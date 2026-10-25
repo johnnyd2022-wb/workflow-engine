@@ -14,10 +14,10 @@ rotocol](.codex/skills/herdr-multi-agent-collab-breaker/SKILL.md) in read-only m
 
 Several endpoints resolve to `sales.record` or `sales.manage`, but their downstream effects decrement or restore `InventoryItem.quantity`:
 
-- `POST /api/crm/matching/assign` resolves to `sales.record` and calls `consume_final_product_lot`.
-- `POST /api/crm/matching/run` resolves to `sales.record` and runs full reconciliation/FIFO consumption.
-- Creating an already-authorised invoice and authorising a draft both run incremental sync and may consume inventory.
-- OAuth callback, tenant selection and manual Xero sync resolve to `sales.manage` and can run the same reconciliation.
+- `POST /api/crm/matching/assign` resolves to `sales.record` and calls `consume_final_product_lot`. → fixed by findings-sweep 2026-10-24: the route now also requires `inventory.adjust` (`requires_permission`; `tests/test_sales_matching.py::test_picking_a_batch_changes_stock_so_it_needs_inventory_adjust`).
+- `POST /api/crm/matching/run` resolves to `sales.record` and runs full reconciliation/FIFO consumption. → fixed by findings-sweep 2026-10-24: the route now also requires `inventory.adjust` (`tests/test_sales_matching.py::test_rerunning_matching_changes_stock_so_it_needs_inventory_adjust`, `::test_a_custom_role_needs_inventory_adjust_itself_to_drive_matching`).
+- Creating an already-authorised invoice and authorising a draft both run incremental sync and may consume inventory. **Open, needs a founder decision (findings-sweep 2026-10-24):** this is the source-to-sale design, where recording a sale consumes the lot it came from. The incremental sync ends in the same whole-org `reconcile_org` that `/api/crm/matching/run` calls, so while this stays open `sales.record` can still reach `/run`'s stock effect, in FIFO and hybrid orgs, without that route. Requiring `inventory.adjust` here would stop the Sales role authorising invoices at all; the other remedy is to state that `sales.record` includes sales-driven consumption and pin it in `tests/test_access_policy.py`.
+- OAuth callback, tenant selection and manual Xero sync resolve to `sales.manage` and can run the same reconciliation. **Open, needs a founder decision (findings-sweep 2026-10-24):** the same call as the invoice bullet above, for the roles that hold `sales.manage`.
 
 The permission descriptions reserve stock adjustment/removal for `inventory.adjust`, while the built-in Sales role has `sales.record` but not `inventory.adjust`. Thus a Sales user can directly select lots and change stock through matching. Cus
 tom roles can also receive `sales.manage` without `inventory.adjust`.
@@ -32,6 +32,8 @@ Evidence:
 
 Expected remediation: require `inventory.adjust` for explicit matching/reconciliation, or formally redefine and test the sales permissions as authorizing sales-driven stock mutations. The current policy supports OR requirements, not AND, so th
 is may need a route-level check or a dedicated permission.
+
+Disposition (findings-sweep 2026-10-24, an unattended choice for the founder to confirm or reverse; `.agents/reports/crm/review.md` O1 had reserved it): for the two routes where a person picks lots or re-runs matching by hand, take the first remedy, `inventory.adjust` on top of `sales.record`. The policy table is any-of only, so the check is a route-level `requires_permission("inventory.adjust")` rather than a table rule; the matching page offers the controls only to people holding both permissions. Confirming a match (`/api/crm/matching/confirm`) moves no stock and stays with Sales. The alternative, which the founder may prefer, is to redefine `sales.record` as covering stock changes and pin that in `tests/test_access_policy.py`. This closes the explicit routes only: the invoice and sync bullets above still reach the same reconciliation, and either remedy for them changes what the Sales role can do day to day.
 
 rule_added: none — read-only grader.
 

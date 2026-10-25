@@ -17,6 +17,9 @@
       showDrawer: false, showLaneModal: false, showLaneManager: false, editingTask: null, saving: false, laneTitle: '',
       draggingTask: null, dragOverLane: '', draggingLaneId: '', dragOverLaneOrder: '', archiveLoading: false,
       form: { title: '', description: '', due_date: '', priority: 'medium', status: 'pending', assigned_to_user_id: '' },
+      // Declared here: Alpine writes an undeclared property onto the outermost x-data (<body>'s),
+      // which outlives a boosted swap, so the next visit's board thought it had already loaded.
+      _boundToCoreTab: false, _initialised: false,
 
       async init() {
         if (this._boundToCoreTab) return;
@@ -87,9 +90,76 @@
 
   window.coreTaskConfiguration = function () {
     return {
-      config: { due_notifications_enabled: true, notification_lead_value: 7, notification_lead_unit: 'days', done_archive_value: 1, done_archive_unit: 'weeks' }, error: '', saving: false,
-      async init() { try { this.config = await CoreAPI.getTaskConfiguration(); } catch (err) { this.error = err.message || 'Could not load task settings.'; } },
-      async save() { this.saving = true; this.error = ''; try { this.config.notification_lead_value = Math.max(1, Math.min(3650, Number(this.config.notification_lead_value || 7))); this.config.done_archive_value = Math.max(1, Math.min(3650, Number(this.config.done_archive_value || 1))); this.config = await CoreAPI.updateTaskConfiguration(this.config); CoreAPI.invalidateSystemFindings(); } catch (err) { this.error = err.message || 'Could not save task settings.'; } finally { this.saving = false; } },
+      // What is saved, and a draft per section; each section saves only its own fields.
+      config: { due_notifications_enabled: true, notification_lead_value: 7, notification_lead_unit: 'days', done_archive_value: 1, done_archive_unit: 'weeks' },
+      draft: { due: {}, archive: {} },
+      loading: true, loadError: '', saving: {}, sectionError: {}, note: {}, editing: {},
+      async init() {
+        await this.load();
+      },
+      // Settings that failed to load are not shown, so their defaults can't be saved over the real ones.
+      async load() {
+        this.loading = true;
+        this.loadError = '';
+        try {
+          this.config = await CoreAPI.getTaskConfiguration();
+          this.reset('due');
+          this.reset('archive');
+        } catch (err) {
+          this.loadError = err.message || 'Task settings could not load.';
+        } finally {
+          this.loading = false;
+        }
+      },
+      fields(name) {
+        return name === 'due'
+          ? ['due_notifications_enabled', 'notification_lead_value', 'notification_lead_unit']
+          : ['done_archive_value', 'done_archive_unit'];
+      },
+      reset(name) {
+        this.draft[name] = Object.fromEntries(this.fields(name).map((key) => [key, this.config[key]]));
+      },
+      isDirty(name) {
+        return this.fields(name).some((key) => String(this.draft[name][key]) !== String(this.config[key]));
+      },
+      get dirtySections() { return ['due', 'archive'].filter((name) => this.isDirty(name)); },
+      period(value, unit) {
+        const n = Number(value);
+        const word = { days: 'day', weeks: 'week', months: 'month' }[unit] || unit;
+        return `${n} ${word}${n === 1 ? '' : 's'}`;
+      },
+      get dueWords() {
+        return this.config.due_notifications_enabled
+          ? `${this.period(this.config.notification_lead_value, this.config.notification_lead_unit)} before it is due`
+          : 'Only once it is overdue';
+      },
+      get archiveWords() { return `${this.period(this.config.done_archive_value, this.config.done_archive_unit)} after it is finished`; },
+      async saveSection(name) {
+        if (this.saving[name] === true) return false;
+        this.saving = { ...this.saving, [name]: true };
+        this.sectionError = { ...this.sectionError, [name]: '' };
+        this.note = { ...this.note, [name]: '' };
+        const next = { ...this.config, ...this.draft[name] };
+        next.notification_lead_value = Math.max(1, Math.min(3650, Number(next.notification_lead_value || 7)));
+        next.done_archive_value = Math.max(1, Math.min(3650, Number(next.done_archive_value || 1)));
+        let ok = false;
+        try {
+          this.config = await CoreAPI.updateTaskConfiguration(next);
+          CoreAPI.invalidateSystemFindings();
+          this.reset(name);
+          this.editing = { ...this.editing, [name]: false };
+          this.note = { ...this.note, [name]: 'Saved.' };
+          ok = true;
+        } catch (err) {
+          this.sectionError = { ...this.sectionError, [name]: err.message || 'Could not save.' };
+        } finally {
+          this.saving = { ...this.saving, [name]: false };
+        }
+        return ok;
+      },
+      async saveAll() { for (const name of this.dirtySections) { if (!(await this.saveSection(name))) return; } },
+      discard(name) { this.reset(name); this.sectionError = { ...this.sectionError, [name]: '' }; this.editing = { ...this.editing, [name]: false }; },
+      startEdit(name) { this.reset(name); this.note = { ...this.note, [name]: '' }; this.editing = { ...this.editing, [name]: true }; },
     };
   };
 })();

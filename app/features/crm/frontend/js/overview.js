@@ -44,6 +44,8 @@ function crmOverview() {
     widgetLayout: [],
     draggingWidgetId: null,
     resizingWidgetId: null,
+    _onResizeMove: null,
+    _onResizeEnd: null,
     resizeStartX: 0,
     resizeStartSize: 'half',
     showGridGuide: false,

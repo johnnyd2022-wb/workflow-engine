@@ -1,335 +1,295 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Configuration · Sales{% endblock %}
+{% block title %}Sales settings{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 
 
 {% block content %}
-<div class="max-content crm-root" x-data="crmConfiguration()" x-init="init()">
-  {% set crm_heading = "Configuration" %}
-  {% set crm_subtitle = "Manage sales integrations, traceability, and mappings" %}
-  {% include "crm/_crm_banner.html" %}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='sales-settings.css') }}">
+{# Alpine calls init() itself; an x-init="init()" here loaded every setting twice. #}
+<div class="max-content crm-root workspace-overview sales-settings" x-data="crmConfiguration()" :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
 
-  <div x-show="error" class="crm-error-banner" x-cloak>
+  <header class="workspace-header ss-header">
+    <div>
+      <h1>Sales settings</h1>
+      <p class="workspace-caption">How Xero invoices are matched to your batches, and what the Sales overview shows.</p>
+    </div>
+  </header>
+
+
+  <div x-show="error" class="crm-error-banner ss-error" role="alert" x-cloak>
     <span x-text="error"></span>
-    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+    <button type="button" class="workspace-button ss-retry" x-show="loadFailed" @click="init()">Try again</button>
+    <button type="button" class="ss-error__close" x-show="!loadFailed" @click="error=null" aria-label="Dismiss">&times;</button>
   </div>
 
-  <div class="crm-card" style="margin-bottom:16px;">
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Integrations</span></div>
-    <div style="padding:16px;">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;">
-        <section class="crm-card" style="padding:14px; border-radius:10px;">
-          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
-            <div style="width:44px; height:44px; border-radius:14px; background:#fff; border:1px solid var(--border-default,#e5e7eb); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
-                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
-              </svg>
-            </div>
-            <div style="min-width:0;">
-              <div style="font-weight:700; color:var(--text-primary,#111827); line-height:1.2;">Xero</div>
-              <template x-if="xero.connected">
-                <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
-                  <div style="font-size:.82rem; color:#16a34a; font-weight:600; display:flex; align-items:center; gap:6px;">
-                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e;"></span>
-                    Connected
-                  </div>
-                  <div style="font-size:.8rem; color:var(--text-secondary,#6b7280);" x-text="tenantName || 'Connected tenant'"></div>
-                  <div style="font-size:.8rem; color:var(--text-secondary,#6b7280);" x-show="lastSyncLabel">Synced <span x-text="lastSyncLabel"></span></div>
-                </div>
-              </template>
-              <template x-if="!xero.connected">
-                <div style="font-size:.82rem; color:var(--text-secondary,#6b7280); margin-top:4px;">Connect to sync contacts and invoices</div>
-              </template>
-            </div>
+  <div class="ss-stack" x-show="!loadFailed">
+
+    {# Xero: the connection itself is managed under Settings › Integrations (plan 2.5). #}
+    <section class="ss-section" id="xero" aria-labelledby="ss-xero-title">
+      <div class="ss-intro">
+        <h2 id="ss-xero-title">Xero</h2>
+        <p>Invoices and contacts come into Sales from Xero.</p>
+      </div>
+      <div class="ss-body">
+        <dl class="ss-rows ss-rows--always">
+          <div class="ss-row">
+            <dt>Connection</dt>
+            <dd>
+              <span class="ss-state" :class="xero.connected ? 'ss-state--good' : 'ss-state--warn'" x-text="xero.connected ? 'Connected' : 'Not connected'">Not connected</span>
+              <span class="ss-muted" x-show="xero.connected && tenantName" x-text="tenantName"></span>
+            </dd>
           </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-            <template x-if="xero.connected">
-              <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="doSync()" :disabled="syncing"><span x-text="syncing ? 'Syncing…' : 'Sync Now'"></span></button>
-            </template>
-            <template x-if="xero.connected">
-              <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openDisconnectModal()" :disabled="disconnecting" style="border-color:rgba(239,68,68,.35); color:#dc2626;">Disconnect</button>
-            </template>
-            <template x-if="!xero.connected">
-              <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm" @click.prevent="beginXeroConnect()">Connect</a>
-            </template>
+          <div class="ss-row" x-show="xero.connected">
+            <dt>Last sync</dt>
+            <dd x-text="lastSyncLabel || 'Not yet'"></dd>
           </div>
-          <template x-if="syncSummary">
-            <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-top:8px;">
-              FIFO sales: <span x-text="syncSummary.allocated"></span> allocated
-              <template x-if="syncSummary.unmapped"><span>; <span x-text="syncSummary.unmapped"></span> unmapped</span></template>
-              <template x-if="syncSummary.insufficientStock"><span>; <span x-text="syncSummary.insufficientStock"></span> awaiting stock</span></template>
-            </div>
+        </dl>
+        <p class="ss-note" x-show="syncSummary" x-cloak>
+          Sales matched: <span x-text="syncSummary?.allocated"></span><template x-if="syncSummary?.unmapped"><span>; <span x-text="syncSummary.unmapped"></span> need a mapping</span></template><template x-if="syncSummary?.insufficientStock"><span>; <span x-text="syncSummary.insufficientStock"></span> waiting for stock</span></template>
+        </p>
+        <div class="ss-actions">
+          <a class="workspace-button" href="/core/integrations" x-text="xero.connected ? 'Manage connection' : 'Connect Xero'">Connect Xero</a>
+          <button type="button" class="workspace-button" x-show="xero.connected" @click="doSync()" :disabled="syncing" x-text="syncing ? 'Syncing…' : 'Sync now'">Sync now</button>
+        </div>
+      </div>
+    </section>
+
+    {# Product mappings: which Xero line is which of your products. #}
+    <section class="ss-section" id="mappings" aria-labelledby="ss-mappings-title" data-ss-mappings>
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-mappings-title">Product mappings</h2>
+            <p>Which Xero invoice line is which of your products, so each sale can be traced to a batch.</p>
+          </div>
+          <button type="button" class="workspace-button workspace-button--primary ss-intro__action" @click="openMappingDialog()" data-ss-add-mapping>Add a mapping</button>
+        </div>
+      </div>
+      <div class="ss-body">
+        <p class="ss-empty" x-show="!loading && mappings.length === 0" x-cloak>No mappings yet. Add one for each product you sell through Xero.</p>
+        <ul class="ss-mappings" x-show="mappings.length > 0" x-cloak>
+          <template x-for="m in mappings" :key="m.id">
+            <li class="ss-mapping">
+              <div class="ss-mapping__what">
+                <strong x-text="m.biz_e_product_name"></strong>
+                <span class="ss-muted"><span x-text="(m.match_type || 'exact') === 'contains' ? 'Xero line contains' : 'Xero line is'"></span> “<span x-text="m.xero_description_pattern"></span>”<span x-show="(m.units_per_line || 1) > 1" x-text="` · ${m.units_per_line} per line`"></span></span>
+              </div>
+              <span class="ss-state" :class="m.mapping_status === 'stale' ? 'ss-state--warn' : 'ss-state--good'" x-text="m.mapping_status === 'stale' ? 'Not seen lately' : 'In use'"></span>
+              <button type="button" class="ss-link ss-link--danger" @click="openDeleteMappingModal(m)" :aria-label="`Delete the mapping for ${m.biz_e_product_name}`">Delete</button>
+            </li>
           </template>
-        </section>
+        </ul>
+      </div>
+    </section>
 
-        <section class="crm-card" aria-disabled="true" style="padding:14px; border-radius:10px; opacity:.6; filter:grayscale(1);">
-          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
-            <div style="width:44px; height:44px; border-radius:14px; background:#fff; border:1px solid var(--border-default,#e5e7eb); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="#7B3FF2"/>
-                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.25" font-weight="700" fill="#ffffff">M</text>
-              </svg>
-            </div>
-            <div style="min-width:0;">
-              <div style="font-weight:700; color:var(--text-primary,#111827); line-height:1.2;">MYOB</div>
-              <div style="font-size:.82rem; color:var(--text-secondary,#6b7280); margin-top:4px;">Coming soon</div>
-            </div>
+    {# Matching sales to batches #}
+    <section class="ss-section" id="matching" aria-labelledby="ss-matching-title" :data-editing="editing.matching ? 'true' : 'false'">
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-matching-title">Matching sales to batches</h2>
+            <p>How each sale is linked back to the batch it came from. Applies on the next sync, including sales already imported.</p>
           </div>
-          <div style="margin-top:10px;">
-            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" disabled>Connect</button>
+        </div>
+      </div>
+      <div class="ss-body">
+        <form class="ss-form" @submit.prevent="saveSection('matching')" hx-boost="false" data-ss-form="matching">
+          <fieldset class="ss-choices">
+            <legend>How sales are matched</legend>
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="fifo" x-model="draft.matching.mode"><span><strong>Automatically, oldest batch first</strong><small>Each sale takes the oldest batch that still has stock.</small></span></label>
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="manual" x-model="draft.matching.mode"><span><strong>You choose the batch</strong><small>Each sale waits on Batch matching until you pick its batch.</small></span></label>
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="hybrid" x-model="draft.matching.mode"><span><strong>Automatically, then held for review</strong><small>Pre-sold and loosely matched sales wait on Batch matching, then confirm themselves.</small></span></label>
+          </fieldset>
+          <label class="ss-field ss-field--short" x-show="draft.matching.mode === 'hybrid'">
+            <span>Review window (days)</span>
+            <input type="number" id="ss-review-days" min="1" max="90" x-model.number="draft.matching.review_days">
+          </label>
+          <label class="ss-check">
+            <input type="checkbox" x-model="draft.matching.strict">
+            <span><strong>Xero line must match exactly</strong><small>Turn this off to let a phrase such as “Wildflower” cover several Xero price variants.</small></span>
+          </label>
+          <div class="ss-actions">
+            <button type="submit" class="workspace-button ss-save" :disabled="saving.matching === true" x-text="saving.matching ? 'Saving…' : 'Save'">Save</button>
+            <a href="/core/sourcemap" class="ss-link">Open Sourcemap</a>
           </div>
-        </section>
+          <p class="ss-section-error" role="alert" x-show="sectionError.matching" x-text="sectionError.matching" x-cloak></p>
+        </form>
+        <p class="ss-saved" role="status" x-text="note.matching"></p>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="crm-card" style="margin-bottom:16px;" data-contact-sync-settings>
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Customers created in Biz-E</span></div>
-    <div style="padding:16px; display:grid; gap:10px;">
-      <p style="margin:0; font-size:.82rem; color:var(--text-secondary,#6b7280);">
-        Every Xero contact comes into Sales. Customers you add here stay in Biz-E unless they are sent to Xero.
-        Each customer can override this on its own page.
-      </p>
-      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.86rem; color:var(--text-primary,#111827); font-weight:600;">
-        <input type="checkbox" data-sync-default :checked="contactSync.sync_contacts_to_xero" :disabled="contactSync.saving" @change="saveContactSyncDefault($event.target.checked)">
-        Send customers created in Biz-E to Xero, and keep their details in step
-      </label>
-      <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);" x-show="contactSync.sync_contacts_to_xero" x-cloak>
-        New customers go to Xero when you save them. Edits to any customer that is in Xero are sent to Xero when you save.
-      </p>
-      <p style="margin:0; font-size:.78rem; color:#b45309;" x-show="contactSync.loaded && !contactSync.xero.connected" x-cloak>
-        Xero is not connected, so nothing is sent yet. Customers wait and go once Xero is connected and you retry them.
-      </p>
-      <p style="margin:0; font-size:.78rem; color:#b45309;" x-show="contactSync.xero.connected && !contactSync.xero.can_write_contacts" x-cloak>
-        The Xero connection only allows reading contacts. Disconnect and connect Xero again to let Biz-E send customers.
-      </p>
-      <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);" role="status" data-sync-default-result x-text="contactSync.message"></p>
-    </div>
-  </div>
-
-  <div class="crm-card" style="margin-bottom:16px;">
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Sales Traceability</span></div>
-    <div style="padding:16px; display:grid; gap:12px;">
-      <p style="margin:0; font-size:.82rem; color:var(--text-secondary,#6b7280);">
-        Configure how new sales are linked back to biz-e batches for end-to-end traceability.
-      </p>
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
-        <div class="crm-form-group">
-          <label class="crm-form-label">Matching Strategy</label>
-          <select class="crm-form-select" x-model="traceConfig.mode">
-            <option value="fifo">FIFO Auto-Match</option>
-            <option value="manual">Manual Review Queue</option>
-            <option value="hybrid">Hybrid (Auto then Review)</option>
-          </select>
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'fifo'" x-cloak>FIFO matches the oldest unlinked batch first.</p>
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'manual'" x-cloak>You pick the batch for each sale on the Batch matching page.</p>
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'hybrid'" x-cloak>Matches automatically; pre-sold and loosely-mapped sales wait on the Batch matching page for the review window, then confirm themselves.</p>
-        </div>
-        <div class="crm-form-group">
-          <label class="crm-form-label">Manual Review Window (days)</label>
-          <input class="crm-form-input" type="number" min="1" max="90" x-model.number="traceConfig.review_days">
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Hybrid only: how long a sale waits for review before its automatic match is confirmed.</p>
+    {# Customers created in Biz-E #}
+    <section class="ss-section" id="customers" aria-labelledby="ss-customers-title" data-contact-sync-settings :data-editing="editing.customers ? 'true' : 'false'">
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-customers-title">Customers created in Biz-E</h2>
+            <p>Every Xero contact comes into Sales. This decides whether customers you add here go the other way. Each customer can override it on its own page.</p>
+          </div>
         </div>
       </div>
-      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
-        <input type="checkbox" x-model="traceConfig.strict">
-        Require an exact Xero match before linking sales
-      </label>
-      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Turn this off to use a manually configured “contains” mapping, such as <em>Wildflower</em>, across multiple Xero price variants.</p>
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies on the next sync, including sales already imported.</div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <a href="/core/sourcemap" class="crm-btn crm-btn--secondary crm-btn--sm">Open Sourcemap</a>
-          <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Traceability Settings</button>
+      <div class="ss-body">
+        <form class="ss-form" @submit.prevent="saveSection('customers')" hx-boost="false" data-ss-form="customers">
+          <label class="ss-check">
+            <input type="checkbox" data-sync-default x-model="draft.customers.sync">
+            <span><strong>Send customers created in Biz-E to Xero, and keep their details in step</strong><small>New customers go to Xero when you save them. Edits to any customer that is in Xero go to Xero too.</small></span>
+          </label>
+          <div class="ss-actions">
+            <button type="submit" class="workspace-button ss-save" :disabled="saving.customers === true" x-text="saving.customers ? 'Saving…' : 'Save'">Save</button>
+          </div>
+          <p class="ss-section-error" role="alert" x-show="sectionError.customers" x-text="sectionError.customers" x-cloak></p>
+        </form>
+        <p class="ss-note ss-note--warn" x-show="!loading && !xero.connected" x-cloak>Xero is not connected, so nothing is sent yet. Customers wait, and go once Xero is connected and you retry them.</p>
+        <p class="ss-note ss-note--warn" x-show="xero.connected && contactSync.loaded && contactSync.xero.connected && !contactSync.xero.can_write_contacts" x-cloak>The Xero connection only allows reading contacts. Connect Xero again from Integrations to let Biz-E send customers.</p>
+        <p class="ss-saved" role="status" data-sync-default-result x-text="note.customers"></p>
+      </div>
+    </section>
+
+    {# Revenue on the overview #}
+    <section class="ss-section" id="revenue" aria-labelledby="ss-revenue-title" :data-editing="editing.revenue ? 'true' : 'false'">
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-revenue-title">Revenue on the overview</h2>
+            <p>A monthly target to measure the month against, and whether money is shown at all.</p>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+      <div class="ss-body">
+        <form class="ss-form" @submit.prevent="saveSection('revenue')" hx-boost="false" data-ss-form="revenue">
+          <label class="ss-field ss-field--short">
+            <span>Monthly target ($)</span>
+            <input type="number" id="ss-revenue-target" min="0" step="0.01" x-model="draft.revenue.target" placeholder="e.g. 120000">
+            <small>Optional. The overview shows how the month is tracking against it.</small>
+          </label>
+          <label class="ss-check">
+            <input type="checkbox" x-model="draft.revenue.obfuscate">
+            <span><strong>Hide money on the Sales overview</strong><small>Amounts show as *****. Records and traceability are not changed.</small></span>
+          </label>
+          <div class="ss-actions">
+            <button type="submit" class="workspace-button ss-save" :disabled="saving.revenue === true" x-text="saving.revenue ? 'Saving…' : 'Save'">Save</button>
+          </div>
+          <p class="ss-section-error" role="alert" x-show="sectionError.revenue" x-text="sectionError.revenue" x-cloak></p>
+        </form>
+        <p class="ss-saved" role="status" x-text="note.revenue"></p>
+      </div>
+    </section>
 
-  <div class="crm-card" style="margin-bottom:16px;">
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Tasks</span></div>
-    <div style="padding:16px; display:grid; gap:12px;">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
-        <div class="crm-form-group">
-          <label class="crm-form-label">Archive Done Tasks After (days)</label>
-          <input class="crm-form-input" type="number" min="1" max="90" x-model.number="traceConfig.task_done_archive_days">
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Completed tasks are automatically archived after this many days to reduce board noise.</p>
+    {# Sales tasks #}
+    <section class="ss-section" id="tasks" aria-labelledby="ss-tasks-title" :data-editing="editing.tasks ? 'true' : 'false'">
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-tasks-title">Sales tasks</h2>
+            <p>How long finished tasks stay on the Tasks board before they move to the archive.</p>
+          </div>
         </div>
       </div>
-      <div style="display:flex; justify-content:flex-end;">
-        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Task Settings</button>
+      <div class="ss-body">
+        <form class="ss-form" @submit.prevent="saveSection('tasks')" hx-boost="false" data-ss-form="tasks">
+          <label class="ss-field ss-field--short">
+            <span>Archive finished tasks after (days)</span>
+            <input type="number" id="ss-archive-days" min="1" max="90" x-model.number="draft.tasks.archive_days">
+          </label>
+          <div class="ss-actions">
+            <button type="submit" class="workspace-button ss-save" :disabled="saving.tasks === true" x-text="saving.tasks ? 'Saving…' : 'Save'">Save</button>
+          </div>
+          <p class="ss-section-error" role="alert" x-show="sectionError.tasks" x-text="sectionError.tasks" x-cloak></p>
+        </form>
+        <p class="ss-saved" role="status" x-text="note.tasks"></p>
       </div>
-    </div>
+    </section>
   </div>
 
-  <div class="crm-card" style="margin-bottom:16px;">
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Revenue</span></div>
-    <div style="padding:16px; display:grid; gap:12px;">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
-        <div class="crm-form-group">
-          <label class="crm-form-label">Monthly Revenue Baseline Target</label>
-          <input
-            class="crm-form-input"
-            type="number"
-            min="0"
-            step="0.01"
-            x-model="traceConfig.revenue_baseline_target_mtd"
-            placeholder="e.g. 120000"
-          >
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">
-            Optional target used by dashboard to show MTD attainment and variance against plan.
-          </p>
-        </div>
-      </div>
-      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
-        <input type="checkbox" x-model="traceConfig.obfuscate_sales_figures">
-        Obfuscate monetary figures on the Sales overview
-      </label>
-      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Overview currency values are replaced with *****. This does not change source records or traceability data.</p>
-      <div style="display:flex; justify-content:flex-end;">
-        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Revenue Settings</button>
-      </div>
-    </div>
-  </div>
 
-  <div class="crm-card">
-    <div class="crm-analytics-header"><span class="crm-analytics-title">Product Mappings</span></div>
-    <div style="padding:16px; border-bottom:1px solid var(--border-default,#e5e7eb); display:grid; gap:10px;">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
-        <div class="crm-form-group">
-          <label class="crm-form-label">Biz-e Final Product</label>
-          <select class="crm-form-select" x-model="mappingDraft.product_key">
-            <option value="">Select final product</option>
+  {# Add a mapping #}
+  <div class="ss-overlay" x-show="showMappingDialog" x-cloak @click.self="closeMappingDialog()" @keydown.escape.window="showMappingDialog && closeMappingDialog()">
+    <div class="ss-dialog" role="dialog" aria-modal="true" aria-labelledby="ss-mapping-dialog-title" data-ss-mapping-dialog>
+      <header class="ss-dialog__head">
+        <h2 id="ss-mapping-dialog-title">Add a mapping</h2>
+        <button type="button" class="ss-dialog__close" @click="closeMappingDialog()" aria-label="Close">&times;</button>
+      </header>
+      <div class="ss-dialog__body">
+        <label class="ss-field">
+          <span>Your product</span>
+          <select id="ss-mapping-product" x-model="mappingDraft.product_key">
+            <option value="">Choose a final product</option>
             <template x-for="p in finalProducts" :key="`${p.source_output_id || 'none'}-${p.name}`">
               <option :value="`${p.source_output_id || ''}||${p.name}`" x-text="productOptionLabel(p)"></option>
             </template>
           </select>
-        </div>
-        <div class="crm-form-group">
-          <label class="crm-form-label">Matching Rule</label>
-          <select class="crm-form-select" x-model="mappingDraft.match_type">
-            <option value="exact">Exact Xero line / item code</option>
-            <option value="contains">Xero line contains phrase</option>
+        </label>
+        <fieldset class="ss-choices ss-choices--inline">
+          <legend>Match the Xero line</legend>
+          <label class="ss-choice"><input type="radio" name="mapping_rule" value="exact" x-model="mappingDraft.match_type"><span><strong>Exactly</strong><small>One Xero line or item code.</small></span></label>
+          <label class="ss-choice"><input type="radio" name="mapping_rule" value="contains" x-model="mappingDraft.match_type"><span><strong>By a phrase</strong><small>Every line containing it.</small></span></label>
+        </fieldset>
+        <label class="ss-field" x-show="mappingDraft.match_type === 'exact'">
+          <span>Xero line</span>
+          <select id="ss-mapping-line" x-model="mappingDraft.xero_description_pattern">
+            <option value="">Choose a Xero line</option>
+            <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
+              <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
+            </template>
           </select>
+        </label>
+        <label class="ss-field" x-show="mappingDraft.match_type === 'contains'">
+          <span>Phrase</span>
+          <input id="ss-mapping-phrase" list="xero-line-item-options" x-model="mappingDraft.xero_description_pattern" placeholder="e.g. Wildflower" autocomplete="off">
+          <datalist id="xero-line-item-options">
+            <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
+              <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
+            </template>
+          </datalist>
+          <small>Upper and lower case are treated the same.</small>
+          <small class="ss-warn" x-show="traceConfig.strict">Saving this turns off “Xero line must match exactly”.</small>
+        </label>
+        <div class="ss-field-pair">
+          <label class="ss-field ss-field--short">
+            <span>Bottles per Xero line</span>
+            <input id="ss-mapping-units" type="number" min="1" max="1000" step="1" inputmode="numeric" x-model.number="mappingDraft.units_per_line">
+            <small>6 for a “Case of 6” line.</small>
+          </label>
+          <label class="ss-field">
+            <span>Note (optional)</span>
+            <input id="ss-mapping-notes" x-model="mappingDraft.notes" placeholder="For your team" autocomplete="off">
+          </label>
         </div>
-        <div class="crm-form-group">
-          <label class="crm-form-label" x-text="mappingDraft.match_type === 'contains' ? 'Shared Xero phrase' : 'Xero Line Item Description'"></label>
-          <template x-if="mappingDraft.match_type === 'exact'">
-            <select class="crm-form-select" x-model="mappingDraft.xero_description_pattern">
-              <option value="">Select Xero line item</option>
-              <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
-                <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
-              </template>
-            </select>
-          </template>
-          <template x-if="mappingDraft.match_type === 'contains'">
-            <div>
-              <input class="crm-form-input" list="xero-line-item-options" x-model="mappingDraft.xero_description_pattern" placeholder="e.g. Wildflower">
-              <datalist id="xero-line-item-options">
-                <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
-                  <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
-                </template>
-              </datalist>
-              <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Use a distinctive shared phrase, such as Wildflower, to cover Xero price variants.</p>
-              <p x-show="traceConfig.strict" x-cloak style="margin:4px 0 0; font-size:.74rem; color:#b45309;">Saving this mapping will enable partial matching for the next Xero sync.</p>
-            </div>
-          </template>
+        <div class="ss-queue" x-show="pendingMappings.length > 0" x-cloak>
+          <p class="ss-queue__title">To save (<span x-text="pendingMappings.length"></span>)</p>
+          <ul>
+            <template x-for="(mapping, index) in pendingMappings" :key="`${mapping.biz_e_product_name}-${mapping.xero_description_pattern}`">
+              <li>
+                <span><strong x-text="mapping.biz_e_product_name"></strong> ← “<span x-text="mapping.xero_description_pattern"></span>”</span>
+                <button type="button" class="ss-link ss-link--danger" @click="removePendingMapping(index)">Remove</button>
+              </li>
+            </template>
+          </ul>
         </div>
+        <p class="ss-section-error" role="alert" x-show="mappingError" x-text="mappingError" x-cloak></p>
       </div>
-      <div class="crm-form-group">
-        <label class="crm-form-label" for="mapping-units-per-line">Units per Xero line quantity</label>
-        <input class="crm-form-input" id="mapping-units-per-line" type="number" min="1" max="1000" step="1" inputmode="numeric" x-model.number="mappingDraft.units_per_line" style="max-width: 8rem;">
-        <p style="margin:4px 0 0; font-size:.8rem; color:var(--text-secondary,#6b7280);">1 for single bottles. 6 if a line like "Case of 6" with quantity 2 means 12 bottles.</p>
-      </div>
-      <div class="crm-form-group">
-        <label class="crm-form-label">Notes (optional)</label>
-        <input class="crm-form-input" x-model="mappingDraft.notes" placeholder="Internal note">
-      </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="queueMapping()" :disabled="!mappingDraft.product_key || !mappingDraft.xero_description_pattern">
-          Add to review
-        </button>
-        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping || !canSaveMappings">
-          <span x-text="savingMapping ? 'Saving mappings…' : 'Save mappings'"></span>
-        </button>
-      </div>
-      <p x-show="mappingError" x-cloak role="alert" style="margin:0; font-size:.8rem; color:#b91c1c;" x-text="mappingError"></p>
-    </div>
-
-    <template x-if="pendingMappings.length > 0">
-      <div style="padding:12px 16px; border-bottom:1px solid var(--border-default,#e5e7eb); background:rgba(19,181,234,.05);">
-        <div style="font-size:.8rem; font-weight:700; margin-bottom:8px;">Review before saving (<span x-text="pendingMappings.length"></span>)</div>
-        <div style="display:grid; gap:6px;">
-          <template x-for="(mapping, index) in pendingMappings" :key="`${mapping.biz_e_product_name}-${mapping.xero_description_pattern}`">
-            <div style="display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:.8rem;">
-              <span x-text="mapping.biz_e_product_name"></span><span>→</span>
-              <span x-text="mapping.xero_description_pattern"></span>
-              <span class="crm-badge crm-badge--active" x-text="mapping.match_type"></span>
-              <span class="crm-badge" x-show="(mapping.units_per_line || 1) > 1" x-text="`× ${mapping.units_per_line} per line`"></span>
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="removePendingMapping(index)">Remove</button>
-            </div>
-          </template>
-        </div>
-        <p style="margin:10px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Add several mappings to review, then use Save mappings above. Nothing is sent to the system until you save. Phrases match Xero lines regardless of upper or lower case.</p>
-      </div>
-    </template>
-
-    <template x-if="mappings.length === 0">
-      <div class="crm-empty"><h3>No mappings yet</h3></div>
-    </template>
-
-    <div class="crm-mapping-grid" x-show="mappings.length > 0">
-      <template x-for="m in mappings" :key="m.id">
-        <div class="crm-mapping-row">
-          <span class="crm-mapping-biz" x-text="m.biz_e_product_name"></span>
-          <span class="crm-mapping-arrow">→</span>
-          <span class="crm-mapping-xero" x-text="m.xero_description_pattern"></span>
-          <span class="crm-badge crm-badge--active" x-text="m.match_type || 'exact'"></span>
-          <span class="crm-badge" x-show="(m.units_per_line || 1) > 1" x-text="`× ${m.units_per_line} per line`"></span>
-          <span class="crm-badge" :class="mappingStatusClass(m)" x-text="m.mapping_status || 'active'"></span>
-          <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="openDeleteMappingModal(m)">Delete</button>
-        </div>
-      </template>
+      <footer class="ss-dialog__foot">
+        <button type="button" class="workspace-button" @click="queueMapping()" :disabled="!draftIsComplete">Add another</button>
+        <button type="button" class="workspace-button workspace-button--primary" @click="saveMappings()" :disabled="savingMapping || !canSaveMappings" x-text="savingMapping ? 'Saving…' : (pendingMappings.length > 0 && !draftIsComplete ? `Save ${pendingMappings.length} mapping${pendingMappings.length === 1 ? '' : 's'}` : 'Save mapping')">Save mapping</button>
+      </footer>
     </div>
   </div>
 
-  <div class="crm-lane-sheet-overlay" x-show="showDisconnectModal" x-cloak @click.self="closeDisconnectModal()" style="display:flex;">
-    <div class="crm-lane-sheet">
-      <div class="crm-lane-sheet__header">
-        <h3 class="crm-lane-sheet__title">Disconnect Xero</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDisconnectModal()">&times;</button>
+  {# Delete a mapping #}
+  <div class="ss-overlay" x-show="showDeleteMappingModal" x-cloak @click.self="closeDeleteMappingModal()" @keydown.escape.window="showDeleteMappingModal && closeDeleteMappingModal()">
+    <div class="ss-dialog ss-dialog--small" role="dialog" aria-modal="true" aria-labelledby="delete-mapping-title">
+      <header class="ss-dialog__head">
+        <h2 id="delete-mapping-title">Delete this mapping?</h2>
+        <button type="button" class="ss-dialog__close" @click="closeDeleteMappingModal()" :disabled="deletingMapping" aria-label="Close delete confirmation">&times;</button>
+      </header>
+      <div class="ss-dialog__body">
+        <p><strong x-text="mappingToDelete?.biz_e_product_name || 'Final product'"></strong> ← “<span x-text="mappingToDelete?.xero_description_pattern || 'Xero line'"></span>”</p>
+        <p class="ss-muted">Future Xero syncs stop using it. Invoices and stock are not changed.</p>
       </div>
-      <div class="crm-lane-sheet__body">
-        <p style="margin:0; font-size:.84rem; color:var(--text-secondary,#6b7280);">
-          This will disconnect Xero and remove synced contacts and invoices from Sales.
-        </p>
-      </div>
-      <div class="crm-lane-sheet__footer">
-        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDisconnectModal()">Cancel</button>
-        <button type="button" class="crm-btn crm-btn--primary" style="background:#ef4444; color:#fff;" @click="doDisconnect()" :disabled="disconnecting">
-          <span x-text="disconnecting ? 'Disconnecting…' : 'Disconnect'"></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div class="crm-lane-sheet-overlay" x-show="showDeleteMappingModal" x-cloak @click.self="closeDeleteMappingModal()" style="display:flex;">
-    <div class="crm-lane-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-mapping-title">
-      <div class="crm-lane-sheet__header">
-        <h3 class="crm-lane-sheet__title" id="delete-mapping-title">Delete product mapping?</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDeleteMappingModal()" :disabled="deletingMapping" aria-label="Close delete confirmation">&times;</button>
-      </div>
-      <div class="crm-lane-sheet__body">
-        <p style="margin:0; font-size:.84rem; color:var(--text-primary,#111827);" x-text="`${mappingToDelete?.biz_e_product_name || 'Final product'} → ${mappingToDelete?.xero_description_pattern || 'Xero line item'}`"></p>
-        <p style="margin:0; font-size:.84rem; color:var(--text-secondary,#6b7280);">This stops the mapping being used on future Xero syncs. It does not delete invoices or stock.</p>
-      </div>
-      <div class="crm-lane-sheet__footer">
-        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDeleteMappingModal()" :disabled="deletingMapping">Cancel</button>
-        <button type="button" class="crm-btn crm-btn--primary" style="background:#ef4444; color:#fff;" @click="confirmDeleteMapping()" :disabled="deletingMapping">
-          <span x-text="deletingMapping ? 'Deleting…' : 'Delete mapping'"></span>
-        </button>
-      </div>
+      <footer class="ss-dialog__foot">
+        <button type="button" class="workspace-button" @click="closeDeleteMappingModal()" :disabled="deletingMapping">Cancel</button>
+        <button type="button" class="workspace-button ss-danger" @click="confirmDeleteMapping()" :disabled="deletingMapping" x-text="deletingMapping ? 'Deleting…' : 'Delete mapping'">Delete mapping</button>
+      </footer>
     </div>
   </div>
 </div>

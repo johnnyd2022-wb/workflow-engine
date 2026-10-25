@@ -380,6 +380,30 @@ def test_route_parameter_in_a_code_span_is_not_mistaken_for_a_format_placeholder
     assert "`/api/crm/customers/<id>/analytics`" in items[0].detail
 
 
+def test_a_bullet_of_only_file_links_is_evidence_not_a_finding(tmp_path, monkeypatch):
+    """The Evidence list under an audit's finding is `- [file.py:38](app/file.py:38)` lines. Each was
+    indexed as its own worklist item, titled with a bare file name and no claim to act on."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/audit.md",
+        """## Findings
+
+### F1 - Medium - a Sales write moves stock
+
+Evidence:
+
+- [access_policy.py:38](app/core/security/access_policy.py:38)
+- [api_routes.py:867](app/api_routes.py:867), [inventory_repo.py:529](app/inventory_repo.py:529)
+- [api_routes.py:900](app/api_routes.py:900) lets a Sales user run reconciliation without inventory.adjust
+""",
+    )
+    items = fi.parse_doc(path)
+    assert [i.detail for i in items] == [
+        "[api_routes.py:900](app/api_routes.py:900) lets a Sales user run reconciliation without inventory.adjust"
+    ]
+
+
 def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
     path = write_doc(
         tmp_path,

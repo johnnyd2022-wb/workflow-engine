@@ -26,7 +26,6 @@ def test_every_setting_is_reachable_one_category_at_a_time(browser, app_url, wor
         expect(page.get_by_label("First name", exact=True)).to_be_enabled()
         for category, heading in [
             ("account", "Account information"),
-            ("organisation", "Manage sites"),
             ("security", "Two-factor authentication"),
             ("preferences", "Appearance"),
         ]:
@@ -35,9 +34,10 @@ def test_every_setting_is_reachable_one_category_at_a_time(browser, app_url, wor
             # Only the chosen category is on screen.
             expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-        _category(page, "organisation")
-        expect(page.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
-        expect(page.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
+        # Sites and people moved from an Organisation category to the Settings tab row (plan 2.5).
+        tabs = page.get_by_role("tablist", name="Settings pages")
+        expect(tabs.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
+        expect(tabs.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
     finally:
         context.close()
 

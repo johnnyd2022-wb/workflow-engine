@@ -63,6 +63,16 @@ function updateSidebarActiveLink() {
   const current = normalizePathname(window.location.pathname);
   const links = sidebar.querySelectorAll('a.nav-link[href]');
 
+  // The server says which main tab a registered page is under (People is Settings, though its
+  // URL starts /core like Production's). URL prefixes only decide for unregistered pages.
+  const marker = document.querySelector('#page-content [data-nav-section]');
+  const section = marker ? marker.getAttribute('data-nav-section') : '';
+  const owner = section ? sidebar.querySelector(`a.nav-link[data-nav-section="${section}"]`) : null;
+  if (owner) {
+    markSidebarActive(links, owner);
+    return;
+  }
+
   // Choose best match by longest prefix:
   // - exact match wins
   // - otherwise a link to "/core" stays active for "/core/flows", etc.
@@ -91,8 +101,12 @@ function updateSidebarActiveLink() {
     }
   });
 
+  markSidebarActive(links, bestLink);
+}
+
+function markSidebarActive(links, activeLink) {
   links.forEach((a) => {
-    const isActive = a === bestLink;
+    const isActive = a === activeLink;
     a.classList.toggle('active', isActive);
     if (isActive) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');

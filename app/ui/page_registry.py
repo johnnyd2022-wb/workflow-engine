@@ -76,7 +76,7 @@ PAGES: tuple[Page, ...] = (
         "compliance",
         "np3",
         "NP3 food safety",
-        "/compliant/nz-alcohol/np3-audit",
+        None,  # the Food safety tab's own page; /np3-audit only redirects here
         "compliant",
     ),
     Page(
@@ -194,7 +194,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     ),
     "compliance": (
         Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
-        Tab("np3", "Food safety", "/compliant/nz-alcohol/np3-audit", ("compliance.view",), when="food_safety"),
+        Tab("np3", "Food safety", "/compliant/nz-alcohol/food-safety", ("compliance.view",), when="food_safety"),
         Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
         Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
         Tab("premises", "Premises", "/compliant/nz-alcohol/premises", ("compliance.view",)),
@@ -219,6 +219,15 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("excise", "Excise", "/crm/excise", ("sales.view",), when="nz_alcohol"),
         # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
+    ),
+    # Plan 2.5: one row for your account and the organisation's setup. Sales and Compliance
+    # settings stay in their own sections, beside the work they configure.
+    "settings": (
+        Tab("account", "Account", "/core/settings"),
+        Tab("people", "People", "/core/people", ("users.manage",)),
+        Tab("sites", "Sites", "/core/sites", ("settings.manage",)),
+        Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
+        Tab("section-settings", "Tasks", "/core/tasks/configuration", ("production.view",)),
     ),
 }
 

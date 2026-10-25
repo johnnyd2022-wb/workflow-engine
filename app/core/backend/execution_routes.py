@@ -257,18 +257,8 @@ def register_routes(
 
         return_to = _safe_flow_return_to(request.args.get("return_to"), process_id)
 
-        # HTMX fragment support (boosted navigation swaps #page-content).
-        if request.headers.get("HX-Request") == "true":
-            return render_template(
-                "processes/batch-start-hx.html",
-                active_page="core",
-                process_id=str(process_id),
-                execution_id=str(execution_id) if execution_id else None,
-                step_id=str(step_id) if step_id else None,
-                draft=is_draft,
-                return_to=return_to,
-            )
-
+        # One template for full and boosted loads: base_spa carries a boosted page's assets, and a
+        # separate fragment dropped the section tabs and breadcrumb.
         return render_template(
             "processes/batch-start.html",
             active_page="core",

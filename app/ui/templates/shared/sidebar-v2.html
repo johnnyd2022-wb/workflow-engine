@@ -16,7 +16,7 @@
     <div class="nav-label">Navigation</div>
     <ul class="nav-list">
       <li class="nav-item">
-        <a href="/core/dashboard" class="nav-link{% if active_section == 'dashboard' %} active{% endif %}">
+        <a href="/core/dashboard" class="nav-link{% if active_section == 'dashboard' %} active{% endif %}" data-nav-section="dashboard">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 68" fill="none">
               <rect x="0" y="0" width="72" height="72" rx="10" fill="none" stroke="currentColor" stroke-width="2" stroke-opacity="0.4"/>
@@ -43,7 +43,7 @@
       </li>
       {% if can('production.view', 'inventory.view', 'sales.view') %}
       <li class="nav-item">
-        <a href="{{ section_home('production') }}" class="nav-link{% if active_section == 'production' %} active{% endif %}">
+        <a href="{{ section_home('production') }}" class="nav-link{% if active_section == 'production' %} active{% endif %}" data-nav-section="production">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 68" fill="none">
               <rect x="30" y="0"  width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
@@ -75,7 +75,7 @@
         {# Compliant's CSS and page controller are deliberately page-scoped and enter
            the document head/body on a full load.  Boosting this link only swaps
            #page-content, leaving the workspace unstyled and inert on first entry. #}
-        <a href="{{ section_home('compliance') }}" class="nav-link{% if active_section == 'compliance' %} active{% endif %}">
+        <a href="{{ section_home('compliance') }}" class="nav-link{% if active_section == 'compliance' %} active{% endif %}" data-nav-section="compliance">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -90,7 +90,7 @@
       {% endif %}
       {% if crm_enabled and can('sales.view') %}
       <li class="nav-item">
-        <a href="{{ section_home('sales') }}" class="nav-link{% if active_section == 'sales' %} active{% endif %}">
+        <a href="{{ section_home('sales') }}" class="nav-link{% if active_section == 'sales' %} active{% endif %}" data-nav-section="sales">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" fill="none">
               <circle cx="26" cy="22" r="13" fill="none" stroke="currentColor" stroke-width="5" stroke-opacity="0.8"/>
@@ -107,7 +107,7 @@
       </li>
       {% endif %}
       <li class="nav-item">
-        <a href="/core/settings" class="nav-link{% if active_section == 'settings' %} active{% endif %}">
+        <a href="/core/settings" class="nav-link{% if active_section == 'settings' %} active{% endif %}" data-nav-section="settings">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 12 72 54" fill="none">
               <rect x="0" y="15" width="72" height="5.5" rx="2.5" fill="white" fill-opacity="0.1"/>
