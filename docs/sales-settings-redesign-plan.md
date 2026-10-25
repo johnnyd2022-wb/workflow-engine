@@ -94,3 +94,9 @@ Try them with `?style=1`, `?style=2` or `?style=3`, or the dashed Concept switch
 - `tests/js/crm-configuration.test.js`: per-section saving and discard.
 - `test_crm_contact_sync_ui.py`: the Sales-wide default now needs Save.
 - Shots: laptop, phone, wall and dark, for a busy org (Xero connected, four mappings) and a quiet one. Also editing, saved, both dialogs, the save bar, arriving by a boosted link and by the Map link, and a failed load.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (Cards) is the approved design for !563. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 12 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

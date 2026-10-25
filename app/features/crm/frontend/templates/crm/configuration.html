@@ -6,8 +6,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='sales-settings.css') }}">
 {# Alpine calls init() itself; an x-init="init()" here loaded every setting twice. #}
-<div class="max-content crm-root workspace-overview sales-settings" x-data="crmConfiguration()"
-     data-ss-style="1" :data-ss-style="ssStyle" :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
+<div class="max-content crm-root workspace-overview sales-settings" x-data="crmConfiguration()" :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
 
   <header class="workspace-header ss-header">
     <div>
@@ -16,13 +15,6 @@
     </div>
   </header>
 
-  {# CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked. #}
-  <div class="ss-style-pick" role="group" aria-label="Layout concepts">
-    <span>Concept</span>
-    <button type="button" @click="setSsStyle('1')" :aria-pressed="ssStyle === '1' ? 'true' : 'false'">1 · Cards</button>
-    <button type="button" @click="setSsStyle('2')" :aria-pressed="ssStyle === '2' ? 'true' : 'false'">2 · Side by side</button>
-    <button type="button" @click="setSsStyle('3')" :aria-pressed="ssStyle === '3' ? 'true' : 'false'">3 · Read first</button>
-  </div>
 
   <div x-show="error" class="crm-error-banner ss-error" role="alert" x-cloak>
     <span x-text="error"></span>
@@ -98,15 +90,9 @@
             <h2 id="ss-matching-title">Matching sales to batches</h2>
             <p>How each sale is linked back to the batch it came from. Applies on the next sync, including sales already imported.</p>
           </div>
-          <button type="button" class="workspace-button ss-change" @click="startEdit('matching')" aria-label="Change how sales are matched">Change</button>
         </div>
       </div>
       <div class="ss-body">
-        <dl class="ss-rows ss-read">
-          <div class="ss-row"><dt>How sales are matched</dt><dd x-text="matchingWords"></dd></div>
-          <div class="ss-row" x-show="traceConfig.mode === 'hybrid'"><dt>Review window</dt><dd x-text="`${traceConfig.review_days} days`"></dd></div>
-          <div class="ss-row"><dt>Xero line must match exactly</dt><dd x-text="traceConfig.strict ? 'Yes' : 'No, phrases can match'"></dd></div>
-        </dl>
         <form class="ss-form" @submit.prevent="saveSection('matching')" hx-boost="false" data-ss-form="matching">
           <fieldset class="ss-choices">
             <legend>How sales are matched</legend>
@@ -124,7 +110,6 @@
           </label>
           <div class="ss-actions">
             <button type="submit" class="workspace-button ss-save" :disabled="saving.matching === true" x-text="saving.matching ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ss-cancel" @click="discard('matching')">Cancel</button>
             <a href="/core/sourcemap" class="ss-link">Open Sourcemap</a>
           </div>
           <p class="ss-section-error" role="alert" x-show="sectionError.matching" x-text="sectionError.matching" x-cloak></p>
@@ -141,13 +126,9 @@
             <h2 id="ss-customers-title">Customers created in Biz-E</h2>
             <p>Every Xero contact comes into Sales. This decides whether customers you add here go the other way. Each customer can override it on its own page.</p>
           </div>
-          <button type="button" class="workspace-button ss-change" @click="startEdit('customers')" aria-label="Change where new customers go">Change</button>
         </div>
       </div>
       <div class="ss-body">
-        <dl class="ss-rows ss-read">
-          <div class="ss-row"><dt>New customers</dt><dd x-text="contactSync.sync_contacts_to_xero ? 'Sent to Xero and kept in step' : 'Stay in Biz-E'"></dd></div>
-        </dl>
         <form class="ss-form" @submit.prevent="saveSection('customers')" hx-boost="false" data-ss-form="customers">
           <label class="ss-check">
             <input type="checkbox" data-sync-default x-model="draft.customers.sync">
@@ -155,7 +136,6 @@
           </label>
           <div class="ss-actions">
             <button type="submit" class="workspace-button ss-save" :disabled="saving.customers === true" x-text="saving.customers ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ss-cancel" @click="discard('customers')">Cancel</button>
           </div>
           <p class="ss-section-error" role="alert" x-show="sectionError.customers" x-text="sectionError.customers" x-cloak></p>
         </form>
@@ -173,14 +153,9 @@
             <h2 id="ss-revenue-title">Revenue on the overview</h2>
             <p>A monthly target to measure the month against, and whether money is shown at all.</p>
           </div>
-          <button type="button" class="workspace-button ss-change" @click="startEdit('revenue')" aria-label="Change revenue settings">Change</button>
         </div>
       </div>
       <div class="ss-body">
-        <dl class="ss-rows ss-read">
-          <div class="ss-row"><dt>Monthly target</dt><dd x-text="targetWords"></dd></div>
-          <div class="ss-row"><dt>Money on the overview</dt><dd x-text="traceConfig.obfuscate_sales_figures ? 'Hidden (shown as *****)' : 'Shown'"></dd></div>
-        </dl>
         <form class="ss-form" @submit.prevent="saveSection('revenue')" hx-boost="false" data-ss-form="revenue">
           <label class="ss-field ss-field--short">
             <span>Monthly target ($)</span>
@@ -193,7 +168,6 @@
           </label>
           <div class="ss-actions">
             <button type="submit" class="workspace-button ss-save" :disabled="saving.revenue === true" x-text="saving.revenue ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ss-cancel" @click="discard('revenue')">Cancel</button>
           </div>
           <p class="ss-section-error" role="alert" x-show="sectionError.revenue" x-text="sectionError.revenue" x-cloak></p>
         </form>
@@ -209,13 +183,9 @@
             <h2 id="ss-tasks-title">Sales tasks</h2>
             <p>How long finished tasks stay on the Tasks board before they move to the archive.</p>
           </div>
-          <button type="button" class="workspace-button ss-change" @click="startEdit('tasks')" aria-label="Change when finished tasks are archived">Change</button>
         </div>
       </div>
       <div class="ss-body">
-        <dl class="ss-rows ss-read">
-          <div class="ss-row"><dt>Finished tasks leave the board after</dt><dd x-text="`${traceConfig.task_done_archive_days} day${Number(traceConfig.task_done_archive_days) === 1 ? '' : 's'}`"></dd></div>
-        </dl>
         <form class="ss-form" @submit.prevent="saveSection('tasks')" hx-boost="false" data-ss-form="tasks">
           <label class="ss-field ss-field--short">
             <span>Archive finished tasks after (days)</span>
@@ -223,7 +193,6 @@
           </label>
           <div class="ss-actions">
             <button type="submit" class="workspace-button ss-save" :disabled="saving.tasks === true" x-text="saving.tasks ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ss-cancel" @click="discard('tasks')">Cancel</button>
           </div>
           <p class="ss-section-error" role="alert" x-show="sectionError.tasks" x-text="sectionError.tasks" x-cloak></p>
         </form>
@@ -232,14 +201,6 @@
     </section>
   </div>
 
-  {# CONCEPT ONLY: Style 2's one save bar for every section. #}
-  <div class="ss-savebar" x-show="dirtySections.length > 0" x-cloak role="region" aria-label="Unsaved changes">
-    <span>Unsaved changes to <span x-text="dirtyWords"></span></span>
-    <div class="ss-savebar__actions">
-      <button type="button" class="workspace-button" @click="discardAll()">Discard</button>
-      <button type="button" class="workspace-button workspace-button--primary" @click="saveAll()">Save changes</button>
-    </div>
-  </div>
 
   {# Add a mapping #}
   <div class="ss-overlay" x-show="showMappingDialog" x-cloak @click.self="closeMappingDialog()" @keydown.escape.window="showMappingDialog && closeMappingDialog()">

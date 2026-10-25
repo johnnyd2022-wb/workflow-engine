@@ -52,33 +52,7 @@ function crmConfiguration() {
     editing: {},
     showMappingDialog: false,
 
-    // CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked.
-    ssStyle: '1',
-
-    readSsStyle() {
-      const wanted = new URLSearchParams(window.location.search).get('style');
-      if (['1', '2', '3'].includes(wanted)) return wanted;
-      try {
-        const kept = window.localStorage.getItem('sales-settings-style');
-        if (['1', '2', '3'].includes(kept)) return kept;
-      } catch (_) {
-        // Storage can be blocked; the default layout is fine.
-      }
-      return '1';
-    },
-
-    setSsStyle(style) {
-      this.ssStyle = style;
-      this.editing = {};
-      try {
-        window.localStorage.setItem('sales-settings-style', style);
-      } catch (_) {
-        // Remembering the choice is a convenience only.
-      }
-    },
-
     async init() {
-      this.ssStyle = this.readSsStyle();
       this.loading = true;
       this.error = null;
       this.loadFailed = false;

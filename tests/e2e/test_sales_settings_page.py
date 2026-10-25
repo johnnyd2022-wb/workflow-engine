@@ -1,5 +1,5 @@
 """Sales settings in a browser: one load, a Save per section that saves only that section, a failed
-load that hides the settings, the overview's "Map" link, and (CONCEPT ONLY) each layout's fit.
+load that hides the settings, the overview's "Map" link, and the page's fit.
 
 Requests are routed into the Flask test client (see test_crm_contact_sync_ui), and Xero is faked.
 """
@@ -18,9 +18,9 @@ PAGE = "https://crm.test/crm/configuration"
 READY = ".sales-settings[aria-busy='false']"
 
 
-def _open(page, style="1", width=1440, query=""):
+def _open(page, width=1440, query=""):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}{query}")
+    page.goto(f"{PAGE}?{query.lstrip("&")}")
     page.locator(READY).wait_for()
 
 
@@ -70,36 +70,9 @@ def test_the_overview_map_link_opens_the_form_for_that_line(xero, sales_page):  
     expect(dialog).to_be_hidden()
 
 
-# CONCEPT ONLY: the next three are deleted with the two layouts not picked.
-def test_read_first_shows_the_value_and_changes_it_in_place(xero, sales_page):  # noqa: F811
-    _open(sales_page, style="3")
-    tasks = sales_page.locator("#tasks")
-    expect(tasks.locator(".ss-read")).to_contain_text("7 days")
-    expect(tasks.locator("#ss-archive-days")).to_be_hidden()
-    tasks.get_by_role("button", name="Change when finished tasks are archived").click()
-    tasks.locator("#ss-archive-days").fill("10")
-    tasks.get_by_role("button", name="Save").click()
-    expect(tasks.locator(".ss-read")).to_contain_text("10 days")
-    expect(tasks.locator("#ss-archive-days")).to_be_hidden()
-
-
-def test_side_by_side_saves_every_changed_section_from_one_bar(xero, sales_page, client):  # noqa: F811
-    _open(sales_page, style="2")
-    bar = sales_page.get_by_role("region", name="Unsaved changes")
-    expect(bar).to_be_hidden()
-    sales_page.locator("#ss-revenue-target").fill("42000")
-    sales_page.locator("#ss-archive-days").fill("21")
-    expect(bar).to_contain_text("Unsaved changes to revenue and tasks")
-    bar.get_by_role("button", name="Save changes").click()
-    expect(bar).to_be_hidden()
-    saved = client.get("/api/crm/traceability-config").get_json()
-    assert (saved["revenue_baseline_target_mtd"], saved["task_done_archive_days"]) == (42000, 21)
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(xero, sales_page, style, width):  # noqa: F811
-    _open(sales_page, style=style, width=width)
+def test_the_page_fits_without_sideways_scroll(xero, sales_page, width):  # noqa: F811
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     for section in ("#xero", "#mappings", "#matching", "#customers", "#revenue", "#tasks"):
         expect(sales_page.locator(section)).to_be_visible()
