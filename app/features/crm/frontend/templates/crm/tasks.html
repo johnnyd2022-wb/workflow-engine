@@ -8,276 +8,190 @@
 
 
 {% block content %}
-<div class="max-content crm-root crm-tasks-page" x-data="crmTasks()" x-init="init()">
-  {% set crm_heading = "Tasks" %}
-  {% set crm_subtitle = "Manage follow-ups and actions for your customers" %}
-  {% include "crm/_crm_banner.html" %}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='tasks.css') }}">
+<div id="tasks-page" class="max-content crm-root workspace-overview tasks-page" x-data="crmTasks()"
+     data-tasks-style="1" :data-tasks-style="style" :aria-busy="loading ? 'true' : 'false'" aria-busy="true"
+     data-me="{{ g.current_user.id if g.current_user else '' }}">
+  <header class="workspace-header">
+    <div>
+      <h1>Tasks</h1>
+      <p class="tasks-summary" aria-live="polite" x-text="summaryLine">Follow-ups for your customers, and who is doing them.</p>
+    </div>
+    <button type="button" class="workspace-button workspace-button--primary" data-new-task @click="openCreate()">New task</button>
+  </header>
 
-  {# Error #}
-  <div x-show="error" class="crm-error-banner" x-cloak>
+  {# The same follow-ups in three views; the choice is remembered in this browser. #}
+  <div class="tasks-view-switch" role="group" aria-label="Task view">
+    <span>View</span>
+    <button type="button" data-style-pick="1" :aria-pressed="style === '1' ? 'true' : 'false'" @click="setStyle('1')">Board</button>
+    <button type="button" data-style-pick="2" :aria-pressed="style === '2' ? 'true' : 'false'" @click="setStyle('2')">List</button>
+    <button type="button" data-style-pick="3" :aria-pressed="style === '3' ? 'true' : 'false'" @click="setStyle('3')">Week</button>
+  </div>
+
+  <div x-show="error" class="tasks-error" role="alert" x-cloak>
     <span x-text="error"></span>
-    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+    <button type="button" class="workspace-button" @click="loadTasks()">Try again</button>
   </div>
 
-  {# ── Calendar Strip ── #}
-  <div class="crm-card" style="padding:14px 16px; margin-bottom:12px;">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-      <p style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary,#9ca3af); margin:0;">
-        Upcoming — click a date to filter
-      </p>
-      <span style="font-size:0.78rem; color:var(--text-secondary,#6b7280);" x-text="calVisibleMonthLabel"></span>
-    </div>
-    <div
-      x-ref="calStrip"
-      class="crm-cal-strip"
-      @pointerdown="onCalPointerDown($event)"
-      @pointermove="onCalPointerMove($event)"
-      @pointerup="onCalPointerUp($event)"
-      @pointercancel="onCalPointerUp($event)"
-      @scroll.passive="onCalScroll()"
-    >
-      <template x-for="day in calDays" :key="day.iso">
-        <div
-          class="crm-cal-day"
-          :data-cal-day="day.iso"
-          :class="{ 'active': calSelectedDate === day.iso, 'today': day.isToday }"
-          @click="selectCalDay(day.iso)"
-        >
-          <span class="dow" x-text="day.dow"></span>
-          <span class="dom" x-text="day.dom"></span>
-          <div class="crm-cal-dots">
-            <template x-if="calDayDots(day.iso) > 0">
-              <template x-for="n in Math.min(calDayDots(day.iso), 3)" :key="n">
-                <span class="crm-cal-dot"></span>
-              </template>
-            </template>
-          </div>
-        </div>
-      </template>
-    </div>
-    <template x-if="calSelectedDate">
-      <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
-        <span style="font-size:0.8rem; color:var(--crm-teal); font-weight:600;">Filtered by: <span x-text="calSelectedDate"></span></span>
-        <button @click="calSelectedDate=null" class="crm-btn crm-btn--ghost crm-btn--sm" style="padding:2px 8px;">&times; Clear</button>
-      </div>
-    </template>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px;">
-      <div class="crm-search-wrap crm-search-wrap--plain" style="max-width:280px;">
-        <input class="crm-search crm-search--plain" type="search" placeholder="Search tasks…" x-model="searchQuery" autocomplete="off">
-      </div>
-      <button class="crm-btn crm-btn--primary" style="margin-left:auto;" @click="openCreate()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New Task
-      </button>
-    </div>
-  </div>
-
-  {# ── Filter bar ── #}
-  <div class="crm-task-filters">
-    <div class="crm-task-filters__desktop-row">
-      <select class="crm-select crm-task-filters__operator-select" x-model="operatorFilter">
-        <option value="">All operators</option>
+  <div class="tasks-toolbar">
+    <label class="tasks-search" for="tasks-search"><span class="tasks-sr">Search tasks</span>
+      <input id="tasks-search" type="search" placeholder="Search tasks or customers" x-model="searchQuery" autocomplete="off">
+    </label>
+    <label class="tasks-person" for="tasks-person"><span class="tasks-sr">Whose tasks</span>
+      <select id="tasks-person" x-model="operatorFilter">
+        <option value="">Everyone</option>
+        <option value="__mine" x-show="me">Mine</option>
+        <option value="__none">Unassigned</option>
         <template x-for="u in operators" :key="u.id">
           <option :value="u.id" x-text="u.display_name || u.email"></option>
         </template>
       </select>
-      <button
-        type="button"
-        class="spa-advanced-toggle crm-task-filters__desktop-toggle"
-        role="switch"
-        :aria-checked="onlyAssigned ? 'true' : 'false'"
-        @click="onlyAssigned = !onlyAssigned"
-      >
-        <span class="spa-advanced-toggle__label">Assigned only</span>
-        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': onlyAssigned }">
-          <span class="spa-advanced-toggle__thumb"></span>
-        </span>
-      </button>
-      <button
-        type="button"
-        class="spa-advanced-toggle crm-task-filters__desktop-toggle"
-        role="switch"
-        :aria-checked="showArchivedCancelled ? 'true' : 'false'"
-        @click="showArchivedCancelled = !showArchivedCancelled"
-      >
-        <span class="spa-advanced-toggle__label">Show archived tasks</span>
-        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': showArchivedCancelled }">
-          <span class="spa-advanced-toggle__thumb"></span>
-        </span>
-      </button>
-      <button class="crm-btn crm-btn--secondary crm-btn--sm crm-task-filters__add-lane-btn" @click="openLaneModal()" :disabled="!canAddCustomLane">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Lane
-      </button>
-    </div>
-
-    <div class="crm-task-filters__mobile-toggle-row">
-      <button
-        type="button"
-        class="spa-advanced-toggle crm-task-filters__mobile-toggle"
-        role="switch"
-        :aria-checked="onlyAssigned ? 'true' : 'false'"
-        @click="onlyAssigned = !onlyAssigned"
-      >
-        <span class="spa-advanced-toggle__label">Assigned only</span>
-        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': onlyAssigned }">
-          <span class="spa-advanced-toggle__thumb"></span>
-        </span>
-      </button>
-      <button
-        type="button"
-        class="spa-advanced-toggle crm-task-filters__mobile-toggle"
-        role="switch"
-        :aria-checked="showArchivedCancelled ? 'true' : 'false'"
-        @click="showArchivedCancelled = !showArchivedCancelled"
-      >
-        <span class="spa-advanced-toggle__label">Show archived tasks</span>
-        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': showArchivedCancelled }">
-          <span class="spa-advanced-toggle__thumb"></span>
-        </span>
-      </button>
-    </div>
-
-    <div class="crm-task-filters__mobile-action-row">
-      <select class="crm-select crm-task-filters__operator-select" x-model="operatorFilter">
-        <option value="">All operators</option>
-        <template x-for="u in operators" :key="`mobile-${u.id}`">
-          <option :value="u.id" x-text="u.display_name || u.email"></option>
-        </template>
-      </select>
-      <button class="crm-btn crm-btn--secondary crm-btn--sm crm-task-filters__add-lane-btn" @click="openLaneModal()" :disabled="!canAddCustomLane">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Lane
-      </button>
-    </div>
-
+    </label>
+    <button type="button" class="tasks-text-action" x-show="filtersOn" x-cloak @click="clearFilters()">Clear</button>
+    <span class="tasks-toolbar__spacer"></span>
+    <button type="button" class="tasks-text-action tasks-board-only" @click="openLaneModal()">Add lane</button>
+    <button type="button" class="tasks-text-action tasks-finished-toggle" :aria-pressed="showFinished ? 'true' : 'false'" @click="showFinished = !showFinished"
+            x-text="showFinished ? 'Hide finished' : 'Show finished (' + finishedTasks.length + ')'">Show finished</button>
   </div>
 
-  <div class="crm-lane-mobile-selector crm-lane-mobile-selector--tasks" x-show="!loading && lanes.length > 0" x-cloak>
-    <div class="flow-mode-segmented" role="tablist" aria-label="Task lanes">
-      <template x-for="lane in lanes" :key="`${lane.id}-selector`">
-        <button
-          type="button"
-          class="flow-mode-segment"
-          :class="activeLaneId === lane.id ? 'flow-mode-segment--active' : ''"
-          @click="activeLaneId = lane.id"
-          x-text="lane.title"
-        ></button>
-      </template>
-    </div>
-  </div>
-
-  {# Loading #}
   <template x-if="loading">
-    <div class="crm-card">
-      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; padding:16px;">
-        <template x-for="col in 3" :key="col">
-          <div>
-            <div class="crm-skeleton" style="height:30px; border-radius:6px; margin-bottom:12px;"></div>
-            <template x-for="i in 3" :key="i">
-              <div class="crm-skeleton" style="height:80px; border-radius:8px; margin-bottom:8px;"></div>
-            </template>
-          </div>
+    <div class="tasks-loading" aria-hidden="true"><span></span><span></span><span></span></div>
+  </template>
+
+  <template x-if="!loading && !tasks.length && !error">
+    <section class="workspace-card tasks-empty">
+      <h2>No tasks yet</h2>
+      <p>Add a follow-up for a customer: a call, a tasting, an order to confirm.</p>
+      <button type="button" class="workspace-button workspace-button--primary" @click="openCreate()">New task</button>
+    </section>
+  </template>
+  <template x-if="!loading && tasks.length && !openTasks.length && filtersOn">
+    <p class="tasks-none">No open tasks match. <button type="button" class="tasks-text-action" @click="clearFilters()">Clear the filters</button></p>
+  </template>
+
+  {# ── Style 1: Board. Lanes of open work; finished folds into a narrow rail. ── #}
+  <template x-if="!loading && tasks.length && style === '1'">
+    <div class="tasks-board-wrap">
+      <div class="tasks-lane-picker" role="tablist" aria-label="Task lanes">
+        <template x-for="lane in boardLanes" :key="`${lane.id}-pick`">
+          <button type="button" role="tab" :aria-selected="activeLaneId === lane.id ? 'true' : 'false'" @click="activeLaneId = lane.id; if (lane.id === 'finished') showFinished = true">
+            <span x-text="lane.title"></span> <small x-text="tasksForLane(lane).length"></small>
+          </button>
+        </template>
+      </div>
+      <div class="tasks-board" :class="{ 'tasks-board--finished': showFinished }" :style="'--tasks-lanes: ' + (boardLanes.length - 1)">
+        <template x-for="lane in boardLanes" :key="lane.id">
+          <section class="tasks-lane" :class="{ 'tasks-lane--finished': lane.id === 'finished', 'tasks-lane--active': activeLaneId === lane.id, 'tasks-lane--over': draggingTaskId && dragOverLaneId === lane.id }"
+                   :aria-label="lane.title"
+                   @dragover.prevent="setDragOverLane(lane.id)" @dragleave="clearDragOverLane(lane.id)" @drop.prevent="dropTaskToLane(lane)">
+            <header class="tasks-lane__head">
+              <button type="button" class="tasks-lane__fold" x-show="lane.id === 'finished'" @click="showFinished = !showFinished"
+                      :aria-expanded="showFinished ? 'true' : 'false'">
+                <span x-text="lane.title"></span> <small x-text="finishedTasks.length"></small>
+              </button>
+              <h2 x-show="lane.id !== 'finished'"><span x-text="lane.title"></span> <small x-text="tasksForLane(lane).length"></small></h2>
+              <div class="tasks-lane__tools" x-show="lane.deletable" x-cloak>
+                <button type="button" @click.stop="moveLane(lane, -1)" aria-label="Move lane left" title="Move lane left">&larr;</button>
+                <button type="button" @click.stop="moveLane(lane, 1)" aria-label="Move lane right" title="Move lane right">&rarr;</button>
+                <button type="button" @click.stop="renameLane(lane)" aria-label="Rename lane" title="Rename lane">Rename</button>
+                <button type="button" @click.stop="removeLane(lane.id)" aria-label="Delete lane" title="Delete lane">Delete</button>
+              </div>
+            </header>
+            <div class="tasks-lane__cards" x-show="lane.id !== 'finished' || showFinished">
+              <template x-for="task in tasksForLane(lane)" :key="task.id">
+                <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" draggable="true"
+                        @click="handleCardClick(task)" @dragstart="startDragTask(task)" @dragend="endDragTask()">
+                  <span class="tasks-card__title" x-text="task.title"></span>
+                  <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
+                  <span class="tasks-card__foot">
+                    <span class="tasks-due" :class="dueClass(task)" x-text="dueWords(task)"></span>
+                    <span class="tasks-high" x-show="task.priority === 'high' && !isFinished(task)">High</span>
+                  </span>
+                </button>
+              </template>
+              <p class="tasks-lane__empty" x-show="!tasksForLane(lane).length" x-text="lane.id === 'finished' ? 'Nothing finished yet' : 'Nothing here'"></p>
+            </div>
+          </section>
         </template>
       </div>
     </div>
   </template>
 
-  {# ── Kanban ── #}
-  <template x-if="!loading">
-    <div class="crm-kanban" :style="{ '--crm-lane-count': String(Math.max(1, visibleLanes.length)) }">
-      <template x-for="lane in visibleLanes" :key="lane.id">
-        <div class="crm-kanban-col">
-          <div class="crm-kanban-header" :class="laneHeaderClass(lane)">
-            <span x-show="!isMobileView" x-text="lane.title"></span>
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="crm-kanban-count" x-text="tasksForLane(lane).length">0</span>
-              <button
-                x-show="lane.deletable"
-                x-cloak
-                class="crm-btn crm-btn--ghost crm-btn--sm"
-                style="padding:2px 6px; color:inherit;"
-                @click.stop="moveLane(lane, -1)"
-                aria-label="Move lane left"
-                title="Move lane left"
-              >&larr;</button>
-              <button
-                x-show="lane.deletable"
-                x-cloak
-                class="crm-btn crm-btn--ghost crm-btn--sm"
-                style="padding:2px 6px; color:inherit;"
-                @click.stop="moveLane(lane, 1)"
-                aria-label="Move lane right"
-                title="Move lane right"
-              >&rarr;</button>
-              <button
-                x-show="lane.deletable"
-                x-cloak
-                class="crm-btn crm-btn--ghost crm-btn--sm"
-                style="padding:2px 6px; color:inherit;"
-                @click.stop="renameLane(lane)"
-                aria-label="Rename lane"
-                title="Rename lane"
-              >&#9998;</button>
-              <button
-                x-show="lane.deletable"
-                x-cloak
-                class="crm-btn crm-btn--ghost crm-btn--sm"
-                style="padding:2px 6px; color:inherit;"
-                @click.stop="removeLane(lane.id)"
-                aria-label="Delete lane"
-                title="Delete lane"
-              >&times;</button>
-            </div>
-          </div>
-          <div
-            class="crm-kanban-dropzone"
-            :class="{ 'crm-kanban-dropzone--active': draggingTaskId && dragOverLaneId === lane.id }"
-            @dragover.prevent="setDragOverLane(lane.id)"
-            @dragleave="clearDragOverLane(lane.id)"
-            @drop.prevent="dropTaskToLane(lane)"
-          >
-            <template x-if="tasksForLane(lane).length === 0">
-              <div style="text-align:center; padding:24px 16px; color:var(--text-secondary,#9ca3af); font-size:0.8rem; border:1.5px dashed var(--border-default,#e5e7eb); border-radius:var(--crm-radius-sm);">
-                No tasks
-              </div>
+  {# ── Style 2: Due list. One list grouped by when it's due; tick to finish. ── #}
+  <template x-if="!loading && tasks.length && style === '2'">
+    <div class="tasks-list workspace-card" x-show="dueGroups.length">
+      <template x-for="group in dueGroups" :key="group.key">
+        <section class="tasks-group" :class="'tasks-group--' + group.key">
+          <h2><span x-text="group.title"></span> <small x-text="group.tasks.length"></small></h2>
+          <ul>
+            <template x-for="task in group.tasks" :key="task.id">
+              <li class="tasks-row" :class="{ 'tasks-row--done': isFinished(task) }">
+                <button type="button" class="tasks-tick" :aria-label="(isFinished(task) ? 'Reopen: ' : 'Mark done: ') + task.title"
+                        :aria-pressed="isFinished(task) ? 'true' : 'false'" @click="toggleDone(task)"></button>
+                <button type="button" class="tasks-row__main" @click="openEdit(task)">
+                  <span class="tasks-row__title" x-text="task.title"></span>
+                  <span class="tasks-row__who" x-text="[whoLine(task), stageWords(task)].filter(Boolean).join(' · ')"></span>
+                </button>
+                <span class="tasks-high" x-show="task.priority === 'high' && !isFinished(task)">High</span>
+                <span class="tasks-due" :class="dueClass(task)" x-text="dueWords(task)"></span>
+              </li>
             </template>
-            <template x-for="task in tasksForLane(lane)" :key="task.id">
-              <div
-                class="crm-task-card"
-                :style="taskCardStyle(task)"
-                @click="handleCardClick(task)"
-                draggable="true"
-                @dragstart="startDragTask(task)"
-                @dragend="endDragTask()"
-              >
-                <div class="crm-task-card-title" :style="taskTitleStyle(task)" x-text="task.title">—</div>
-                <div class="crm-task-card-meta">
-                  <span class="crm-badge" :class="priorityClass(task.priority)" x-text="task.priority">—</span>
-                  <template x-if="task.contact_id">
-                    <span class="crm-badge crm-task-customer-tag" x-text="customerName(task.contact_id)"></span>
-                  </template>
-                  <template x-if="task.assigned_to_user_id">
-                    <span class="crm-task-card-due">
-                      <span x-text="assigneeName(task.assigned_to_user_id)"></span>
-                    </span>
-                  </template>
-                  <template x-if="task.due_date">
-                    <span class="crm-task-card-due" :class="isOverdue(task) ? 'overdue' : ''">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                      <span x-text="formatDue(task.due_date)"></span>
-                    </span>
-                  </template>
-                </div>
-                <div style="font-size:0.74rem; color:var(--text-secondary,#6b7280); margin-top:8px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
-                <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-                  <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="deleteTask(task)" style="color:var(--crm-red); font-size:0.7rem;">Delete</button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
+          </ul>
+        </section>
       </template>
+    </div>
+  </template>
+
+  {# ── Style 3: Week. The seven days side by side; overdue and undated beside them. ── #}
+  <template x-if="!loading && tasks.length && style === '3'">
+    <div class="tasks-week-wrap">
+      <div class="tasks-week-nav">
+        <button type="button" class="workspace-button" @click="weekOffset -= 1" aria-label="Previous week">&larr;</button>
+        <h2 x-text="weekLabel"></h2>
+        <button type="button" class="workspace-button" @click="weekOffset += 1" aria-label="Next week">&rarr;</button>
+        <button type="button" class="tasks-text-action" x-show="weekOffset !== 0" @click="weekOffset = 0">This week</button>
+      </div>
+      <section class="tasks-tray tasks-tray--overdue" x-show="weekOffset === 0 && overdueBeforeWeek.length" aria-label="Overdue from before this week">
+        <h3><span>Overdue from before this week</span> <small x-text="overdueBeforeWeek.length"></small></h3>
+        <div class="tasks-tray__cards">
+          <template x-for="task in overdueBeforeWeek" :key="`od-${task.id}`">
+            <button type="button" class="tasks-card" @click="openEdit(task)">
+              <span class="tasks-card__title" x-text="task.title"></span>
+              <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
+              <span class="tasks-due tasks-due--late" x-text="dueWords(task)"></span>
+            </button>
+          </template>
+        </div>
+      </section>
+      <div class="tasks-week">
+        <template x-for="day in weekDays" :key="day.iso">
+          <section class="tasks-day" :class="{ 'tasks-day--today': day.isToday, 'tasks-day--past': day.isPast, 'tasks-day--empty': !day.tasks.length }" :aria-label="day.long">
+            <header><span x-text="day.dow"></span> <strong x-text="day.dom"></strong> <em x-show="day.isToday">Today</em></header>
+            <template x-for="task in day.tasks" :key="`${day.iso}-${task.id}`">
+              <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" @click="openEdit(task)">
+                <span class="tasks-card__title" x-text="task.title"></span>
+                <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
+                <span class="tasks-card__foot">
+                  <span class="tasks-due tasks-due--late" x-show="day.isPast && !isFinished(task)" x-text="dueWords(task)"></span>
+                  <span class="tasks-high" x-show="task.priority === 'high' && !isFinished(task)">High</span>
+                </span>
+              </button>
+            </template>
+            <button type="button" class="tasks-day__add" @click="openCreate(day.iso)" :aria-label="'New task on ' + day.long">+ Add</button>
+          </section>
+        </template>
+      </div>
+      <section class="tasks-tray" x-show="undatedTasks.length" aria-label="No date">
+        <h3><span>No date</span> <small x-text="undatedTasks.length"></small></h3>
+        <div class="tasks-tray__cards">
+          <template x-for="task in undatedTasks" :key="`nd-${task.id}`">
+            <button type="button" class="tasks-card" @click="openEdit(task)">
+              <span class="tasks-card__title" x-text="task.title"></span>
+              <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
+            </button>
+          </template>
+        </div>
+      </section>
     </div>
   </template>
 
@@ -285,116 +199,95 @@
   <div class="crm-lane-sheet-overlay" x-show="showLaneModal" x-cloak @click.self="closeLaneModal()" style="display:flex;">
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
-        <h3 class="crm-lane-sheet__title">Add Lane</h3>
+        <h3 class="crm-lane-sheet__title">Add lane</h3>
         <button type="button" class="crm-btn crm-btn--ghost" @click="closeLaneModal()" aria-label="Close lane modal">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div class="crm-form-group">
-          <label class="crm-form-label">Lane Name</label>
-          <input class="crm-form-input" x-model="laneDraft.title" maxlength="50" placeholder="e.g. Follow Up" @keydown.enter.prevent="saveLane()">
+          <label class="crm-form-label" for="tasks-lane-name">Lane name</label>
+          <input id="tasks-lane-name" class="crm-form-input" x-model="laneDraft.title" maxlength="50" placeholder="e.g. Waiting on customer" @keydown.enter.prevent="saveLane()">
         </div>
       </div>
       <div class="crm-lane-sheet__footer">
         <button type="button" class="crm-btn crm-btn--secondary" @click="closeLaneModal()">Cancel</button>
-        <button type="button" class="crm-btn crm-btn--primary" @click="saveLane()" :disabled="!laneDraft.title.trim()">Save Lane</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="saveLane()" :disabled="!laneDraft.title.trim()">Save lane</button>
       </div>
     </div>
   </div>
 
   {# ── Task Drawer ── #}
-  <div class="crm-task-sheet-overlay" x-show="showDrawer" x-cloak @click.self="closeDrawer()" style="display:flex;">
-    <div class="crm-task-sheet">
+  <div class="crm-task-sheet-overlay" x-show="showDrawer" x-cloak @click.self="closeDrawer()" @keydown.escape.window="closeDrawer()" style="display:flex;">
+    <div class="crm-task-sheet" role="dialog" aria-modal="true" aria-labelledby="tasks-sheet-title">
       <div class="crm-task-sheet__header">
-        <span class="crm-task-sheet__title" x-text="editingTask ? 'Edit Task' : 'New Task'">Task</span>
-        <button class="crm-btn crm-btn--ghost" @click="closeDrawer()" style="font-size:1.2rem;">&times;</button>
+        <span class="crm-task-sheet__title" id="tasks-sheet-title" x-text="editingTask ? 'Edit task' : 'New task'">Task</span>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDrawer()" aria-label="Close" style="font-size:1.2rem;">&times;</button>
       </div>
 
       <div class="crm-task-sheet__body">
         <div class="crm-form-group">
-          <label class="crm-form-label">Title <span style="color:var(--crm-red);">*</span></label>
-          <input class="crm-form-input" x-model="drawerForm.title" placeholder="Task title" @keydown.enter.prevent="saveTask()">
+          <label class="crm-form-label" for="task-title">Title <span class="tasks-required">*</span></label>
+          <input id="task-title" class="crm-form-input" x-model="drawerForm.title" placeholder="e.g. Confirm the Christmas order" @keydown.enter.prevent="saveTask()">
         </div>
-        <div class="crm-form-group">
-          <label class="crm-form-label">Description</label>
-          <textarea class="crm-form-textarea" x-model="drawerForm.description" placeholder="Optional description…"></textarea>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="tasks-sheet-grid">
           <div class="crm-form-group">
-            <label class="crm-form-label">Due Date</label>
-            <input class="crm-form-input" type="date" x-model="drawerForm.due_date">
+            <label class="crm-form-label" for="task-due">Due</label>
+            <input id="task-due" class="crm-form-input" type="date" x-model="drawerForm.due_date">
           </div>
           <div class="crm-form-group">
-            <label class="crm-form-label">Priority</label>
-            <select class="crm-form-select" x-model="drawerForm.priority">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+            <label class="crm-form-label" for="task-who">Assigned to</label>
+            <select id="task-who" class="crm-form-select" x-model="drawerForm.assigned_to_user_id">
+              <option value="">Unassigned</option>
+              <template x-for="u in operators" :key="`drawer-${u.id}`">
+                <option :value="u.id" x-text="u.display_name || u.email"></option>
+              </template>
             </select>
           </div>
         </div>
-
-        <template x-if="editingTask">
-          <div class="crm-form-group">
-            <label class="crm-form-label">Status</label>
-            <select class="crm-form-select" x-model="drawerForm.status">
-              <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-        </template>
-
         <div class="crm-form-group">
-          <label class="crm-form-label">Customer Tag</label>
-          <select class="crm-form-select" x-model="drawerForm.contact_id">
+          <label class="crm-form-label" for="task-customer">Customer</label>
+          <select id="task-customer" class="crm-form-select" x-model="drawerForm.contact_id">
             <option value="">No customer</option>
             <template x-for="c in customers" :key="`customer-${c.id}`">
               <option :value="c.id" x-text="c.name"></option>
             </template>
           </select>
         </div>
-
-        <div class="crm-task-customer-details" x-show="selectedDrawerCustomer()" x-cloak>
-          <div class="crm-task-customer-details__title">Customer Details</div>
-          <div class="crm-task-customer-details__grid">
-            <div class="crm-task-customer-details__field">
-              <label>Name</label>
-              <span x-text="selectedDrawerCustomer()?.name || '—'"></span>
-            </div>
-            <div class="crm-task-customer-details__field">
-              <label>Contact</label>
-              <span x-text="((selectedDrawerCustomer()?.first_name || '') + ' ' + (selectedDrawerCustomer()?.last_name || '')).trim() || selectedDrawerCustomer()?.name || '—'"></span>
-            </div>
-            <div class="crm-task-customer-details__field">
-              <label>Email</label>
-              <span x-text="selectedDrawerCustomer()?.email_address || selectedDrawerCustomer()?.contact_email || '—'"></span>
-            </div>
-            <div class="crm-task-customer-details__field">
-              <label>Phone</label>
-              <span x-text="selectedDrawerCustomer()?.phone_number || selectedDrawerCustomer()?.contact_phone || '—'"></span>
-            </div>
+        <p class="tasks-contact" x-show="selectedDrawerCustomer()" x-cloak x-text="contactLine()"></p>
+        <div class="tasks-sheet-grid">
+          <div class="crm-form-group">
+            <label class="crm-form-label" for="task-priority">Priority</label>
+            <select id="task-priority" class="crm-form-select" x-model="drawerForm.priority">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
           </div>
+          <template x-if="editingTask">
+            <div class="crm-form-group">
+              <label class="crm-form-label" for="task-status">Status</label>
+              <select id="task-status" class="crm-form-select" x-model="drawerForm.status">
+                <option value="pending">To do</option>
+                <option value="in_progress">In progress</option>
+                <option value="completed">Done</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </template>
         </div>
-
         <div class="crm-form-group">
-          <label class="crm-form-label">Assigned To</label>
-          <select class="crm-form-select" x-model="drawerForm.assigned_to_user_id">
-            <option value="">Unassigned</option>
-            <template x-for="u in operators" :key="`drawer-${u.id}`">
-              <option :value="u.id" x-text="u.display_name || u.email"></option>
-            </template>
-          </select>
+          <label class="crm-form-label" for="task-notes">Notes</label>
+          <textarea id="task-notes" class="crm-form-textarea" x-model="drawerForm.description" placeholder="Optional"></textarea>
         </div>
       </div>
 
       <div class="crm-task-sheet__footer">
         <template x-if="editingTask">
-          <button class="crm-btn crm-btn--danger crm-btn--sm" @click="deleteTask(editingTask); closeDrawer();">Delete</button>
+          <button type="button" class="tasks-text-action tasks-text-action--danger" @click="deleteTask(editingTask)">Delete task</button>
         </template>
-        <button class="crm-btn crm-btn--secondary" @click="closeDrawer()">Cancel</button>
-        <button class="crm-btn crm-btn--primary" @click="saveTask()" :disabled="savingTask || !drawerForm.title.trim()">
-          <span x-text="savingTask ? 'Saving…' : (editingTask ? 'Save Changes' : 'Create Task')">Save</span>
+        <span class="tasks-toolbar__spacer"></span>
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDrawer()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="saveTask()" :disabled="savingTask || !drawerForm.title.trim()">
+          <span x-text="savingTask ? 'Saving…' : (editingTask ? 'Save changes' : 'Create task')">Save</span>
         </button>
       </div>
     </div>

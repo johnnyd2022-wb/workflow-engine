@@ -1,4 +1,4 @@
-/* Tasks Kanban + Calendar Alpine.js component */
+/* Sales tasks: the follow-ups for customers, as a board, a due list or a week (Alpine.js). */
 function crmTasks() {
   const DEFAULT_LANE_IDS = {
     todo: 'lane-todo',
@@ -7,34 +7,64 @@ function crmTasks() {
     cancelled: 'lane-cancelled',
   };
   const OPEN_STATUSES = ['pending', 'in_progress'];
+  const FINISHED_LANE = { id: 'finished', title: 'Finished', status_mode: 'completed', deletable: false };
+  const STYLE_KEY = 'tasks-style';
+  const DAY_MS = 86400000;
 
   function defaultLanes() {
     return [
-      { id: DEFAULT_LANE_IDS.todo, title: 'To Do', status_mode: 'pending', deletable: false },
-      { id: DEFAULT_LANE_IDS.inProgress, title: 'In Progress', status_mode: 'in_progress', deletable: false },
-      { id: DEFAULT_LANE_IDS.done, title: 'Done', status_mode: 'completed', deletable: false },
-      { id: DEFAULT_LANE_IDS.cancelled, title: 'Cancelled', status_mode: 'cancelled', deletable: false },
+      { id: DEFAULT_LANE_IDS.todo, title: 'To do', status_mode: 'pending', deletable: false },
+      { id: DEFAULT_LANE_IDS.inProgress, title: 'In progress', status_mode: 'in_progress', deletable: false },
     ];
+  }
+
+  // A local calendar date as YYYY-MM-DD. toISOString() gives the UTC date, which in New Zealand
+  // is the day before until 1pm, so due dates landed on the wrong day.
+  function localIso(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function parseIso(iso) {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function todayDate() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function daysUntil(iso) {
+    return Math.round((parseIso(iso) - todayDate()) / DAY_MS);
+  }
+
+  function priorityRank(task) {
+    return { high: 0, medium: 1, low: 2 }[task.priority] ?? 1;
+  }
+
+  function byDue(a, b) {
+    if (a.due_date && b.due_date && a.due_date !== b.due_date) return a.due_date < b.due_date ? -1 : 1;
+    if (!!a.due_date !== !!b.due_date) return a.due_date ? -1 : 1;
+    return priorityRank(a) - priorityRank(b);
   }
 
   return {
     tasks: [],
     customers: [],
     operators: [],
+    me: '',
     operatorFilter: '',
-    onlyAssigned: false,
     lanes: defaultLanes(),
     loading: true,
     error: null,
     searchQuery: '',
-    calSelectedDate: null,
-    calVisibleMonthLabel: '',
-    showArchivedCancelled: false,
+    showFinished: false,
     taskDoneArchiveDays: 7,
     showLaneModal: false,
     laneDraft: { title: '' },
-    activeLaneId: null,
-    isMobileView: false,
+    activeLaneId: DEFAULT_LANE_IDS.todo,
     draggingTaskId: null,
     dragOverLaneId: null,
     dragSuppressUntil: 0,
@@ -50,225 +80,32 @@ function crmTasks() {
       assigned_to_user_id: '',
     },
     savingTask: false,
-    calDays: [],
-    wasMobileView: null,
-    calDragPointerId: null,
-    calDragStartX: 0,
-    calDragStartScrollLeft: 0,
-    calDragActive: false,
-    calSuppressClickUntil: 0,
-    calExtendingBefore: false,
-    calExtendingAfter: false,
+    weekOffset: 0,
+    style: '1',
 
+    // Alpine calls init() itself; the template must not call it again (it did, and every
+    // request went out twice).
     async init() {
-      this.syncViewport();
-      window.addEventListener('resize', () => { this.syncViewport(); });
-      this.initCalendarWindow();
+      this.me = this.$el.dataset.me || '';
+      // A direct view link takes priority over the remembered choice; Board is the default.
+      const params = new URLSearchParams(window.location.search || '');
+      const asked = ({ board: '1', list: '2', week: '3' })[params.get('view')] || params.get('style');
+      let kept = null;
+      try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
+      this.style = ['1', '2', '3'].includes(asked) ? asked : (['1', '2', '3'].includes(kept) ? kept : '1');
       await Promise.all([this.loadLanes(), this.loadOperators(), this.loadTasks(), this.loadCustomers(), this.loadTraceabilityConfig()]);
       this.openTaskFromQueryString();
     },
 
-    syncViewport() {
-      const nextMobile = window.innerWidth <= 768;
-      const changed = this.wasMobileView !== null && this.wasMobileView !== nextMobile;
-      this.isMobileView = nextMobile;
-      this.wasMobileView = nextMobile;
-      if (changed) {
-        const anchorIso = this.calSelectedDate || this.closestVisibleCalDateIso() || this.todayIso();
-        this.initCalendarWindow(anchorIso);
-      }
-    },
-
-    todayIso() {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      return d.toISOString().slice(0, 10);
-    },
-
-    parseIsoDate(iso) {
-      const d = new Date(`${iso}T00:00:00`);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    },
-
-    buildCalDay(dateObj) {
-      const d = new Date(dateObj);
-      d.setHours(0, 0, 0, 0);
-      const iso = d.toISOString().slice(0, 10);
-      return {
-        date: d,
-        iso,
-        dow: d.toLocaleDateString('en', { weekday: 'short' }),
-        dom: d.getDate(),
-        isToday: iso === this.todayIso(),
-      };
-    },
-
-    monthBounds(dateObj) {
-      const d = new Date(dateObj);
-      d.setHours(0, 0, 0, 0);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      return { start, end };
-    },
-
-    buildCalDays(startDate, endDate) {
-      const days = [];
-      const cursor = new Date(startDate);
-      cursor.setHours(0, 0, 0, 0);
-      const last = new Date(endDate);
-      last.setHours(0, 0, 0, 0);
-      while (cursor <= last) {
-        days.push(this.buildCalDay(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      return days;
-    },
-
-    initCalendarWindow(anchorIso = null) {
-      const anchor = anchorIso ? this.parseIsoDate(anchorIso) : this.parseIsoDate(this.todayIso());
-      const { start, end } = this.monthBounds(anchor);
-      this.calDays = this.buildCalDays(start, end);
-      this.$nextTick(() => {
-        this.centerCurrentMonthInView();
-        this.updateCalVisibleMonthLabel();
-      });
-    },
-
-    centerCurrentMonthInView() {
-      const strip = this.$refs.calStrip;
-      if (!strip || !this.calDays.length) return;
-      const firstIso = this.calDays[0].iso;
-      const lastIso = this.calDays[this.calDays.length - 1].iso;
-      const first = strip.querySelector(`[data-cal-day="${firstIso}"]`);
-      const last = strip.querySelector(`[data-cal-day="${lastIso}"]`);
-      if (!first || !last) return;
-      const monthStart = first.offsetLeft;
-      const monthEnd = last.offsetLeft + last.offsetWidth;
-      const midpoint = monthStart + ((monthEnd - monthStart) / 2);
-      strip.scrollLeft = Math.max(0, midpoint - (strip.clientWidth / 2));
-    },
-
-    scrollDateIntoView(iso, align = 'center') {
-      const strip = this.$refs.calStrip;
-      if (!strip) return;
-      const target = strip.querySelector(`[data-cal-day="${iso}"]`);
-      if (!target) return;
-      const left = target.offsetLeft - Math.max(0, (strip.clientWidth - target.offsetWidth) / (align === 'center' ? 2 : 1));
-      strip.scrollLeft = Math.max(0, left);
-    },
-
-    closestVisibleCalDateIso() {
-      const strip = this.$refs.calStrip;
-      if (!strip) return this.calDays[0]?.iso || null;
-      const center = strip.scrollLeft + (strip.clientWidth / 2);
-      const cards = strip.querySelectorAll('[data-cal-day]');
-      let bestIso = null;
-      let bestDist = Infinity;
-      cards.forEach((node) => {
-        const nodeCenter = node.offsetLeft + (node.offsetWidth / 2);
-        const dist = Math.abs(nodeCenter - center);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestIso = node.getAttribute('data-cal-day');
-        }
-      });
-      return bestIso;
-    },
-
-    updateCalVisibleMonthLabel() {
-      const iso = this.closestVisibleCalDateIso();
-      if (!iso) {
-        this.calVisibleMonthLabel = '';
-        return;
-      }
-      const d = this.parseIsoDate(iso);
-      this.calVisibleMonthLabel = d.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' });
-    },
-
-    onCalScroll() {
-      this.updateCalVisibleMonthLabel();
-      const strip = this.$refs.calStrip;
-      if (!strip) return;
-      const threshold = 260;
-      if (strip.scrollLeft < threshold) this.extendCalBeforeMonth();
-      if ((strip.scrollWidth - (strip.scrollLeft + strip.clientWidth)) < threshold) this.extendCalAfterMonth();
-    },
-
-    extendCalBeforeMonth() {
-      if (this.calExtendingBefore || !this.calDays.length) return;
-      this.calExtendingBefore = true;
-      const strip = this.$refs.calStrip;
-      const prevScrollWidth = strip ? strip.scrollWidth : 0;
-      const prevScrollLeft = strip ? strip.scrollLeft : 0;
-      const first = this.calDays[0].date;
-      const start = new Date(first.getFullYear(), first.getMonth() - 1, 1);
-      const end = new Date(first.getFullYear(), first.getMonth(), 0);
-      const prepend = this.buildCalDays(start, end);
-      this.calDays = prepend.concat(this.calDays);
-      this.$nextTick(() => {
-        const scroller = this.$refs.calStrip;
-        if (scroller) {
-          const delta = scroller.scrollWidth - prevScrollWidth;
-          scroller.scrollLeft = prevScrollLeft + Math.max(0, delta);
-        }
-        this.calExtendingBefore = false;
-        this.updateCalVisibleMonthLabel();
-      });
-    },
-
-    extendCalAfterMonth() {
-      if (this.calExtendingAfter || !this.calDays.length) return;
-      this.calExtendingAfter = true;
-      const last = this.calDays[this.calDays.length - 1].date;
-      const start = new Date(last.getFullYear(), last.getMonth() + 1, 1);
-      const end = new Date(last.getFullYear(), last.getMonth() + 2, 0);
-      const append = this.buildCalDays(start, end);
-      this.calDays = this.calDays.concat(append);
-      this.$nextTick(() => {
-        this.calExtendingAfter = false;
-        this.updateCalVisibleMonthLabel();
-      });
-    },
-
-    onCalPointerDown(event) {
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-      const strip = this.$refs.calStrip;
-      if (!strip) return;
-      this.calDragActive = true;
-      this.calDragPointerId = event.pointerId;
-      this.calDragStartX = event.clientX;
-      this.calDragStartScrollLeft = strip.scrollLeft;
-      if (strip.setPointerCapture) strip.setPointerCapture(event.pointerId);
-    },
-
-    onCalPointerMove(event) {
-      if (!this.calDragActive) return;
-      if (this.calDragPointerId !== null && event.pointerId !== this.calDragPointerId) return;
-      const strip = this.$refs.calStrip;
-      if (!strip) return;
-      const delta = event.clientX - this.calDragStartX;
-      if (Math.abs(delta) > 6) this.calSuppressClickUntil = Date.now() + 180;
-      strip.scrollLeft = this.calDragStartScrollLeft - delta;
-    },
-
-    onCalPointerUp(event) {
-      if (this.calDragPointerId !== null && event.pointerId !== this.calDragPointerId) return;
-      const strip = this.$refs.calStrip;
-      if (strip && strip.releasePointerCapture && this.calDragPointerId !== null) {
-        try { strip.releasePointerCapture(this.calDragPointerId); } catch (_) {}
-      }
-      this.calDragActive = false;
-      this.calDragPointerId = null;
-    },
-
-    calDayDots(isoDate) {
-      return this.tasks.filter((t) => t.due_date === isoDate).length;
-    },
-
-    selectCalDay(iso) {
-      if (Date.now() < this.calSuppressClickUntil) return;
-      this.calSelectedDate = this.calSelectedDate === iso ? null : iso;
+    // Switching views keeps the current filters, tasks and unsaved drawer fields.
+    setStyle(style) {
+      if (!['1', '2', '3'].includes(style)) return;
+      this.style = style;
+      try { window.localStorage.setItem(STYLE_KEY, style); } catch (_) { /* private mode */ }
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', ({ '1': 'board', '2': 'list', '3': 'week' })[style]);
+      url.searchParams.delete('style');
+      window.history.replaceState(window.history.state, '', url);
     },
 
     async loadOperators() {
@@ -321,32 +158,240 @@ function crmTasks() {
       if (task) this.openEdit(task);
     },
 
+    // ── What is shown ──
+
+    get filtersOn() {
+      return !!(this.searchQuery || this.operatorFilter);
+    },
+
+    clearFilters() {
+      this.searchQuery = '';
+      this.operatorFilter = '';
+    },
+
     get filteredTasks() {
       let t = this.tasks;
-      if (this.calSelectedDate) t = t.filter((x) => x.due_date === this.calSelectedDate);
       if (this.searchQuery) {
         const q = this.searchQuery.toLowerCase();
-        t = t.filter((x) => x.title.toLowerCase().includes(q));
+        t = t.filter((x) => x.title.toLowerCase().includes(q) || (x.contact_id && this.customerName(x.contact_id).toLowerCase().includes(q)));
       }
-      if (this.onlyAssigned) t = t.filter((x) => !!x.assigned_to_user_id);
-      if (this.operatorFilter) t = t.filter((x) => x.assigned_to_user_id === this.operatorFilter);
+      if (this.operatorFilter === '__mine') t = t.filter((x) => x.assigned_to_user_id === this.me);
+      else if (this.operatorFilter === '__none') t = t.filter((x) => !x.assigned_to_user_id);
+      else if (this.operatorFilter) t = t.filter((x) => x.assigned_to_user_id === this.operatorFilter);
       return t;
     },
 
-    get canAddCustomLane() {
-      return true;
+    get openTasks() {
+      return this.filteredTasks.filter((t) => OPEN_STATUSES.includes(t.status)).sort(byDue);
     },
 
+    // Finished in the last few days (Sales settings: "archive done tasks after"); older ones
+    // stay on the customer's page.
+    get finishedTasks() {
+      const when = (t) => t.completed_at || t.updated_at || t.created_at || '';
+      const since = Date.now() - this.taskDoneArchiveDays * DAY_MS;
+      return this.filteredTasks
+        .filter((t) => !OPEN_STATUSES.includes(t.status) && (!when(t) || new Date(when(t)).getTime() >= since))
+        .sort((a, b) => (when(a) < when(b) ? 1 : -1));
+    },
+
+    get overdueTasks() {
+      return this.openTasks.filter((t) => t.due_date && daysUntil(t.due_date) < 0);
+    },
+
+    // Style 3's tray: overdue from before Monday (this week's own late tasks stay on their day).
+    get overdueBeforeWeek() {
+      const monday = todayDate();
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const start = localIso(monday);
+      return this.overdueTasks.filter((t) => t.due_date < start);
+    },
+
+    get undatedTasks() {
+      return this.openTasks.filter((t) => !t.due_date);
+    },
+
+    get summaryLine() {
+      if (this.loading) return 'Follow-ups for your customers, and who is doing them.';
+      const open = this.openTasks;
+      const late = this.overdueTasks.length;
+      const today = open.filter((t) => t.due_date && daysUntil(t.due_date) === 0).length;
+      const parts = [`${open.length} open`];
+      if (late) parts.push(`${late} overdue`);
+      if (today) parts.push(`${today} due today`);
+      return parts.join(' · ');
+    },
+
+    isFinished(task) {
+      return !OPEN_STATUSES.includes(task.status);
+    },
+
+    // Style 1: open lanes, then the finished rail.
+    get boardLanes() {
+      return this.lanes.concat([FINISHED_LANE]);
+    },
+
+    // Style 2: grouped by when it is due.
+    get dueGroups() {
+      const groups = [
+        { key: 'overdue', title: 'Overdue', tasks: [] },
+        { key: 'today', title: 'Today', tasks: [] },
+        { key: 'tomorrow', title: 'Tomorrow', tasks: [] },
+        { key: 'week', title: 'This week', tasks: [] },
+        { key: 'later', title: 'Later', tasks: [] },
+        { key: 'none', title: 'No date', tasks: [] },
+      ];
+      const at = Object.fromEntries(groups.map((g) => [g.key, g]));
+      this.openTasks.forEach((task) => {
+        if (!task.due_date) { at.none.tasks.push(task); return; }
+        const n = daysUntil(task.due_date);
+        if (n < 0) at.overdue.tasks.push(task);
+        else if (n === 0) at.today.tasks.push(task);
+        else if (n === 1) at.tomorrow.tasks.push(task);
+        else if (n <= 6) at.week.tasks.push(task);
+        else at.later.tasks.push(task);
+      });
+      if (this.showFinished) groups.push({ key: 'finished', title: 'Finished', tasks: this.finishedTasks });
+      return groups.filter((g) => g.tasks.length);
+    },
+
+    // Style 3: Monday to Sunday of the chosen week.
+    get weekDays() {
+      const start = todayDate();
+      start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + this.weekOffset * 7);
+      const today = localIso(todayDate());
+      const shown = this.showFinished ? this.openTasks.concat(this.finishedTasks) : this.openTasks;
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const iso = localIso(d);
+        return {
+          iso,
+          dow: d.toLocaleDateString('en-NZ', { weekday: 'short' }),
+          dom: d.getDate(),
+          long: d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' }),
+          isToday: iso === today,
+          isPast: iso < today,
+          tasks: shown.filter((t) => t.due_date === iso),
+        };
+      });
+    },
+
+    get weekLabel() {
+      const days = this.weekDays;
+      const first = parseIso(days[0].iso);
+      const last = parseIso(days[6].iso);
+      const range = `${first.getDate()} ${first.toLocaleDateString('en-NZ', { month: 'short' })} – ${last.getDate()} ${last.toLocaleDateString('en-NZ', { month: 'short' })}`;
+      if (this.weekOffset === 0) return `This week · ${range}`;
+      if (this.weekOffset === 1) return `Next week · ${range}`;
+      if (this.weekOffset === -1) return `Last week · ${range}`;
+      return range;
+    },
+
+    // ── Words on a card or row ──
+
+    dueWords(task) {
+      if (task.status === 'cancelled') return 'Cancelled';
+      if (task.status === 'completed') {
+        const at = task.completed_at || task.updated_at;
+        if (!at) return 'Done';
+        const n = Math.round((todayDate() - parseIso(localIso(new Date(at)))) / DAY_MS);
+        return n <= 0 ? 'Done today' : (n === 1 ? 'Done yesterday' : `Done ${n} days ago`);
+      }
+      if (!task.due_date) return 'No date';
+      const n = daysUntil(task.due_date);
+      if (n < 0) return n === -1 ? '1 day overdue' : `${-n} days overdue`;
+      if (n === 0) return 'Today';
+      if (n === 1) return 'Tomorrow';
+      const d = parseIso(task.due_date);
+      if (n <= 6) return d.toLocaleDateString('en-NZ', { weekday: 'long' });
+      return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+    },
+
+    dueClass(task) {
+      if (this.isFinished(task) || !task.due_date) return 'tasks-due--quiet';
+      const n = daysUntil(task.due_date);
+      if (n < 0) return 'tasks-due--late';
+      if (n === 0) return 'tasks-due--today';
+      return '';
+    },
+
+    whoLine(task) {
+      return [task.contact_id ? this.customerName(task.contact_id) : '', task.assigned_to_user_id ? this.assigneeName(task.assigned_to_user_id) : '']
+        .filter(Boolean).join(' · ');
+    },
+
+    stageWords(task) {
+      if (this.isFinished(task)) return '';
+      const lane = task.board_lane_id && this.lanes.find((l) => l.id === task.board_lane_id && l.status_mode === 'custom');
+      if (lane) return lane.title;
+      return task.status === 'in_progress' ? 'In progress' : '';
+    },
+
+    assigneeName(userId) {
+      const u = this.operators.find((x) => x.id === userId);
+      return u ? (u.display_name || u.email || 'Assigned') : 'Assigned';
+    },
+
+    customerName(contactId) {
+      const c = this.customers.find((x) => x.id === contactId);
+      if (c) return c.name || 'Customer';
+      const task = this.tasks.find((x) => x.contact_id === contactId);
+      return task?.contact_name || 'Customer';
+    },
+
+    selectedDrawerCustomer() {
+      const contactId = this.drawerForm.contact_id || '';
+      if (!contactId) return null;
+      const c = this.customers.find((x) => x.id === contactId);
+      if (c) return c;
+      if (this.editingTask && this.editingTask.contact_id === contactId) {
+        return {
+          id: contactId,
+          name: this.editingTask.contact_name || 'Customer',
+          email_address: this.editingTask.contact_email || '',
+          phone_number: this.editingTask.contact_phone || '',
+        };
+      }
+      return null;
+    },
+
+    contactLine() {
+      const c = this.selectedDrawerCustomer();
+      if (!c) return '';
+      const person = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+      const parts = [person, c.email_address || c.contact_email, c.phone_number || c.contact_phone].filter(Boolean);
+      return parts.length ? parts.join(' · ') : 'No contact details on file';
+    },
+
+    ensureCustomerOptionForTask(task) {
+      const contactId = String(task?.contact_id || '').trim();
+      if (!contactId) return;
+      const exists = this.customers.some((c) => String(c.id || '').trim() === contactId);
+      if (exists) return;
+
+      this.customers.push({
+        id: contactId,
+        name: task.contact_name || 'Customer',
+        first_name: '',
+        last_name: '',
+        email_address: task.contact_email || '',
+        phone_number: task.contact_phone || '',
+      });
+    },
+
+    // ── Lanes ──
+
+    // Builds the list, then assigns it once: two loads in flight can't interleave their lanes.
     async loadLanes() {
-      const base = defaultLanes();
-      this.lanes = base.slice();
+      const lanes = defaultLanes();
       try {
         const data = await CRMAPI.getTaskLanes();
         (data?.lanes || []).forEach((lane) => {
           const id = String(lane?.id || '').trim();
           const title = String(lane?.title || '').trim();
           if (!id || !title) return;
-          this.lanes.push({
+          lanes.push({
             id,
             title,
             status_mode: 'custom',
@@ -354,7 +399,8 @@ function crmTasks() {
           });
         });
       } catch (_) {}
-      if (!this.activeLaneId || !this.lanes.some((lane) => lane.id === this.activeLaneId)) {
+      this.lanes = lanes;
+      if (!this.activeLaneId || !this.boardLanes.some((lane) => lane.id === this.activeLaneId)) {
         this.activeLaneId = this.lanes[0]?.id || null;
       }
     },
@@ -371,7 +417,7 @@ function crmTasks() {
     async saveLane() {
       const title = (this.laneDraft.title || '').trim();
       if (!title) return;
-      const exists = this.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase());
+      const exists = this.boardLanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase());
       if (exists) {
         alert('A lane with this name already exists.');
         return;
@@ -415,31 +461,12 @@ function crmTasks() {
       } catch (e) { alert(e.message || 'Failed to reorder lanes.'); }
     },
 
-    get visibleLanes() {
-      if (this.isMobileView) {
-        return this.lanes.filter((lane) => lane.id === this.activeLaneId);
-      }
-      return this.lanes;
-    },
-
-    laneHeaderClass(lane) {
-      const mode = lane.status_mode;
-      if (mode === 'completed') return 'crm-kanban-header--done';
-      if (mode === 'cancelled') return 'crm-kanban-header--cancelled';
-      if (mode === 'in_progress') return 'crm-kanban-header--inprogress';
-      return 'crm-kanban-header--todo';
-    },
-
     defaultLaneForStatus(status) {
-      if (status === 'completed') return DEFAULT_LANE_IDS.done;
-      if (status === 'cancelled') return DEFAULT_LANE_IDS.cancelled;
-      if (status === 'in_progress') return DEFAULT_LANE_IDS.inProgress;
-      return DEFAULT_LANE_IDS.todo;
+      return status === 'in_progress' ? DEFAULT_LANE_IDS.inProgress : DEFAULT_LANE_IDS.todo;
     },
 
     laneForTask(task) {
-      if (!task) return DEFAULT_LANE_IDS.todo;
-      if (!OPEN_STATUSES.includes(task.status)) return this.defaultLaneForStatus(task.status);
+      if (!OPEN_STATUSES.includes(task.status)) return FINISHED_LANE.id;
       const assignedLaneId = task.board_lane_id;
       if (assignedLaneId && this.lanes.some((lane) => lane.id === assignedLaneId && lane.status_mode === 'custom')) {
         return assignedLaneId;
@@ -448,116 +475,11 @@ function crmTasks() {
     },
 
     tasksForLane(lane) {
-      return this.filteredTasks.filter((task) => {
-        if (task.status === 'completed' && !this.showArchivedCancelled && this.isArchivedCompleted(task)) return false;
-        if (task.status === 'cancelled' && !this.showArchivedCancelled && this.isArchivedCancelled(task)) return false;
-        return this.laneForTask(task) === lane.id;
-      });
+      if (lane.id === FINISHED_LANE.id) return this.finishedTasks;
+      return this.openTasks.filter((task) => this.laneForTask(task) === lane.id);
     },
 
-    isOverdue(task) {
-      if (!task.due_date || task.status === 'completed' || task.status === 'cancelled') return false;
-      const d = new Date(task.due_date + 'T00:00:00');
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      return d < today;
-    },
-
-    formatDue(d) {
-      if (!d) return null;
-      const dt = new Date(d + 'T00:00:00');
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const diff = Math.round((dt - today) / 86400000);
-      if (diff === 0) return 'Today';
-      if (diff === 1) return 'Tomorrow';
-      if (diff === -1) return 'Yesterday';
-      if (diff < 0) return `${Math.abs(diff)}d ago`;
-      return dt.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
-    },
-
-    formatStatus(status) {
-      return (status || '').replace('_', ' ');
-    },
-
-    assigneeName(userId) {
-      const u = this.operators.find((x) => x.id === userId);
-      return u ? (u.display_name || u.email || 'Assigned') : 'Assigned';
-    },
-
-    customerName(contactId) {
-      const c = this.customers.find((x) => x.id === contactId);
-      if (c) return c.name || 'Customer';
-      const task = this.tasks.find((x) => x.contact_id === contactId);
-      return task?.contact_name || 'Customer';
-    },
-
-    selectedDrawerCustomer() {
-      const contactId = this.drawerForm.contact_id || '';
-      if (!contactId) return null;
-      const c = this.customers.find((x) => x.id === contactId);
-      if (c) return c;
-      if (this.editingTask && this.editingTask.contact_id === contactId) {
-        return {
-          id: contactId,
-          name: this.editingTask.contact_name || 'Customer',
-          email_address: this.editingTask.contact_email || '',
-          phone_number: this.editingTask.contact_phone || '',
-        };
-      }
-      return null;
-    },
-
-    ensureCustomerOptionForTask(task) {
-      const contactId = String(task?.contact_id || '').trim();
-      if (!contactId) return;
-      const exists = this.customers.some((c) => String(c.id || '').trim() === contactId);
-      if (exists) return;
-
-      this.customers.push({
-        id: contactId,
-        name: task.contact_name || 'Customer',
-        first_name: '',
-        last_name: '',
-        email_address: task.contact_email || '',
-        phone_number: task.contact_phone || '',
-      });
-    },
-
-    isArchivedCancelled(task) {
-      if (!task || task.status !== 'cancelled') return false;
-      const ts = task.updated_at || task.completed_at || task.created_at;
-      if (!ts) return false;
-      const dt = new Date(ts);
-      if (Number.isNaN(dt.getTime())) return false;
-      return (Date.now() - dt.getTime()) >= 3 * 24 * 60 * 60 * 1000;
-    },
-
-    isArchivedCompleted(task) {
-      if (!task || task.status !== 'completed') return false;
-      const ts = task.completed_at || task.updated_at || task.created_at;
-      if (!ts) return false;
-      const dt = new Date(ts);
-      if (Number.isNaN(dt.getTime())) return false;
-      const days = Math.min(90, Math.max(1, Number(this.taskDoneArchiveDays || 7)));
-      return (Date.now() - dt.getTime()) >= days * 24 * 60 * 60 * 1000;
-    },
-
-    priorityClass(p) {
-      return { high: 'crm-badge--high', medium: 'crm-badge--medium', low: 'crm-badge--low' }[p] || '';
-    },
-
-    statusClass(s) {
-      return { pending: 'crm-badge--pending', in_progress: 'crm-badge--in_progress', completed: 'crm-badge--completed', cancelled: 'crm-badge--cancelled' }[s] || '';
-    },
-
-    taskCardStyle(task) {
-      return task.status === 'cancelled' ? 'opacity:.6;' : (task.status === 'completed' ? 'opacity:.75;' : '');
-    },
-
-    taskTitleStyle(task) {
-      if (task.status === 'cancelled') return 'text-decoration:line-through;';
-      if (task.status === 'completed') return 'text-decoration:line-through; opacity:.7;';
-      return '';
-    },
+    // ── Moving and finishing ──
 
     handleCardClick(task) {
       if (Date.now() < this.dragSuppressUntil) return;
@@ -607,8 +529,11 @@ function crmTasks() {
         const { task: updated } = await CRMAPI.assignTaskLane(task.id, null);
         task.board_lane_id = updated.board_lane_id;
       } catch (e) { alert(e.message || 'Failed to move task.'); return; }
-      const targetStatus = lane.status_mode;
-      await this.moveTask(task, targetStatus);
+      await this.moveTask(task, lane.status_mode);
+    },
+
+    async toggleDone(task) {
+      await this.moveTask(task, this.isFinished(task) ? 'pending' : 'completed');
     },
 
     async moveTask(task, newStatus) {
@@ -625,12 +550,14 @@ function crmTasks() {
       }
     },
 
-    openCreate() {
+    // ── The drawer ──
+
+    openCreate(dueIso = '') {
       this.editingTask = null;
       this.drawerForm = {
         title: '',
         description: '',
-        due_date: this.calSelectedDate || '',
+        due_date: dueIso || '',
         priority: 'medium',
         status: 'pending',
         contact_id: '',
@@ -694,6 +621,7 @@ function crmTasks() {
       try {
         await CRMAPI.deleteTask(task.id);
         this.tasks = this.tasks.filter((t) => t.id !== task.id);
+        if (this.editingTask && this.editingTask.id === task.id) this.closeDrawer();
       } catch (e) {
         alert(e.message || 'Failed to delete task.');
       }
