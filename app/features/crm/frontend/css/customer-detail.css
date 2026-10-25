@@ -1,0 +1,42 @@
+/* A customer's page, with facts and tabbed sections. */
+#page-content .customer-page { padding-bottom: 48px; }
+#page-content .customer-page .workspace-header { margin-bottom: 18px; }
+#page-content .cd-header-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+#page-content .customer-page .crm-customer-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+#page-content .customer-page .crm-customer-meta a { color: var(--ui-accent-strong, #115e59); text-decoration: none; }
+#page-content .customer-page .crm-customer-meta a:hover { text-decoration: underline; }
+#page-content .cd-status { display: inline-flex; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--ui-surface-subtle, #f1f5f9); color: var(--ui-text-muted, #475569); }
+#page-content .cd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Four facts */
+#page-content .cd-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; margin-bottom: 20px; }
+#page-content .cd-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); background: var(--ui-surface, #fff); }
+#page-content .cd-fact__label { font-size: 12px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
+#page-content .cd-fact__value { font-size: 18px; font-weight: 700; color: var(--ui-text, #172033); }
+#page-content .cd-fact__note { font-size: 12px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
+#page-content .cd-fact--bad .cd-fact__value, #page-content .cd-fact--bad .cd-fact__note { color: #b42318; }
+html[data-spa-theme="dark"] #page-content .cd-fact--bad .cd-fact__value, html[data-spa-theme="dark"] #page-content .cd-fact--bad .cd-fact__note { color: #f97066; }
+
+/* Tabs, in the house's view switch (as on Customs) */
+#page-content .cd-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-bottom: 18px; padding: 4px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; background: var(--ui-surface, #fff); }
+#page-content .cd-tabs button { min-height: 36px; padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ui-text-muted, #475569); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: none; }
+#page-content .cd-tabs button small { margin-left: 4px; font-size: 12px; color: inherit; opacity: .75; }
+#page-content .cd-tabs button[aria-selected="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+#page-content .cd-tabs button:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
+
+/* The panels in the house card */
+#page-content .customer-page .crm-card { border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); box-shadow: 0 2px 5px rgb(15 23 42 / 3%); }
+#page-content .customer-page .crm-badge { text-transform: none; letter-spacing: 0; }
+#page-content .customer-page .crm-toolbar select { width: auto !important; min-width: 10rem; min-height: 38px; padding: 6px 12px !important; font-size: 14px !important; }
+#page-content .customer-page .crm-detail-field label { text-transform: none; letter-spacing: 0; font-size: 12px; }
+#page-content .cd-layout { min-width: 0; }
+
+@media (max-width: 720px) {
+  #page-content .customer-page .workspace-header { flex-direction: column; align-items: stretch; }
+  #page-content .cd-header-actions .workspace-button { flex: 1 1 auto; }
+  #page-content .cd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #page-content .cd-fact { padding: 12px; }
+  #page-content .cd-fact__value { font-size: 16px; }
+  #page-content .cd-tabs { display: flex; border-radius: 12px; }
+  #page-content .cd-tabs button { flex: 1 1 auto; padding: 6px 10px; }
+}

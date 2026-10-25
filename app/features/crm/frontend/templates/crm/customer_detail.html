@@ -9,10 +9,10 @@
 
 
 {% block content %}
-<div class="max-content crm-root" x-data="crmCustomerDetail('{{ contact_id }}')" x-init="init()">
-  {% set crm_heading = "Customer Profile" %}
-  {% set crm_subtitle = "Customer activity, invoices, tasks, and notes" %}
-  {% include "crm/_crm_banner.html" %}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customer-detail.css') }}">
+{# Alpine calls init() itself; an x-init="init()" here loaded the customer twice. #}
+<div class="max-content crm-root workspace-overview customer-page" x-data="crmCustomerDetail('{{ contact_id }}')"
+     :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
 
   {# Loading #}
   <template x-if="loading">
@@ -35,42 +35,43 @@
   {# Content #}
   <template x-if="!loading && customer">
     <div>
-      {# ── Customer Hero ── #}
-      <div class="crm-customer-hero">
-        <div class="crm-avatar" x-text="initials"></div>
-        <div class="crm-customer-info">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <span class="crm-customer-name" x-text="customer.name">—</span>
-            <span class="crm-badge" :class="customer.contact_status === 'ACTIVE' ? 'crm-badge--active' : 'crm-badge--archived'" x-text="customer.contact_status || '—'">—</span>
-          </div>
-          <div class="crm-customer-meta">
-            <template x-if="customer.email_address">
-              <span x-text="customer.email_address"></span>
-            </template>
-            <template x-if="customer.phone_number">
-              <span>· <span x-text="customer.phone_number"></span></span>
-            </template>
-            <template x-if="customer.last_synced_at">
-              <span style="opacity:.6;">· Synced <span x-text="formatDate(customer.last_synced_at)"></span></span>
-            </template>
-          </div>
+      <header class="workspace-header cd-header">
+        <div>
+          <h1 x-text="customer.name">Customer</h1>
+          <p class="workspace-caption crm-customer-meta">
+            <template x-if="contactPerson"><span x-text="contactPerson"></span></template>
+            <template x-if="customer.email_address"><a :href="`mailto:${customer.email_address}`" x-text="customer.email_address"></a></template>
+            <template x-if="customer.phone_number"><a :href="`tel:${customer.phone_number}`" x-text="customer.phone_number"></a></template>
+            <template x-if="customer.contact_status === 'ARCHIVED'"><span class="cd-status cd-status--archived">Archived in Xero</span></template>
+          </p>
         </div>
+        {% if can('sales.record') %}
+        <div class="workspace-header__actions cd-header-actions">
+          <button type="button" class="workspace-button" data-cd-new-task @click="openCustomerTaskModal()">New task</button>
+          <button type="button" class="workspace-button workspace-button--primary" data-cd-new-invoice @click="openInvoiceModal()">New invoice</button>
+        </div>
+        {% endif %}
+      </header>
+
+      <div class="cd-facts" aria-label="Where this customer stands">
+        <div class="cd-fact"><span class="cd-fact__label">Sales in the period</span><strong class="cd-fact__value" x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="`${customerAnalytics.total_invoices || 0} invoices · ${rangeWords}`"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Last order</span><strong class="cd-fact__value" x-text="lastOrder ? agoWords(lastOrder.date) : 'None yet'"></strong><span class="cd-fact__note" x-text="lastOrder ? `${lastOrder.invoice_number || 'Invoice'} · ${formatCurrency(lastOrder.total, lastOrder.currency_code)}` : 'No invoices in Biz-E'"></span></div>
+        <div class="cd-fact" :class="overdueTasks ? 'cd-fact--bad' : ''"><span class="cd-fact__label">Open tasks</span><strong class="cd-fact__value" x-text="openTasks.length"></strong><span class="cd-fact__note" x-text="nextTaskWords"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Last contact</span><strong class="cd-fact__value" x-text="customer.last_contact_date ? agoWords(customer.last_contact_date) : 'None recorded'"></strong><span class="cd-fact__note" x-text="customer.last_contact_date ? `${formatDate(customer.last_contact_date)} · ${customer.last_contact_source === 'sale' ? 'a sale' : 'a task'}` : 'No sale or task yet'"></span></div>
       </div>
 
-      {# ── Tabs ── #}
-      <div class="crm-detail-tabs">
-        <div class="flow-mode-segmented" role="tablist" aria-label="Customer sections">
-          <button type="button" class="flow-mode-segment" :class="activeTab==='overview' ? 'flow-mode-segment--active' : ''" @click="setTab('overview')" role="tab">Overview</button>
-          <button type="button" class="flow-mode-segment" :class="activeTab==='invoices' ? 'flow-mode-segment--active' : ''" @click="setTab('invoices')" role="tab">Invoices <span x-text="invoices.length ? `(${invoices.length})` : ''"></span></button>
-          <button type="button" class="flow-mode-segment" :class="activeTab==='notes' ? 'flow-mode-segment--active' : ''" @click="setTab('notes')" role="tab">Notes <span x-text="notes.length ? `(${notes.length})` : ''"></span></button>
-          <button type="button" class="flow-mode-segment" :class="activeTab==='tasks' ? 'flow-mode-segment--active' : ''" @click="setTab('tasks')" role="tab">Tasks <span x-text="tasks.length ? `(${tasks.length})` : ''"></span></button>
-        </div>
-      </div>
+      <nav class="cd-tabs" role="tablist" aria-label="Customer sections">
+        <button type="button" role="tab" :aria-selected="activeTab==='overview' ? 'true' : 'false'" @click="setTab('overview')">Overview</button>
+        <button type="button" role="tab" :aria-selected="activeTab==='invoices' ? 'true' : 'false'" @click="setTab('invoices')">Invoices <small x-text="invoices.length || ''"></small></button>
+        <button type="button" role="tab" :aria-selected="activeTab==='notes' ? 'true' : 'false'" @click="setTab('notes')">Notes <small x-text="notes.length || ''"></small></button>
+        <button type="button" role="tab" :aria-selected="activeTab==='tasks' ? 'true' : 'false'" @click="setTab('tasks')">Tasks <small x-text="openTasks.length || ''"></small></button>
+      </nav>
 
+      <div class="cd-layout">
       {# ══════════════════════════════════════════════
          OVERVIEW
          ══════════════════════════════════════════════ #}
-      <div x-show="activeTab === 'overview'" x-cloak>
+      <div class="cd-panel cd-panel--overview" data-cd-panel="overview" x-show="activeTab === 'overview'" x-cloak>
         <div class="crm-card" style="padding:20px;" data-contact-details>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;">
             <div style="font-size:.86rem; font-weight:700;">Details</div>
@@ -130,7 +131,7 @@
 
           <div class="crm-detail-grid" x-show="!editing">
             <div class="crm-detail-field">
-              <label>Full Name</label>
+              <label>Name</label>
               <span x-text="customer.name || '—'">—</span>
             </div>
             <div class="crm-detail-field">
@@ -149,32 +150,20 @@
               <label>Street address</label>
               <span data-address="STREET" x-text="addressLine('STREET') || '—'">—</span>
             </div>
-            <div class="crm-detail-field">
+            <div class="crm-detail-field" x-show="customer.tax_number">
               <label>Tax Number</label>
               <span x-text="customer.tax_number || '—'">—</span>
             </div>
-            <div class="crm-detail-field">
+            <div class="crm-detail-field" x-show="customer.account_number">
               <label>Account Number</label>
               <span x-text="customer.account_number || '—'">—</span>
             </div>
-            <div class="crm-detail-field">
-              <label>Customer</label>
-              <span x-text="customer.is_customer ? 'Yes' : 'No'">—</span>
+            <div class="crm-detail-field" x-show="customer.is_supplier">
+              <label>Also a supplier</label>
+              <span>Yes</span>
             </div>
-            <div class="crm-detail-field">
-              <label>Supplier</label>
-              <span x-text="customer.is_supplier ? 'Yes' : 'No'">—</span>
-            </div>
-            <div class="crm-detail-field">
-              <label>Xero Status</label>
-              <span x-text="customer.contact_status || '—'">—</span>
-            </div>
-            <div class="crm-detail-field">
-              <label>Last contact</label>
-              <span x-text="customer.last_contact_date ? `${formatDate(customer.last_contact_date)} (${customer.last_contact_source})` : 'None recorded'">—</span>
-            </div>
-            <div class="crm-detail-field">
-              <label>Last Synced</label>
+            <div class="crm-detail-field" x-show="customer.last_synced_at">
+              <label>Last synced from Xero</label>
               <span x-text="formatDate(customer.last_synced_at)">—</span>
             </div>
           </div>
@@ -221,22 +210,18 @@
 
         <div class="crm-card" style="margin-top:16px; padding:16px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-            <div style="font-size:.86rem; font-weight:700;">Customer Sales</div>
+            <div style="font-size:.86rem; font-weight:700;">Sales</div>
             <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openAnalyticsDateModal()">
-              Date Range: <span x-text="`${analyticsDateFrom || '—'} to ${analyticsDateTo || '—'}`"></span>
+              <span x-text="rangeWords"></span>
             </button>
-          </div>
-          <div class="crm-detail-grid" style="margin-bottom:10px;">
-            <div class="crm-detail-field"><label>Total Revenue</label><span x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></span></div>
-            <div class="crm-detail-field"><label>Total Invoices</label><span x-text="customerAnalytics.total_invoices || 0"></span></div>
           </div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;">
             <div class="crm-card" style="padding:10px;">
-              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Revenue Trend</div>
+              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">By month</div>
               <canvas id="crmCustomerRevenueChart" style="width:100%; height:220px; display:block;"></canvas>
             </div>
             <div class="crm-card" style="padding:10px;">
-              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Top Products</div>
+              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Top products</div>
               <canvas id="crmCustomerProductChart" style="width:100%; height:220px; display:block;"></canvas>
             </div>
           </div>
@@ -246,14 +231,8 @@
       {# ══════════════════════════════════════════════
          INVOICES
          ══════════════════════════════════════════════ #}
-      <div x-show="activeTab === 'invoices'" x-cloak>
+      <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" x-show="activeTab === 'invoices'" x-cloak>
         <div class="crm-card">
-          <div class="crm-toolbar" style="justify-content:flex-end;">
-            <button class="crm-btn crm-btn--primary crm-btn--sm" @click="openInvoiceModal()">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              New Invoice
-            </button>
-          </div>
           <template x-if="invoices.length === 0">
             <div class="crm-empty">
               <div class="crm-empty-icon">
@@ -341,10 +320,10 @@
       {# ══════════════════════════════════════════════
          NOTES
          ══════════════════════════════════════════════ #}
-      <div x-show="activeTab === 'notes'" x-cloak>
+      <div class="cd-panel cd-panel--notes" data-cd-panel="notes" x-show="activeTab === 'notes'" x-cloak>
         {# Add Note #}
         <div class="crm-card" style="padding:16px; margin-bottom:16px;">
-          <p style="font-size:0.78rem; font-weight:600; color:var(--text-secondary,#6b7280); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Add Note</p>
+          <p style="font-size:0.78rem; font-weight:600; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Add a note</p>
           <textarea
             class="crm-note-textarea"
             placeholder="Write a note about this customer…"
@@ -353,7 +332,7 @@
           ></textarea>
           <div style="display:flex; justify-content:flex-end; margin-top:8px;">
             <button class="crm-btn crm-btn--primary crm-btn--sm" @click="submitNote()" :disabled="addingNote || !newNoteContent.trim()">
-              <span x-text="addingNote ? 'Saving…' : 'Add Note'">Add Note</span>
+              <span x-text="addingNote ? 'Saving…' : 'Add note'">Add note</span>
             </button>
           </div>
         </div>
@@ -407,10 +386,9 @@
       {# ══════════════════════════════════════════════
          TASKS
          ══════════════════════════════════════════════ #}
-      <div x-show="activeTab === 'tasks'" x-cloak>
+      <div class="cd-panel cd-panel--tasks" data-cd-panel="tasks" x-show="activeTab === 'tasks'" x-cloak>
         <div class="crm-card">
           <div class="crm-toolbar">
-            <button class="crm-btn crm-btn--primary crm-btn--sm" @click="openCustomerTaskModal()">+ New Task</button>
             <select class="crm-select" x-model="taskStatusFilter">
               <option value="">All statuses</option>
               <option value="pending">Pending</option>
@@ -441,15 +419,16 @@
                     <span x-text="assigneeName(t.assigned_to_user_id)"></span>
                   </span>
                   <span class="crm-task-card-due" x-show="t.due_date" x-cloak>
-                    <span x-text="t.due_date"></span>
+                    <span x-text="dueWords(t)"></span>
                   </span>
                 </div>
-                <div style="font-size:0.74rem; color:var(--text-secondary,#6b7280); margin-top:8px; white-space:pre-wrap;" x-text="t.description || 'No description'"></div>
+                <div style="font-size:0.74rem; color:var(--text-secondary,#6b7280); margin-top:8px; white-space:pre-wrap;" x-show="t.description" x-text="t.description"></div>
               </div>
             </template>
           </div>
         </div>
       </div>
+      </div>{# .cd-layout #}
     </div>
   </template>
 
