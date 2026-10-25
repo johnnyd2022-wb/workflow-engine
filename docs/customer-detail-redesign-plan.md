@@ -66,3 +66,9 @@ Observed in the `00-before` screenshots (a seeded customer with three invoices, 
   - every style at laptop (first screen and full page), phone and wall, and dark after a reload;
   - each tab, editing details, a new task, the feed filtered to tasks, and arriving from Customers;
   - a note added from the feed.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (Tabs) is the approved design for !561. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 11 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

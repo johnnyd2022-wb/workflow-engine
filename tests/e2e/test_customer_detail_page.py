@@ -1,5 +1,5 @@
 """A customer's page in a browser: one load, the header and facts, actions from the header, the
-activity feed, and (CONCEPT ONLY) each layout at phone, laptop and wall widths.
+tabbed sections, and the page at phone, laptop and wall widths.
 
 Requests are routed into the Flask test client (see test_crm_contact_sync_ui), and Xero is faked.
 """
@@ -37,9 +37,9 @@ def customer(db, org):  # noqa: F811
     return contact
 
 
-def _open(page, contact, style="1", width=1440):
+def _open(page, contact, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"https://crm.test/crm/customers/{contact.id}?style={style}")
+    page.goto(f"https://crm.test/crm/customers/{contact.id}")
     page.locator(READY).wait_for()
 
 
@@ -77,30 +77,11 @@ def test_new_task_opens_from_the_header_on_any_tab(xero, sales_page, customer): 
     expect(sales_page.locator(".crm-task-sheet-overlay").filter(has_text="New Customer Task")).to_be_visible()
 
 
-def test_activity_puts_open_tasks_under_coming_up_and_notes_under_before_now(
-    xero,  # noqa: F811
-    sales_page,  # noqa: F811
-    client,  # noqa: F811
-    customer,
-):
-    _task(client, customer, "Drop off a sample", 3)
-    note = client.post(f"/api/crm/customers/{customer.id}/notes", json={"content": "Met at the market."})
-    assert note.status_code == 201, note.data
-    _open(sales_page, customer, style="3")
-    lists = sales_page.locator(".cd-feed__list")
-    expect(lists.first.locator(".cd-feed__title")).to_have_text(["Drop off a sample"])
-    expect(lists.last.locator(".cd-feed__note")).to_have_text(["Met at the market."])
-    sales_page.get_by_role("button", name="Notes", exact=True).click()
-    expect(sales_page.locator(".cd-feed__group", has_text="Coming up")).to_be_hidden()
-
-
-# CONCEPT ONLY: deleted with the two layouts not picked.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(xero, sales_page, client, customer, style, width):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(xero, sales_page, client, customer, width):  # noqa: F811
     _task(client, customer, "Send the summer price list", 1)
-    _open(sales_page, customer, style=style, width=width)
+    _open(sales_page, customer, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator("[data-contact-details]")).to_be_visible()
-    region = {"1": ".cd-tabs", "2": ".cd-panel--tasks", "3": ".cd-feed"}[style]
-    expect(sales_page.locator(region)).to_be_visible()
+    expect(sales_page.locator(".cd-tabs")).to_be_visible()
+    expect(sales_page.locator(".cd-style-pick")).to_have_count(0)

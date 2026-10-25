@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customer-detail.css') }}">
 {# Alpine calls init() itself; an x-init="init()" here loaded the customer twice. #}
 <div class="max-content crm-root workspace-overview customer-page" x-data="crmCustomerDetail('{{ contact_id }}')"
-     data-cd-style="1" :data-cd-style="cdStyle" :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
+     :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
 
   {# Loading #}
   <template x-if="loading">
@@ -53,14 +53,6 @@
         {% endif %}
       </header>
 
-      {# CONCEPT ONLY: the layout switch, deleted with the two styles not picked. #}
-      <div class="cd-style-pick" role="group" aria-label="Layout (concept)">
-        <span>Concept</span>
-        <button type="button" :aria-pressed="cdStyle === '1' ? 'true' : 'false'" @click="setCdStyle('1')">1 · Tabs</button>
-        <button type="button" :aria-pressed="cdStyle === '2' ? 'true' : 'false'" @click="setCdStyle('2')">2 · Record page</button>
-        <button type="button" :aria-pressed="cdStyle === '3' ? 'true' : 'false'" @click="setCdStyle('3')">3 · Activity</button>
-      </div>
-
       <div class="cd-facts" aria-label="Where this customer stands">
         <div class="cd-fact"><span class="cd-fact__label">Sales in the period</span><strong class="cd-fact__value" x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="`${customerAnalytics.total_invoices || 0} invoices · ${rangeWords}`"></span></div>
         <div class="cd-fact"><span class="cd-fact__label">Last order</span><strong class="cd-fact__value" x-text="lastOrder ? agoWords(lastOrder.date) : 'None yet'"></strong><span class="cd-fact__note" x-text="lastOrder ? `${lastOrder.invoice_number || 'Invoice'} · ${formatCurrency(lastOrder.total, lastOrder.currency_code)}` : 'No invoices in Biz-E'"></span></div>
@@ -76,52 +68,6 @@
       </nav>
 
       <div class="cd-layout">
-      {# Style 3: everything that happened with this customer, newest first. #}
-      <section class="workspace-card cd-feed" aria-label="Activity">
-        {% if can('sales.record') %}
-        <div class="cd-feed__compose">
-          <label class="cd-sr" for="cd-feed-note">Add a note</label>
-          <textarea id="cd-feed-note" rows="2" placeholder="Add a note: a call, a tasting, what they asked for…" x-model="newNoteContent"></textarea>
-          <button type="button" class="workspace-button" @click="submitNote()" :disabled="addingNote || !newNoteContent.trim()">Add note</button>
-        </div>
-        {% endif %}
-        <div class="cd-feed__filters" role="group" aria-label="Show">
-          <template x-for="f in feedFilters" :key="f.key">
-            <button type="button" :aria-pressed="feedFilter === f.key ? 'true' : 'false'" @click="feedFilter = f.key" x-text="f.label"></button>
-          </template>
-        </div>
-        <h3 class="cd-feed__group" x-show="upcoming.length">Coming up</h3>
-        <ol class="cd-feed__list" x-show="upcoming.length">
-          <template x-for="item in upcoming" :key="item.key">
-            <li class="cd-feed__item cd-feed__item--task">
-              <span class="cd-feed__icon" aria-hidden="true">○</span>
-              <div class="cd-feed__body">
-                <button type="button" class="cd-feed__title" @click="item.open()" x-text="item.title"></button>
-                <span class="cd-feed__meta" :class="item.late ? 'cd-feed__meta--late' : ''" x-text="item.meta"></span>
-              </div>
-              <span class="cd-feed__side"></span>
-            </li>
-          </template>
-        </ol>
-        <h3 class="cd-feed__group" x-show="upcoming.length && activity.length">Before now</h3>
-        <ol class="cd-feed__list">
-          <template x-for="item in activity" :key="item.key">
-            <li class="cd-feed__item" :class="'cd-feed__item--' + item.kind">
-              <span class="cd-feed__icon" aria-hidden="true" x-text="item.icon"></span>
-              <div class="cd-feed__body">
-                <template x-if="item.kind === 'note'"><p class="cd-feed__note" x-text="item.text"></p></template>
-                <template x-if="item.kind !== 'note'">
-                  <button type="button" class="cd-feed__title" @click="item.open()" x-text="item.title"></button>
-                </template>
-                <span class="cd-feed__meta" x-text="item.meta"></span>
-              </div>
-              <span class="cd-feed__side" x-text="item.side"></span>
-            </li>
-          </template>
-          <li class="cd-feed__empty" x-show="!activity.length">Nothing here yet.</li>
-        </ol>
-      </section>
-
       {# ══════════════════════════════════════════════
          OVERVIEW
          ══════════════════════════════════════════════ #}
@@ -286,7 +232,6 @@
          INVOICES
          ══════════════════════════════════════════════ #}
       <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" x-show="activeTab === 'invoices'" x-cloak>
-        <h2 class="cd-panel__title">Invoices</h2>
         <div class="crm-card">
           <template x-if="invoices.length === 0">
             <div class="crm-empty">
@@ -376,7 +321,6 @@
          NOTES
          ══════════════════════════════════════════════ #}
       <div class="cd-panel cd-panel--notes" data-cd-panel="notes" x-show="activeTab === 'notes'" x-cloak>
-        <h2 class="cd-panel__title">Notes</h2>
         {# Add Note #}
         <div class="crm-card" style="padding:16px; margin-bottom:16px;">
           <p style="font-size:0.78rem; font-weight:600; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Add a note</p>
@@ -443,7 +387,6 @@
          TASKS
          ══════════════════════════════════════════════ #}
       <div class="cd-panel cd-panel--tasks" data-cd-panel="tasks" x-show="activeTab === 'tasks'" x-cloak>
-        <h2 class="cd-panel__title">Tasks</h2>
         <div class="crm-card">
           <div class="crm-toolbar">
             <select class="crm-select" x-model="taskStatusFilter">

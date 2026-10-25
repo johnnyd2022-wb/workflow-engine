@@ -12,14 +12,6 @@ function crmCustomerDetail(contactId) {
   return {
     contactId,
     activeTab: 'overview',
-    cdStyle: '1',
-    feedFilter: 'all',
-    feedFilters: [
-      { key: 'all', label: 'Everything' },
-      { key: 'invoice', label: 'Invoices' },
-      { key: 'note', label: 'Notes' },
-      { key: 'task', label: 'Tasks' },
-    ],
     customer: null,
     invoices: [],
     invoicePage: 1,
@@ -106,11 +98,6 @@ function crmCustomerDetail(contactId) {
     savingMapping: false,
 
     async init() {
-      // CONCEPT ONLY: ?style=1|2|3, then the last one picked, then Style 1.
-      const asked = new URLSearchParams(window.location.search || '').get('style');
-      let kept = null;
-      try { kept = window.localStorage.getItem('customer-detail-style'); } catch (_) { /* private mode */ }
-      this.cdStyle = ['1', '2', '3'].includes(asked) ? asked : (['1', '2', '3'].includes(kept) ? kept : '1');
       this.loading = true;
       this.error = null;
       try {
@@ -134,13 +121,6 @@ function crmCustomerDetail(contactId) {
         await this.$nextTick();
         this.drawCustomerAnalyticsCharts();
       }
-    },
-
-    // CONCEPT ONLY
-    setCdStyle(style) {
-      this.cdStyle = style;
-      try { window.localStorage.setItem('customer-detail-style', style); } catch (_) { /* private mode */ }
-      this.$nextTick(() => this.drawCustomerAnalyticsCharts());
     },
 
     // ── What the header and facts say ───────────────────────────
@@ -195,55 +175,6 @@ function crmCustomerDetail(contactId) {
       if (n === 0) return 'Today';
       if (n === 1) return 'Tomorrow';
       return this.formatDate(task.due_date);
-    },
-
-    // Style 3: invoices, notes and tasks in one list, newest first.
-    get activity() {
-      const items = [];
-      const statusWords = { AUTHORISED: 'Awaiting payment', PAID: 'Paid', DRAFT: 'Draft', SUBMITTED: 'Awaiting approval', VOIDED: 'Voided' };
-      this.invoices.forEach((inv) => {
-        const owed = inv.status === 'AUTHORISED' && inv.due_date && this.daysUntil(inv.due_date) < 0 ? ' · overdue' : '';
-        items.push({
-          key: `i-${inv.id}`, kind: 'invoice', icon: '$', when: inv.date || '',
-          title: `Invoice ${inv.invoice_number || ''}`.trim(),
-          meta: `${this.formatDate(inv.date)} · ${statusWords[inv.status] || inv.status}${owed}`,
-          side: this.formatCurrency(inv.total, inv.currency_code),
-          open: () => this.viewInvoice(inv),
-        });
-      });
-      this.notes.forEach((note) => {
-        items.push({
-          key: `n-${note.id}`, kind: 'note', icon: '✎', when: note.created_at || '', text: note.content,
-          meta: this.formatNoteDate(note.created_at), side: '',
-        });
-      });
-      this.tasks.forEach((task) => {
-        const done = task.status === 'completed' || task.status === 'cancelled';
-        if (!done) return; // open tasks are under "Coming up"
-        items.push({
-          key: `t-${task.id}`, kind: 'task', icon: done ? '✓' : '○',
-          when: (done ? task.completed_at || task.updated_at : task.due_date) || task.created_at || '',
-          title: task.title,
-          meta: [done ? (task.status === 'completed' ? 'Done' : 'Cancelled') : this.dueWords(task), task.assigned_to_user_id ? this.assigneeName(task.assigned_to_user_id) : ''].filter(Boolean).join(' · '),
-          side: '',
-          open: () => this.openTaskEdit(task),
-        });
-      });
-      return items
-        .filter((item) => this.feedFilter === 'all' || item.kind === this.feedFilter)
-        .sort((a, b) => (String(a.when) < String(b.when) ? 1 : -1));
-    },
-
-    get upcoming() {
-      if (this.feedFilter !== 'all' && this.feedFilter !== 'task') return [];
-      return this.openTasks.slice()
-        .sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')))
-        .map((task) => ({
-          key: `u-${task.id}`, title: task.title,
-          late: !!task.due_date && this.daysUntil(task.due_date) < 0,
-          meta: [this.dueWords(task), task.status === 'in_progress' ? 'In progress' : '', task.assigned_to_user_id ? this.assigneeName(task.assigned_to_user_id) : ''].filter(Boolean).join(' · '),
-          open: () => this.openTaskEdit(task),
-        }));
     },
 
     get hasSalesTerms() {
