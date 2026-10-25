@@ -1,4 +1,4 @@
-/* Integrations: Style 1 cards, Style 2 side by side, Style 3 connected and available. */
+/* Integrations: connection cards. */
 #page-content .ig-page { display: flex; flex-direction: column; gap: 20px; padding-bottom: 64px; }
 #page-content .ig-page .workspace-header { margin-bottom: 0; }
 #page-content .ig-item { min-width: 0; padding: 28px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); }
@@ -41,27 +41,6 @@
 #page-content .ig-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; }
 #page-content .ig-danger { border-color: #fda29b; color: #b42318; }
 
-/* CONCEPT ONLY: the layout switch */
-#page-content .ig-style-pick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; align-self: flex-start; padding: 4px; border: 1px dashed var(--ui-border, #cbd5e1); border-radius: 10px; }
-#page-content .ig-style-pick span { padding: 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ui-text-muted, #64748b); }
-#page-content .ig-style-pick button { min-height: 32px; padding: 4px 12px; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--ui-text-muted, #64748b); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content .ig-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
-
-/* CONCEPT ONLY: Style 2, who it is on the left, the connection on the right. */
-#page-content [data-ig-style="2"] .ig-item { display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); align-items: start; gap: 32px; padding: 32px 0; border: 0; border-top: 1px solid var(--ui-border, #e2e8f0); border-radius: 0; background: transparent; }
-#page-content [data-ig-style="2"] .ig-item:first-of-type { border-top: 0; padding-top: 8px; }
-#page-content [data-ig-style="2"] .ig-intro { flex-direction: column; gap: 12px; }
-#page-content [data-ig-style="2"] .ig-body { margin-top: 0; padding: 24px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); }
-#page-content [data-ig-style="2"] .ig-item--soon .ig-body { padding: 16px 24px; }
-
-/* CONCEPT ONLY: Style 3, what is connected, then a short list of what is available. */
-#page-content [data-ig-style="3"] .ig-group { display: block; }
-#page-content [data-ig-style="3"] .ig-group[style*="display: none"] { display: none !important; }
-#page-content [data-ig-style="3"] .ig-item--soon { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; }
-#page-content [data-ig-style="3"] .ig-item--soon .ig-body { margin-top: 0; }
-#page-content [data-ig-style="3"] .ig-item--soon .ig-intro p { display: none; }
-#page-content [data-ig-style="3"] .ig-item--soon .ig-intro { align-items: center; }
-
 html[data-spa-theme="dark"] #page-content .ig-state--good { color: #75e0a7; }
 html[data-spa-theme="dark"] #page-content .ig-state--warn, html[data-spa-theme="dark"] #page-content .ig-note { color: #fdb022; }
 html[data-spa-theme="dark"] #page-content .ig-link--danger, html[data-spa-theme="dark"] #page-content .ig-danger { color: #f97066; }
@@ -69,11 +48,9 @@ html[data-spa-theme="dark"] #page-content .ig-message--ok { border-color: rgba(1
 html[data-spa-theme="dark"] #page-content .ig-message--error { border-color: rgba(240, 68, 56, .4); background: rgba(240, 68, 56, .12); color: #f97066; }
 
 @media (max-width: 900px) {
-  #page-content [data-ig-style="2"] .ig-item { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 24px 0; }
 }
 @media (max-width: 720px) {
   #page-content .ig-item { padding: 20px; }
   #page-content .ig-row { grid-template-columns: minmax(0, 1fr); padding: 10px 0; }
   #page-content .ig-actions .ig-spacer { display: none; }
-  #page-content [data-ig-style="3"] .ig-item--soon { padding: 16px 20px; }
 }

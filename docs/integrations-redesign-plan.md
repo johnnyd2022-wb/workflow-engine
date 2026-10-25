@@ -54,3 +54,9 @@ APIs. The OAuth routes change only where they redirect on failure.
 ## Checks
 
 - `tests/e2e/test_integrations_page.py`: one status load; a failed connection says why, and the redirect comes here; Disconnect asks in the page; CONCEPT ONLY: each layout fits at phone, laptop and wall widths.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (Cards) is the approved design for !567. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 6 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

@@ -1,5 +1,5 @@
 """Integrations in a browser: one status load, a failed Xero connection explained, disconnect asked
-in the page, and (CONCEPT ONLY) each layout's fit.
+in the page, and the page's fit.
 
 Requests are routed into the Flask test client, and Xero is faked (see test_crm_contact_sync_ui).
 """
@@ -19,9 +19,9 @@ PAGE = "https://crm.test/core/integrations"
 READY = ".ig-page[aria-busy='false']"
 
 
-def _open(page, style="1", width=1440, query=""):
+def _open(page, width=1440, query=""):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}{query}")
+    page.goto(PAGE + ("?" + query.lstrip("?&") if query else ""))
     page.locator(READY).wait_for()
 
 
@@ -56,11 +56,9 @@ def test_disconnect_is_asked_in_the_page(xero, sales_page, db, org):  # noqa: F8
     expect(sales_page.locator("[data-integration='xero'] .ig-state")).to_have_text("Connected")
 
 
-# CONCEPT ONLY: deleted with the two layouts not picked.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(xero, sales_page, style, width):  # noqa: F811
-    _open(sales_page, style=style, width=width)
+def test_the_page_fits_without_sideways_scroll(xero, sales_page, width):  # noqa: F811
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator("[data-integration='xero']")).to_be_visible()
     expect(sales_page.get_by_role("link", name="Connect Xero")).to_be_visible()

@@ -25,19 +25,8 @@ function xeroIntegration() {
     error: null,
     notice: '',
 
-    // CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked.
-    igStyle: '1',
-    setIgStyle(style) {
-      this.igStyle = style;
-      try { window.localStorage.setItem('integrations-style', style); } catch (_) { /* a convenience only */ }
-    },
-
     async init() {
       const params = new URLSearchParams(window.location.search);
-      const wanted = params.get('style');
-      let kept = null;
-      try { kept = window.localStorage.getItem('integrations-style'); } catch (_) { /* storage blocked */ }
-      this.igStyle = ['1', '2', '3'].includes(wanted) ? wanted : (['1', '2', '3'].includes(kept) ? kept : '1');
       // A failed connection used to land on Sales settings, which never read ?error=.
       const code = params.get('error');
       if (code) this.error = XERO_CONNECT_ERRORS[code] || `Xero couldn't connect (${code.replace(/^xero_/, '').replace(/_/g, ' ')}).`;

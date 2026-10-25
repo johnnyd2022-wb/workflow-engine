@@ -9,7 +9,7 @@
 {% block content %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='integrations.css') }}">
   {# Alpine calls init() itself; an x-init="init()" here loaded the Xero status twice. #}
-  <div class="max-content workspace-overview ig-page" x-data="xeroIntegration()" data-ig-style="1" :data-ig-style="igStyle"
+  <div class="max-content workspace-overview ig-page" x-data="xeroIntegration()"
        :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
     <header class="workspace-header">
       <div>
@@ -18,22 +18,12 @@
       </div>
     </header>
 
-    {# CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked. #}
-    <div class="ig-style-pick" role="group" aria-label="Layout concepts">
-      <span>Concept</span>
-      <button type="button" @click="setIgStyle('1')" :aria-pressed="igStyle === '1' ? 'true' : 'false'">1 · Cards</button>
-      <button type="button" @click="setIgStyle('2')" :aria-pressed="igStyle === '2' ? 'true' : 'false'">2 · Side by side</button>
-      <button type="button" @click="setIgStyle('3')" :aria-pressed="igStyle === '3' ? 'true' : 'false'">3 · Connected and available</button>
-    </div>
 
     <div class="ig-message ig-message--error" role="alert" x-show="error" x-cloak>
       <span x-text="error"></span>
       <button type="button" class="ig-close" @click="error = null" aria-label="Dismiss">&times;</button>
     </div>
     <div class="ig-message ig-message--ok" role="status" x-show="notice" x-cloak x-text="notice"></div>
-
-    {# CONCEPT ONLY: Style 3's group heading. #}
-    <h2 class="ig-group" x-text="connected ? 'Connected' : 'Available'">Available</h2>
 
     <section class="ig-item ig-xero" data-integration="xero" aria-labelledby="ig-xero-title">
       <div class="ig-intro">
@@ -76,9 +66,6 @@
         {% endif %}
       </div>
     </section>
-
-    {# CONCEPT ONLY: Style 3's group heading. #}
-    <h2 class="ig-group" x-show="connected" x-cloak>Available</h2>
 
     <section class="ig-item ig-item--soon" data-integration="myob" aria-labelledby="ig-myob-title">
       <div class="ig-intro">
