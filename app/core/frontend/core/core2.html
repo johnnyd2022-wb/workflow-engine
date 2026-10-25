@@ -3262,7 +3262,7 @@
       currentDeleteInventoryName = itemName;
       const modal = document.getElementById('delete-inventory-confirmation-modal');
       const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
-      messageEl.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
+      messageEl.textContent = `Delete "${itemName}"? This can't be undone. Only stock with no history can be deleted: anything moved, sold, wasted or counted stays in the records (adjust it to zero instead).`;
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }

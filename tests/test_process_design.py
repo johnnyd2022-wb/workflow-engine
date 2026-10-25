@@ -1015,3 +1015,74 @@ def test_reorder_steps_concurrent_if_match_writes_exactly_one_wins(db):
         assert sorted(outcomes.values()) == ["ok", "stale"], outcomes
     finally:
         _drop_org(db, org_id)
+
+
+# --- GL-U02c: a delete never takes production records with it ---------------------------------
+
+
+def test_a_workflow_with_batches_cannot_be_deleted(admin_client, db):
+    from app.core.db.models.execution import Execution
+    from tests.factories import ExecutionFactory
+
+    pid = _create_process(admin_client)["id"]
+    _add_step(admin_client, pid, 1, "Only step")
+    proc = db.query(Process).filter(Process.id == pid).one()
+    batch = ExecutionFactory(org_id=proc.org_id, process_id=proc.id)
+
+    resp = admin_client.delete(f"/api/core/processes/{pid}")
+    assert resp.status_code == 409
+    assert resp.get_json()["error"].startswith("This workflow has 1 batch recorded against it")
+    db.expire_all()
+    assert db.query(Execution).filter(Execution.id == batch.id).count() == 1
+    assert admin_client.get(f"/api/core/processes/{pid}").status_code == 200
+    _remove_batch(db, batch)
+
+
+def _remove_batch(db, batch):
+    from app.core.db.models.execution import Execution
+
+    db.delete(db.get(Execution, batch.id))  # its steps cascade with it
+    db.commit()
+
+
+def test_a_step_that_batches_recorded_cannot_be_deleted(admin_client, db):
+    from app.core.db.models.execution_step import ExecutionStep
+    from tests.factories import ExecutionFactory
+
+    pid = _create_process(admin_client)["id"]
+    step = _add_step(admin_client, pid, 1, "Distil").get_json()
+    proc = db.query(Process).filter(Process.id == pid).one()
+    batch = ExecutionFactory(org_id=proc.org_id, process_id=proc.id)
+    db.expire_all()
+    recorded = db.query(ExecutionStep).filter(ExecutionStep.execution_id == batch.id).count()
+    assert recorded, "the batch should carry a record of the step"
+
+    resp = admin_client.delete(f"/api/core/processes/{pid}/steps/{step['id']}")
+    assert resp.status_code == 409
+    assert "1 batch has recorded this step" in resp.get_json()["error"]
+    assert db.query(ExecutionStep).filter(ExecutionStep.execution_id == batch.id).count() == recorded
+    _remove_batch(db, batch)
+
+
+def test_a_workflow_with_no_batches_still_deletes(admin_client):
+    pid = _create_process(admin_client)["id"]
+    assert admin_client.delete(f"/api/core/processes/{pid}").status_code == 200
+
+
+def test_stock_with_history_is_refused_with_the_reason(admin_client, db):
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_wastage import InventoryWastage
+    from tests.factories import InventoryItemFactory, WastageFactory
+
+    org_id = db.query(Process).filter(Process.id == _create_process(admin_client)["id"]).one().org_id
+    item = InventoryItemFactory(org_id=org_id)
+    wastage = WastageFactory(org_id=org_id, inventory_item_id=item.id)
+
+    resp = admin_client.delete(f"/api/core/inventory/{item.id}")
+    assert resp.status_code == 409, "was a bare 500 'Failed to delete inventory item'"
+    assert "stock history" in resp.get_json()["error"]
+    db.expire_all()
+    assert db.query(InventoryItem).filter(InventoryItem.id == item.id).count() == 1
+    db.delete(db.get(InventoryWastage, wastage.id))
+    db.delete(db.get(InventoryItem, item.id))
+    db.commit()

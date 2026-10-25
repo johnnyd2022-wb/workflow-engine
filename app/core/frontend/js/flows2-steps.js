@@ -981,7 +981,7 @@
       // Check if this is a new step (not saved yet)
       if (!stepId || stepId.startsWith('step-new-')) {
         // Just remove from DOM
-        if (confirm(`Are you sure you want to delete "${stepName}"?`)) {
+        if (confirm(`Remove the unsaved step "${stepName}"?`)) {
           stepCard.remove();
           updateStepCount();
         }
@@ -989,7 +989,7 @@
       }
       
       // Confirm deletion
-      if (!confirm(`Are you sure you want to delete "${stepName}"? This action cannot be undone.`)) {
+      if (!confirm(`Delete the step "${stepName}" from this workflow? This can't be undone. A step that batches have recorded can't be deleted.`)) {
         return;
       }
       
