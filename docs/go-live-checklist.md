@@ -60,7 +60,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
 | ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
-| ☐ | GL-P08 | Contract producer: one end-to-end test of the case described | Fix | |
+| ◐ | GL-P08 | Contract producer: one end-to-end test of the case described | Fix | Reclassified Decide + Founder, see below |
 | ☐ | GL-P09 | Guided first-day setup | Decide | The highest-impact design item |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
 | ☐ | GL-P11 | Reminders outside the app | Decide + Founder | Needs an email sender, as GL-A04 does |
@@ -70,11 +70,11 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ☐ | GL-U01 | Dialogs: focus moves in, stays in, Escape closes, focus returns to the button | Fix | One shared helper for every custom dialog |
-| ☐ | GL-U02a | Tabs marked `role="tab"` get arrow keys and their panels | Fix | |
+| ☑ | GL-U01 | Dialogs: focus moves in, stays in, Escape closes, focus returns to the button | Fix | !573. One shared helper for every custom dialog |
+| ☑ | GL-U02a | Tabs marked `role="tab"` get arrow keys and their panels | Fix | !573. Section tabs stay links with role=tab; arrows move focus only |
 | ☐ | GL-U02b | One name for each place (Customs vs Excise, the two Tasks) | Decide | |
 | ☑ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | !572: deleting a workflow or step silently deleted its batches; now refused, and the delete confirmations state the effect. An audit of confirmation texts |
-| ☐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | Production steps, receiving, counts and evidence first |
+| ◐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | !573: production steps (offline and signed-out) and a sign-in-again path for every save. Receiving, counts and evidence still to test. Production steps, receiving, counts and evidence first |
 | ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes |
 | ☑ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | !572 |
 
@@ -94,9 +94,9 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
 | ☐ | GL-S01 | Decide and test which sales actions may change stock | Fix + Founder | The invoice and sync halves of CRM F1 still need the founder's call |
-| ☐ | GL-S02 | Every background and raw-SQL path names its org | Fix | |
-| ☐ | GL-S03 | Untrusted-input rendering, attachments, link protocols | Fix | |
-| ☐ | GL-S04 | Session replay and error reports never capture tokens, contacts or recipes | Fix | Tests on the masking |
+| ◐ | GL-S02 | Every background and raw-SQL path names its org | Fix | !572: event-summary raw SQL names its org; the nightly warm job is tested against a hostile neighbour. Other raw SQL is locks, schema or already org-filtered |
+| ◐ | GL-S03 | Untrusted-input rendering, attachments, link protocols | Fix | Audited: no user-stored URLs or x-html; innerHTML escaped and guarded by semgrep; uploads checked by magic bytes, allowlist and global nosniff. Left: the CSP migration (needs a plan, see below) |
+| ◐ | GL-S04 | Session replay and error reports never capture tokens, contacts or recipes | Fix | !572: replays mask all page text (not just inputs); invite paths and token parameters scrubbed from events. Left: error-report payloads. Tests on the masking |
 | ◐ | GL-S05 | Abuse and revocation across invite, portal, auditor expiry and deactivation | Fix | !571: deactivation, role change and password change reach open sessions (expiry, invites and the portal were already tested). Follows GL-A02 |
 
 ### To go over together
@@ -105,3 +105,6 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 - **GL-P12: commercial depth.** I agree with the report and would build these only when a named buyer is missing one; listing them here invites building ahead of demand.
 - **The "ten times better" targets.** They're worth measuring in the pilots, but they're founder goals, not engineering tasks.
 - **GL-A05 and GL-C05: pilots and customer references.** They can't be built, only arranged.
+- **GL-P08: contract producers.** The parts that exist are already tested (portal isolation, per-order duty responsibility, per-line materials source, customer material receipts). Two pieces don't exist yet, so a test can't cover them: a dispatch record tied to stock (dispatch is only "shared" by hand), and how a customer-liable order affects the producer's own excise entry, which still counts the removal. Which party's entry a contract removal belongs on is a duty-law decision, so this needs the founder before code.
+- **GL-S03: tightening the CSP.** The CSP still allows inline and evaluated script because Alpine and inline handlers need it. Removing that needs Alpine's CSP build and moving inline handlers out, page by page, with browser coverage. That's a planned migration, not a one-MR fix.
+- **No archive for workflows.** After !572 a workflow with batches can't be deleted, and there's no "archive" to hide old ones. Worth a design item if old workflows clutter the list.
