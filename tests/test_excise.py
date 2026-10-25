@@ -44,6 +44,32 @@ def test_entry_is_due_on_the_15th_working_day_after_the_period():
     assert excise.period_label(date(2026, 9, 1), date(2026, 10, 1)) == "September 2026"
 
 
+@pytest.mark.parametrize(
+    ("period_end", "due", "skipped"),
+    [
+        (date(2026, 6, 1), date(2026, 6, 22), "King's Birthday, 1 June"),
+        (date(2026, 4, 1), date(2026, 4, 23), "Good Friday and Easter Monday"),
+        (date(2027, 1, 1), date(2027, 1, 25), "1-2 January, and Monday 4th as 1 January is a Friday"),
+    ],
+)
+def test_entry_due_skips_nz_public_holidays(period_end, due, skipped):
+    # GL-P04: a Mon-Fri count put these 1 to 4 working days early.
+    assert excise.entry_due(period_end) == due, skipped
+
+
+def test_the_customs_summer_break_is_25_december_to_2_january():
+    from app.features.compliant.modules.nz_alcohol.nz_calendar import is_statutory_working_day
+
+    assert is_statutory_working_day(date(2026, 12, 24))
+    assert not is_statutory_working_day(date(2026, 12, 28))
+    # 1 January 2028 is a Saturday: the next Monday and Tuesday are off, Wednesday isn't.
+    assert not is_statutory_working_day(date(2028, 1, 3))
+    assert not is_statutory_working_day(date(2028, 1, 4))
+    assert is_statutory_working_day(date(2028, 1, 5))
+    # Unlike the licensing count, mid-January is working time.
+    assert is_statutory_working_day(date(2027, 1, 12))
+
+
 # --- the service against a real tenant ------------------------------------------------------
 
 
@@ -439,3 +465,22 @@ def test_position_sums_the_year_against_customs_thresholds(world):
     db.commit()
     after = client.get("/api/compliant/nz-alcohol/excise/position").get_json()["year"]
     assert after["lodged_duty"] == expected and after["estimated_duty"] == "0.00" and after["lodged_periods"] == 1
+
+
+# --- GL-P06: the built-in rates say when they go out of date ---------------------------------
+
+
+def test_the_rate_guide_goes_out_of_date_on_the_next_1_july():
+    from app.features.compliant.modules.nz_alcohol import excise_tariff
+
+    assert excise_tariff.next_review() == date(2027, 7, 1)  # newest rates in the guide: 1 July 2026
+    assert excise_tariff.guide_status(date(2027, 6, 30))["out_of_date"] is False
+    assert excise_tariff.guide_status(date(2027, 7, 1))["out_of_date"] is True
+
+
+def test_a_draft_past_the_review_date_says_its_rates_are_out_of_date(world):
+    db, org = world["db"], world["org"]
+    current = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))
+    assert current["rates_guide"] == {"next_review": "2027-07-01", "out_of_date": False}
+    later = excise.draft(db, org.id, date(2027, 7, 1), "monthly", today=date(2027, 8, 5))
+    assert later["rates_guide"]["out_of_date"] is True

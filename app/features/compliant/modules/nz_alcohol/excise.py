@@ -44,6 +44,7 @@ from app.core.utils.unit_conversion import is_count_unit, normalize_unit
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.excise import ExciseLodgement, ExciseRate
 from app.features.compliant.modules.nz_alcohol import excise_tariff
+from app.features.compliant.modules.nz_alcohol.nz_calendar import is_statutory_working_day
 
 FREQUENCIES = ("monthly", "six_monthly", "twelve_monthly")
 ABV_PROMPT_LABEL = "ABV (%)"
@@ -75,14 +76,11 @@ def previous_period(start: date, frequency: str) -> tuple[date, date]:
 
 
 def working_day(month_start: date, n: int) -> date:
-    """The nth working day (Mon-Fri) of the month starting at ``month_start``.
-
-    Public holidays aren't modelled; the page says so next to the date.
-    """
+    """The nth working day of the month starting at ``month_start``, skipping NZ public holidays."""
     day = month_start
     count = 0
     while True:
-        if day.weekday() < 5:
+        if is_statutory_working_day(day):
             count += 1
             if count == n:
                 return day
@@ -527,6 +525,8 @@ def draft(session: Session, org_id: UUID, start: date, frequency: str, today: da
         }
 
     current = compute_lines(session, org_id, removals_between(session, org_id, start, end), start)
+    # Rates are taken at the period's start; a lodged snapshot above keeps the rates it was filed with.
+    base["rates_guide"] = excise_tariff.guide_status(start)
     adjustments = _late_adjustments(session, org_id, start)
     if _legacy_draft_unavailable(session, org_id):
         current["problems"].append(

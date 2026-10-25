@@ -102,9 +102,12 @@
             </div>
           </div>
 
-          <div class="crm-card ex-attention" x-show="report.problems.length || report.unmapped.count" x-cloak>
+          <div class="crm-card ex-attention" x-show="report.problems.length || report.unmapped.count || ratesStale" x-cloak>
             <h3>Needs attention</h3>
             <ul>
+              <li x-show="ratesStale" data-rates-stale>
+                <span>Customs set new duty rates on 1 July and the built-in ones don't have them yet, so this estimate uses last year's.</span>
+                <a href="/compliant/nz-alcohol/customs/settings#customs-rates-title">Check rates</a></li>
               <template x-for="p in report.problems" :key="p.product + p.reason">
                 <li><span><strong x-text="p.product"></strong> · <span x-text="p.reason"></span></span>
                   <a :href="fixLink(p)">Fix in Customs setup</a></li>

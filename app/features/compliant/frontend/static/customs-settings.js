@@ -12,6 +12,7 @@
     var fail = U.failer(page);
     var categories = null;
     var source = null;
+    var guide = null;
 
     function categorySelect(id, name, value) {
       var sel = el('select', { name: 'excise_category', id: id + '-type', 'aria-label': 'Product type for ' + name });
@@ -37,7 +38,7 @@
     async function loadProducts() {
       if (categories === null) {
         var cat = await api('GET', '/api/compliant/nz-alcohol/excise/categories');
-        categories = cat.categories; source = cat.source;
+        categories = cat.categories; source = cat.source; guide = cat.guide;
         renderRates();
       }
       var data = await api('GET', '/api/compliant/nz-alcohol/excise/products');
@@ -97,6 +98,11 @@
       if (source) {
         var src = page.querySelector('[data-rates-source]');
         src.replaceChildren(document.createTextNode('From '), el('a', { href: source.url, target: '_blank', rel: 'noopener', text: source.title }), document.createTextNode(', checked ' + fmtDate(source.checked) + '. Updated every 1 July.'));
+        var stale = page.querySelector('[data-rates-stale]');
+        if (stale) stale.remove();
+        if (guide && guide.out_of_date) {
+          src.after(el('p', { className: 'customs-attention', role: 'note', 'data-rates-stale': '', text: 'These rates are out of date: Customs set new rates on ' + fmtDate(guide.next_review) + ' and they aren\'t built in yet. Until they are, add each new rate below from Customs\' table.' }));
+        }
       }
       var used = {};
       (products || []).forEach(function (p) { if (p.excise_category) used[p.excise_category] = (used[p.excise_category] || []).concat(p.name); });
