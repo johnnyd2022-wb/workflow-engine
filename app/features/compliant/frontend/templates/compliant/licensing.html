@@ -3,7 +3,7 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/licensing.css">{% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page licensing-page" data-licensing-root data-licensing-style="1" aria-busy="true"
+<main class="max-content workspace-overview workspace-page licensing-page" data-licensing-root aria-busy="true"
       data-can-manage="{{ '1' if can('compliance.manage') else '0' }}"
       data-can-record="{{ '1' if can('compliance.record') else '0' }}">
   <header class="workspace-header">
@@ -16,38 +16,15 @@
       <button type="button" class="workspace-button workspace-button--primary" data-log-open hidden>Log a refusal or incident</button>
     </div>
   </header>
-  {# CONCEPT ONLY: the layout switch, deleted with the two styles not picked. #}
-  <div class="lic-style-pick" role="group" aria-label="Layout (concept)">
-    <span>Concept</span>
-    <button type="button" data-style-pick="1">1 · Register</button>
-    <button type="button" data-style-pick="2">2 · Coming up</button>
-    <button type="button" data-style-pick="3">3 · Inspector file</button>
-  </div>
   <p class="compliant-error" data-licensing-error role="alert" hidden></p>
 
   <div class="lic-facts" data-lic-facts aria-label="Where licensing stands"></div>
 
-  {# Style 2 leads with every date that matters, soonest first. #}
-  <section class="workspace-card lic-upcoming" aria-labelledby="lic-upcoming-title">
-    <div class="lic-section__head"><div><h2 id="lic-upcoming-title">Coming up</h2><p class="lic-verdict">Every date that matters, soonest first.</p></div></div>
-    <ol class="lic-rows" data-lic-upcoming></ol>
-    <button type="button" class="lic-more" data-lic-upcoming-more hidden></button>
-  </section>
-
   <div class="lic-layout">
-    {# Style 3: the sections in the order an inspector asks for them. #}
-    <nav class="lic-toc" aria-label="Sections" data-lic-toc>
-      <p>Inspector file</p>
-      <a href="#lic-licences"><span>1</span> Licences <em data-lic-toc-state="licences"></em></a>
-      <a href="#lic-managers"><span>2</span> Certified managers <em data-lic-toc-state="managers"></em></a>
-      <a href="#lic-checks"><span>3</span> Policies, displays and checks <em data-lic-toc-state="checks"></em></a>
-      <a href="#lic-log"><span>4</span> Incident and refusal log <em data-lic-toc-state="log"></em></a>
-    </nav>
-
     <div class="lic-body">
       <section class="workspace-card lic-section lic-section--licences" id="lic-licences" aria-labelledby="lic-licences-title">
         <div class="lic-section__head">
-          <div><h2 id="lic-licences-title"><span class="lic-num">1</span>Licences</h2><p class="lic-verdict" data-lic-verdict="licences"></p></div>
+          <div><h2 id="lic-licences-title">Licences</h2><p class="lic-verdict" data-lic-verdict="licences"></p></div>
           <button type="button" class="workspace-button lic-add" data-licensing-manage data-open-dialog="licence" hidden>Add a licence</button>
         </div>
         <div class="lic-licences" data-licensing-licences></div>
@@ -56,7 +33,7 @@
 
       <section class="workspace-card lic-section" id="lic-managers" aria-labelledby="lic-managers-title">
         <div class="lic-section__head">
-          <div><h2 id="lic-managers-title"><span class="lic-num">2</span>Certified managers</h2><p class="lic-verdict" data-lic-verdict="managers"></p></div>
+          <div><h2 id="lic-managers-title">Certified managers</h2><p class="lic-verdict" data-lic-verdict="managers"></p></div>
           <button type="button" class="workspace-button lic-add" data-licensing-manage data-open-dialog="manager" hidden>Add a certificate</button>
         </div>
         <ul class="lic-rows" data-licensing-managers></ul>
@@ -65,7 +42,7 @@
 
       <section class="workspace-card lic-section" id="lic-checks" aria-labelledby="lic-checks-title">
         <div class="lic-section__head">
-          <div><h2 id="lic-checks-title"><span class="lic-num">3</span>Policies, displays and checks</h2><p class="lic-verdict" data-lic-verdict="checks"></p></div>
+          <div><h2 id="lic-checks-title">Policies, displays and checks</h2><p class="lic-verdict" data-lic-verdict="checks"></p></div>
         </div>
         <ul class="lic-rows" data-licensing-checks></ul>
         <p class="lic-footnote">Staff training lives in the shared training register.</p>
@@ -73,7 +50,7 @@
 
       <section class="workspace-card lic-section" id="lic-log" aria-labelledby="lic-log-title">
         <div class="lic-section__head">
-          <div><h2 id="lic-log-title"><span class="lic-num">4</span>Incident and refusal log</h2><p class="lic-verdict" data-lic-verdict="log"></p></div>
+          <div><h2 id="lic-log-title">Incident and refusal log</h2><p class="lic-verdict" data-lic-verdict="log"></p></div>
           <button type="button" class="workspace-button lic-add" data-log-open hidden>Add to the log</button>
         </div>
         <ul class="lic-rows" data-licensing-log></ul>

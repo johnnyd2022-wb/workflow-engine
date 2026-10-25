@@ -83,3 +83,7 @@ read for grouping, but it has no licensing analogue.
   before choosing a site, because the picker now lives there.
 - **Screenshots:** every style at laptop (first screen and full page), phone, wall and dark;
   the dialogs; the details opened; arriving by the tab; and a saved log entry.
+
+## Chosen: Style 1, Register
+
+Picked by the founder on 2026-10-25. Styles 2 (Coming up) and 3 (Inspector file) are deleted with the switch and their CONCEPT ONLY tests: the four tiles already say what is due next, and each section already reads like the inspector file.

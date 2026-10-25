@@ -22,7 +22,6 @@
     ended: 'muted'
   };
   var LOG_LIMIT = 5;
-  var UPCOMING_LIMIT = 6;
 
   function csrfToken() {
     var meta = document.querySelector('meta[name="csrf-token"]');
@@ -99,24 +98,6 @@
     var canRecord = root.dataset.canRecord === '1';
     var state = null;
     var showAllLog = false;
-    var showAllUpcoming = false;
-
-    // CONCEPT ONLY: ?style=1|2|3, then the last one picked, then Style 1.
-    var STYLE_KEY = 'licensing-style';
-    function setStyle(style) {
-      root.dataset.licensingStyle = style;
-      root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === style)); });
-      try { window.localStorage.setItem(STYLE_KEY, style); } catch (_) { /* private mode */ }
-    }
-    (function () {
-      var asked = new URLSearchParams(window.location.search).get('style');
-      var kept = null;
-      try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
-      setStyle(['1', '2', '3'].indexOf(asked) >= 0 ? asked : (['1', '2', '3'].indexOf(kept) >= 0 ? kept : '1'));
-    })();
-    root.querySelectorAll('[data-style-pick]').forEach(function (b) {
-      b.addEventListener('click', function () { setStyle(b.dataset.stylePick); });
-    });
 
     function fail(err) {
       console.error(err);
@@ -374,65 +355,6 @@
       more.textContent = showAllLog ? 'Show the latest ' + LOG_LIMIT : 'Show all ' + s.log.length + ' entries';
     }
 
-    // Every dated thing that needs doing, for the tiles and for Style 2's list.
-    function upcomingItems(s) {
-      var items = [];
-      s.licences.filter(function (l) { return l.status === 'current'; }).forEach(function (lic) {
-        var name = lic.kind_label + (lic.licence_number ? ' ' + lic.licence_number : '');
-        if (lic.kind === 'special') {
-          if (lic.event_starts_on && daysFrom(lic.event_starts_on) >= 0) {
-            items.push({ date: lic.event_starts_on, title: lic.event_name || 'Event', note: name + (lic.manager_on_duty ? ' · manager on duty ' + lic.manager_on_duty : ' · no manager on duty named'), code: lic.manager_on_duty ? 'ok' : 'attention', label: lic.manager_on_duty ? 'Ready' : 'No manager named', action: lic.manager_on_duty ? null : ['Name the manager', nameManager(lic)] });
-          }
-          return;
-        }
-        if (!lic.renewal_lodged_on && lic.renewal_file_by) {
-          items.push({ date: lic.renewal_file_by, title: 'Last day to file the renewal', note: name + ' expires ' + fmt(lic.expires_on), code: lic.state_code, label: lic.state_code === 'ok' ? 'Current' : lic.state_label, action: ['Renewal lodged', lodgeLicence(lic)] });
-        }
-        if (lic.annual_fee_due_on) {
-          items.push({ date: lic.annual_fee_due_on, title: 'Annual licence fee', note: name, code: lic.annual_fee_overdue ? 'overdue' : (daysFrom(lic.annual_fee_due_on) <= 30 ? 'due' : 'ok'), label: lic.annual_fee_overdue ? 'Overdue' : 'To pay', action: ['Fee paid', function () { act('POST', '/api/compliant/licensing/licences/' + lic.id + '/fee-paid'); }] });
-        }
-      });
-      s.managers.filter(function (m) { return m.active && !m.renewal_lodged_on; }).forEach(function (m) {
-        items.push({ date: m.expires_on, title: m.holder_name + '’s manager’s certificate expires', note: m.certificate_number, code: m.state_code, label: m.state_code === 'ok' ? 'Current' : (m.state_code === 'due' ? 'Renew' : 'Expired'), action: ['Renewal lodged', lodgeManager(m)] });
-      });
-      s.checks.forEach(function (c) {
-        if (c.from_register) return;
-        if (c.latest && c.latest.review_due) {
-          items.push({ date: c.latest.review_due, title: 'Review: ' + (CHECK_NAMES[c.control_id] || c.description), note: c.latest.title, code: c.state, label: CHECK_LABELS[c.state], check: c });
-        } else if (!c.latest) {
-          items.push({ date: null, title: CHECK_NAMES[c.control_id] || c.description, note: 'No record yet', code: 'missing', label: 'No record', check: c });
-        }
-      });
-      items.sort(function (a, b) {
-        if (!a.date) return 1;
-        if (!b.date) return -1;
-        return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0);
-      });
-      return items;
-    }
-
-    function renderUpcoming(s, items) {
-      var list = $('[data-lic-upcoming]');
-      list.replaceChildren();
-      var rows = showAllUpcoming ? items : items.slice(0, UPCOMING_LIMIT);
-      rows.forEach(function (item) {
-        var li = el('li', { className: 'lic-row lic-row--due' }, [
-          el('span', { className: 'lic-when' + (item.date && daysFrom(item.date) < 0 ? ' lic-when--late' : '') }, item.date
-            ? [el('strong', { text: day(item.date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) }), el('small', { text: when(item.date) })]
-            : [el('strong', { text: 'No date' })]),
-          el('div', { className: 'lic-row__main' }, [el('strong', { text: item.title }), el('span', { text: item.note })]),
-          chip(item.code, item.label)
-        ]);
-        if (item.check && canRecord) li.append(el('div', { className: 'lic-row__actions' }, [button('Record', function () { openCheck(item.check); })]));
-        else if (item.action && canManage) li.append(el('div', { className: 'lic-row__actions' }, [button(item.action[0], item.action[1])]));
-        list.append(li);
-      });
-      if (!items.length) list.append(el('li', { className: 'lic-empty', text: 'Nothing dated yet. Add your licence to see its renewal dates here.' }));
-      var more = $('[data-lic-upcoming-more]');
-      more.hidden = items.length <= UPCOMING_LIMIT;
-      more.textContent = showAllUpcoming ? 'Show the next ' + UPCOMING_LIMIT : 'Show all ' + items.length;
-    }
-
     function tile(label, value, note, tone) {
       return el('div', { className: 'lic-fact lic-fact--' + tone }, [
         el('span', { className: 'lic-fact__label', text: label }),
@@ -450,12 +372,12 @@
         return (rank[a.state_code] ?? 4) - (rank[b.state_code] ?? 4);
       })[0];
       var licence;
-      if (!live.length) licence = { value: 'None recorded', note: 'Add your licence', tone: 'warn', toc: 'Add one' };
-      else if (!worst) licence = { value: 'Special only', note: plural(live.length, 'special licence'), tone: 'good', toc: 'Ready' };
+      if (!live.length) licence = { value: 'None recorded', note: 'Add your licence', tone: 'warn' };
+      else if (!worst) licence = { value: 'Special only', note: plural(live.length, 'special licence'), tone: 'good' };
       else {
         var tone = TONES[worst.state_code] || 'muted';
         var next = worst.renewal_lodged_on ? 'Renewal lodged ' + fmt(worst.renewal_lodged_on) : 'File renewal by ' + fmt(worst.renewal_file_by);
-        licence = { value: worst.state_code === 'ok' ? 'Current' : (worst.state_code === 'due' ? 'Renewal due' : (worst.state_code === 'late' ? 'Renewal late' : 'Expired')), note: next, tone: tone, toc: tone === 'good' ? 'Ready' : '1 to do' };
+        licence = { value: worst.state_code === 'ok' ? 'Current' : (worst.state_code === 'due' ? 'Renewal due' : (worst.state_code === 'late' ? 'Renewal late' : 'Expired')), note: next, tone: tone };
       }
       var active = s.managers.filter(function (m) { return m.active; });
       var current = active.filter(function (m) { return m.state_code !== 'expired'; });
@@ -465,7 +387,6 @@
         note: renewing ? renewing.holder_name + ' renews by ' + fmt(renewing.expires_on) : (current.length ? 'No renewals due' : 'Add a manager’s certificate'),
         tone: !current.length ? 'bad' : (renewing ? 'warn' : 'good')
       };
-      managers.toc = managers.tone === 'good' ? 'Ready' : (current.length ? '1 renewing' : 'Add one');
       var good = s.checks.filter(function (c) { return c.state === 'current' || c.state === 'compliant'; }).length;
       var overdue = s.checks.filter(function (c) { return c.state === 'overdue' || c.state === 'attention'; }).length;
       var missing = s.checks.filter(function (c) { return c.state === 'missing' || c.state === 'setup'; }).length;
@@ -476,14 +397,12 @@
       if (soon) notes.push(soon + ' to review soon');
       var checks = {
         value: good + ' of ' + s.checks.length + ' current', note: notes.join(', ') || 'Every check has current proof',
-        tone: overdue ? 'bad' : (missing || soon ? 'warn' : 'good'), toc: (s.checks.length - good) ? (s.checks.length - good) + ' to do' : 'Ready'
-      };
+        tone: overdue ? 'bad' : (missing || soon ? 'warn' : 'good') };
       var recent = s.log.filter(function (e) { return (Date.now() - new Date(e.occurred_at).getTime()) <= 90 * 86400000; });
       var log = {
         value: recent.length ? plural(recent.length, 'entry', 'entries') : 'Nothing logged',
         note: s.log.length ? 'In the last 90 days · latest ' + new Date(s.log[0].occurred_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : 'Log every refusal and incident',
-        tone: 'muted', toc: recent.length ? plural(recent.length, 'entry', 'entries') + ' in 90 days' : 'Nothing logged'
-      };
+        tone: 'muted' };
       return { licence: licence, managers: managers, checks: checks, log: log };
     }
 
@@ -521,11 +440,7 @@
         var verdict = $('[data-lic-verdict="' + key + '"]');
         verdict.textContent = part.value + ' · ' + part.note;
         verdict.className = 'lic-verdict lic-verdict--' + part.tone;
-        var toc = $('[data-lic-toc-state="' + key + '"]');
-        toc.textContent = part.toc;
-        toc.className = 'lic-toc__state lic-toc__state--' + part.tone;
       });
-      renderUpcoming(s, upcomingItems(s));
       renderLicences(s);
       renderManagers(s);
       renderChecks(s);
@@ -534,7 +449,6 @@
     }
 
     $('[data-lic-log-more]').addEventListener('click', function () { showAllLog = !showAllLog; if (state) renderLog(state); });
-    $('[data-lic-upcoming-more]').addEventListener('click', function () { showAllUpcoming = !showAllUpcoming; if (state) renderUpcoming(state, upcomingItems(state)); });
 
     function syncKind() {
       var special = $('[data-licence-kind]').value === 'special';

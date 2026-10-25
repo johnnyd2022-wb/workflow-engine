@@ -1,5 +1,5 @@
 """The Licensing page in a browser: the four answers up front, dialogs instead of browser
-prompts, the log, and (CONCEPT ONLY) each layout at phone, laptop and wall widths."""
+prompts, the log, and the page's fit at phone, laptop and wall widths."""
 
 from datetime import date, timedelta
 from urllib.parse import urlsplit
@@ -110,22 +110,16 @@ def test_the_log_shows_the_latest_five_then_all_on_request(world, browser):  # n
         page.close()
 
 
-# CONCEPT ONLY: deleted with the two layouts not picked.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("viewport", [PHONE, LAPTOP, WALL], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(world, browser, style, viewport):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(world, browser, viewport):  # noqa: F811
     client = world["client"]
     _licence(client)
     client.post("/api/compliant/licensing/log", json={"kind": "incident", "description": "A broken bottle."})
-    page = _open(browser, client, viewport=viewport, query=f"?style={style}")
+    page = _open(browser, client, viewport=viewport)
     try:
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         for region in ("#lic-licences", "#lic-managers", "#lic-checks", "#lic-log"):
             expect(page.locator(region)).to_be_visible()
-        upcoming = expect(page.locator(".lic-upcoming"))
-        if style == "2":
-            upcoming.to_be_visible()
-        else:
-            upcoming.to_be_hidden()
+        expect(page.locator("[data-style-pick]")).to_have_count(0)
     finally:
         page.close()
