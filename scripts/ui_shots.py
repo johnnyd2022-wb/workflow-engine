@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "licensing",
     "premises",
 )
 
@@ -732,102 +733,238 @@ def _seed_np3(db, org_id, inv) -> None:
     db.commit()
 
 
-def _seed_premises(db, org_id, inv) -> None:
-    """Customs licences and the areas they cover, the way a distillery with a bond store has
-    them: a manufacturing-area licence over the still house and bottling room, an off-site
-    storage licence over the bond store, an older licence that has ended, and a cellar door
-    shop that sits outside any licensed area."""
-    from app.core.db.models.organisation import Organisation
-    from app.core.db.models.site import Site
-    from app.core.db.models.stock_location import StockLocation
-    from app.features.compliant.modules.nz_alcohol import premises
+def _seed_licensing(db, org_id, inv) -> None:
+    """A distillery's liquor licensing a year in: an off-licence with remote sales whose
+    renewal falls due within the month, a special licence for a market with no manager named
+    yet, an on-licence that ended, three managers (one due to renew, one gone), checks with
+    evidence in every state, and an incident and refusal log."""
+    from datetime import UTC, datetime, time
 
+    from app.core.db.models.user import User
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.models.licensing import LicensingLogEntry, LiquorLicence, ManagerCertificate
+    from app.features.compliant.modules.nz_alcohol.licensing import RENEWAL_WORKING_DAYS
+    from app.features.compliant.modules.nz_alcohol.nz_calendar import working_days_before
+
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        raise ValueError("licensing requires the compliance seed")
+    profile.settings = {**(profile.settings or {}), "liquor_licence_types": ["off", "special"]}
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"
     today = date.today()
-    org = db.get(Organisation, org_id)
-    org.multiple_sites_enabled = org.multiple_site_operations_enabled = True  # the bond store is a second site
-    db.flush()
-    distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
-    if distillery is None:
-        distillery = Site(org_id=org_id, name="Gracefield distillery", is_default=True)
-        db.add(distillery)
-    distillery.name, distillery.address = "Gracefield distillery", "Unit 4, 12 Gracefield Road, Lower Hutt"
-    bond = Site(org_id=org_id, name="Seaview bond store", address="31 Hutt Park Road, Seaview", kind="storage")
-    db.add(bond)
-    db.flush()
-    places = {}
-    for site, name, inside in (
-        (distillery, "Still house", True),
-        (distillery, "Bottling room", True),
-        (distillery, "Cellar door shop", False),
-        (bond, "Bay 1", True),
-        (bond, "Bay 2", True),
+    # Expiry placed so the last day to file the renewal is about three weeks away.
+    expires = today + timedelta(days=50)
+    while working_days_before(expires, RENEWAL_WORKING_DAYS) > today + timedelta(days=21):
+        expires -= timedelta(days=1)
+    db.add_all(
+        [
+            LiquorLicence(
+                org_id=org_id,
+                kind="off",
+                licence_number="31/OFF/112/2023",
+                issuing_dlc="Hutt City DLC",
+                premises="Unit 4, 12 Gracefield Road, Lower Hutt",
+                endorsements=["s40_remote_sales"],
+                issued_on=expires - timedelta(days=3 * 365),
+                expires_on=expires,
+                annual_fee_due_on=today + timedelta(days=64),
+                sale_hours="Mon-Sun 7am-11pm",
+                delivery_hours_start=time(7),
+                delivery_hours_end=time(23),
+                conditions="No sale or supply to anyone under 18. Drinking water available at tastings.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="special",
+                licence_number="31/SP/208/2026",
+                issuing_dlc="Wellington DLC",
+                event_name="Harbourside Market tasting stand",
+                event_starts_on=today + timedelta(days=12),
+                event_ends_on=today + timedelta(days=13),
+                sale_hours="Sat-Sun 9am-2pm",
+                conditions="Tastings of 15 ml or less; food available at the stand.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="on",
+                licence_number="31/ON/044/2021",
+                issuing_dlc="Hutt City DLC",
+                premises="Cellar door bar, 12 Gracefield Road",
+                issued_on=today - timedelta(days=4 * 365),
+                expires_on=today - timedelta(days=200),
+                status="ended",
+                created_by_user_id=user.id,
+            ),
+        ]
+    )
+    for name, number, expires_on, active, holder in (
+        ("Jordan Lee", "31/CERT/0912/2024", today + timedelta(days=430), True, user.id),
+        ("Sam Ngata", "31/CERT/1187/2023", today + timedelta(days=38), True, None),
+        ("Priya Shah", "31/CERT/0456/2022", today - timedelta(days=90), False, None),
     ):
-        place = StockLocation(org_id=org_id, site_id=site.id, name=name, inside_licensed_area=inside)
-        db.add(place)
-        places[name] = place
-    db.flush()
-    lma = premises.add_licence(
-        db,
-        org_id,
-        {
-            "number": "CCA-LMA-2291",
-            "name": "Gracefield distillery manufacturing area",
-            "kind": "lma",
-            "legal_entity_reference": "NZBN 9429049999011",
-            "valid_from": (today - timedelta(days=700)).isoformat(),
-            "valid_until": None,
-            "evidence_reference": "Customs approval letter, 3 Nov 2024",
-        },
-    )
-    oss = premises.add_licence(
-        db,
-        org_id,
-        {
-            "number": "CCA-OSS-0418",
-            "name": "Seaview off-site storage",
-            "kind": "oss",
-            "legal_entity_reference": "NZBN 9429049999011",
-            "valid_from": (today - timedelta(days=200)).isoformat(),
-            "valid_until": (today + timedelta(days=45)).isoformat(),
-            "evidence_reference": "Customs approval letter, 18 Apr 2026",
-        },
-    )
-    old = premises.add_licence(
-        db,
-        org_id,
-        {
-            "number": "CCA-OSS-0112",
-            "name": "Petone shared bond (ended)",
-            "kind": "oss",
-            "legal_entity_reference": "NZBN 9429049999011",
-            "valid_from": (today - timedelta(days=900)).isoformat(),
-            "valid_until": (today - timedelta(days=210)).isoformat(),
-            "evidence_reference": "Surrender acknowledgement, Mar 2026",
-        },
-    )
-    db.flush()
-    for licence, site, place, start, end, evidence in (
-        (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
-        (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
-        (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
-        (oss, bond, "Bay 2", 200, 45, "OSS plan, bays 1-2"),
-        (old, bond, None, 800, 210, "Shared bond floor plan"),
-    ):
-        premises.add_coverage(
-            db,
-            org_id,
-            {
-                "licence_id": str(licence.id),
-                "site_id": str(site.id),
-                "location_id": str(places[place].id) if place else None,
-                "valid_from": (today - timedelta(days=start)).isoformat(),
-                "valid_until": (today + timedelta(days=end) if end == 45 else today - timedelta(days=end)).isoformat()
-                if end
-                else None,
-                "evidence_reference": evidence,
-            },
+        db.add(
+            ManagerCertificate(
+                org_id=org_id,
+                user_id=holder,
+                holder_name=name,
+                certificate_number=number,
+                issuing_dlc="Hutt City DLC",
+                issued_on=expires_on - timedelta(days=2 * 365),
+                expires_on=expires_on,
+                active=active,
+            )
         )
-        db.flush()
+
+    def at(day: date, hour: int = 9) -> datetime:
+        return datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=hour)
+
+    for control_id, title, evidence, recorded, due in (
+        (
+            "licence-conditions",
+            "Licence conditions and how we meet them",
+            "Drive / Licensing / Conditions 2026.pdf",
+            today - timedelta(days=120),
+            today + timedelta(days=245),
+        ),
+        (
+            "licence-displayed",
+            "Licence and duty manager sign at the cellar door",
+            "Photo: cellar-door-sign.jpg",
+            today - timedelta(days=340),
+            today + timedelta(days=25),
+        ),
+        (
+            "responsibility-policy",
+            "Host responsibility policy, signed",
+            "Drive / Licensing / Host responsibility policy.pdf",
+            today - timedelta(days=200),
+            today + timedelta(days=165),
+        ),
+        (
+            "remote-seller-website",
+            "Website shows licence, R18 notice and age check",
+            "Screenshot: checkout-age-gate.png",
+            today - timedelta(days=400),
+            today - timedelta(days=35),
+        ),
+    ):
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="liquor-licence",
+                control_id=control_id,
+                record_type="attestation",
+                status="complete",
+                title=title,
+                evidence_reference=evidence,
+                due_date=due,
+                source_refs=[],
+                details={},
+                created_by_user_id=user.id,
+                created_at=at(recorded),
+                updated_at=at(recorded),
+            )
+        )
+    for kind, days_ago, where, staff, what, action, ref in (
+        (
+            "id_refusal",
+            3,
+            "Cellar door",
+            "Sam Ngata",
+            "Customer couldn't show ID; looked under 25.",
+            "Declined the sale and offered a tasting of the non-alcoholic tonic.",
+            None,
+        ),
+        (
+            "id_refusal",
+            11,
+            "Online order",
+            "Jordan Lee",
+            "Courier returned an R18 parcel: no ID at the door.",
+            "Parcel held at the depot; customer collected with ID.",
+            "Order 4471",
+        ),
+        (
+            "intoxication_refusal",
+            26,
+            "Harbourside Market",
+            "Sam Ngata",
+            "Visitor at the stand showed signs of intoxication.",
+            "Declined a tasting; pointed to water and food stalls.",
+            None,
+        ),
+        (
+            "incident",
+            58,
+            "Cellar door",
+            "Jordan Lee",
+            "A bottle broke on the shop floor during a tasting.",
+            "Area cleared and mopped; no one hurt.",
+            None,
+        ),
+        (
+            "controlled_purchase",
+            140,
+            "Cellar door",
+            "Priya Shah",
+            "Police controlled purchase operation: the minor was asked for ID and refused service.",
+            "Passed. Letter from Police filed.",
+            "CPO-2026-118",
+        ),
+        (
+            "id_refusal",
+            170,
+            "Cellar door",
+            "Sam Ngata",
+            "Group of four; one couldn't show ID.",
+            "Served the three with ID only after checking all four.",
+            None,
+        ),
+        (
+            "id_refusal",
+            205,
+            "Online order",
+            "Jordan Lee",
+            "Date of birth at checkout was under 18.",
+            "Order cancelled and refunded.",
+            "Order 3982",
+        ),
+        (
+            "incident",
+            240,
+            "Harbourside Market",
+            "Priya Shah",
+            "Stand gazebo blew over in the wind.",
+            "Packed down early; no one hurt.",
+            None,
+        ),
+        (
+            "intoxication_refusal",
+            300,
+            "Cellar door",
+            "Priya Shah",
+            "Customer arrived from a nearby bar, unsteady.",
+            "Declined service; called them a taxi.",
+            None,
+        ),
+    ):
+        db.add(
+            LicensingLogEntry(
+                org_id=org_id,
+                kind=kind,
+                occurred_at=at(today - timedelta(days=days_ago), 2),  # mid-afternoon in NZ
+                location=where,
+                description=what,
+                action_taken=action,
+                staff_name=staff,
+                reference=ref,
+                created_by_user_id=user.id,
+            )
+        )
     db.commit()
 
 
@@ -1387,6 +1524,105 @@ def _seed_board(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_premises(db, org_id, inv) -> None:
+    """Customs licences and the areas they cover, the way a distillery with a bond store has
+    them: a manufacturing-area licence over the still house and bottling room, an off-site
+    storage licence over the bond store, an older licence that has ended, and a cellar door
+    shop that sits outside any licensed area."""
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.features.compliant.modules.nz_alcohol import premises
+
+    today = date.today()
+    org = db.get(Organisation, org_id)
+    org.multiple_sites_enabled = org.multiple_site_operations_enabled = True  # the bond store is a second site
+    db.flush()
+    distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
+    if distillery is None:
+        distillery = Site(org_id=org_id, name="Gracefield distillery", is_default=True)
+        db.add(distillery)
+    distillery.name, distillery.address = "Gracefield distillery", "Unit 4, 12 Gracefield Road, Lower Hutt"
+    bond = Site(org_id=org_id, name="Seaview bond store", address="31 Hutt Park Road, Seaview", kind="storage")
+    db.add(bond)
+    db.flush()
+    places = {}
+    for site, name, inside in (
+        (distillery, "Still house", True),
+        (distillery, "Bottling room", True),
+        (distillery, "Cellar door shop", False),
+        (bond, "Bay 1", True),
+        (bond, "Bay 2", True),
+    ):
+        place = StockLocation(org_id=org_id, site_id=site.id, name=name, inside_licensed_area=inside)
+        db.add(place)
+        places[name] = place
+    db.flush()
+    lma = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-LMA-2291",
+            "name": "Gracefield distillery manufacturing area",
+            "kind": "lma",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=700)).isoformat(),
+            "valid_until": None,
+            "evidence_reference": "Customs approval letter, 3 Nov 2024",
+        },
+    )
+    oss = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0418",
+            "name": "Seaview off-site storage",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=200)).isoformat(),
+            "valid_until": (today + timedelta(days=45)).isoformat(),
+            "evidence_reference": "Customs approval letter, 18 Apr 2026",
+        },
+    )
+    old = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0112",
+            "name": "Petone shared bond (ended)",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=900)).isoformat(),
+            "valid_until": (today - timedelta(days=210)).isoformat(),
+            "evidence_reference": "Surrender acknowledgement, Mar 2026",
+        },
+    )
+    db.flush()
+    for licence, site, place, start, end, evidence in (
+        (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
+        (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
+        (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
+        (oss, bond, "Bay 2", 200, 45, "OSS plan, bays 1-2"),
+        (old, bond, None, 800, 210, "Shared bond floor plan"),
+    ):
+        premises.add_coverage(
+            db,
+            org_id,
+            {
+                "licence_id": str(licence.id),
+                "site_id": str(site.id),
+                "location_id": str(places[place].id) if place else None,
+                "valid_from": (today - timedelta(days=start)).isoformat(),
+                "valid_until": (today + timedelta(days=end) if end == 45 else today - timedelta(days=end)).isoformat()
+                if end
+                else None,
+                "evidence_reference": evidence,
+            },
+        )
+        db.flush()
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -1426,6 +1662,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "licensing": _seed_licensing,
             "premises": _seed_premises,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
