@@ -27,3 +27,81 @@ completing an item.
   Setup reference: [Google sign-in](google-sign-in.md).
 
   Completed: —. Evidence: —.
+
+## From the go-live assessment (!570)
+
+The findings from `docs/nz-alcohol-go-live-assessment-2026-10-25.md`, as one list to work through. Each item is marked:
+
+- **Fix**: a defect or clear requirement with one right answer. Fixed in code, no input needed.
+- **Decide**: a design or product choice. Three researched options with screenshots, built with the page-design process, for the founder to pick.
+- **Founder**: needs the founder, not code (pricing, legal terms, pilots).
+- **Discuss**: I disagree or think it should be reshaped. The reason is given in "To go over together".
+
+Status: ☐ open · ◐ in progress · ☑ done (with the MR).
+
+### Launch gates (P0)
+
+| | ID | Item | Type | Notes |
+|---|---|---|---|---|
+| ☑ | GL-A01 | One server-side password policy (min and max) across signup, invite and change; long input gives a 400, not a 500 | Fix | |
+| ☑ | GL-A02 | A password change signs out every other session | Fix | |
+| ☑ | GL-A03 | `password_reset: true` on login must not clear an account lock | Fix | |
+| ☐ | GL-A04 | Forgotten-password recovery | Decide + Founder | Self-service needs an email sender, which the app doesn't have. Until then, a visible "Locked out? Contact us" route (Fix) |
+| ☐ | GL-A05 | One observed independent pilot per sector | Founder | Not code |
+
+### Product and operations (P1)
+
+| | ID | Item | Type | Notes |
+|---|---|---|---|---|
+| ☐ | GL-P01 | Returns, credit notes and physical stock | Decide | Importing credit notes is a fix; how a return shows on stock and duty is a design choice |
+| ☐ | GL-P02 | Quality hold and release on a lot | Decide | |
+| ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
+| ☐ | GL-P04 | Customs deadlines count NZ public holidays | Fix | Licensing already has an NZ working-day calendar; excise doesn't use it |
+| ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
+| ☐ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | |
+| ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
+| ☐ | GL-P08 | Contract producer: one end-to-end test of the case described | Fix | |
+| ☐ | GL-P09 | Guided first-day setup | Decide | The highest-impact design item |
+| ☐ | GL-P10 | One readable export of all the business's records | Decide | |
+| ☐ | GL-P11 | Reminders outside the app | Decide + Founder | Needs an email sender, as GL-A04 does |
+| ☐ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | |
+
+### UX and accessibility
+
+| | ID | Item | Type | Notes |
+|---|---|---|---|---|
+| ☐ | GL-U01 | Dialogs: focus moves in, stays in, Escape closes, focus returns to the button | Fix | One shared helper for every custom dialog |
+| ☐ | GL-U02a | Tabs marked `role="tab"` get arrow keys and their panels | Fix | |
+| ☐ | GL-U02b | One name for each place (Customs vs Excise, the two Tasks) | Decide | |
+| ☐ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | An audit of confirmation texts |
+| ☐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | Production steps, receiving, counts and evidence first |
+| ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes |
+| ☐ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | |
+
+### Conversion (P1)
+
+| | ID | Item | Type | Notes |
+|---|---|---|---|---|
+| ☐ | GL-C01 | Pricing, inclusions, cancellation | Founder | |
+| ☐ | GL-C02 | Privacy and service terms linked at signup and in the app | Founder + Fix | The founder supplies the terms; the links and pages are code |
+| ☐ | GL-C03 | Import templates with an error report and a preview | Decide | |
+| ☐ | GL-C04 | Help and contact on every page, with a reference ID | Decide | |
+| ☐ | GL-C05 | Sector-specific example journeys | Founder | Needs a real customer's permission |
+| ☐ | GL-C06 | Show the exception loop in the demo | Founder | Follows from GL-P01 to GL-P03 |
+
+### Security (P1)
+
+| | ID | Item | Type | Notes |
+|---|---|---|---|---|
+| ☐ | GL-S01 | Decide and test which sales actions may change stock | Fix + Founder | The invoice and sync halves of CRM F1 still need the founder's call |
+| ☐ | GL-S02 | Every background and raw-SQL path names its org | Fix | |
+| ☐ | GL-S03 | Untrusted-input rendering, attachments, link protocols | Fix | |
+| ☐ | GL-S04 | Session replay and error reports never capture tokens, contacts or recipes | Fix | Tests on the masking |
+| ☐ | GL-S05 | Abuse and revocation across invite, portal, auditor expiry and deactivation | Fix | Follows GL-A02 |
+
+### To go over together
+
+- **GL-P07: advertising multi-site and planning.** This is a rule about what to claim, not a code change; the Sites page already says which flows are on. I'd keep it in the sales playbook rather than here.
+- **GL-P12: commercial depth.** I agree with the report and would build these only when a named buyer is missing one; listing them here invites building ahead of demand.
+- **The "ten times better" targets.** They're worth measuring in the pilots, but they're founder goals, not engineering tasks.
+- **GL-A05 and GL-C05: pilots and customer references.** They can't be built, only arranged.
