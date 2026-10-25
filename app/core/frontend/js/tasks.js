@@ -17,6 +17,9 @@
       showDrawer: false, showLaneModal: false, showLaneManager: false, editingTask: null, saving: false, laneTitle: '',
       draggingTask: null, dragOverLane: '', draggingLaneId: '', dragOverLaneOrder: '', archiveLoading: false,
       form: { title: '', description: '', due_date: '', priority: 'medium', status: 'pending', assigned_to_user_id: '' },
+      // Declared here: Alpine writes an undeclared property onto the outermost x-data (<body>'s),
+      // which outlives a boosted swap, so the next visit's board thought it had already loaded.
+      _boundToCoreTab: false, _initialised: false,
 
       async init() {
         if (this._boundToCoreTab) return;

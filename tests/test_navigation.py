@@ -195,6 +195,7 @@ def test_registered_child_pages_list_their_tab_and_parents():
 def test_a_detail_page_hangs_off_its_registered_ancestor():
     assert _trail("/core/contracts/abc", leaf="CO-12") == [
         ("Production", "/core"),
+        ("Planner", "/core/planner"),
         ("Contract orders", "/core/contracts"),
         ("CO-12", None),
     ]
@@ -204,12 +205,13 @@ def test_a_detail_page_hangs_off_its_registered_ancestor():
         extra=[{"label": "CO-12", "href": "/core/contracts/abc"}],
     ) == [
         ("Production", "/core"),
+        ("Planner", "/core/planner"),
         ("Contract orders", "/core/contracts"),
         ("CO-12", "/core/contracts/abc"),
         ("Portal sharing", None),
     ]
     assert _trail("/compliant/nz-alcohol/np3-audit/check/recall-policy", leaf="Check")[-2:] == [
-        ("Food safety", "/compliant/nz-alcohol/np3-audit"),
+        ("Food safety", "/compliant/nz-alcohol/food-safety"),
         ("Check", None),
     ]
     assert _trail("/crm/customers/7")[-1] == ("Details", None)
@@ -261,7 +263,12 @@ def test_secondary_pages_select_their_primary_parent_and_keep_a_trail(db, flask_
             html = client.get(path).get_data(as_text=True)
             assert [key for key, active in _tabs(html) if active] == [parent]
             assert 'aria-label="Breadcrumb"' in html or 'aria-label="Breadcrumbs"' in html
-        assert _trail("/core/contracts") == [("Production", "/core"), ("Contract orders", None)]
+        # Going up from a secondary page passes through the tab that lights up for it.
+        assert _trail("/core/contracts") == [
+            ("Production", "/core"),
+            ("Planner", "/core/planner"),
+            ("Contract orders", None),
+        ]
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
@@ -282,3 +289,29 @@ def test_contextual_actions_follow_role_permissions(db, flask_app):  # noqa: F81
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
+
+
+def test_going_up_passes_through_the_tab_a_page_sits_under():
+    # The arrow goes to the last-but-one crumb, so these are where it leads.
+    assert _trail("/core/suppliers")[-2] == ("Inventory", "/core/inventory/view")
+    assert _trail("/core/executions/live")[-2] == ("Workflows", "/core/processes")
+    assert _trail("/crm/matching")[-2] == ("Analytics", "/crm/analytics")
+    assert _trail("/compliant/nz-alcohol/food-registrations")[-2] == (
+        "Food safety",
+        "/compliant/nz-alcohol/food-safety",
+    )
+    # A primary tab's secondaries under Overview go to the section's home, as before.
+    assert _trail("/compliant/tools") == [("Compliance", "/compliant"), ("Tools", None)]
+
+
+def test_the_food_safety_summary_is_its_tabs_own_page():
+    # The tab pointed at /np3-audit, which redirects to the summary: the arrow there led back to itself.
+    assert breadcrumbs("/compliant/nz-alcohol/food-safety") == []
+
+
+def test_a_batch_step_screen_goes_back_to_its_workflow(flask_app):  # noqa: F811
+    with flask_app.test_request_context("/core/flows/batches/start?id=abc&execution_id=x"):
+        assert _trail("/core/flows/batches/start", leaf="Record step")[-2:] == [
+            ("Workflow editor", "/core/flows?id=abc"),
+            ("Record step", None),
+        ]
