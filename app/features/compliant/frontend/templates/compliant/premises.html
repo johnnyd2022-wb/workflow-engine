@@ -6,38 +6,67 @@
 <link rel="stylesheet" href="/compliant/static/premises.css">
 {% endblock %}
 {% block content %}
-<main class="compliant-shell premises" data-premises-root>
-  <a href="/compliant/nz-alcohol/customs">Back to Customs</a>
-  <h1>Customs licences and areas</h1>
-  <p>Record each CCA licence and the stock areas it covers. One licence can cover areas at several sites.</p>
+<main class="max-content workspace-overview workspace-page premises-page" data-premises-root aria-busy="true"
+      data-can-manage="{{ '1' if can('compliance.manage') else '0' }}">
+  <header class="workspace-header">
+    <div>
+      <h1>Customs licences and areas</h1>
+      <p class="workspace-caption">Which stock areas sit inside a Customs-licensed area, under which licence, and until when.</p>
+    </div>
+    {% if can('compliance.manage') %}
+    <div class="workspace-header__actions prem-header-actions">
+      <button type="button" class="workspace-button" data-open-dialog="coverage">Assign an area</button>
+      <button type="button" class="workspace-button workspace-button--primary" data-open-dialog="licence">Register a licence</button>
+    </div>
+    {% endif %}
+  </header>
   <p class="compliant-error" role="alert" data-premises-error hidden></p>
+
+  <p class="prem-summary" data-prem-summary></p>
+
+  <section class="workspace-card prem-licences-card" aria-labelledby="prem-licences-title">
+    <div class="prem-section__head"><div><h2 id="prem-licences-title">Licences</h2><p class="workspace-caption" data-prem-licences-note></p></div></div>
+    <div class="prem-licences" data-licences></div>
+    <details class="prem-ended" data-prem-ended hidden><summary></summary><div class="prem-licences"></div></details>
+  </section>
+
+  {# What isn't covered: where an inspector's question would land. #}
+  <section class="workspace-card prem-outside-card" aria-labelledby="prem-outside-title" data-prem-outside-card hidden>
+    <div class="prem-section__head"><div><h2 id="prem-outside-title">Not in a licensed area today</h2><p class="workspace-caption">Fine for a shop or a car; stock kept here is outside Customs control.</p></div></div>
+    <ul class="prem-rows" data-prem-outside></ul>
+  </section>
+
   {% if can('compliance.manage') %}
-  <section><h2>Register a licence</h2>
-    <form data-licence-form hx-boost="false" class="premises-form">
+  <dialog class="prem-dialog" data-prem-dialog="licence" aria-labelledby="prem-licence-title">
+    <form data-licence-form hx-boost="false" class="prem-form">
+      <h2 class="span-2" id="prem-licence-title">Register a licence</h2>
+      <p class="span-2 workspace-caption">A Customs Controlled Area licence, as Customs issued it.</p>
       <label>Licence number<input name="number" maxlength="100" required></label>
-      <label>Name<input name="name" maxlength="150" required></label>
+      <label>Name<input name="name" maxlength="150" required placeholder="e.g. Gracefield distillery"></label>
       <label>Type<select name="kind" required><option value="lma">Manufacturing area</option><option value="oss">Off-site storage</option><option value="duty_free">Duty-free shop</option><option value="export">Export warehouse</option></select></label>
       <label>Legal entity reference<input name="legal_entity_reference" maxlength="100" required placeholder="NZBN or registered entity ID"></label>
       <label>Valid from<input name="valid_from" type="date" required></label>
       <label>Valid until (optional)<input name="valid_until" type="date"></label>
-      <label>Licence document reference<input name="evidence_reference" maxlength="500" required></label>
-      <button type="submit">Register licence</button>
+      <label class="span-2">Licence document reference<input name="evidence_reference" maxlength="500" required placeholder="Where the approval letter is kept"></label>
+      <p class="span-2 prem-form__error" role="alert" data-form-error hidden></p>
+      <div class="span-2 prem-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Register licence</button></div>
     </form>
-  </section>
-  <section><h2>Assign a licensed area</h2>
-    <form data-coverage-form hx-boost="false" class="premises-form">
-      <label>Licence<select name="licence_id" data-licence-select required></select></label>
+  </dialog>
+  <dialog class="prem-dialog" data-prem-dialog="coverage" aria-labelledby="prem-coverage-title">
+    <form data-coverage-form hx-boost="false" class="prem-form">
+      <h2 class="span-2" id="prem-coverage-title">Assign an area</h2>
+      <p class="span-2 workspace-caption">Put a stock area inside a licence, for the dates on the approved plan.</p>
+      <label class="span-2">Licence<select name="licence_id" data-licence-select required></select></label>
       <label>Site<select name="site_id" data-site-select required></select></label>
       <label>Stock area<select name="location_id" data-location-select></select></label>
       <label>Covered from<input name="valid_from" type="date" required></label>
       <label>Covered until (optional)<input name="valid_until" type="date"></label>
-      <label>Coverage document reference<input name="evidence_reference" maxlength="500" required></label>
-      <button type="submit">Assign area</button>
+      <label class="span-2">Coverage document reference<input name="evidence_reference" maxlength="500" required placeholder="e.g. Approved site plan rev B"></label>
+      <p class="span-2 prem-form__error" role="alert" data-form-error hidden></p>
+      <div class="span-2 prem-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Assign area</button></div>
     </form>
-  </section>
+  </dialog>
   {% endif %}
-  <section><h2>Registered licences</h2><div data-licences></div></section>
-  <section><h2>Licensed areas</h2><div data-coverage></div></section>
 </main>
 {% endblock %}
 {% block scripts %}{{ super() }}<script src="/compliant/static/premises.js"></script>{% endblock %}

@@ -60,7 +60,7 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         assert saved.ok, saved.text()
         for name, path, labels, secondary in [
             ("production", "/core", ["Overview", "Planner", "Workflows", "Inventory"], "Contract orders"),
-            ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Premises"),
+            ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Tools"),
             ("sales", "/crm", ["Overview", "Customers", "Tasks", "Analytics"], "Batch matching"),
         ]:
             page.goto(path)
