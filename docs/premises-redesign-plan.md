@@ -71,3 +71,7 @@ Observed in the `00-before` screenshots (a seeded distillery with a bond store, 
   - ended licences opened;
   - arriving from the Customs header twice;
   - empty and failed loads.
+
+## Chosen: Style 1, By licence
+
+Picked by the founder on 2026-10-25. Styles 2 (By place) and 3 (Timeline) are deleted with the switch and their CONCEPT ONLY tests. Each licence lists its areas, and what is outside a licensed area today ends the page.

@@ -55,23 +55,6 @@
     var error = $('[data-premises-error]');
     var state;
 
-    // CONCEPT ONLY: ?style=1|2|3, then the last one picked, then Style 1.
-    var STYLE_KEY = 'premises-style';
-    function setStyle(style) {
-      root.dataset.premisesStyle = style;
-      root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === style)); });
-      try { window.localStorage.setItem(STYLE_KEY, style); } catch (_) { /* private mode */ }
-    }
-    (function () {
-      var asked = new URLSearchParams(window.location.search).get('style');
-      var kept = null;
-      try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
-      setStyle(['1', '2', '3'].indexOf(asked) >= 0 ? asked : (['1', '2', '3'].indexOf(kept) >= 0 ? kept : '1'));
-    })();
-    root.querySelectorAll('[data-style-pick]').forEach(function (b) {
-      b.addEventListener('click', function () { setStyle(b.dataset.stylePick); });
-    });
-
     function report(message) { error.textContent = message || ''; error.hidden = !message; }
 
     function dialog(name) { return $('[data-prem-dialog="' + name + '"]'); }
@@ -161,7 +144,6 @@
         el('p', { className: 'prem-licence__facts', text: [state.kinds[lic.kind], 'Entity ' + lic.legal_entity_reference,
           fmt(lic.valid_from) + ' to ' + (lic.valid_until ? fmt(lic.valid_until) : 'ongoing')].join(' · ') }),
         el('p', { className: 'prem-licence__doc', text: lic.evidence_reference }),
-        el('p', { className: 'prem-licence__count', text: plural(covers.filter(live).length, 'area covered today', 'areas covered today') }),
         list
       ]);
     }
@@ -182,47 +164,6 @@
         : 'None current';
     }
 
-    function areaRow(area) {
-      var cover = currentCover(area);
-      var past = coverageFor(area).filter(function (c) { return !live(c) || !live(licenceById(c.licence_id) || c); });
-      var note;
-      if (cover) {
-        var lic = licenceById(cover.licence_id);
-        var until = [cover.valid_until, lic.valid_until].filter(Boolean).sort()[0];
-        note = lic.number + ' · ' + state.kinds[lic.kind] + (until ? ' · until ' + fmt(until) : '');
-      } else if (past.length) {
-        var last = past.slice().sort(function (a, b) { return (a.valid_until || '') < (b.valid_until || '') ? 1 : -1; })[0];
-        note = 'Was under ' + (licenceById(last.licence_id) || { number: 'a licence' }).number + (last.valid_until ? ' until ' + fmt(last.valid_until) : '');
-      } else {
-        note = 'Never in a licensed area';
-      }
-      var s;
-      if (cover) {
-        var ends = [cover.valid_until, licenceById(cover.licence_id).valid_until].filter(Boolean).sort()[0];
-        s = ends && daysFrom(ends) <= SOON_DAYS ? { code: 'soon', label: 'Licensed · ends in ' + plural(daysFrom(ends), 'day', 'days') } : { code: 'current', label: 'Licensed' };
-      } else {
-        s = { code: 'outside', label: 'Outside' };
-      }
-      return el('li', { className: 'prem-row prem-row--area' }, [
-        el('div', { className: 'prem-row__main' }, [el('strong', { text: area.name }), el('span', { text: note })]),
-        chip(s)
-      ]);
-    }
-
-    function renderAreas(list) {
-      var host = $('[data-areas]');
-      host.replaceChildren();
-      if (!list.length) { host.append(el('p', { className: 'prem-empty', text: 'No stock areas yet. Add them under Settings, Sites.' })); return; }
-      state.sites.forEach(function (site) {
-        var rows = list.filter(function (a) { return a.site.id === site.id; });
-        if (!rows.length) return;
-        host.append(el('section', { className: 'prem-site' }, [
-          el('h3', { text: site.name }),
-          el('ul', { className: 'prem-rows' }, rows.map(areaRow))
-        ]));
-      });
-    }
-
     function renderOutside(list) {
       var outside = list.filter(function (a) { return !currentCover(a); });
       $('[data-prem-outside-card]').hidden = !outside.length;
@@ -232,48 +173,6 @@
           el('span', { text: coverageFor(a).length ? 'Its coverage has ended' : 'Never in a licensed area' })
         ])]);
       }));
-    }
-
-    // Style 3: a bar per coverage record across the months, with today marked.
-    function renderTimeline(list) {
-      var host = $('[data-timeline]');
-      host.replaceChildren();
-      if (!state.coverage.length) { host.append(el('p', { className: 'prem-empty', text: 'Nothing to chart yet: assign an area to a licence.' })); return; }
-      var today = todayIso();
-      var starts = state.coverage.map(function (c) { return c.valid_from; }).concat([today]);
-      var start = day(starts.sort()[0]);
-      start = new Date(start.getFullYear(), start.getMonth() < 6 ? 0 : 6, 1);
-      var ends = state.coverage.map(function (c) { return c.valid_until || today; });
-      var endDate = new Date(Math.max(day(ends.sort().reverse()[0]).getTime(), day(today).getTime()) + 180 * DAY);
-      var span = endDate - start;
-      function pct(iso) { return Math.max(0, Math.min(100, ((day(iso) - start) / span) * 100)); }
-      var axis = el('div', { className: 'prem-axis' });
-      for (var t = new Date(start); t < endDate; t = new Date(t.getFullYear(), t.getMonth() + 6, 1)) {
-        var left = ((t - start) / span) * 100;
-        axis.append(el('span', { className: 'prem-axis__tick', style: 'left:' + left.toFixed(2) + '%', text: t.toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' }) }));
-      }
-      var todayLeft = pct(today).toFixed(2);
-      host.append(el('div', { className: 'prem-tl-row prem-tl-row--axis' }, [el('span', { className: 'prem-tl-label' }), axis]));
-      list.forEach(function (area) {
-        var track = el('div', { className: 'prem-track' }, [el('span', { className: 'prem-today', style: 'left:' + todayLeft + '%', title: 'Today' })]);
-        if (!coverageFor(area).length) track.append(el('span', { className: 'prem-track__none', text: 'Never in a licensed area' }));
-        coverageFor(area).forEach(function (c) {
-          var lic = licenceById(c.licence_id);
-          var s = standing(c.valid_from, c.valid_until);
-          var from = pct(c.valid_from);
-          var to = c.valid_until ? pct(c.valid_until) : 100;
-          track.append(el('span', {
-            className: 'prem-bar prem-bar--' + s.code + (c.valid_until ? '' : ' prem-bar--open'),
-            style: 'left:' + from.toFixed(2) + '%;width:' + Math.max(1, to - from).toFixed(2) + '%',
-            title: (lic ? lic.number : 'Licence') + ': ' + fmt(c.valid_from) + ' to ' + (c.valid_until ? fmt(c.valid_until) : 'ongoing')
-          }, [el('span', { text: lic ? lic.number : '' })]));
-        });
-        host.append(el('div', { className: 'prem-tl-row' }, [
-          el('span', { className: 'prem-tl-label' }, [el('strong', { text: area.name }), el('small', { text: area.site.name })]),
-          track
-        ]));
-      });
-      host.append(el('p', { className: 'prem-tl-key' }, [el('span', { className: 'prem-today-key' }), ' Today · bars run from the date an area was covered to its end date; an open end means ongoing']));
     }
 
     function render() {
@@ -289,9 +188,7 @@
       if (list.length - covered) parts.push(plural(list.length - covered, 'area outside', 'areas outside'));
       $('[data-prem-summary]').textContent = state.licences.length ? parts.join(' · ') : '';
       renderLicences();
-      renderAreas(list);
       renderOutside(list);
-      renderTimeline(list);
       root.setAttribute('aria-busy', 'false');
     }
 

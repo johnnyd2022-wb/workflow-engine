@@ -10,7 +10,6 @@
 #page-content .prem-empty { margin: 0; padding: 12px 4px; font-size: 14px; color: var(--ui-text-muted, #64748b); list-style: none; }
 
 /* Order and what shows: Style 1 */
-#page-content .prem-timeline-card, #page-content .prem-areas-card { display: none; }
 #page-content .prem-summary { order: 1; }
 #page-content .prem-licences-card { order: 2; }
 #page-content .prem-outside-card { order: 3; }
@@ -29,7 +28,6 @@ html[data-spa-theme="dark"] #page-content .prem-status--soon, html[data-spa-them
 #page-content .prem-licence__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 #page-content .prem-licence h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
 #page-content .prem-licence p { margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
-#page-content .prem-licence__count { display: none; }
 #page-content .prem-licence__areas { margin-top: 10px; }
 #page-content .prem-ended { margin-top: 16px; }
 #page-content .prem-ended > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
@@ -43,29 +41,9 @@ html[data-spa-theme="dark"] #page-content .prem-status--soon, html[data-spa-them
 #page-content .prem-row__main strong { font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
 #page-content .prem-row__main span { font-size: 13px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
 #page-content .prem-row__date { font-size: 12px; color: var(--ui-text-muted, #64748b); white-space: nowrap; }
-#page-content .prem-site + .prem-site { margin-top: 22px; }
-#page-content .prem-site h3 { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--ui-text-muted, #64748b); }
 
 /* Timeline */
 #page-content .prem-timeline { display: flex; flex-direction: column; gap: 6px; }
-#page-content .prem-tl-row { display: grid; grid-template-columns: 180px minmax(0, 1fr); align-items: center; gap: 16px; }
-#page-content .prem-tl-label { display: flex; flex-direction: column; min-width: 0; }
-#page-content .prem-tl-label strong { font-size: 14px; color: var(--ui-text, #172033); }
-#page-content .prem-tl-label small { font-size: 12px; color: var(--ui-text-muted, #64748b); }
-#page-content .prem-axis { position: relative; height: 20px; }
-#page-content .prem-axis__tick { position: absolute; top: 0; padding-left: 4px; border-left: 1px solid var(--ui-border, #cbd5e1); font-size: 11px; color: var(--ui-text-muted, #64748b); white-space: nowrap; }
-#page-content .prem-track { position: relative; height: 34px; border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); }
-#page-content .prem-track__none { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--ui-text-muted, #64748b); }
-#page-content .prem-bar { position: absolute; top: 5px; bottom: 5px; display: flex; align-items: center; min-width: 6px; padding: 0 8px; overflow: hidden; border-radius: 6px; background: #b7e4d0; color: #0f3d2a; font-size: 11px; font-weight: 700; white-space: nowrap; }
-#page-content .prem-bar--soon { background: #fde4a3; color: #5c3d00; }
-#page-content .prem-bar--ended { background: var(--ui-border, #e2e8f0); color: var(--ui-text-muted, #475569); }
-#page-content .prem-bar--open { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-#page-content .prem-today { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ui-accent, #0d9488); z-index: 1; }
-#page-content .prem-tl-key { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 12px; color: var(--ui-text-muted, #64748b); }
-#page-content .prem-today-key { display: inline-block; width: 2px; height: 14px; background: var(--ui-accent, #0d9488); }
-html[data-spa-theme="dark"] #page-content .prem-bar { background: rgba(23, 178, 106, .35); color: #d1fadf; }
-html[data-spa-theme="dark"] #page-content .prem-bar--soon { background: rgba(247, 144, 9, .35); color: #fef0c7; }
-html[data-spa-theme="dark"] #page-content .prem-bar--ended { background: rgba(148, 163, 184, .25); color: #cbd5e1; }
 
 /* Dialogs */
 #page-content .prem-dialog { position: fixed; inset: 0; margin: auto; overflow: auto; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); box-shadow: 0 24px 48px rgb(15 23 42 / 18%); }
@@ -79,33 +57,10 @@ html[data-spa-theme="dark"] #page-content .prem-bar--ended { background: rgba(14
 #page-content .prem-form__error[hidden] { display: none; }
 #page-content .prem-form__actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; margin: 6px -24px -24px; padding: 14px 24px; border-top: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); }
 
-/* CONCEPT ONLY: the layout switch */
-#page-content .prem-style-pick { display: inline-flex; align-self: flex-start; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; border: 1px dashed var(--ui-border, #cbd5e1); border-radius: 10px; }
-#page-content .prem-style-pick span { padding: 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ui-text-muted, #64748b); }
-#page-content .prem-style-pick button { min-height: 32px; padding: 4px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--ui-text-muted, #64748b); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: none; }
-#page-content .prem-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
-
-/* CONCEPT ONLY: Style 2, by place. Areas lead; licences follow without their area lists. */
-#page-content [data-premises-style="2"] .prem-areas-card { display: block; order: 2; }
-#page-content [data-premises-style="2"] .prem-licences-card { order: 3; }
-#page-content [data-premises-style="2"] .prem-outside-card { display: none; }
-#page-content [data-premises-style="2"] .prem-licence__areas { display: none; }
-#page-content [data-premises-style="2"] .prem-licence__count { display: block; color: var(--ui-text, #172033); font-weight: 600; }
-
-/* CONCEPT ONLY: Style 3, timeline. Dates lead; licences follow without their area lists. */
-#page-content [data-premises-style="3"] .prem-timeline-card { display: block; order: 2; }
-#page-content [data-premises-style="3"] .prem-licences-card { order: 3; }
-#page-content [data-premises-style="3"] .prem-outside-card { display: none; }
-#page-content [data-premises-style="3"] .prem-licence__areas { display: none; }
-#page-content [data-premises-style="3"] .prem-licence__count { display: block; color: var(--ui-text, #172033); font-weight: 600; }
-
 @media (max-width: 720px) {
   #page-content .premises-page .workspace-header { flex-direction: column; align-items: stretch; }
   #page-content .prem-header-actions .workspace-button { flex: 1 1 auto; }
   #page-content .prem-form { grid-template-columns: minmax(0, 1fr); }
   #page-content .prem-row { grid-template-columns: minmax(0, 1fr); }
   #page-content .prem-row .prem-status { justify-self: start; }
-  #page-content .prem-tl-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  #page-content .prem-tl-row--axis .prem-tl-label { display: none; }
-  #page-content .prem-axis__tick:nth-child(even) { display: none; }
 }

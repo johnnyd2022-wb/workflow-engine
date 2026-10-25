@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/compliant/static/premises.css">
 {% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page premises-page" data-premises-root data-premises-style="1" aria-busy="true"
+<main class="max-content workspace-overview workspace-page premises-page" data-premises-root aria-busy="true"
       data-can-manage="{{ '1' if can('compliance.manage') else '0' }}">
   <header class="workspace-header">
     <div>
@@ -20,28 +20,9 @@
     </div>
     {% endif %}
   </header>
-  {# CONCEPT ONLY: the layout switch, deleted with the two styles not picked. #}
-  <div class="prem-style-pick" role="group" aria-label="Layout (concept)">
-    <span>Concept</span>
-    <button type="button" data-style-pick="1">1 · By licence</button>
-    <button type="button" data-style-pick="2">2 · By place</button>
-    <button type="button" data-style-pick="3">3 · Timeline</button>
-  </div>
   <p class="compliant-error" role="alert" data-premises-error hidden></p>
 
   <p class="prem-summary" data-prem-summary></p>
-
-  {# Style 3 leads with the dates: one row per area, a bar per licence that covered it. #}
-  <section class="workspace-card prem-timeline-card" aria-labelledby="prem-timeline-title">
-    <div class="prem-section__head"><div><h2 id="prem-timeline-title">Coverage over time</h2><p class="workspace-caption">Each area, and the licence that covered it when.</p></div></div>
-    <div class="prem-timeline" data-timeline></div>
-  </section>
-
-  {# Style 2 leads with places: each site, its areas, and whether each is licensed today. #}
-  <section class="workspace-card prem-areas-card" aria-labelledby="prem-areas-title">
-    <div class="prem-section__head"><div><h2 id="prem-areas-title">Your stock areas</h2><p class="workspace-caption">Whether each area is inside a licensed area today.</p></div></div>
-    <div data-areas></div>
-  </section>
 
   <section class="workspace-card prem-licences-card" aria-labelledby="prem-licences-title">
     <div class="prem-section__head"><div><h2 id="prem-licences-title">Licences</h2><p class="workspace-caption" data-prem-licences-note></p></div></div>
@@ -49,7 +30,7 @@
     <details class="prem-ended" data-prem-ended hidden><summary></summary><div class="prem-licences"></div></details>
   </section>
 
-  {# Style 1 ends with what isn't covered: the place an inspector's question would land. #}
+  {# What isn't covered: where an inspector's question would land. #}
   <section class="workspace-card prem-outside-card" aria-labelledby="prem-outside-title" data-prem-outside-card hidden>
     <div class="prem-section__head"><div><h2 id="prem-outside-title">Not in a licensed area today</h2><p class="workspace-caption">Fine for a shop or a car; stock kept here is outside Customs control.</p></div></div>
     <ul class="prem-rows" data-prem-outside></ul>

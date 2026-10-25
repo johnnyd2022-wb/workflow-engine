@@ -119,27 +119,24 @@ def test_the_summary_and_areas_say_what_is_licensed_today(clients, browser):  # 
         ),
     ).get_json()
     _cover(client, licence)
-    page = _open(browser, client, width=1440, query="?style=2")
+    page = _open(browser, client, width=1440)
     try:
         expect(page.locator("[data-prem-summary]")).to_have_text(
             "1 area licensed under 1 current licence · CCA-123 ends in 20 days"
         )
-        expect(page.locator(".prem-row--area .prem-status")).to_have_text(["Licensed · ends in 20 days"])
+        expect(page.locator(".prem-licence .prem-status")).to_have_text(["Ends in 20 days"])
     finally:
         page.close()
 
 
-# CONCEPT ONLY: deleted with the two layouts not picked.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(clients, browser, style, width):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(clients, browser, width):  # noqa: F811
     _, client, _, _ = clients
     _cover(client, client.post("/api/compliant/nz-alcohol/cca-licences", json=licence_data()).get_json())
-    page = _open(browser, client, width=width, query=f"?style={style}")
+    page = _open(browser, client, width=width)
     try:
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        region = {"1": ".prem-licences-card", "2": ".prem-areas-card", "3": ".prem-timeline-card"}[style]
-        expect(page.locator(region)).to_be_visible()
         expect(page.locator(".prem-licences-card")).to_be_visible()
+        expect(page.locator("[data-style-pick]")).to_have_count(0)
     finally:
         page.close()
