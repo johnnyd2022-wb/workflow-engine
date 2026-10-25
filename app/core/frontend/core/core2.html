@@ -7,9 +7,6 @@
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
-{% block topbar %}
-  {% if not core2_focus %}{{ super() }}{% endif %}
-{% endblock %}
 
 {# On the overview the section head is the page's title, and "Get to work" is its main buttons,
    on the tab row. The pages behind the tabs keep their own header. #}
@@ -2764,6 +2761,7 @@
         renderInventoryV2(items);
       } catch (error) {
         core2LoadedTabPanels.inventory.delete(surface);
+        if (error && error.name === 'AbortError') return;
         console.error('Failed to load inventory tab:', error);
       }
     }

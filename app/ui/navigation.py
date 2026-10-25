@@ -6,6 +6,8 @@ Everything comes from `app.ui.page_registry`; templates only render what this re
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from flask import g, has_request_context, request
 
 from app.core.security.access_policy import has_permission
@@ -70,6 +72,11 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
     ):
         return []
     crumbs = [{"label": SECTION_LABELS[section], "href": _HOME[section]}]
+    # A secondary page sits under the primary tab that lights up for it (Suppliers under Inventory),
+    # so going up passes through that tab rather than jumping to the section's home.
+    primary = _primary_tab(section, tab)
+    if primary is not None and primary.path not in {path, crumbs[-1]["href"]}:
+        crumbs.append({"label": primary.label, "href": primary.path})
     if tab is not None and tab.path not in {path, crumbs[-1]["href"]}:
         crumbs.append({"label": tab.label, "href": tab.path})
     chain = []
@@ -81,14 +88,47 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
         chain.append(found)
         parent = found.parent
     for found in reversed(chain):
-        if found.path not in {crumb["href"] for crumb in crumbs}:
-            crumbs.append({"label": found.title, "href": found.path})
+        href = _REDIRECTS.get(found.path, found.path)
+        if href not in {crumb["href"] for crumb in crumbs}:
+            crumbs.append({"label": found.title, "href": _with_kept_query(href)})
     if exact:
         crumbs.append({"label": page.title, "href": None})
     else:
         crumbs.extend({"label": item["label"], "href": item.get("href")} for item in (extra or []))
         crumbs.append({"label": leaf or "Details", "href": None})
     return crumbs
+
+
+# Registered paths that only redirect: a crumb to one would lead back round, so it points where the
+# redirect goes (and drops out when that page is already in the trail).
+_REDIRECTS = {"/compliant/nz-alcohol/np3-audit": "/compliant/nz-alcohol/food-safety"}
+
+# Parent pages that need the current page's query to mean anything: the workflow editor without
+# ``?id=`` opens no workflow, so a step screen's way up keeps the workflow it came from.
+_KEPT_QUERY = {"/core/flows": ("id",)}
+
+
+def _with_kept_query(href: str) -> str:
+    keys = _KEPT_QUERY.get(href)
+    if not keys or not has_request_context():
+        return href
+    kept = [(key, request.args[key]) for key in keys if request.args.get(key)]
+    return href + ("?" + urlencode(kept) if kept else "")
+
+
+def _primary_tab(section: str, tab: Tab | None) -> Tab | None:
+    """The primary tab a secondary tab's page sits under, if the signed-in person can open it."""
+    if tab is None:
+        return None
+    group = next((group for group in WORKSPACE_TAB_GROUPS.get(section, ()) if tab.key in group), None)
+    # An Overview tab is the section's home, which the trail already starts with.
+    if group is None or group[0] in (tab.key, "overview"):
+        return None
+    primary = next((t for t in SECTION_TABS.get(section, ()) if t.key == group[0]), None)
+    user = getattr(g, "current_user", None) if has_request_context() else None
+    if primary is None or (user is not None and not _permitted(primary, user)):
+        return None
+    return primary
 
 
 def _conditions() -> dict[str, bool]:

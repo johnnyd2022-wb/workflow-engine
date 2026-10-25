@@ -54,8 +54,11 @@
   </div>
   <script>
     (function () {
-      if (window.__disposeInventoryPageInit) return;
-      window.__disposeInventoryPageInit = true;
+      // Guard on the page's own root, not on window: window survives a boosted swap, so a
+      // window flag kept the second visit stuck on "Loading inventory...".
+      var pageRoot = document.getElementById('dispose-inventory-page');
+      if (!pageRoot || pageRoot.dataset.bound === '1') return;
+      pageRoot.dataset.bound = '1';
 
       var initialItemIds = {{ initial_item_ids|tojson }};
       var cardsContainer = document.getElementById('dispose-inventory-cards-container');
@@ -199,6 +202,7 @@
           syncTabActiveUi();
           renderFromState();
         } catch (e) {
+          if (e && e.name === 'AbortError') return;
           console.error('Failed to load inventory for wastage', e);
           setLoading('Failed to load inventory.');
         }

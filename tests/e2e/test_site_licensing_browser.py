@@ -33,6 +33,8 @@ def test_phone_assigns_site_and_displays_hostile_name_as_text(world, browser):  
     page.route("**/*", proxy)
     try:
         page.goto("https://licensing.test/compliant/nz-alcohol/licensing")
+        # The site lives with the licence's other details, folded under the card.
+        page.get_by_text("Site, conditions and hours").click()
         page.get_by_label("Site for " + old["licence_number"]).select_option(str(site.id))
         page.get_by_role("button", name="Assign site").click()
         page.locator(".licensing-card dd").get_by_text(site.name, exact=True).wait_for()

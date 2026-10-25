@@ -1,19 +1,79 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Task settings{% endblock %}
 {% block content %}
-<div class="max-content core-tasks" x-data="coreTaskConfiguration()" x-init="init()">
-  <section class="card spa-primary-flat core-tasks__settings">
-    <div class="core-tasks__heading"><div><h1>Task settings</h1><p>Choose when open tasks appear in Notifications. Overdue tasks always remain system findings.</p></div><a href="/core?tab=tasks" class="btn btn-secondary">Back to tasks</a></div>
-    <p class="core-tasks__error" x-show="error" x-text="error" x-cloak></p>
-    <label class="core-tasks__toggle core-tasks__toggle--setting"><input type="checkbox" x-model="config.due_notifications_enabled"> Notify for tasks due soon</label>
-    <div class="core-tasks__settings-grid" :class="{disabled: !config.due_notifications_enabled}"><label>Notify before due date<input class="form-input" type="number" min="1" max="3650" x-model.number="config.notification_lead_value" :disabled="!config.due_notifications_enabled"></label><label>Period<select class="form-select" x-model="config.notification_lead_unit" :disabled="!config.due_notifications_enabled"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
-    <p class="core-tasks__note">Default: 7 days. After a due date passes, the task is always shown as an overdue system finding.</p>
-    <hr>
-    <h2 class="core-tasks__settings-heading">Archive completed work</h2>
-    <p class="core-tasks__note">Completed or cancelled tasks move out of the active board after this period. They remain available from Load archive.</p>
-    <div class="core-tasks__settings-grid"><label>Archive after<input class="form-input" type="number" min="1" max="3650" x-model.number="config.done_archive_value"></label><label>Period<select class="form-select" x-model="config.done_archive_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
-    <p class="core-tasks__note">Default: 1 week.</p>
-    <button type="button" class="btn btn-primary" @click="save()" :disabled="saving" x-text="saving ? 'Saving…' : 'Save settings'"></button>
-  </section>
+<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='task-settings.css') }}">
+{# Alpine calls init() itself; an x-init="init()" here loaded the settings twice. #}
+<div class="max-content workspace-overview task-settings" x-data="coreTaskConfiguration()"
+     :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
+  <header class="workspace-header">
+    <div>
+      <h1>Task settings</h1>
+      <p class="workspace-caption">When Production tasks show up in Notifications, and how long finished ones stay on the board.</p>
+    </div>
+    <div class="workspace-header__actions">
+      <a href="/core?tab=tasks" class="workspace-button">Open tasks</a>
+    </div>
+  </header>
+
+
+  <div class="ts-error ts-load-error" role="alert" x-show="loadError" x-cloak>
+    <span x-text="loadError"></span>
+    <button type="button" class="workspace-button ts-retry" @click="load()">Try again</button>
+  </div>
+
+  <div class="ts-stack" x-show="!loading && !loadError" x-cloak>
+    <section class="ts-section" id="due" aria-labelledby="ts-due-title" :data-editing="editing.due ? 'true' : 'false'">
+      <div class="ts-intro">
+        <div class="ts-intro__row">
+          <div>
+            <h2 id="ts-due-title">Tasks due soon</h2>
+            <p>When an open task appears in Notifications before its due date. Once a task is overdue it always shows.</p>
+          </div>
+        </div>
+      </div>
+      <div class="ts-body">
+        <form class="ts-form" @submit.prevent="saveSection('due')" hx-boost="false">
+          <label class="ts-check">
+            <input type="checkbox" x-model="draft.due.due_notifications_enabled">
+            <span><strong>Show tasks before they are due</strong><small>Off shows a task only once it is overdue.</small></span>
+          </label>
+          <div class="ts-field-pair" x-show="draft.due.due_notifications_enabled">
+            <label class="ts-field"><span>How long before</span><input type="number" id="ts-due-value" min="1" max="3650" x-model.number="draft.due.notification_lead_value"></label>
+            <label class="ts-field"><span>Period</span><select id="ts-due-unit" x-model="draft.due.notification_lead_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label>
+          </div>
+          <div class="ts-actions">
+            <button type="submit" class="workspace-button ts-save" :disabled="saving.due === true" x-text="saving.due ? 'Saving…' : 'Save'">Save</button>
+          </div>
+          <p class="ts-section-error" role="alert" x-show="sectionError.due" x-text="sectionError.due" x-cloak></p>
+        </form>
+        <p class="ts-saved" role="status" x-text="note.due"></p>
+      </div>
+    </section>
+
+    <section class="ts-section" id="archive" aria-labelledby="ts-archive-title" :data-editing="editing.archive ? 'true' : 'false'">
+      <div class="ts-intro">
+        <div class="ts-intro__row">
+          <div>
+            <h2 id="ts-archive-title">Finished tasks</h2>
+            <p>How long done or cancelled tasks stay on the board before they move to the archive. They can always be found from Load archive.</p>
+          </div>
+        </div>
+      </div>
+      <div class="ts-body">
+        <form class="ts-form" @submit.prevent="saveSection('archive')" hx-boost="false">
+          <div class="ts-field-pair">
+            <label class="ts-field"><span>Archive after</span><input type="number" id="ts-archive-value" min="1" max="3650" x-model.number="draft.archive.done_archive_value"></label>
+            <label class="ts-field"><span>Period</span><select id="ts-archive-unit" x-model="draft.archive.done_archive_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label>
+          </div>
+          <div class="ts-actions">
+            <button type="submit" class="workspace-button ts-save" :disabled="saving.archive === true" x-text="saving.archive ? 'Saving…' : 'Save'">Save</button>
+          </div>
+          <p class="ts-section-error" role="alert" x-show="sectionError.archive" x-text="sectionError.archive" x-cloak></p>
+        </form>
+        <p class="ts-saved" role="status" x-text="note.archive"></p>
+      </div>
+    </section>
+  </div>
+
 </div>
 {% endblock %}
