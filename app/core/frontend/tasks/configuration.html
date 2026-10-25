@@ -3,7 +3,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='task-settings.css') }}">
 {# Alpine calls init() itself; an x-init="init()" here loaded the settings twice. #}
-<div class="max-content workspace-overview task-settings" x-data="coreTaskConfiguration()" data-ts-style="1" :data-ts-style="tsStyle"
+<div class="max-content workspace-overview task-settings" x-data="coreTaskConfiguration()"
      :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
   <header class="workspace-header">
     <div>
@@ -15,13 +15,6 @@
     </div>
   </header>
 
-  {# CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked. #}
-  <div class="ts-style-pick" role="group" aria-label="Layout concepts">
-    <span>Concept</span>
-    <button type="button" @click="setTsStyle('1')" :aria-pressed="tsStyle === '1' ? 'true' : 'false'">1 · Cards</button>
-    <button type="button" @click="setTsStyle('2')" :aria-pressed="tsStyle === '2' ? 'true' : 'false'">2 · Side by side</button>
-    <button type="button" @click="setTsStyle('3')" :aria-pressed="tsStyle === '3' ? 'true' : 'false'">3 · Read first</button>
-  </div>
 
   <div class="ts-error ts-load-error" role="alert" x-show="loadError" x-cloak>
     <span x-text="loadError"></span>
@@ -36,11 +29,9 @@
             <h2 id="ts-due-title">Tasks due soon</h2>
             <p>When an open task appears in Notifications before its due date. Once a task is overdue it always shows.</p>
           </div>
-          <button type="button" class="workspace-button ts-change" @click="startEdit('due')" aria-label="Change when tasks due soon are shown">Change</button>
         </div>
       </div>
       <div class="ts-body">
-        <dl class="ts-rows ts-read"><div class="ts-row"><dt>Show a task in Notifications</dt><dd x-text="dueWords"></dd></div></dl>
         <form class="ts-form" @submit.prevent="saveSection('due')" hx-boost="false">
           <label class="ts-check">
             <input type="checkbox" x-model="draft.due.due_notifications_enabled">
@@ -52,7 +43,6 @@
           </div>
           <div class="ts-actions">
             <button type="submit" class="workspace-button ts-save" :disabled="saving.due === true" x-text="saving.due ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ts-cancel" @click="discard('due')">Cancel</button>
           </div>
           <p class="ts-section-error" role="alert" x-show="sectionError.due" x-text="sectionError.due" x-cloak></p>
         </form>
@@ -67,11 +57,9 @@
             <h2 id="ts-archive-title">Finished tasks</h2>
             <p>How long done or cancelled tasks stay on the board before they move to the archive. They can always be found from Load archive.</p>
           </div>
-          <button type="button" class="workspace-button ts-change" @click="startEdit('archive')" aria-label="Change when finished tasks are archived">Change</button>
         </div>
       </div>
       <div class="ts-body">
-        <dl class="ts-rows ts-read"><div class="ts-row"><dt>Move to the archive</dt><dd x-text="archiveWords"></dd></div></dl>
         <form class="ts-form" @submit.prevent="saveSection('archive')" hx-boost="false">
           <div class="ts-field-pair">
             <label class="ts-field"><span>Archive after</span><input type="number" id="ts-archive-value" min="1" max="3650" x-model.number="draft.archive.done_archive_value"></label>
@@ -79,7 +67,6 @@
           </div>
           <div class="ts-actions">
             <button type="submit" class="workspace-button ts-save" :disabled="saving.archive === true" x-text="saving.archive ? 'Saving…' : 'Save'">Save</button>
-            <button type="button" class="workspace-button ts-cancel" @click="discard('archive')">Cancel</button>
           </div>
           <p class="ts-section-error" role="alert" x-show="sectionError.archive" x-text="sectionError.archive" x-cloak></p>
         </form>
@@ -88,13 +75,5 @@
     </section>
   </div>
 
-  {# CONCEPT ONLY: Style 2's one save bar. #}
-  <div class="ts-savebar" x-show="dirtySections.length > 0" x-cloak role="region" aria-label="Unsaved changes">
-    <span x-text="dirtySections.length > 1 ? 'Unsaved changes to both settings' : 'Unsaved changes to ' + (dirtySections[0] === 'due' ? 'tasks due soon' : 'finished tasks')"></span>
-    <div class="ts-savebar__actions">
-      <button type="button" class="workspace-button" @click="dirtySections.forEach((name) => discard(name))">Discard</button>
-      <button type="button" class="workspace-button workspace-button--primary" @click="saveAll()">Save changes</button>
-    </div>
-  </div>
 </div>
 {% endblock %}

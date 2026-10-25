@@ -44,3 +44,9 @@ The same three as Sales settings (!563) and Compliance settings (!564), so the s
 ## Checks
 
 - `tests/e2e/test_task_settings_page.py`: one load; a section saves only itself; a failed load can't be saved over; CONCEPT ONLY: Read first changes in place, and each layout fits at phone, laptop and wall widths.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (Cards) is the approved design for !568. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 6 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

@@ -1,5 +1,5 @@
 """Task settings in a browser: one load, a Save per section, a failed load that hides the settings,
-and (CONCEPT ONLY) each layout's fit.
+and the page's fit.
 
 Requests are routed into the Flask test client (see test_crm_contact_sync_ui).
 """
@@ -18,9 +18,9 @@ PAGE = "https://crm.test/core/tasks/configuration"
 READY = ".task-settings[aria-busy='false']"
 
 
-def _open(page, style="1", width=1440):
+def _open(page, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}")
+    page.goto(f"{PAGE}")
     page.locator(READY).wait_for()
 
 
@@ -58,21 +58,9 @@ def test_settings_that_did_not_load_cannot_be_saved_over(sales_page):  # noqa: F
     expect(sales_page.locator("#due")).to_be_visible()
 
 
-# CONCEPT ONLY: the rest are deleted with the two layouts not picked.
-def test_read_first_shows_the_value_and_changes_it_in_place(sales_page):  # noqa: F811
-    _open(sales_page, style="3")
-    archive = sales_page.locator("#archive")
-    expect(archive.locator(".ts-read")).to_contain_text("1 week after it is finished")
-    archive.get_by_role("button", name="Change when finished tasks are archived").click()
-    archive.locator("#ts-archive-value").fill("3")
-    archive.get_by_role("button", name="Save").click()
-    expect(archive.locator(".ts-read")).to_contain_text("3 weeks after it is finished")
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(sales_page, style, width):  # noqa: F811
-    _open(sales_page, style=style, width=width)
+def test_the_page_fits_without_sideways_scroll(sales_page, width):  # noqa: F811
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator("#due")).to_be_visible()
     expect(sales_page.locator("#archive")).to_be_visible()

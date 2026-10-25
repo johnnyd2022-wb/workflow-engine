@@ -91,14 +91,7 @@
       config: { due_notifications_enabled: true, notification_lead_value: 7, notification_lead_unit: 'days', done_archive_value: 1, done_archive_unit: 'weeks' },
       draft: { due: {}, archive: {} },
       loading: true, loadError: '', saving: {}, sectionError: {}, note: {}, editing: {},
-      // CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked.
-      tsStyle: '1',
-      setTsStyle(style) { this.tsStyle = style; this.editing = {}; try { window.localStorage.setItem('task-settings-style', style); } catch (_) { /* a convenience only */ } },
       async init() {
-        const wanted = new URLSearchParams(window.location.search).get('style');
-        let kept = null;
-        try { kept = window.localStorage.getItem('task-settings-style'); } catch (_) { /* storage blocked */ }
-        this.tsStyle = ['1', '2', '3'].includes(wanted) ? wanted : (['1', '2', '3'].includes(kept) ? kept : '1');
         await this.load();
       },
       // Settings that failed to load are not shown, so their defaults can't be saved over the real ones.
