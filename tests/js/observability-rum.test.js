@@ -65,3 +65,52 @@ test('sampled RUM sessions use one sampler and same-origin trace propagation', (
   assert.equal(propagationPattern.test('https://app.example.test/api/core/processes'), true);
   assert.equal(propagationPattern.test('https://telemetry.example.test/collect'), false);
 });
+
+function runPosthog(maskInputs) {
+  const inits = [];
+  const window = {
+    __RUM_CONFIG__: {
+      enabled: true,
+      posthogDataEnabled: true,
+      posthogApiKey: 'phc_test',
+      sampleRate: 1,
+      collectorUrl: '/telemetry',
+      maskInputs,
+    },
+    location: { origin: 'https://app.example.test', pathname: '/core/people' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    addEventListener: () => {},
+    posthog: { init: (key, options) => inits.push(options) },
+  };
+  const document = { body: { addEventListener: () => {} }, addEventListener: () => {}, referrer: '' };
+  const math = Object.create(Math);
+  math.random = () => 0.5;
+  vm.runInNewContext(rumSource, { window, document, Math: math, Number, String, RegExp, Uint8Array });
+  return inits[0];
+}
+
+test('session replay masks page text as well as inputs (GL-S04)', () => {
+  const options = runPosthog(true);
+  assert.equal(options.session_recording.maskAllInputs, true);
+  assert.equal(options.session_recording.maskTextSelector, '*');
+});
+
+test('turning masking off is explicit and turns both off', () => {
+  const options = runPosthog(false);
+  assert.equal(options.session_recording.maskAllInputs, false);
+  assert.equal(options.session_recording.maskTextSelector, null);
+});
+
+test('invite links and token parameters never reach an event (GL-S04)', () => {
+  const scrub = runPosthog(true).sanitize_properties;
+  const props = scrub({
+    $current_url: 'https://app.example.test/invite/abc123SECRET?next=/core',
+    $referrer: 'https://app.example.test/auth/google/callback?code=4/0Ab&state=xyz',
+    $pathname: '/invite/abc123SECRET',
+    title: 'People',
+  });
+  assert.equal(props.$current_url, 'https://app.example.test/invite/[redacted]?next=/core');
+  assert.equal(props.$referrer, 'https://app.example.test/auth/google/callback?code=[redacted]&state=[redacted]');
+  assert.equal(props.$pathname, '/invite/[redacted]');
+  assert.equal(props.title, 'People');
+});

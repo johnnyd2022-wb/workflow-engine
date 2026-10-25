@@ -313,6 +313,13 @@
           environment: 'browser',
         },
         instrumentations: instrumentations,
+        beforeSend: function (item) {
+          var page = item && item.meta && item.meta.page;
+          if (page && page.url) {
+            page.url = _scrubUrl(page.url);
+          }
+          return item;
+        },
         sessionTracking: {
           enabled: true,
           // The outer sampledIn check is the single session-level sampler.
@@ -320,6 +327,28 @@
         },
       });
     } catch (_err) {}
+  }
+
+  // GL-S04: an invite link (/invite/<token>) or a token in a query string must never reach
+  // an event, even if a page that shows one starts loading this script.
+  var SECRET_PARAMS = /([?&](?:token|code|invite|key|secret|password|state)=)[^&#]*/gi;
+  function _scrubUrl(value) {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    return value.replace(/\/invite\/[^/?#]+/g, '/invite/[redacted]').replace(SECRET_PARAMS, '$1[redacted]');
+  }
+
+  function _scrubProperties(properties) {
+    if (!properties) {
+      return properties;
+    }
+    Object.keys(properties).forEach(function (key) {
+      if (/url|referrer|pathname|href/i.test(key)) {
+        properties[key] = _scrubUrl(properties[key]);
+      }
+    });
+    return properties;
   }
 
   function _initPosthog() {
@@ -347,8 +376,12 @@
         disable_session_recording: false,
         mask_all_text: maskInputs,
         mask_all_element_attributes: true,
+        sanitize_properties: _scrubProperties,
         session_recording: {
           maskAllInputs: maskInputs,
+          // mask_all_text only covers autocapture. Replays need their own text mask, or they
+          // record customer names, contact details, recipes and invite links (GL-S04).
+          maskTextSelector: maskInputs ? '*' : null,
         },
         loaded: function (instance) {
           posthog = instance;
