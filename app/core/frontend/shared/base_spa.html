@@ -298,6 +298,8 @@
            swapped-in scripts in order. See docs/ux-overhaul-plan.md (1.3). #}
         {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
+        {# Which main tab this page is under; sidebar-v2.js reads it after a boosted swap. #}
+        <div hidden data-nav-section="{{ active_section or '' }}"></div>
         {% block section_tabs %}{% set section_actions %}{% block section_actions %}{% endblock %}{% endset %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
@@ -527,7 +529,7 @@
         if (stepNum > 1) {
           el.setAttribute('href', '/core/flows/create/step/' + (stepNum - 1) + q);
         } else {
-          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core/processes';
           el.setAttribute('href', dest);
         }
         el.setAttribute('data-spa-back-explicit', 'true');
@@ -541,7 +543,7 @@
       }
       if (path === '/core/flows/create') {
         var legacyPid = new URLSearchParams(window.location.search).get('id');
-        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
+        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core/processes';
         el.setAttribute('href', legacyDest);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;

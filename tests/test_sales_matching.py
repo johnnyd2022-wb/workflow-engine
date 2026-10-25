@@ -7,7 +7,9 @@ from uuid import uuid4
 import pytest
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.org_role import OrgRole
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.user import User
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
@@ -16,6 +18,7 @@ from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
 from tests.dag_traversal_helpers import clear_org_synthetic_data
+from tests.factories import DEFAULT_TEST_PASSWORD
 from tests.test_compliant_routes import _admin_client, flask_app  # noqa: F401 -- fixture re-export
 
 PRODUCT = "Gin - final product"
@@ -77,6 +80,25 @@ def world(db, flask_app):  # noqa: F811
     def allocations():
         return db.query(SalesFifoAllocation).filter(SalesFifoAllocation.org_id == org.id).all()
 
+    def login_as(role):
+        """A client signed in as a new person in this org; ``role`` is a built-in role or ``custom:<id>``."""
+        email = f"matching-{uuid4()}@test.com"
+        made = client.post("/org/users", json={"email": email, "password": DEFAULT_TEST_PASSWORD, "role": role})
+        assert made.status_code == 201, made.get_json()
+        person = flask_app.test_client()
+        person.environ_base["wsgi.url_scheme"] = "https"
+        person.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        signed_in = person.post("/auth/login", json={"email": email, "password": DEFAULT_TEST_PASSWORD})
+        assert signed_in.status_code == 200, signed_in.get_json()
+        return person
+
+    def custom_role(*permissions):
+        name = f"Role {uuid4().hex[:6]}"
+        made = client.post("/org/roles", json={"name": name, "base_role": "sales", "permissions": list(permissions)})
+        assert made.status_code == 201, made.get_json()
+        # The reply lists every custom role in the org, so pick this one out by name.
+        return next(role["value"] for role in made.get_json()["custom_roles"] if role["name"] == name)
+
     client.post(
         "/api/crm/product-mappings",
         json={"biz_e_product_name": PRODUCT, "xero_description_pattern": "Gin 700ml", "match_type": "exact"},
@@ -84,6 +106,8 @@ def world(db, flask_app):  # noqa: F811
     yield {
         "org": org,
         "client": client,
+        "login_as": login_as,
+        "custom_role": custom_role,
         "lot": lot,
         "mode": mode,
         "invoice": invoice,
@@ -93,6 +117,9 @@ def world(db, flask_app):  # noqa: F811
     }
 
     db.rollback()
+    db.query(User).filter(User.org_id == org.id).update({User.custom_role_id: None}, synchronize_session=False)
+    db.query(OrgRole).filter(OrgRole.org_id == org.id).delete(synchronize_session=False)
+    db.commit()
     for model in (SalesFifoAllocation, XeroInvoiceLineItem, XeroInvoice, ProductMapping, SalesTraceabilityConfig):
         db.query(model).filter(model.org_id == org.id).delete(synchronize_session=False)
     db.commit()
@@ -223,6 +250,105 @@ def test_owner_can_change_the_batch_on_an_automatic_match(world):
     db.expire_all()
     assert Decimal(str(db.get(InventoryItem, old.id).quantity)) == 10  # put back
     assert Decimal(str(db.get(InventoryItem, new.id).quantity)) == 7
+
+
+def _stock(world, item):
+    world["db"].expire_all()
+    return Decimal(str(world["db"].get(InventoryItem, item.id).quantity))
+
+
+def test_picking_a_batch_changes_stock_so_it_needs_inventory_adjust(world):
+    """crm-security-audit F1: Sales holds sales.record but not inventory.adjust, and /assign moves stock."""
+    world["mode"]("manual")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    inv, line = world["invoice"](date(2026, 10, 25), "6")
+    world["reconcile"]()
+    pick = {
+        "invoice_id": inv.xero_invoice_id,
+        "line_key": line.xero_line_item_id,
+        "picks": [{"inventory_item_id": str(lot.id), "quantity": "6"}],
+    }
+
+    sales = world["login_as"]("sales")
+    denied = sales.post("/api/crm/matching/assign", json=pick)
+    assert denied.status_code == 403 and denied.get_json()["code"] == "permission_denied"
+    assert world["allocations"]() == [] and _stock(world, lot) == 10
+
+    assert world["client"].post("/api/crm/matching/assign", json=pick).status_code == 200
+    assert _stock(world, lot) == 4
+
+
+def test_rerunning_matching_changes_stock_so_it_needs_inventory_adjust(world):
+    world["mode"]("fifo")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    world["invoice"](date(2026, 10, 1), "3")  # never reconciled: only a run will consume it
+
+    denied = world["login_as"]("sales").post("/api/crm/matching/run")
+    assert denied.status_code == 403 and denied.get_json()["code"] == "permission_denied"
+    assert world["allocations"]() == [] and _stock(world, lot) == 10
+
+    ran = world["client"].post("/api/crm/matching/run")
+    assert ran.status_code == 200 and ran.get_json()["summary"]["allocated"] == 1
+    assert _stock(world, lot) == 7
+
+
+def test_sales_can_still_review_matching_without_moving_stock(world):
+    world["mode"]("hybrid")
+    world["client"].post(
+        "/api/crm/product-mappings",
+        json={"biz_e_product_name": PRODUCT, "xero_description_pattern": "Wildflower", "match_type": "contains"},
+    )
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    inv, line = world["invoice"](date(2026, 10, 1), "2", description="Whistlebird Wildflower 700ml - x1")
+    world["reconcile"]()
+
+    sales = world["login_as"]("sales")
+    queue = sales.get("/api/crm/matching")
+    assert queue.status_code == 200 and len(queue.get_json()["pending_review"]) == 1
+    assert sales.get(f"/api/crm/matching/candidates?product={PRODUCT}").status_code == 200
+    confirmed = sales.post(
+        "/api/crm/matching/confirm", json={"invoice_id": inv.xero_invoice_id, "line_key": line.xero_line_item_id}
+    )
+    assert confirmed.status_code == 200 and confirmed.get_json()["confirmed"] == 1
+    assert _stock(world, lot) == 8  # the match already held these bottles; confirming moves nothing
+
+
+def test_a_custom_role_needs_inventory_adjust_itself_to_drive_matching(world):
+    """sales.manage (Xero, mappings) is not a stock permission, so it does not stand in for inventory.adjust."""
+    world["mode"]("fifo")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    world["invoice"](date(2026, 10, 1), "3")
+
+    manager = world["login_as"](world["custom_role"]("sales.view", "sales.record", "sales.manage", "inventory.view"))
+    assert manager.post("/api/crm/matching/run").status_code == 403
+    assert _stock(world, lot) == 10
+
+    keeper = world["login_as"](world["custom_role"]("sales.view", "sales.record", "inventory.view", "inventory.adjust"))
+    assert keeper.post("/api/crm/matching/run").status_code == 200
+    assert _stock(world, lot) == 7
+
+
+def test_matching_page_only_offers_stock_changing_buttons_to_people_who_can_use_them(world):
+    page = {"headers": {"Accept": "text/html"}}
+    sales = world["login_as"]("sales").get("/crm/matching", **page)
+    owner = world["client"].get("/crm/matching", **page)
+    assert sales.status_code == 200 and owner.status_code == 200
+    sales_html, owner_html = sales.get_data(as_text=True), owner.get_data(as_text=True)
+    for button in (">Re-run matching</button>", ">Choose batch</button>", ">Change batch</button>"):
+        assert button in owner_html, button
+        assert button not in sales_html, button
+    assert ">Looks right</button>" in sales_html  # confirming a match moves no stock, so Sales keeps it
+
+
+def test_matching_page_needs_both_permissions_to_offer_the_buttons(world):
+    """The server wants sales.record (policy table) and inventory.adjust (route check); can() is any-of,
+    so a person holding only inventory.adjust must not be shown buttons that answer 403."""
+    stock_only = world["login_as"](world["custom_role"]("sales.view", "inventory.view", "inventory.adjust"))
+    resp = stock_only.get("/crm/matching", headers={"Accept": "text/html"})
+    assert resp.status_code == 200
+    for button in (">Re-run matching</button>", ">Choose batch</button>", ">Change batch</button>"):
+        assert button not in resp.get_data(as_text=True), button
+    assert stock_only.post("/api/crm/matching/run").status_code == 403  # the policy table stops it first
 
 
 def test_sale_nodes_carry_presold_and_review_status(world):

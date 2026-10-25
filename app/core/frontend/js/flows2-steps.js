@@ -600,8 +600,8 @@
     // ============================================================
     // DRAG AND DROP FOR STEP REORDERING
     // ============================================================
-    let draggedStepCard = null;
-    let draggedStepIndex = -1;
+    var draggedStepCard = null;
+    var draggedStepIndex = -1;
     
     function initializeStepDragAndDrop() {
       const container = document.getElementById('steps-container');

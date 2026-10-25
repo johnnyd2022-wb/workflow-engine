@@ -47,7 +47,7 @@ def test_nz_alcohol_module_has_a_dedicated_page():
         section_tabs=[SimpleNamespace(href="/compliant/nz-alcohol", key="overview", label="Overview", active=True)],
     )
     assert rendered.count("<h1 ") == 1
-    assert '>Compliance</h1>' in rendered
+    assert ">Compliance</h1>" in rendered
     assert 'data-compliant-surface="overview"' in dashboard
     assert "Food safety programme" in configuration
     assert "Liquor licence" in configuration
@@ -128,9 +128,7 @@ def test_complaint_spelling_redirects_to_the_compliant_workspace():
 def test_compliant_navigation_is_boosted_but_downloads_are_not():
     """Page links are boosted (a boosted response carries the page's own CSS/JS inside #page-content,
     see shared/base_spa.html); a file download must still bypass htmx."""
-    tabs = (
-        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
-    ).read_text(encoding="utf-8")
+    tabs = (ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html").read_text(encoding="utf-8")
     audit = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_np3_header.html"
     ).read_text(encoding="utf-8")  # the downloads sit in the food safety pages' shared header
@@ -144,9 +142,7 @@ def test_compliant_navigation_is_boosted_but_downloads_are_not():
 
 
 def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
-    tabs = (
-        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
-    ).read_text(encoding="utf-8")
+    tabs = (ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html").read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
         encoding="utf-8"
@@ -157,7 +153,7 @@ def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     from app.ui.page_registry import SECTION_TABS
 
     paths = {tab.key: tab.path for tab in SECTION_TABS["compliance"]}
-    assert paths["np3"] == "/compliant/nz-alcohol/np3-audit"
+    assert paths["np3"] == "/compliant/nz-alcohol/food-safety"  # /np3-audit only redirects there
     assert paths["customs"] == "/compliant/nz-alcohol/customs"
     assert "data-food-safety-tab" in tabs  # configuration.js shows, hides and renames it live
     assert 'conditions["programme"].upper()' in (ROOT / "app" / "ui" / "navigation.py").read_text(encoding="utf-8")

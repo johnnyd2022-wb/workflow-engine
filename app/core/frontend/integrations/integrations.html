@@ -4,116 +4,89 @@
 
 {% block head_extras %}
   <meta name="description" content="Accounting integrations for biz-e">
-  {# inventory-spa-header.css loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
 {% block content %}
-  {# Wrapper class ships with HTMX #page-content swaps (head_extras styles do not). Layout lives in styles2.css. #}
-  <div class="max-content integrations-page">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='integrations.css') }}">
+  {# Alpine calls init() itself; an x-init="init()" here loaded the Xero status twice. #}
+  <div class="max-content workspace-overview ig-page" x-data="xeroIntegration()"
+       :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
+    <header class="workspace-header">
+      <div>
+        <h1>Integrations</h1>
+        <p class="workspace-caption">The accounting software Biz-E reads invoices and contacts from. Connect one; how sales are matched to batches is in Sales settings.</p>
+      </div>
+    </header>
 
-    <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
-      <h1 class="page-title">Integrations</h1>
-      <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
-        Connect your accounting software to sync contacts and invoices.
-      </p>
+
+    <div class="ig-message ig-message--error" role="alert" x-show="error" x-cloak>
+      <span x-text="error"></span>
+      <button type="button" class="ig-close" @click="error = null" aria-label="Dismiss">&times;</button>
+    </div>
+    <div class="ig-message ig-message--ok" role="status" x-show="notice" x-cloak x-text="notice"></div>
+
+    <section class="ig-item ig-xero" data-integration="xero" aria-labelledby="ig-xero-title">
+      <div class="ig-intro">
+        <span class="ig-logo ig-logo--xero" aria-hidden="true">X</span>
+        <div>
+          <h2 id="ig-xero-title">Xero</h2>
+          <p>Contacts and invoices come into Sales, so each sale can be traced to a batch.</p>
+        </div>
+      </div>
+      <div class="ig-body">
+        {% if crm_enabled %}
+        <p class="ig-muted" x-show="loading">Loading…</p>
+        <template x-if="!loading">
+          <div>
+            <dl class="ig-rows">
+              <div class="ig-row">
+                <dt>Status</dt>
+                <dd><span class="ig-state" :class="connected ? 'ig-state--good' : (reconnect ? 'ig-state--warn' : 'ig-state--off')" x-text="connected ? 'Connected' : (reconnect ? 'Needs reconnecting' : 'Not connected')"></span></dd>
+              </div>
+              <div class="ig-row" x-show="connected && tenantName"><dt>Organisation</dt><dd x-text="tenantName"></dd></div>
+              <div class="ig-row" x-show="connected"><dt>Last sync</dt><dd x-text="lastSync || 'Not yet'"></dd></div>
+              <div class="ig-row" x-show="connected"><dt>In Biz-E</dt><dd x-text="countsWords"></dd></div>
+            </dl>
+            <p class="ig-note" x-show="reconnect" x-cloak>Xero's permission has run out. Connect again to carry on syncing; nothing already synced is lost.</p>
+            <div class="ig-actions">
+              <template x-if="connected">
+                <button type="button" class="workspace-button workspace-button--primary" @click="doSync()" :disabled="syncing === true" x-text="syncing ? 'Syncing…' : 'Sync now'"></button>
+              </template>
+              <template x-if="!connected">
+                <a href="/crm/xero/auth" hx-boost="false" class="workspace-button workspace-button--primary" x-text="reconnect ? 'Connect again' : 'Connect Xero'">Connect Xero</a>
+              </template>
+              <a href="/crm/configuration" class="ig-link" x-show="connected">Sales settings</a>
+              <span class="ig-spacer"></span>
+              <button type="button" class="ig-link ig-link--danger" x-show="connected" @click="askDisconnect()">Disconnect</button>
+            </div>
+          </div>
+        </template>
+        {% else %}
+        <p class="ig-muted">Sales is unavailable in this environment.</p>
+        {% endif %}
+      </div>
     </section>
 
-    <div class="integrations-grid">
-      {% if crm_enabled %}
-      <section class="card" x-data="xeroIntegration()" x-init="init()">
-        <div class="card-content integration-card-row">
-          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
-            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
-                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
-              </svg>
-            </div>
-            <div style="min-width: 0;">
-              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">Xero</div>
-              <template x-if="loading">
-                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Loading…</div>
-              </template>
-              <template x-if="!loading && connected">
-                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
-                  <div style="font-size:0.875rem; color:#16a34a; font-weight:600; display:flex; align-items:center; gap:6px;">
-                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e;"></span>
-                    Connected
-                  </div>
-                  <div x-show="tenantName" style="font-size:0.8125rem; color:var(--text-secondary,#6b7280);" x-text="tenantName"></div>
-                  <div x-show="lastSync" style="font-size:0.8125rem; color:var(--text-secondary,#6b7280);" x-text="'Synced ' + lastSync"></div>
-                </div>
-              </template>
-              <template x-if="!loading && !connected">
-                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Connect to sync contacts &amp; invoices</div>
-              </template>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex-shrink:0;">
-            <template x-if="!loading && connected">
-              <button
-                type="button"
-                class="btn btn-primary btn-sm integration-connect-btn"
-                @click="doSync()"
-                :disabled="syncing"
-                x-text="syncing ? 'Syncing…' : 'Sync Now'"
-              >Sync Now</button>
-            </template>
-            <template x-if="!loading && connected">
-              <button
-                type="button"
-                class="btn btn-secondary btn-sm integration-connect-btn"
-                @click="doDisconnect()"
-                :disabled="disconnecting"
-                style="border-color:rgba(239,68,68,.35); color:#dc2626;"
-              >Disconnect</button>
-            </template>
-            <template x-if="!loading && !connected">
-              <a href="/crm/xero/auth" hx-boost="false" class="btn btn-primary btn-sm integration-connect-btn">Connect</a>
-            </template>
-          </div>
+    <section class="ig-item ig-item--soon" data-integration="myob" aria-labelledby="ig-myob-title">
+      <div class="ig-intro">
+        <span class="ig-logo ig-logo--myob" aria-hidden="true">M</span>
+        <div>
+          <h2 id="ig-myob-title">MYOB</h2>
+          <p>Coming soon. Tell us if you use it and we'll let you know when it's ready.</p>
         </div>
-        <template x-if="error">
-          <div style="padding: 8px 16px 12px; font-size: 0.82rem; color: var(--color-red, #ef4444);" x-text="error"></div>
-        </template>
-      </section>
-      {% else %}
-      <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content integration-card-row">
-          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
-            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
-                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
-              </svg>
-            </div>
-            <div style="min-width: 0;">
-              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">Xero</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Sales is unavailable in this environment.</div>
-            </div>
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
-        </div>
-      </section>
-      {% endif %}
+      </div>
+      <div class="ig-body"><span class="ig-tag">Coming soon</span></div>
+    </section>
 
-      <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content integration-card-row">
-          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
-            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="#7B3FF2"/>
-                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.25" font-weight="700" fill="#ffffff">M</text>
-              </svg>
-            </div>
-            <div style="min-width: 0;">
-              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">MYOB</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Coming soon</div>
-            </div>
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
+    <dialog class="ig-dialog" x-ref="disconnect" aria-labelledby="ig-disconnect-title">
+      <div class="ig-dialog__body">
+        <h2 id="ig-disconnect-title">Disconnect Xero?</h2>
+        <p>Sales stops receiving new invoices and contacts, and the synced contacts and invoices are removed from Sales. Batches and stock are not changed.</p>
+        <div class="ig-dialog__actions">
+          <button type="button" class="workspace-button" @click="$refs.disconnect.close()">Cancel</button>
+          <button type="button" class="workspace-button ig-danger" @click="doDisconnect()" :disabled="disconnecting === true" x-text="disconnecting ? 'Disconnecting…' : 'Disconnect'"></button>
         </div>
-      </section>
-    </div>
+      </div>
+    </dialog>
   </div>
 {% endblock %}

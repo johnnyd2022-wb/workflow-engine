@@ -3,6 +3,9 @@
   'use strict';
   window.bize.onPage('.settings-overview', function (root) {
     const controller = new AbortController();
+    // A full navigation away (Back reloads from the server) also cuts this page's requests off;
+    // abort first so they end quietly instead of being logged as failures.
+    window.addEventListener('pagehide', () => controller.abort(), { once: true, signal: controller.signal });
     const timeouts = new Set();
     const intervals = new Set();
     const originalPageFetch = window.fetch;

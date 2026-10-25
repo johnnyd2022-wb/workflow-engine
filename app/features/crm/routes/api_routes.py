@@ -19,7 +19,7 @@ from app.core.backend.tasks import (
     update_lane,
 )
 from app.core.db import db_session
-from app.core.security.permissions import requires_auth
+from app.core.security.permissions import requires_auth, requires_permission
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.services.crm_service import CRMService
@@ -908,8 +908,11 @@ def confirm_matching_line():
     return jsonify({"confirmed": count}), 200
 
 
+# /assign and /run decrement (or put back) finished-product stock, which the policy reserves for
+# inventory.adjust; the table can't ask for that beside sales.record, so the routes do.
 @api_bp.route("/api/crm/matching/assign", methods=["POST"])
 @requires_auth
+@requires_permission("inventory.adjust")
 def assign_matching_line():
     data = request.get_json(silent=True) or {}
     try:
@@ -926,6 +929,7 @@ def assign_matching_line():
 
 @api_bp.route("/api/crm/matching/run", methods=["POST"])
 @requires_auth
+@requires_permission("inventory.adjust")
 def run_matching():
     """Re-run matching now (e.g. after changing the matching mode)."""
     try:

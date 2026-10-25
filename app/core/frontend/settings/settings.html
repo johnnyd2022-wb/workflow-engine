@@ -1,4 +1,6 @@
 {% extends "shared/base_spa.html" %}
+{# The Settings tab row above the page carries the title (plan 2.5). #}
+{% set section_head_is_page_title = true %}
 
 {% block title %}Settings{% endblock %}
 
@@ -14,12 +16,6 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings-design.css') }}">
   <div class="max-content workspace-overview settings-overview" data-settings-root>
 
-    <header class="workspace-header" aria-label="Settings header">
-      <div>
-        <h1 class="page-title">Settings</h1>
-      </div>
-    </header>
-
     <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
     <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
       <div class="long-session-banner-content">
@@ -31,9 +27,8 @@
       </div>
     </div>
     <div class="settings-layout">
-      <nav class="settings-nav" aria-label="Settings sections">
-        <a href="#settings-account" data-settings-link="account" aria-current="page">My account</a>
-        {% if can('settings.manage') or can('users.manage') %}<a href="#settings-organisation" data-settings-link="organisation">Organisation</a>{% endif %}
+      <nav class="settings-nav" aria-label="Account sections">
+        <a href="#settings-account" data-settings-link="account" aria-current="page">Profile</a>
         <a href="#settings-security" data-settings-link="security">Security and sign-in</a>
         <a href="#settings-preferences" data-settings-link="preferences">Preferences</a>
       </nav>
@@ -114,28 +109,6 @@
           </section>
           </div>
         </section>
-
-          {% if can('settings.manage') or can('users.manage') %}
-        <section class="settings-group" id="settings-organisation" data-settings-group="organisation">
-          <div class="settings-group-heading" role="heading" aria-level="2"><span>Organisation</span><small>Places, people and access</small></div>
-          <div class="settings-group-content">
-            {% if can('settings.manage') %}
-            <section class="workspace-card settings-card" aria-labelledby="settings-sites-title">
-              <h2 id="settings-sites-title">Manage sites</h2>
-              <p class="workspace-caption">Add the places you make and store product, and choose which one is your default.</p>
-              <a class="workspace-button" href="/core/sites">View sites</a>
-            </section>
-            {% endif %}
-            {% if can('users.manage') %}
-            <section class="workspace-card settings-card" aria-labelledby="settings-people-title">
-              <h2 id="settings-people-title">People and roles</h2>
-              <p class="workspace-caption">Invite people, choose what each person can see and do, and remove access.</p>
-              <a class="workspace-button" href="/core/people">Manage people</a>
-            </section>
-            {% endif %}
-          </div>
-        </section>
-          {% endif %}
 
         <section class="settings-group" id="settings-security" data-settings-group="security">
           <div class="settings-group-heading" role="heading" aria-level="2"><span>Security and sign-in</span><small>Password, two-factor authentication and sessions</small></div>
