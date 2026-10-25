@@ -25,7 +25,6 @@
     var formError = root.querySelector('[data-site-error]');
     var state;
     var editing = null;
-    var inPlace = null;
 
     async function api(method, path, body) {
       var headers = { Accept: 'application/json' };
@@ -62,38 +61,10 @@
         b.addEventListener('click', handler);
         wrap.append(b);
       }
-      add('Edit', function () { if (root.dataset.stStyle === '3') { inPlace = site.id; render(); } else openSite(site); }, ' st-edit');
+      add('Edit', function () { openSite(site); }, ' st-edit');
       if (!site.is_default && site.is_active) add('Make default', function () { mutate('PATCH', '/api/core/sites/' + site.id, { is_default: true, is_active: true }, site.name + ' is the default site.'); });
       if (!site.is_default) add(site.is_active ? 'Archive' : 'Restore', function () { mutate('PATCH', '/api/core/sites/' + site.id, { is_active: !site.is_active }, site.name + (site.is_active ? ' archived.' : ' restored.')); }, site.is_active ? ' st-link--danger' : '');
       return wrap;
-    }
-
-    // CONCEPT ONLY: Style 3 edits a site in its own row.
-    function inlineForm(site) {
-      var f = el('form', { className: 'st-inline', 'hx-boost': 'false' });
-      var name = el('input', { name: 'name', value: site.name, maxlength: '120', required: '', 'aria-label': 'Name' });
-      var kind = el('select', { name: 'kind', 'aria-label': 'Kind' });
-      kindOptions(kind, site.kind);
-      var address = el('input', { name: 'address', value: site.address || '', maxlength: '500', 'aria-label': 'Address', placeholder: 'Address (optional)' });
-      var save = el('button', { type: 'submit', className: 'workspace-button workspace-button--primary', text: 'Save' });
-      var cancel = el('button', { type: 'button', className: 'workspace-button', text: 'Cancel' });
-      cancel.addEventListener('click', function () { inPlace = null; render(); });
-      f.append(
-        el('label', { className: 'st-field' }, [document.createTextNode('Name'), name]),
-        el('label', { className: 'st-field' }, [document.createTextNode('Kind'), kind]),
-        el('label', { className: 'st-field st-field--wide' }, [document.createTextNode('Address'), address]),
-        el('div', { className: 'st-dialog-actions st-inline__actions' }, [cancel, save])
-      );
-      f.addEventListener('submit', async function (event) {
-        event.preventDefault();
-        try {
-          await api('PATCH', '/api/core/sites/' + site.id, Object.fromEntries(new FormData(f)));
-          inPlace = null;
-          await load();
-          say('Saved.', true);
-        } catch (error) { say(error.message, false); }
-      });
-      return f;
     }
 
     function render() {
@@ -113,12 +84,6 @@
       root.querySelector('[data-sites-summary]').textContent = active + (active === 1 ? ' active site' : ' active sites') + (archived ? ' · ' + archived + ' archived' : '');
       state.sites.forEach(function (site) {
         var li = el('li', { className: 'st-site' + (site.is_active ? '' : ' st-site--archived'), 'data-site-id': site.id });
-        if (inPlace === site.id) {
-          li.classList.add('is-editing');
-          li.append(inlineForm(site));
-          list.append(li);
-          return;
-        }
         var tags = el('span', { className: 'st-tags' });
         if (site.is_default) tags.append(el('span', { className: 'st-tag st-tag--default', text: 'Default' }));
         if (!site.is_active) tags.append(el('span', { className: 'st-tag', text: 'Archived' }));
@@ -132,10 +97,7 @@
         );
         list.append(li);
       });
-      // CONCEPT ONLY: Style 2 ends the grid with a tile to add another.
-      var addTile = el('li', { className: 'st-add-tile' }, [el('button', { type: 'button', text: '+ Add a site' })]);
-      addTile.firstChild.addEventListener('click', function () { openSite(null); });
-      list.append(addTile);
+
     }
 
     async function load() {
@@ -201,22 +163,6 @@
         formError.hidden = false;
       }
     });
-
-    // --- layout switch (CONCEPT ONLY: deleted with the two layouts not picked) ----------------
-    function setStyle(style) {
-      root.dataset.stStyle = style;
-      inPlace = null;
-      root.querySelectorAll('[data-st-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stStylePick === style)); });
-      try { window.localStorage.setItem('sites-style', style); } catch (_) { /* a convenience only */ }
-      if (state) render();
-    }
-    root.querySelectorAll('[data-st-style-pick]').forEach(function (b) { b.addEventListener('click', function () { setStyle(b.dataset.stStylePick); }); });
-    (function () {
-      var wanted = new URLSearchParams(window.location.search).get('style');
-      var kept = null;
-      try { kept = window.localStorage.getItem('sites-style'); } catch (_) { /* storage blocked */ }
-      setStyle(['1', '2', '3'].includes(wanted) ? wanted : (['1', '2', '3'].includes(kept) ? kept : '1'));
-    })();
 
     load();
   }

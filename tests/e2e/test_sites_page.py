@@ -1,5 +1,5 @@
 """Sites in a browser: switching on, adding and refusing a site in the dialog, saying truthfully
-whether other sites can record work, a failed load, and (CONCEPT ONLY) each layout's fit.
+whether other sites can record work, a failed load, and the page's fit.
 
 Requests are routed into the Flask test client (see test_crm_contact_sync_ui).
 """
@@ -27,9 +27,9 @@ def user(_member, db):  # noqa: F811
     return _member
 
 
-def _open(page, style="1", width=1440):
+def _open(page, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}")
+    page.goto(f"{PAGE}")
     page.locator(READY).wait_for()
 
 
@@ -87,22 +87,9 @@ def test_sites_that_did_not_load_leave_nothing_to_act_on(sales_page):  # noqa: F
     expect(sales_page.get_by_role("button", name="Switch on")).to_be_visible()
 
 
-# CONCEPT ONLY: the rest are deleted with the two layouts not picked.
-def test_edit_in_place_saves_the_row(sales_page, client):  # noqa: F811
-    _on(client, "Bond store")
-    _open(sales_page, style="3")
-    sales_page.get_by_role("button", name="Edit: Bond store").click()
-    row = sales_page.locator(".st-site.is-editing")
-    row.get_by_label("Address").fill("12 Seaview Road")
-    row.get_by_role("button", name="Save").click()
-    expect(sales_page.locator(".st-site", has_text="Bond store")).to_contain_text("12 Seaview Road")
-    expect(sales_page.locator(".st-site.is-editing")).to_have_count(0)
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(sales_page, client, style, width):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(sales_page, client, width):  # noqa: F811
     _on(client, "Bond store", "Cellar door")
-    _open(sales_page, style=style, width=width)
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator("[data-sites-list] .st-site")).to_have_count(3)

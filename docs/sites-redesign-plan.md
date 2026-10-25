@@ -52,3 +52,9 @@ Observed in `00-before`, on main `bf069927`:
 
 - `tests/e2e/test_sites_page.py`, routed into the Flask test client: switching on, a refused site, the status text, a failed load; CONCEPT ONLY: edit in place, and each layout fits at phone, laptop and wall widths.
 - Shots: off, on with four sites (one archived), editing, a refused add, dark, a failed load, arriving by the Settings tab.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (List) is the approved design for !566. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 7 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.
