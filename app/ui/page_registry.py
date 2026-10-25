@@ -76,7 +76,7 @@ PAGES: tuple[Page, ...] = (
         "compliance",
         "np3",
         "NP3 food safety",
-        "/compliant/nz-alcohol/np3-audit",
+        None,  # the Food safety tab's own page; /np3-audit only redirects here
         "compliant",
     ),
     Page(
@@ -194,7 +194,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     ),
     "compliance": (
         Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
-        Tab("np3", "Food safety", "/compliant/nz-alcohol/np3-audit", ("compliance.view",), when="food_safety"),
+        Tab("np3", "Food safety", "/compliant/nz-alcohol/food-safety", ("compliance.view",), when="food_safety"),
         Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
         Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
         Tab("premises", "Premises", "/compliant/nz-alcohol/premises", ("compliance.view",)),

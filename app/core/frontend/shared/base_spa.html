@@ -527,7 +527,7 @@
         if (stepNum > 1) {
           el.setAttribute('href', '/core/flows/create/step/' + (stepNum - 1) + q);
         } else {
-          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core/processes';
           el.setAttribute('href', dest);
         }
         el.setAttribute('data-spa-back-explicit', 'true');
@@ -541,7 +541,7 @@
       }
       if (path === '/core/flows/create') {
         var legacyPid = new URLSearchParams(window.location.search).get('id');
-        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
+        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core/processes';
         el.setAttribute('href', legacyDest);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;

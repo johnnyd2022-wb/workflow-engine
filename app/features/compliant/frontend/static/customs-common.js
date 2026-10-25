@@ -53,6 +53,8 @@
   function failer(page) {
     var box = page.querySelector('[data-compliant-error]');
     return function (msg) {
+      // Leaving the page cuts its requests off; that is not an error to show or log.
+      if (msg && window.__coreApiPageUnloading) return;
       if (msg) console.error('[customs]', msg);
       if (box) { box.textContent = msg || ''; box.hidden = !msg; }
     };

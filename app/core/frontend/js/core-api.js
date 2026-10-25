@@ -15,6 +15,8 @@ function _getRumTraceHeaders(url, method) {
 // Full-page navigation cancels outstanding fetches. Mark that lifecycle so those
 // cancellations do not appear as application network failures in the old page.
 window.addEventListener('pagehide', function () { window.__coreApiPageUnloading = true; });
+// A page restored from the back-forward cache is live again.
+window.addEventListener('pageshow', function () { window.__coreApiPageUnloading = false; });
 
 window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
