@@ -296,7 +296,7 @@
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
         <h3 class="crm-lane-sheet__title">Add Custom Widget</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeWidgetModal()">&times;</button>
+        <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeWidgetModal()">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div class="crm-form-group">
@@ -376,7 +376,7 @@
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
         <h3 class="crm-lane-sheet__title">Select Date Range</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDateRangeModal()">&times;</button>
+        <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeDateRangeModal()">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -401,7 +401,7 @@
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
         <h3 class="crm-lane-sheet__title">Month on month change period</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeMoMModal()">&times;</button>
+        <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeMoMModal()">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div class="crm-form-group">
@@ -420,7 +420,7 @@
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
         <h3 class="crm-lane-sheet__title">Select Top N</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeTopNModal()">&times;</button>
+        <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeTopNModal()">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div class="crm-form-group">
@@ -442,7 +442,7 @@
     <div class="crm-task-sheet">
       <div class="crm-task-sheet__header">
         <span class="crm-task-sheet__title" x-text="invoiceModalTitle"></span>
-        <button class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
+        <button aria-label="Close" class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
       </div>
       <div class="crm-task-sheet__body">
         <template x-if="invoiceModalLoading">
