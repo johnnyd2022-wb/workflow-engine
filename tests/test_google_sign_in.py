@@ -301,7 +301,10 @@ def test_link_aborts_if_account_or_password_changes(world, monkeypatch, change):
     else:
         _authenticate(browser, neighbor)
     monkeypatch.setattr(routes, "exchange_verified_identity", lambda nonce: _claims(user.email, nonce=nonce))
-    assert browser.get("/auth/google/callback", query_string={"state": q["state"][0], "code": "x"}).status_code == 400
+    # Refused either way: the link itself answers 400, and since GL-A02 a session whose password
+    # changed under it (or whose user was swapped without signing in) ends with a 401 first.
+    response = browser.get("/auth/google/callback", query_string={"state": q["state"][0], "code": "x"})
+    assert response.status_code in (400, 401)
     assert db.query(UserIdentity).filter_by(user_id=user.id).count() == 0
 
 

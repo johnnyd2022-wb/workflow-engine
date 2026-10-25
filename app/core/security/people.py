@@ -27,6 +27,8 @@ from app.core.security.access_policy import (
 INVITE_VALID_FOR = timedelta(days=7)
 AUDITOR_MAX_ACCESS = timedelta(days=90)
 MIN_PASSWORD_LENGTH = 8
+# bcrypt only reads the first 72 bytes, and bcrypt 5 refuses longer input outright.
+MAX_PASSWORD_BYTES = 72
 _NZ = ZoneInfo("Pacific/Auckland")
 
 
@@ -185,8 +187,11 @@ def check_change(
 
 
 def validate_new_password(password: str, confirm: str | None = None) -> None:
+    """The one password rule (GL-A01): signup, invite acceptance and change all call this."""
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         raise PeopleError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise PeopleError(f"Password must be at most {MAX_PASSWORD_BYTES} characters (fewer with accents or emoji).")
     if confirm is not None and password != confirm:
         raise PeopleError("Passwords don't match.")
 

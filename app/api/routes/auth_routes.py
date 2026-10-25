@@ -218,6 +218,10 @@ def signup():
 
     if password != password_confirm:
         return jsonify({"error": "Passwords do not match"}), 400
+    try:
+        validate_new_password(password)
+    except PeopleError as err:
+        return jsonify({"error": str(err)}), 400
 
     # Normalize phone number if provided (reusable function for consistency)
     from app.core.utils.phone_normalization import normalize_phone_number
@@ -339,9 +343,6 @@ def login():
         ip_address = get_remote_address()
         user_agent = request.headers.get("User-Agent", "Unknown")
 
-        # Check if this is a password reset attempt (unlocks account)
-        is_password_reset = data.get("password_reset", False)
-
         auth_service = AuthService(db)
 
         # Try to get user by email first to check lockout status
@@ -363,8 +364,9 @@ def login():
         user = auth_service.authenticate(email, password)
 
         # CRITICAL: Account Lockout Logic
-        # If account is locked and this is NOT a password reset, block login
-        if user_by_email and not is_password_reset:
+        # If the account is locked, block login. Nothing the caller sends can skip this (GL-A03):
+        # only the lock expiring, or a verified recovery, clears it.
+        if user_by_email:
             if user_repo.is_account_locked(user_by_email.id):
                 # Calculate remaining lockout time
                 remaining_seconds = int((user_by_email.account_locked_until - datetime.now(UTC)).total_seconds())
@@ -473,21 +475,6 @@ def login():
 
             # Always return the same error message to prevent user enumeration
             return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 401
-
-        # CRITICAL: Account Lockout - Reset failed attempts on successful authentication
-        # If password reset flag is set, unlock the account
-        if is_password_reset:
-            with start_span(
-                "auth.account_unlock",
-                attributes={
-                    "org_id": str(user.org_id),
-                    "user_id": str(user.id),
-                    "reason": "password_reset",
-                },
-            ):
-                user_repo.unlock_account(user.id)
-            db.commit()
-            logger.info(f"Account unlocked via password reset for user {user.id}")
 
         # Reset failed login attempts on successful authentication
         user_repo.reset_failed_login_attempts(user.id)
@@ -1522,6 +1509,11 @@ def change_password():
     # Validate passwords match
     if new_password != new_password_confirm:
         return jsonify({"error": "New passwords do not match"}), 400
+
+    try:
+        validate_new_password(new_password)
+    except PeopleError as err:
+        return jsonify({"error": str(err)}), 400
 
     # Ensure new password is different from current
     if current_password == new_password:
