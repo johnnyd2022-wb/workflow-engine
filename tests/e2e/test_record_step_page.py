@@ -6,6 +6,7 @@ to the step, and saving brings you back to the picker with the batch's next step
 
 from __future__ import annotations
 
+import json
 import re
 import time
 
@@ -84,6 +85,107 @@ def test_no_batches_shows_only_the_start_list(logged_in_page: Page):
     _open(page)
     expect(page.locator("[data-rs-batches-section]")).to_be_hidden()
     expect(page.locator(".rs-workflow")).to_have_count(1)
+
+
+def _options(page: Page, body: dict):
+    page.route(
+        "**/api/core/record-options*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)),
+    )
+
+
+_ROW = {
+    "process_id": "p",
+    "workflow": "Gin",
+    "label": None,
+    "started_at": None,
+    "step_number": 2,
+    "step_total": 3,
+    "waited_seconds": 30,
+    "waiting": False,
+    "last_by": None,
+}
+_TILE = {
+    "process_id": "p",
+    "name": "Gin",
+    "step_count": 3,
+    "first_step": "Steep",
+    "in_flight": 2,
+    "last_started_at": None,
+    "href": "/core/flows",
+}
+
+
+def test_a_recorded_batch_outside_the_bounded_list_is_not_called_finished(logged_in_page: Page):
+    """Review on !576: absence from the (bounded) list said "finished" while a step remained."""
+    page = logged_in_page
+    mine = {**_ROW, "execution_id": "new", "label": "GIN-042", "step_name": "Distil", "href": "/core/flows?mine"}
+    _options(
+        page,
+        {
+            "batches": [{**_ROW, "execution_id": "old", "step_name": "Steep", "href": "/core/flows?old"}],
+            "batches_total": 2,
+            "workflows": [_TILE],
+            "workflows_total": 1,
+            "recorded": {"execution_id": "new", "finished": False, "batch": mine},
+        },
+    )
+    page.goto("/core/record?recorded=new")
+    notice = page.locator("[data-rs-recorded]")
+    expect(notice).to_contain_text("GIN-042 is now at step 2 of 3: Distil")
+    expect(notice).not_to_contain_text("finished")
+    expect(notice.get_by_role("link", name="Record Distil")).to_have_attribute("href", "/core/flows?mine")
+    expect(page.locator(".rs-batch").first).to_have_attribute("href", "/core/flows?mine")
+    expect(page.locator("[data-rs-batches-more]")).to_contain_text("Showing the oldest 1 of 2 batches in progress")
+
+
+def test_a_batch_with_nothing_ready_is_not_called_finished_either(logged_in_page: Page):
+    page = logged_in_page
+    _options(
+        page,
+        {
+            "batches": [],
+            "batches_total": 0,
+            "workflows": [_TILE],
+            "workflows_total": 1,
+            "recorded": {"execution_id": "new", "finished": False, "batch": None},
+        },
+    )
+    page.goto("/core/record?recorded=new")
+    notice = page.locator("[data-rs-recorded]")
+    expect(notice).to_contain_text("no step ready to record yet")
+    expect(notice).not_to_contain_text("finished")
+
+
+def test_a_finished_batch_says_so(logged_in_page: Page):
+    page = logged_in_page
+    _options(
+        page,
+        {
+            "batches": [],
+            "batches_total": 0,
+            "workflows": [_TILE],
+            "workflows_total": 1,
+            "recorded": {"execution_id": "new", "finished": True, "batch": None},
+        },
+    )
+    page.goto("/core/record?recorded=new")
+    expect(page.locator("[data-rs-recorded]")).to_contain_text("the batch is finished")
+
+
+def test_a_long_workflow_list_can_be_searched_and_says_when_it_is_bounded(logged_in_page: Page):
+    page = logged_in_page
+    tiles = [{**_TILE, "process_id": str(i), "name": f"Workflow {i}", "href": f"/core/flows?{i}"} for i in range(8)]
+    tiles.append({**_TILE, "process_id": "r", "name": "Rhubarb Liqueur", "href": "/core/flows?r"})
+    _options(page, {"batches": [], "batches_total": 0, "workflows": tiles, "workflows_total": 240, "recorded": None})
+    _open(page)
+    expect(page.locator("[data-rs-workflows-more]")).to_contain_text(
+        "Showing the most recently used 9 of 240 workflows"
+    )
+    expect(page.locator("[data-rs-workflows-more] a")).to_have_attribute("href", "/core/processes")
+    page.locator("#rs-wsearch").fill("rhubarb")
+    expect(page.locator(".rs-workflow")).to_have_count(1)
+    expect(page.locator(".rs-workflow")).to_contain_text("Rhubarb Liqueur")
 
 
 @pytest.mark.parametrize("width", [390, 1440, 1920])

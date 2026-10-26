@@ -26,11 +26,12 @@ html[data-spa-theme="dark"] .rs-message--error { color: #fca5a5; }
 .rs-count { font-size: 13px; font-weight: 600; color: var(--ui-text-muted); background: var(--ui-surface-subtle, #f1f5f9); border-radius: 999px; padding: 2px 9px; }
 .rs-count:empty { display: none; }
 html[data-spa-theme="dark"] .rs-count { background: rgb(255 255 255 / 8%); }
-#page-content .rs-shell #rs-search { width: 280px; max-width: 100%; height: 40px; min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
-@media (max-width: 560px) { .rs-search { flex-basis: 100%; } #page-content .rs-shell #rs-search { width: 100%; } }
+#page-content .rs-shell #rs-search, #page-content .rs-shell #rs-wsearch { width: 280px; max-width: 100%; height: 40px; min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
+@media (max-width: 560px) { .rs-search { flex-basis: 100%; } #page-content .rs-shell #rs-search, #page-content .rs-shell #rs-wsearch { width: 100%; } }
 .rs-batches:empty { display: none; }
 .rs-empty { margin: 0; padding: 16px 18px; border: 1px dashed var(--ui-border); border-radius: 10px; color: var(--ui-text-muted); font-size: 14px; }
-.rs-empty a { color: var(--ui-accent-strong, #115e59); font-weight: 600; }
+.rs-more { margin: 0; font-size: 13px; color: var(--ui-text-muted); }
+.rs-more a, .rs-empty a { color: var(--ui-accent-strong, #115e59); font-weight: 600; }
 
 /* Batches in flight: one card, a full-width row each. */
 .rs-batches { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); overflow: hidden; }

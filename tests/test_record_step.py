@@ -70,3 +70,69 @@ def test_the_page_renders(account):  # noqa: F811
     resp = account["client"].get("/core/record")
     assert resp.status_code == 200
     assert b"data-record-step-root" in resp.data
+
+
+def _record(client, eid, step_index, data=None):
+    ex = client.get(f"/api/core/executions/{eid}").get_json()
+    steps = sorted(ex["execution_steps"], key=lambda s: s["step_number"])
+    resp = client.post(
+        f"/api/core/executions/{eid}/steps/{steps[step_index]['id']}/complete",
+        json={"actual_inputs": [], "actual_outputs": [], "execution_data": data or {}},
+    )
+    assert resp.status_code == 200, resp.data
+
+
+def test_a_batch_shows_the_batch_number_recorded_on_its_step(account):  # noqa: F811
+    """Review on !576: the "Batch number" prompt is where operators record the batch code."""
+    client = account["client"]
+    pid, _ = _workflow(client, "Harbour Gin", ["Macerate", "Distil"])
+    eid = client.post("/api/core/executions", json={"process_id": pid}).get_json()["id"]
+    _record(client, eid, 0, {"Batch number": "GIN-2026-042"})
+
+    batch = next(b for b in client.get("/api/core/record-options").get_json()["batches"] if b["execution_id"] == eid)
+    assert batch["label"] == "GIN-2026-042"
+
+
+def test_the_recorded_batch_is_read_on_its_own_not_inferred_from_the_bounded_list(account, monkeypatch):  # noqa: F811
+    """Review on !576: a batch outside the limited list is still in progress, not finished."""
+    from app.core.backend import record_step
+
+    client = account["client"]
+    pid, _ = _workflow(client, "Two Step", ["Steep", "Bottle"])
+    older = client.post("/api/core/executions", json={"process_id": pid}).get_json()["id"]
+    newer = client.post("/api/core/executions", json={"process_id": pid}).get_json()["id"]
+    _record(client, newer, 0)
+    monkeypatch.setattr(record_step, "MAX_BATCHES", 1)
+
+    body = client.get(f"/api/core/record-options?recorded={newer}").get_json()
+    assert [b["execution_id"] for b in body["batches"]] == [older]
+    assert body["batches_total"] == 2
+    assert body["recorded"]["finished"] is False
+    assert body["recorded"]["batch"]["step_name"] == "Bottle"
+
+    _record(client, newer, 1)
+    done = client.get(f"/api/core/record-options?recorded={newer}").get_json()["recorded"]
+    assert done == {"execution_id": newer, "finished": True, "batch": None}
+
+
+def test_another_orgs_batch_is_not_reported_as_recorded(account):  # noqa: F811
+    from uuid import uuid4
+
+    body = account["client"].get(f"/api/core/record-options?recorded={uuid4()}").get_json()
+    assert body["recorded"] is None
+
+
+def test_the_workflow_limit_is_spent_on_runnable_workflows_most_recent_first(account, monkeypatch):  # noqa: F811
+    """Review on !576: empty or alphabetically early workflows must not crowd out runnable ones."""
+    from app.core.backend import record_step
+
+    client = account["client"]
+    _workflow(client, "A empty", [])
+    _workflow(client, "B never run", ["Steep"])
+    used, _ = _workflow(client, "Z runnable", ["Steep"])
+    client.post("/api/core/executions", json={"process_id": used})
+    monkeypatch.setattr(record_step, "MAX_WORKFLOWS", 1)
+
+    body = client.get("/api/core/record-options").get_json()
+    assert [w["name"] for w in body["workflows"]] == ["Z runnable"]
+    assert body["workflows_total"] == 2

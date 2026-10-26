@@ -79,8 +79,12 @@
     function renderBatches() {
       var list = $('[data-rs-batches]');
       var query = ($('[data-rs-search]').value || '').trim().toLowerCase();
-      // The batch just recorded leads, so its next step is one tap away at the top.
-      var ordered = data.batches.slice().sort(function (x, y) { return (y.execution_id === recordedId) - (x.execution_id === recordedId); });
+      // The batch just recorded leads, so its next step is one tap away at the top, even when
+      // it falls outside the list the server bounded.
+      var all = data.batches.slice();
+      var rec = data.recorded && data.recorded.batch;
+      if (rec && !all.some(function (x) { return x.execution_id === rec.execution_id; })) all.unshift(rec);
+      var ordered = all.sort(function (x, y) { return (y.execution_id === recordedId) - (x.execution_id === recordedId); });
       var shown = ordered.filter(function (b) {
         return !query || [b.workflow, b.label, b.step_name].join(' ').toLowerCase().indexOf(query) !== -1;
       });
@@ -92,19 +96,24 @@
 
     function renderRecorded() {
       var box = $('[data-rs-recorded]');
-      if (!recordedId) return;
-      var b = data.batches.find(function (x) { return x.execution_id === recordedId; });
+      var rec = data.recorded;
+      if (!recordedId || !rec) return;
+      var b = rec.batch;
+      var name = b ? (b.label || b.workflow) : 'The batch';
       box.replaceChildren();
       if (b) {
         box.append(
           el('p', { className: 'rs-recorded__text' }, [
             el('strong', { text: 'Recorded.' }),
-            document.createTextNode(' ' + (b.label || b.workflow) + ' is now at step ' + b.step_number + ' of ' + b.step_total + ': ' + b.step_name + '.')
+            document.createTextNode(' ' + name + ' is now at step ' + b.step_number + ' of ' + b.step_total + ': ' + b.step_name + '.')
           ]),
           el('a', { className: 'workspace-button workspace-button--primary rs-primary', href: b.href, text: 'Record ' + b.step_name })
         );
-      } else {
+      } else if (rec.finished) {
         box.append(el('p', { className: 'rs-recorded__text' }, [el('strong', { text: 'Recorded.' }), document.createTextNode(' That was the last step, so the batch is finished.')]));
+      } else {
+        // In progress with nothing ready to record: say so, never "finished".
+        box.append(el('p', { className: 'rs-recorded__text' }, [el('strong', { text: 'Recorded.' }), document.createTextNode(' The batch has no step ready to record yet.')]));
       }
       box.hidden = false;
     }
@@ -112,14 +121,18 @@
     function render() {
       $('[data-rs-loading]').hidden = true;
       // No batches in progress: the section has nothing to offer, so it isn't shown.
-      $('[data-rs-batches-section]').hidden = !data.batches.length;
+      var hasRecorded = !!(data.recorded && data.recorded.batch);
+      $('[data-rs-batches-section]').hidden = !data.batches.length && !hasRecorded;
       $('[data-rs-workflows-section]').hidden = false;
-      $('[data-rs-batch-count]').textContent = data.batches.length ? String(data.batches.length) : '';
-      $('[data-rs-search-wrap]').hidden = data.batches.length < SEARCH_FROM;
+      $('[data-rs-batch-count]').textContent = data.batches_total ? String(data.batches_total) : '';
+      $('[data-rs-search-wrap]').hidden = Math.max(data.batches.length, data.batches_total || 0) < SEARCH_FROM;
+      $('[data-rs-wsearch-wrap]').hidden = Math.max(data.workflows.length, data.workflows_total || 0) < SEARCH_FROM;
       renderRecorded();
       renderBatches();
-      var tiles = $('[data-rs-workflows]');
-      tiles.replaceChildren.apply(tiles, data.workflows.map(workflowTile));
+      renderWorkflows();
+      // A bounded list says so, with the way to the rest.
+      bounded($('[data-rs-batches-more]'), data.batches.length, data.batches_total, 'batches in progress', 'the oldest', '/core/executions/live', 'All batches');
+      bounded($('[data-rs-workflows-more]'), data.workflows.length, data.workflows_total, 'workflows', 'the most recently used', '/core/processes', 'All workflows');
       var noWorkflows = $('[data-rs-workflows-empty]');
       noWorkflows.hidden = data.workflows.length > 0;
       if (root.getAttribute('data-can-design') !== '1') {
@@ -128,9 +141,31 @@
       }
     }
 
-    $('[data-rs-search]').addEventListener('input', function () { if (data) renderBatches(); });
+    function renderWorkflows() {
+      var query = ($('[data-rs-wsearch]').value || '').trim().toLowerCase();
+      var shown = data.workflows.filter(function (w) { return !query || (w.name + ' ' + w.first_step).toLowerCase().indexOf(query) !== -1; });
+      var tiles = $('[data-rs-workflows]');
+      tiles.replaceChildren.apply(tiles, shown.map(workflowTile));
+      var none = $('[data-rs-workflows-nomatch]');
+      none.hidden = !query || shown.length > 0;
+      none.textContent = 'No workflow matches “' + query + '”.';
+    }
 
-    fetch('/api/core/record-options', { credentials: 'include', headers: { Accept: 'application/json' } })
+    function bounded(node, shown, total, what, which, href, linkText) {
+      node.replaceChildren();
+      node.hidden = !(total > shown);
+      if (node.hidden) return;
+      node.append(
+        document.createTextNode('Showing ' + which + ' ' + shown + ' of ' + total + ' ' + what + '. '),
+        el('a', { href: href, text: linkText })
+      );
+    }
+
+    $('[data-rs-search]').addEventListener('input', function () { if (data) renderBatches(); });
+    $('[data-rs-wsearch]').addEventListener('input', function () { if (data) renderWorkflows(); });
+
+    var url = '/api/core/record-options' + (recordedId ? '?recorded=' + encodeURIComponent(recordedId) : '');
+    fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } })
       .then(function (r) { if (!r.ok) throw new Error('Could not load batches (' + r.status + '). Refresh to try again.'); return r.json(); })
       .then(function (body) { if (!root.isConnected) return; data = body; render(); })
       .catch(function (err) {
