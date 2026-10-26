@@ -60,7 +60,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
 | ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
-| ◐ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free |
+| ◐ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free. Part 1 (sales to another CCA, the movement register, Customs → Transfers) in !580; part 2 (dispatching contract orders) follows |
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
 | ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. Go-live blocker; leave it out of assessments not about go-live |
