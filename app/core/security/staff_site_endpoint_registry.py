@@ -17,6 +17,7 @@ ENDPOINT_COVERAGE = {
     ("auth.enable_2fa", "POST"): "blocked",
     ("auth.enroll_2fa", "POST"): "blocked",
     ("auth.get_current_user", "GET"): "blocked",
+    ("auth.get_csrf_token", "GET"): "blocked",
     ("auth.login", "POST"): "blocked",
     ("auth.logout", "POST"): "blocked",
     ("auth.manage_session_timeout", "GET"): "blocked",

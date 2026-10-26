@@ -124,6 +124,7 @@ htmlcov/
 
 # Runtime evidence file storage (org_id/execution_id dirs written by uploads, incl. tests)
 app/core/evidence_storage/
+app/core/process_docs_storage/
 app/admin_site/document_storage/
 
 # Terraform runtime data and potentially sensitive state / plan / variable files.
