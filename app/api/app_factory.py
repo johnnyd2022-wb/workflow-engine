@@ -154,6 +154,10 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # Getting started (GL-P09): the guided first-day path.
+    from app.core.backend.getting_started import getting_started_bp
+
+    app.register_blueprint(getting_started_bp)
     # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
     from app.core.backend.stock_locations import stock_locations_bp
 

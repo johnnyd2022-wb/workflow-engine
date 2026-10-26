@@ -30,6 +30,10 @@ COMPLIANT_FEATURE_KEY = "compliant"
 
 
 def create_compliant_blueprint() -> Blueprint:
+    from app.core.backend.getting_started import register_step_provider
+    from app.features.compliant.modules.nz_alcohol.getting_started import what_you_make
+
+    register_step_provider(what_you_make)  # GL-P09: "Tell us what you make" on Getting started
     bp = Blueprint("compliant", __name__)
     bp.register_blueprint(api_bp)
     bp.register_blueprint(cca_movement_bp)

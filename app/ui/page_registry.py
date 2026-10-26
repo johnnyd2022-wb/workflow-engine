@@ -26,6 +26,7 @@ class Page:
 PAGES: tuple[Page, ...] = (
     Page("/core/dashboard", "dashboard", None, "Home", None, None),
     Page("/core/go-live", "dashboard", None, "Go live", None, None),
+    Page("/core/getting-started", "dashboard", None, "Getting started", None, None),
     Page("/core", "production", "overview", "Production overview", None, None),
     Page("/core/cases", "production", "overview", "Cases", None, None),
     Page("/core/cases/new", "production", "overview", "New case", "/core/cases", None),
