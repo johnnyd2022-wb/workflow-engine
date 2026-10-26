@@ -184,6 +184,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),
     ("auth.get_current_user", None, PUBLIC),
+    ("auth.get_csrf_token", frozenset({"GET"}), SIGNED_IN),
     ("auth.logout", None, PUBLIC),
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),
@@ -250,6 +251,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),
     ("go_live.get_go_live", None, ("inventory.view", "production.view")),
+    # --- getting started (GL-P09): a guide over pages that keep their own rules
+    ("getting_started.getting_started_page", None, SIGNED_IN),
+    ("getting_started.get_getting_started", None, SIGNED_IN),
     # --- process design
     ("core.create_process", None, "production.design"),
     ("core.update_process", None, "production.design"),

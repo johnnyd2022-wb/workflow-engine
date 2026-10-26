@@ -61,17 +61,17 @@
       </div>
 
       <nav class="cd-tabs" role="tablist" aria-label="Customer sections">
-        <button type="button" role="tab" :aria-selected="activeTab==='overview' ? 'true' : 'false'" @click="setTab('overview')">Overview</button>
-        <button type="button" role="tab" :aria-selected="activeTab==='invoices' ? 'true' : 'false'" @click="setTab('invoices')">Invoices <small x-text="invoices.length || ''"></small></button>
-        <button type="button" role="tab" :aria-selected="activeTab==='notes' ? 'true' : 'false'" @click="setTab('notes')">Notes <small x-text="notes.length || ''"></small></button>
-        <button type="button" role="tab" :aria-selected="activeTab==='tasks' ? 'true' : 'false'" @click="setTab('tasks')">Tasks <small x-text="openTasks.length || ''"></small></button>
+        <button type="button" role="tab" id="cd-tab-overview" aria-controls="cd-panel-overview" :aria-selected="activeTab==='overview' ? 'true' : 'false'" @click="setTab('overview')">Overview</button>
+        <button type="button" role="tab" id="cd-tab-invoices" aria-controls="cd-panel-invoices" :aria-selected="activeTab==='invoices' ? 'true' : 'false'" @click="setTab('invoices')">Invoices <small x-text="invoices.length || ''"></small></button>
+        <button type="button" role="tab" id="cd-tab-notes" aria-controls="cd-panel-notes" :aria-selected="activeTab==='notes' ? 'true' : 'false'" @click="setTab('notes')">Notes <small x-text="notes.length || ''"></small></button>
+        <button type="button" role="tab" id="cd-tab-tasks" aria-controls="cd-panel-tasks" :aria-selected="activeTab==='tasks' ? 'true' : 'false'" @click="setTab('tasks')">Tasks <small x-text="openTasks.length || ''"></small></button>
       </nav>
 
       <div class="cd-layout">
       {# ══════════════════════════════════════════════
          OVERVIEW
          ══════════════════════════════════════════════ #}
-      <div class="cd-panel cd-panel--overview" data-cd-panel="overview" x-show="activeTab === 'overview'" x-cloak>
+      <div class="cd-panel cd-panel--overview" data-cd-panel="overview" id="cd-panel-overview" role="tabpanel" aria-labelledby="cd-tab-overview" x-show="activeTab === 'overview'" x-cloak>
         <div class="crm-card" style="padding:20px;" data-contact-details>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;">
             <div style="font-size:.86rem; font-weight:700;">Details</div>
@@ -231,7 +231,7 @@
       {# ══════════════════════════════════════════════
          INVOICES
          ══════════════════════════════════════════════ #}
-      <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" x-show="activeTab === 'invoices'" x-cloak>
+      <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" id="cd-panel-invoices" role="tabpanel" aria-labelledby="cd-tab-invoices" x-show="activeTab === 'invoices'" x-cloak>
         <div class="crm-card">
           <template x-if="invoices.length === 0">
             <div class="crm-empty">
@@ -320,7 +320,7 @@
       {# ══════════════════════════════════════════════
          NOTES
          ══════════════════════════════════════════════ #}
-      <div class="cd-panel cd-panel--notes" data-cd-panel="notes" x-show="activeTab === 'notes'" x-cloak>
+      <div class="cd-panel cd-panel--notes" data-cd-panel="notes" id="cd-panel-notes" role="tabpanel" aria-labelledby="cd-tab-notes" x-show="activeTab === 'notes'" x-cloak>
         {# Add Note #}
         <div class="crm-card" style="padding:16px; margin-bottom:16px;">
           <p style="font-size:0.78rem; font-weight:600; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Add a note</p>
@@ -386,7 +386,7 @@
       {# ══════════════════════════════════════════════
          TASKS
          ══════════════════════════════════════════════ #}
-      <div class="cd-panel cd-panel--tasks" data-cd-panel="tasks" x-show="activeTab === 'tasks'" x-cloak>
+      <div class="cd-panel cd-panel--tasks" data-cd-panel="tasks" id="cd-panel-tasks" role="tabpanel" aria-labelledby="cd-tab-tasks" x-show="activeTab === 'tasks'" x-cloak>
         <div class="crm-card">
           <div class="crm-toolbar">
             <select class="crm-select" x-model="taskStatusFilter">
@@ -436,7 +436,7 @@
     <div class="crm-task-sheet">
       <div class="crm-task-sheet__header">
         <span class="crm-task-sheet__title">New Customer Task</span>
-        <button class="crm-btn crm-btn--ghost" @click="closeCustomerTaskModal()" style="font-size:1.2rem;">&times;</button>
+        <button aria-label="Close" class="crm-btn crm-btn--ghost" @click="closeCustomerTaskModal()" style="font-size:1.2rem;">&times;</button>
       </div>
       <div class="crm-task-sheet__body">
         <div class="crm-card" style="padding:10px;">
@@ -493,7 +493,7 @@
     <div class="crm-task-sheet">
       <div class="crm-task-sheet__header">
         <span class="crm-task-sheet__title">New Invoice</span>
-        <button class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
+        <button aria-label="Close" class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
       </div>
       <div class="crm-task-sheet__body">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -606,7 +606,7 @@
     <div class="crm-task-sheet">
       <div class="crm-task-sheet__header">
         <span class="crm-task-sheet__title">Edit Task</span>
-        <button class="crm-btn crm-btn--ghost" @click="closeTaskEditModal()" style="font-size:1.2rem;">&times;</button>
+        <button aria-label="Close" class="crm-btn crm-btn--ghost" @click="closeTaskEditModal()" style="font-size:1.2rem;">&times;</button>
       </div>
       <div class="crm-task-sheet__body">
         <div class="crm-form-group">
@@ -664,7 +664,7 @@
     <div class="crm-lane-sheet">
       <div class="crm-lane-sheet__header">
         <h3 class="crm-lane-sheet__title">Select Date Range</h3>
-        <button type="button" class="crm-btn crm-btn--ghost" @click="closeAnalyticsDateModal()">&times;</button>
+        <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeAnalyticsDateModal()">&times;</button>
       </div>
       <div class="crm-lane-sheet__body">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">

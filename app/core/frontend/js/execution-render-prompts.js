@@ -117,7 +117,7 @@
         }
       }
       throwIfAborted(signal);
-      executionPrompts.forEach(prompt => {
+      executionPrompts.forEach((prompt, promptIndex) => {
         const promptSection = document.createElement('div');
         promptSection.className = 'execute-prompt-section';
         promptSection.style.cssText = 'margin-bottom: 16px;';
@@ -169,6 +169,13 @@
           ${prompt.compliant_auto ? `<p style="margin:-3px 0 10px;font-size:12px;color:var(--text-secondary);">${escapeHtml(prompt.help || '')}</p>` : ''}
           ${inputHtml}
         `;
+        // Tie the label to its field, so it is announced and clicking it focuses the field.
+        const promptField = promptSection.querySelector('.execute-prompt-input');
+        const promptLabel = promptSection.querySelector(':scope > label');
+        if (promptField && promptLabel) {
+          promptField.id = 'execute-prompt-' + (currentStepId || 'step') + '-' + promptIndex;
+          promptLabel.htmlFor = promptField.id;
+        }
 
         if (prompt.type === 'evidence') {
           const uploadZone = promptSection.querySelector('.execute-evidence-upload');

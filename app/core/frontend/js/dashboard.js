@@ -471,10 +471,16 @@
                 try { window.localStorage.setItem(GO_LIVE_HIDDEN_KEY, '1'); } catch (e) { /* private mode */ }
             });
         }
-        fetch('/api/core/go-live', { credentials: 'include', headers: { Accept: 'application/json' } })
+        // GL-P09: the strip leads to Getting started until every step is done.
+        fetch('/api/core/getting-started', { credentials: 'include', headers: { Accept: 'application/json' } })
             .then(function (response) { return response.ok ? response.json() : null; })
             .then(function (state) {
-                if (state && !state.go_live_date && strip.isConnected) strip.hidden = false;
+                if (!state || state.complete || !strip.isConnected) return;
+                byData(strip, '[data-dashboard-setup-done]').textContent = state.done;
+                byData(strip, '[data-dashboard-setup-total]').textContent = state.total;
+                var next = (state.steps || []).find(function (s) { return s.key === state.next; });
+                if (next) byData(strip, '[data-dashboard-setup-next]').textContent = 'Next: ' + next.title + '.';
+                strip.hidden = false;
             })
             .catch(function () { /* the strip is an invitation, not a requirement */ });
     }

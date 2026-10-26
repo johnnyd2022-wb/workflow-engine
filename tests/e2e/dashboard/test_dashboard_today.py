@@ -271,7 +271,10 @@ def test_the_setup_strip_can_be_hidden_and_stays_hidden(expired_stock_page):
     _open(page)
     strip = page.locator("[data-dashboard-go-live]")
     expect(strip).to_be_visible()
-    expect(strip.get_by_role("link", name="Start the go-live stocktake")).to_have_attribute("href", "/core/go-live")
+    # GL-P09: the strip leads to Getting started, with progress and the next step.
+    expect(strip.get_by_role("link", name="Continue setup")).to_have_attribute("href", "/core/getting-started")
+    expect(strip).to_contain_text(re.compile(r"Getting started · \d+ of \d+ done"))
+    expect(strip).to_contain_text("Next: ")
 
     strip.get_by_role("button", name="Hide").click()
     expect(strip).to_be_hidden()

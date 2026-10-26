@@ -83,7 +83,7 @@
   {% block body_extra_attrs %}{% endblock %}
   hx-boost="true"
   hx-target="#page-content"
-  hx-select="#page-content"
+  hx-select="#page-content > *"
   hx-push-url="true"
   x-data
 >
@@ -347,6 +347,9 @@
   <script src="/ui/shared/account-info.js"></script>
   <script src="/ui/shared/page-init.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/dialog-focus.js" defer></script>
+  <script src="/ui/shared/tabs-keyboard.js" defer></script>
+  <script src="/ui/shared/session-ended.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
   {% if rum_enabled and (grafana_data_enabled or posthog_data_enabled) %}

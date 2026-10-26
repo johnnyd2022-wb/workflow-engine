@@ -5,7 +5,7 @@ import os
 import re
 
 import requests
-from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
@@ -154,6 +154,10 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # Getting started (GL-P09): the guided first-day path.
+    from app.core.backend.getting_started import getting_started_bp
+
+    app.register_blueprint(getting_started_bp)
     # Record a production step: the Production overview's main button (go-live UX blocker).
     from app.core.backend.record_step import record_step_bp
 
@@ -550,6 +554,30 @@ def create_app():
         for endpoint, view in app.view_functions.items():
             if endpoint.startswith("auth.") or endpoint in {"ingest_faro_telemetry", "ingest_posthog_telemetry"}:
                 csrf.exempt(view)
+
+        from flask_wtf.csrf import CSRFError
+
+        @app.errorhandler(CSRFError)
+        def handle_csrf_error(e):
+            # GL-U03: a write from a page whose session has ended fails CSRF before it reaches the
+            # sign-in check (the CSRF secret went with the session). Say "signed out", as a 401
+            # would, so the page offers to sign in again. A signed-in session with a stale token
+            # (it signed in again in another tab) gets code "csrf", so the page can fetch a fresh
+            # token from /auth/csrf-token and retry. Public forms (sign-in, Google sign-in, invite
+            # acceptance) and the customer portal keep Flask-WTF's own 400: nobody was signed in.
+            from app.core.security.access_policy import PUBLIC, requirement_for
+
+            if request.path.startswith("/portal") or requirement_for(request.endpoint or "", request.method) == PUBLIC:
+                return e
+            if not session.get("user_id"):
+                return jsonify(
+                    {
+                        "error": "Session expired or not authenticated",
+                        "message": "Session expired or not authenticated",
+                        "code": "signed_out",
+                    }
+                ), 401
+            return jsonify({"error": e.description, "code": "csrf"}), 400
     except ImportError:
         # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
         if config.environment not in ("local", "test"):
