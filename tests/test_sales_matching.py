@@ -361,3 +361,58 @@ def test_sale_nodes_carry_presold_and_review_status(world):
     nodes, _edges = append_sales_to_dag(world["db"], world["org"].id, {str(lot.id)})
     (node,) = nodes
     assert node["presold"] is True and node["match_status"] == "pending_review"
+
+
+# --- GL-S01 (founder, 2026-10-26): in FIFO mode a sale always takes its stock off ---------------
+
+
+@pytest.fixture
+def draft_invoice(world, monkeypatch):
+    """A draft invoice that Xero authorises. The stubbed sync does what the real one ends with:
+    reconcile every invoice against stock (XeroSyncService._sync_invoices)."""
+    from app.features.crm.services.xero_api_client import XeroAPIClient
+    from app.features.crm.services.xero_sync_service import XeroSyncService
+
+    inv, _line = world["invoice"](date(2026, 10, 25), "4")
+    inv.status = "DRAFT"
+    world["db"].commit()
+    monkeypatch.setattr(XeroAPIClient, "__init__", lambda self, db, org_id: None)
+    monkeypatch.setattr(
+        XeroAPIClient, "authorise_invoice", lambda self, xero_invoice_id: type("X", (), {"status": "AUTHORISED"})()
+    )
+
+    def sync(self, org_id, triggered_by="manual"):
+        SalesTraceabilityService(self.db).reconcile_org(org_id)
+        self.db.commit()
+
+    monkeypatch.setattr(XeroSyncService, "incremental_sync", sync)
+    return inv
+
+
+def test_in_fifo_mode_a_sales_person_authorising_an_invoice_takes_its_stock_off(world, draft_invoice):
+    world["mode"]("fifo")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    sales = world["login_as"]("sales")  # sales.record, no inventory.adjust
+
+    resp = sales.post(f"/api/crm/invoices/{draft_invoice.id}/authorise")
+    assert resp.status_code == 200, resp.get_json()
+    (allocation,) = world["allocations"]()
+    assert allocation.inventory_item_id == lot.id and Decimal(str(allocation.quantity)) == 4
+    assert _stock(world, lot) == 6
+
+
+def test_in_manual_mode_authorising_leaves_stock_until_someone_with_stock_access_picks(world, draft_invoice):
+    world["mode"]("manual")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    sales = world["login_as"]("sales")
+
+    assert sales.post(f"/api/crm/invoices/{draft_invoice.id}/authorise").status_code == 200
+    assert world["allocations"]() == [] and _stock(world, lot) == 10
+    queue = world["client"].get("/api/crm/matching").get_json()
+    assert [row["invoice_id"] for row in queue["to_assign"]] == [draft_invoice.xero_invoice_id]
+
+
+def test_the_sales_permission_says_an_invoice_takes_stock_off():
+    from app.core.security.access_policy import PERMISSIONS
+
+    assert "takes its stock off" in PERMISSIONS["sales.record"]

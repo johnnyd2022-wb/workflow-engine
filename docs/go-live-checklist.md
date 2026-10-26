@@ -47,6 +47,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-A02 | A password change signs out every other session | Fix | !571 |
 | ☑ | GL-A03 | `password_reset: true` on login must not clear an account lock | Fix | !571 |
 | ◐ | GL-A04 | Forgotten-password recovery | Founder (blocked) | Interim help line on the sign-in form in !572. **Go-live blocker, on hold (founder, 2026-10-26):** self-service reset waits for email sending, via SES once the AWS production infrastructure is built (or a Google Workspace domain for biz-e as the fallback). Future assessments not about go-live should leave it out |
+| ◐ | GL-A06 | Founder reviews pricing, terms and privacy before launch | Founder (review) | **Go-live blocker.** The placeholder pricing, terms and privacy pages (!579, GL-C01/GL-C02) need the founder's review, and the terms a lawyer's. Founder (2026-10-26): assessments assume the wording is good until then |
 | ☐ | GL-A05 | One observed independent pilot per sector | Founder (after go-live) | Can only happen after launch. Whistlebird (an NZ distillery the founder owns and runs) is the pilot business for distilleries. Out of scope for go-live assessments |
 
 ### Product and operations (P1)
@@ -94,7 +95,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ☐ | GL-S01 | Decide and test which sales actions may change stock | Founder | Explained 2026-10-26; awaiting the call |
+| ☑ | GL-S01 | Decide and test which sales actions may change stock | Founder | Founder (2026-10-26): with FIFO matching a sale always takes its stock off, so authorising an invoice (sales.record) reduces stock; manual mode waits for someone with inventory.adjust to pick the batch; picking a batch or re-running matching needs inventory.adjust (!557). Written into the sales.record permission and pinned by tests in !581 |
 | ◐ | GL-S02 | Every background and raw-SQL path names its org | Fix | !572: event-summary raw SQL names its org; the nightly warm job is tested against a hostile neighbour. Other raw SQL is locks, schema or already org-filtered |
 | ◐ | GL-S03 | Untrusted-input rendering, attachments, link protocols | Fix | Audited: no user-stored URLs or x-html; innerHTML escaped and guarded by semgrep; uploads checked by magic bytes, allowlist and global nosniff. Founder (2026-10-26): do the CSP migration next |
 | ◐ | GL-S04 | Session replay and error reports never capture tokens, contacts or recipes | Fix | !572: replays mask all page text (not just inputs); invite paths and token parameters scrubbed from events. Left: error-report payloads. Tests on the masking |
