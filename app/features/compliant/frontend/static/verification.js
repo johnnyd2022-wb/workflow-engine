@@ -65,6 +65,8 @@
       var box = $('[data-verification-error]');
       box.textContent = err.message || String(err);
       box.hidden = false;
+      // Nothing loaded yet: say so rather than leave "Loading…" beside the error (GL-U04).
+      if (!state) $('[data-verification-headline]').textContent = 'Verification not loaded';
     }
     function clearError() { $('[data-verification-error]').hidden = true; }
 

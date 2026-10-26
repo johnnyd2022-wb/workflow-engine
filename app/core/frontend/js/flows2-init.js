@@ -698,8 +698,8 @@
       } else {
         var nameEl = document.getElementById('process-name');
         var descEl = document.getElementById('process-description');
-        if (nameEl) nameEl.textContent = 'No Process Selected';
-        if (descEl) descEl.textContent = 'Please select a process from the Process Hub';
+        if (nameEl) nameEl.textContent = 'No workflow open';
+        if (descEl) descEl.textContent = 'Open one from Workflows, or create a product workflow there.';
       }
     }
     window.flows2InitPage = flows2InitPage;

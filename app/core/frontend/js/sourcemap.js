@@ -101,7 +101,8 @@
       // (DAG-backed checks), the Activity tab (event feed) -- so it loads off the
       // critical path below.
       const [inventoryData, outOfStockData] = await Promise.all([
-        CoreAPI.getInventory(null, null, { compact: true }).catch(() => ({ inventory_items: [] })),
+        // No catch here: stock that failed to load must not read as "No inventory items found" (GL-U04).
+        CoreAPI.getInventory(null, null, { compact: true }),
         CoreAPI.getOutOfStockRawMaterials().catch(() => ({ inventory_items: [] })),
       ]);
 

@@ -50,6 +50,8 @@
   function slug(text) { return String(text || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase(); }
 
   // Errors go to the page's one error line; console too, so the screenshot harness sees them.
+  // A "Loading…" placeholder ([data-loading]) still on the page when something fails never
+  // finished: it says so, rather than spinning beside the error (GL-U04).
   function failer(page) {
     var box = page.querySelector('[data-compliant-error]');
     return function (msg) {
@@ -57,7 +59,15 @@
       if (msg && window.__coreApiPageUnloading) return;
       if (msg) console.error('[customs]', msg);
       if (box) { box.textContent = msg || ''; box.hidden = !msg; }
+      if (msg) markNotLoaded(page);
     };
+  }
+  function markNotLoaded(scope) {
+    scope.querySelectorAll('[data-loading]').forEach(function (node) {
+      node.textContent = 'Not loaded. Reload the page to try again.';
+      node.removeAttribute('data-loading');
+      node.setAttribute('data-not-loaded', '');
+    });
   }
 
   // A small "fact" for summary strips and cards: a label, a value, and a line of context.
@@ -71,6 +81,6 @@
 
   window.CustomsUI = {
     api: api, el: el, fmtDate: fmtDate, shortDate: shortDate, money: money, wholeMoney: wholeMoney, num: num,
-    qty: qty, amount: amount, dayMonth: dayMonth, todayIso: todayIso, daysUntil: daysUntil, plural: plural, slug: slug, failer: failer, fact: fact,
+    qty: qty, amount: amount, dayMonth: dayMonth, todayIso: todayIso, daysUntil: daysUntil, plural: plural, slug: slug, failer: failer, markNotLoaded: markNotLoaded, fact: fact,
   };
 })();

@@ -271,6 +271,7 @@
       if (c.receipt_overdue) bits.push(U.plural(c.receipt_overdue, 'receipt') + ' overdue');
       if (c.awaiting_receipt) bits.push(c.awaiting_receipt + ' awaiting receipt');
       if (!todo && state.transfers.length) bits.push('all received');
+      summary.removeAttribute('data-loading');
       summary.textContent = bits.join(' · ');
       if (!state.transfers.length) {
         body.replaceChildren(el('p', { className: 'customs-empty', text: state.destinations.length ? 'No sales to other CCAs in the last year.' : 'No sales to other CCAs yet. Add the CCAs you sell into below, and link each to its customer.' }));

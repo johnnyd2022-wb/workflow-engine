@@ -183,7 +183,14 @@
       } catch (err) { error.textContent = err.message; error.hidden = false; }
     });
 
-    api('GET', '/api/core/go-live').then(render).catch(function (err) { say(err.message, false); });
+    api('GET', '/api/core/go-live').then(render).catch(function (err) {
+      say(err.message, false);
+      // The three "Loading…" lines never got their answer (GL-U04).
+      ['[data-gl-workflow-summary]', '[data-gl-raw-summary]', '[data-gl-products]'].forEach(function (sel) {
+        var node = $(sel);
+        if (node) node.textContent = 'Not loaded. Reload the page to try again.';
+      });
+    });
   }
 
   // Runs at first load and after every boosted swap that brings the page in (page-init.js).
