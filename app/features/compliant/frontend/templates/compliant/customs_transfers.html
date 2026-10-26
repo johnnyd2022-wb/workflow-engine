@@ -1,0 +1,40 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Sales to other CCAs — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
+{% block content %}
+<main class="max-content workspace-overview workspace-page customs-page customs-transfers-page" data-customs-transfers-root data-compliant-root aria-busy="true">
+  {% set customs_caption = "Sales that went to another business's CCA: when the goods left, who carried them, and the receipt." %}
+  {% include "compliant/_customs_header.html" %}
+
+  <section class="workspace-card customs-card tr-main" aria-labelledby="tr-title">
+    <div class="customs-card__head">
+      <div>
+        <h2 id="tr-title">Sales to other CCAs</h2>
+        <p class="workspace-caption" data-tr-summary>Loading…</p>
+      </div>
+      <div class="customs-card__actions">
+        <button type="button" class="workspace-button workspace-button--primary" data-tr-mark>Mark a sale as a transfer</button>
+      </div>
+    </div>
+    <div class="tr-mark" data-tr-mark-panel hidden></div>
+    <div class="tr-body" data-tr-body></div>
+  </section>
+
+  <section class="workspace-card customs-card tr-places-card" aria-labelledby="tr-places-title" data-tr-places-card>
+    <div class="customs-card__head">
+      <div>
+        <h2 id="tr-places-title">CCAs you send to</h2>
+        <p class="workspace-caption">Link a customer to its CCA and every sale to them is a transfer, left out of duty.</p>
+      </div>
+      <div class="customs-card__actions">
+        <button type="button" class="workspace-button" data-tr-add-place>Add a CCA</button>
+      </div>
+    </div>
+    <div data-tr-places></div>
+  </section>
+
+  <p class="customs-note tr-rule">Goods leaving your CCA are either moved to another CCA or entered for duty. For each move Customs asks for the destination, the date it moved, the carrier, the date it arrived and what moved, and the destination's written acknowledgement that it arrived (Customs operational policy, <em>Product movement excise unpaid – alcohol</em>, paragraphs 15–16). Until then the goods are still your responsibility.</p>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/customs-transfers.js"></script>{% endblock %}

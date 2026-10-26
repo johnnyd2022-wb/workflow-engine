@@ -12,6 +12,12 @@ period's lines come from removals:
 Stock moved back into the licensed area is listed separately as a possible credit to
 raise with Customs; it's never claimed automatically.
 
+A sale to another business's CCA (a duty free shop, an export warehouse, a contract
+customer's licensed area) is a transfer, not a removal: it is left out of the duty lines
+and listed under ``cca_transfers`` with its movement-register status (``cca_transfers``
+module, GL-P08). Goods leaving the CCA are either transferred to another CCA or entered
+for duty; nothing falls between the two.
+
 Each removal's litres of alcohol (LAL) = litres x ABV. ABV comes from the batch (its
 final-step "ABV (%)" field, or the ABV counted at go-live), falling back to the product
 profile. Litres come from the pack volume for counted goods (700 mL bottles) or the unit
@@ -104,13 +110,14 @@ def period_label(start: date, end: date) -> str:
 
 @dataclass
 class Removal:
-    kind: str  # "sale" | "moved_out" | "returned"
+    kind: str  # "sale" | "moved_out" | "returned" | "cca_transfer"
     occurred_on: date
     recorded_at: datetime | None
     item: InventoryItem
     quantity: Decimal
     reference: str
     customer: str | None = None
+    transfer: dict | None = None  # for "cca_transfer": destination and register status
 
 
 def _licensed(item: InventoryItem, locations: dict) -> bool:
@@ -121,6 +128,7 @@ def _licensed(item: InventoryItem, locations: dict) -> bool:
 
 
 def removals_between(session: Session, org_id: UUID, start: date, end: date) -> list[Removal]:
+    from app.features.compliant.modules.nz_alcohol import cca_transfers
     from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
     from app.features.crm.models.xero_contact import XeroContact
     from app.features.crm.models.xero_invoice import XeroInvoice
@@ -148,19 +156,22 @@ def removals_between(session: Session, org_id: UUID, start: date, end: date) -> 
         if contact_ids
         else {}
     )
+    transfers_by_invoice = cca_transfers.for_invoices(session, org_id, [inv for _, inv in rows])
     for allocation, invoice in rows:
         item = items.get(allocation.inventory_item_id)
         if item is None or not _licensed(item, locations):
             continue  # sold from stock already removed (e.g. a rep's car): counted when it left
+        transfer = transfers_by_invoice.get(invoice.xero_invoice_id)
         out.append(
             Removal(
-                kind="sale",
+                kind="cca_transfer" if transfer else "sale",
                 occurred_on=invoice.date,
                 recorded_at=allocation.created_at,
                 item=item,
                 quantity=Decimal(str(allocation.quantity)),
                 reference=invoice.invoice_number or invoice.xero_invoice_id,
                 customer=contacts.get(invoice.contact_id),
+                transfer=transfer,
             )
         )
 
@@ -273,6 +284,7 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
     lines: dict = {}
     problems: dict = {}
     returns = []
+    transfers = []
     for r in removals:
         product = _base_name(r.item.name)
         profile = profiles.get(product.casefold())
@@ -283,6 +295,22 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
             continue
         litres = _litres(r.quantity, r.item.unit, profile)
         abv = _lot_abv(session, r.item, profile)
+        if r.kind == "cca_transfer":
+            # Not entered for duty; its LAL is shown when it can be worked out, for the register.
+            lal = litres * abv / 100 if litres is not None and abv is not None else None
+            transfers.append(
+                {
+                    "product": product,
+                    "quantity": _s(r.quantity),
+                    "unit": r.item.unit,
+                    "date": r.occurred_on.isoformat(),
+                    "reference": r.reference,
+                    "customer": r.customer,
+                    "lal": _s(lal.quantize(_Q4)) if lal is not None else None,
+                    **(r.transfer or {}),
+                }
+            )
+            continue
         if profile is None or litres is None or abv is None:
             reason = (
                 "Not set up as an excise product"
@@ -360,9 +388,26 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
         + [
             {"product": t, "reason": "No duty rate for this tariff item at the period start", "removals": 0}
             for t in sorted(missing_rates)
-        ],
+        ]
+        + _transfer_problems(transfers),
         "returns": returns,
+        "cca_transfers": transfers,
     }
+
+
+def _transfer_problems(transfers: list[dict]) -> list[dict]:
+    """A transfer without its register row is a sale whose movement Customs can't trace yet."""
+    invoices = {t["reference"] for t in transfers if t.get("status") == "needs_details"}
+    if not invoices:
+        return []
+    return [
+        {
+            "product": "Sales to other CCAs",
+            "reason": "Record when the goods left and who carried them",
+            "removals": len(invoices),
+            "link": "transfers",
+        }
+    ]
 
 
 def entry_lines(lines: dict, rates: list[ExciseRate], rate_date: date) -> dict:
@@ -568,7 +613,10 @@ def _late_adjustments(session: Session, org_id: UUID, before: date) -> list[dict
         removals = [
             r
             for r in removals_between(session, org_id, lodgement.period_start, lodgement.period_end + timedelta(days=1))
-            if r.kind != "returned" and r.recorded_at is not None and cutoff is not None and r.recorded_at > cutoff
+            if r.kind not in ("returned", "cca_transfer")
+            and r.recorded_at is not None
+            and cutoff is not None
+            and r.recorded_at > cutoff
         ]
         if not removals:
             continue
@@ -610,7 +658,8 @@ def lodge(
     if current["open"]:
         raise ValueError(f"{current['label']} hasn't finished yet.")
     snapshot = {
-        k: current[k] for k in ("lines", "entry", "total_lal", "total_duty", "problems", "returns", "adjustments")
+        k: current[k]
+        for k in ("lines", "entry", "total_lal", "total_duty", "problems", "returns", "adjustments", "cca_transfers")
     }
     record = ExciseLodgement(
         org_id=org_id,

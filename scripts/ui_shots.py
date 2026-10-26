@@ -66,6 +66,7 @@ SEED_KINDS = (
     "customers",
     "suppliers",
     "excise",
+    "transfers",
     "np3",
     "licensing",
     "premises",
@@ -1066,6 +1067,119 @@ def _seed_excise(db, org_id, inv) -> None:
     _seed_customs_records(db, org_id)
 
 
+def _seed_transfers(db, org_id, inv) -> None:
+    """Sales to other CCAs (GL-P08), on top of the excise seed: a duty free shop linked to its
+    customer, an export warehouse, and a contract customer's licensed area, with one sale in
+    each register state (needs details, awaiting receipt, receipt overdue, received)."""
+    from datetime import datetime
+    from datetime import time as clock
+    from zoneinfo import ZoneInfo
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliant.models.cca_transfers import CcaDeparture, CcaDestination
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    gin = "Whistlebird Dry Gin 700 mL"
+    lot = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin)
+        .order_by(InventoryItem.created_at.asc())
+        .first()
+    )
+    if lot is None:
+        raise ValueError("transfers requires the lineage and excise seeds")
+    nz = ZoneInfo("Pacific/Auckland")
+    today = date.today()
+    places = []
+    for name, code, address, kind, customer in (
+        (
+            "Auckland Airport duty free",
+            "DF-AKL-0142",
+            "Ray Emery Drive, Auckland Airport 2022",
+            "duty_free",
+            "Aelia Duty Free Auckland",
+        ),
+        (
+            "Wellington export warehouse",
+            "EW-WLG-0077",
+            "12 Hutt Road, Kaiwharawhara, Wellington 6035",
+            "export_warehouse",
+            "Harbour Export Logistics",
+        ),
+        ("Kapiti Craft Spirits licensed area", "LMA-KAP-0210", "4 Kapiti Road, Paraparaumu 5032", "manufacturer", None),
+    ):
+        contact = None
+        if customer:
+            contact = XeroContact(org_id=org_id, xero_contact_id=f"ui-{uuid.uuid4()}", name=customer)
+            db.add(contact)
+            db.flush()
+        dest = CcaDestination(
+            org_id=org_id,
+            name=name,
+            cca_code=code,
+            address=address,
+            kind=kind,
+            contact_id=contact.id if contact else None,
+        )
+        db.add(dest)
+        db.flush()
+        places.append((dest, contact))
+    bottle_store = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).first()
+    # (destination, customer, days ago, bottles, departure: None | (carrier, note, received days after or None))
+    sales = [
+        (0, None, 3, 120, None),
+        (0, None, 9, 96, ("Mainfreight", "MF-882310", None)),
+        (1, None, 24, 240, ("NZ Couriers", "NZC-55102", None)),
+        (0, None, 38, 144, ("Mainfreight", "MF-879904", 2)),
+        (1, None, 52, 180, ("Own van", None, 1)),
+        (2, bottle_store, 16, 60, ("Own van", None, 1)),
+    ]
+    for number, (place, customer, days, bottles, moved) in enumerate(sales):
+        dest, contact = places[place]
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=(customer or contact).id,
+            invoice_type="ACCREC",
+            invoice_number=f"INV-{1060 + number}",
+            status="AUTHORISED",
+            date=today - timedelta(days=days),
+            total=Decimal(bottles * 38),
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            SalesFifoAllocation(
+                org_id=org_id,
+                xero_invoice_id=invoice.xero_invoice_id,
+                xero_line_key="X1",
+                inventory_item_id=lot.id,
+                product_name=gin,
+                quantity=Decimal(bottles),
+                unit=lot.unit,
+            )
+        )
+        if moved:
+            carrier, note, received_after = moved
+            left = datetime.combine(invoice.date + timedelta(days=1), clock(9, 30), tzinfo=nz)
+            db.add(
+                CcaDeparture(
+                    org_id=org_id,
+                    destination_id=dest.id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    moved_at=left,
+                    carrier=carrier,
+                    consignment_note=note,
+                    received_on=left.date() + timedelta(days=received_after) if received_after is not None else None,
+                    receipt_reference="Signed delivery docket" if received_after is not None else None,
+                )
+            )
+    db.commit()
+
+
 def _seed_customs_records(db, org_id) -> None:
     """Records for Customs beyond the lodgements: a monthly reconciliation, the retention
     attestation, and a movement record still open."""
@@ -1866,6 +1980,7 @@ def cmd_seed(args) -> int:
             "production": _seed_production,
             "sales": _seed_sales,
             "excise": _seed_excise,
+            "transfers": _seed_transfers,
             "np3": _seed_np3,
             "people": _seed_people,
             "customer": _seed_customer,
