@@ -87,6 +87,7 @@ server up)
 | 21 | Core system checks | `app/features/compliance_checks/routes/corechecks.py` | test_corechecks.py | covered | 23 tests |
 | 22 | Frontend asset/guards (execution modal, batches) | core frontend JS/templates | test_execution_modal_frontend_assets.py, test_batches_refactor_frontend_guards.py, test_execution_shared_utils_js.py | covered | asset-presence + guard tests |
 | 23 | Observability (logging/tracing/telemetry ingress/CLI) | `app/observability/*` | test_observability_*.py (10 files) | covered | broad; owned jointly with observability skill |
+| 30 | NZ Alcohol Tastings: shared calendar, separate sampling stock and excise | Tastings `/crm/tastings`, `/api/crm/tastings/*`; CRM/Core task integration | test_tastings.py, e2e/test_tastings_page.py | covered | Real PostgreSQL concurrency/rollback/replay and hostile tenant/role probes; browser booking, dispatch, partial bottle outcomes/reuse, boosted/Back navigation and subscription-aware performance budgets. |
 
 ## Known highest-value gaps (test-author works these first)
 

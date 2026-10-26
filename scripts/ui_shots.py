@@ -55,6 +55,7 @@ STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
 SEED_KINDS = (
     "stock",
+    "tastings",
     "lineage",
     "compliance",
     "production",
@@ -1942,6 +1943,123 @@ def _seed_people(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_tastings(db, org_id, inv) -> None:
+    """A realistic sampling week, with distinct stock and partial-bottle leftovers."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.models.excise import ExciseRate
+    from app.features.tastings.services import tasting_service
+
+    rep = db.query(User).filter(User.org_id == org_id).order_by(User.created_at).first()
+    today = datetime.now(ZoneInfo("Pacific/Auckland")).date()
+    products = []
+    for index, (name, abv, batch) in enumerate(
+        [
+            ("Wildflower Gin", "44", "WB-26-041"),
+            ("Solstice Gin", "42", "WB-26-038"),
+            ("Green Gold Gin", "40", "WB-26-036"),
+        ]
+    ):
+        item = inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity="24",
+            unit="bottles",
+            inventory_type="final_product",
+            supplier_batch_number=batch,
+            extra_data={"opening_stock": True, "abv_percent": abv, "batch_number": batch},
+        )
+        profile = (
+            db.query(AlcoholProductProfile)
+            .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.inventory_name == name)
+            .first()
+        )
+        if profile is None:
+            profile = AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=700,
+                abv_percent=Decimal(abv),
+                customs_product_code="TASTINGS-SEED",
+                excise_category="gin",
+            )
+            db.add(profile)
+        products.append(item)
+    if (
+        not db.query(ExciseRate.id)
+        .filter(ExciseRate.org_id == org_id, ExciseRate.tariff_item == "TASTINGS-SEED")
+        .first()
+    ):
+        db.add(
+            ExciseRate(
+                org_id=org_id,
+                tariff_item="TASTINGS-SEED",
+                rate_per_lal=Decimal("50"),
+                effective_from=today.replace(month=1, day=1),
+            )
+        )
+    db.commit()
+
+    def event(title, venue, offset, product, count="1", own=False, hour=16):
+        start = datetime.combine(
+            today + timedelta(days=offset), datetime.min.time(), ZoneInfo("Pacific/Auckland")
+        ).replace(hour=hour)
+        row = tasting_service.save_event(
+            db,
+            org_id,
+            rep.id,
+            {
+                "title": title,
+                "venue_name": venue,
+                "venue_address": "Wellington, New Zealand",
+                "venue_type": "own" if own else "external",
+                "licence_reference": "Venue's recorded reference",
+                "starts_at": start.isoformat(),
+                "ends_at": (start + timedelta(hours=2)).isoformat(),
+                "rep_id": str(rep.id),
+                "notes": "Bring the bottle display and tasting notes. Confirm the setup with the venue manager.",
+                "allocations": [{"source_item_id": str(product.id), "quantity": count}],
+            },
+        )
+        db.commit()
+        return row
+
+    event("After-work tasting", "Glengarry Wellington", 0, products[0], "2")
+    event("New-release tasting", "Regional Wines & Spirits", 1, products[1])
+    event("Meet the distiller", "Moore Wilson's", 3, products[0], "2")
+    event("Sunday discovery", "The Bottle Store", 5, products[2])
+    out = event("Afternoon at the tasting room", "Whistlebird cellar door", 0, products[1], "2", True, 14)
+    tasting_service.dispatch(
+        db, org_id, rep.id, out.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(out.id)
+    )
+    db.commit()
+    complete = event("First pours of Green Gold", "The neighbourhood bottle store", 0, products[2], hour=0)
+    tasting_service.dispatch(
+        db, org_id, rep.id, complete.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(complete.id)
+    )
+    db.commit()
+    line = tasting_service.event_dict(db, complete)["allocations"][0]
+    tasting_service.finalise(
+        db,
+        org_id,
+        rep.id,
+        complete.id,
+        {
+            "usage": [{"allocation_id": line["id"], "used_volume_ml": "150"}],
+            "samples_count": 15,
+            "notes": "15 pours. Good response to the citrus; 550 mL ready for the next visit.",
+        },
+    )
+    db.commit()
+    cancelled = event("Venue rescheduled", "Bottle shop on Cuba", 2, products[2])
+    tasting_service.cancel(db, org_id, rep.id, cancelled.id)
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -1977,6 +2095,7 @@ def cmd_seed(args) -> int:
             "stock": _seed_stock,
             "lineage": _seed_lineage,
             "compliance": _seed_compliance,
+            "tastings": _seed_tastings,
             "production": _seed_production,
             "sales": _seed_sales,
             "excise": _seed_excise,
