@@ -75,8 +75,9 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-U02b | One name for each place (Customs vs Excise, the two Tasks) | Decide | |
 | ☑ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | !572: deleting a workflow or step silently deleted its batches; now refused, and the delete confirmations state the effect. An audit of confirmation texts |
 | ◐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | !573: production steps (offline and signed-out) and a sign-in-again path for every save. Receiving, counts and evidence still to test. Production steps, receiving, counts and evidence first |
-| ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes. Found so far: dark-mode headings on Record step are near-invisible; a boosted arrival at pages without section tabs sits 32px lower than a full load |
+| ◐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | !575: boosted pages no longer nest a second #page-content (the 32px drop). Screenshot sweep with fixes. Found so far: dark-mode headings on Record step are near-invisible; a boosted arrival at pages without section tabs sits 32px lower than a full load |
 | ☑ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | !572 |
+| ◐ | GL-U06 | Record production step opens a picker: every batch in flight and a start-new-batch list, two taps to any step | Fix (founder: go-live blocker) | !576 |
 
 ### Conversion (P1)
 
