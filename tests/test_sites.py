@@ -14,6 +14,7 @@ from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.site_guard import SiteScopeError
+from app.core.security.auth_service import auth_stamp
 from app.core.security.tenant_scope import unscoped
 from app.features.sites import service
 from tests.dag_traversal_helpers import clear_org_synthetic_data
@@ -246,6 +247,7 @@ def test_permissions_and_settings_page_link(world, db, flask_app):  # noqa: F811
     client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
     with client.session_transaction() as session:
         session["user_id"] = str(production.id)
+        session["auth_stamp"] = auth_stamp(production.password_hash)
     assert client.get("/api/core/sites").status_code == 200
     assert client.get(f"/api/core/sites/{default['id']}/position").status_code == 200
     assert client.put("/api/core/sites/settings", json={"enabled": False}).status_code == 403

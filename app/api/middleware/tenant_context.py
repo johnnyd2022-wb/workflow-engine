@@ -8,6 +8,7 @@ Rules:
 - Abort early on invalid or inactive users or missing tenant.
 """
 
+import hmac
 from uuid import UUID, uuid4
 
 from flask import abort, g, request, session
@@ -16,6 +17,7 @@ from werkzeug.exceptions import HTTPException
 from app.core.db import db_session
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.security.auth_service import auth_stamp
 from app.core.security.tenant_scope import activate_request_org_id, clear_request_org_id, unscoped
 from app.observability import get_logger
 
@@ -100,6 +102,20 @@ def setup_tenant_context(app):
                 # the browser. End that session so the next request is anonymous,
                 # then use the existing 401 handler to return the normal re-login
                 # response instead of converting this expected state into a 500.
+                session.clear()  # nosemgrep: bize-session-clear-without-rotate
+                session.modified = True
+                abort(401, "Session expired or account is unavailable")
+
+            # GL-A02: a session signed in before the password last changed is over. A session with no
+            # stamp predates this check, and nothing on the server says which password it signed in
+            # with, so it ends too: deploying this signs everyone out once.
+            stamp = auth_stamp(user.password_hash)
+            current = session.get("auth_stamp")
+            if current is None or not hmac.compare_digest(str(current), stamp):
+                LOGGER.info(
+                    "session_ended_by_password_change" if current is not None else "session_ended_unstamped",
+                    user_id=str(user_uuid),
+                )
                 session.clear()  # nosemgrep: bize-session-clear-without-rotate
                 session.modified = True
                 abort(401, "Session expired or account is unavailable")
