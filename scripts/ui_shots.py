@@ -1999,23 +1999,59 @@ def cmd_seed(args) -> int:
     return 0
 
 
-def cmd_purge(_args) -> int:
-    _require_local()
-    state = _state()
-    sys.path.insert(0, str(REPO))
+def import_all_models() -> None:
+    """purge_org walks Base.metadata, which only knows the tables whose models are imported."""
     import app.features as features
-    from app.core.db import db_session
-    from app.core.db.models.organisation import Organisation
-    from app.core.db.models.user import User
-    from tests.e2e.conftest import purge_org
 
-    # purge_org walks Base.metadata, which only knows the tables whose models are imported.
     for module in pkgutil.walk_packages(features.__path__, features.__name__ + "."):
         if module.name.rsplit(".", 1)[-1].endswith("models") or ".models." in module.name:
             try:
                 importlib.import_module(module.name)
             except Exception:  # an optional feature that will not import has no rows here either
                 pass
+
+
+def purge_seeded_org(db, org_id, user_id) -> None:
+    """Delete a seeded org and everything in it (also used by scripts/demo_orgs.py)."""
+    from sqlalchemy import String, func
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_movement import InventoryMovement
+    from app.core.db.models.inventory_wastage import InventoryWastage
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.user import User
+    from tests.e2e.conftest import purge_org
+
+    import_all_models()
+    # Lots at a place reference it, and purge_org can't order that cycle: detach them first.
+    # A throwaway org: rename them so detaching can't collide on (name, batch, place).
+    placed = InventoryItem.org_id == org_id, InventoryItem.location_id.isnot(None)
+    db.query(InventoryItem).filter(*placed).update(
+        {InventoryItem.name: InventoryItem.name + " @" + func.cast(InventoryItem.id, String)},
+        synchronize_session=False,
+    )
+    db.query(InventoryItem).filter(InventoryItem.org_id == org_id).update(
+        {InventoryItem.location_id: None}, synchronize_session=False
+    )
+    # A stocktake's breakage is a wastage record plus its movement: clear those first too.
+    db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
+    db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
+    db.commit()
+    # Synthetic users may hold a seeded custom role; release it before purging.
+    db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)
+    db.commit()
+    purge_org(db, org_id, user_id)
+    db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
+    db.commit()
+
+
+def cmd_purge(_args) -> int:
+    _require_local()
+    state = _state()
+    sys.path.insert(0, str(REPO))
+    from app.core.db import db_session
+    from app.core.db.models.organisation import Organisation
 
     org_id, user_id = uuid.UUID(state["org_id"]), uuid.UUID(state["user_id"])
     db = db_session()
@@ -2024,34 +2060,7 @@ def cmd_purge(_args) -> int:
         if not org.name.startswith(ORG_PREFIX):
             say(f"refusing to purge {org.name!r}: not an org this script created")
             return 2
-        # Lots at a place reference it, and purge_org can't order that cycle: detach them first.
-        from sqlalchemy import String, func
-
-        from app.core.db.models.inventory_item import InventoryItem
-
-        # A throwaway org: rename them so detaching can't collide on (name, batch, place).
-        placed = InventoryItem.org_id == org_id, InventoryItem.location_id.isnot(None)
-        db.query(InventoryItem).filter(*placed).update(
-            {InventoryItem.name: InventoryItem.name + " @" + func.cast(InventoryItem.id, String)},
-            synchronize_session=False,
-        )
-        db.query(InventoryItem).filter(InventoryItem.org_id == org_id).update(
-            {InventoryItem.location_id: None}, synchronize_session=False
-        )
-        # A stocktake's breakage is a wastage record plus its movement: clear those first too.
-        from app.core.db.models.inventory_movement import InventoryMovement
-        from app.core.db.models.inventory_wastage import InventoryWastage
-
-        db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
-        db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
-        db.commit()
-        # Synthetic users may hold a seeded custom role; release it before purging.
-        db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)
-        db.commit()
-        purge_org(db, org_id, user_id)
-        db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
-        db.commit()
+        purge_seeded_org(db, org_id, user_id)
     STATE.unlink()
     say("purged")
     return 0

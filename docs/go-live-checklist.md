@@ -89,7 +89,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-C03 | Import templates with an error report and a preview | Decide | |
 | ☐ | GL-C04 | Help and contact on every page, with a reference ID | Decide | |
 | ◐ | GL-C05 | Sector-specific example journeys | Fix | Founder (2026-10-26): Whistlebird is the worked example for distilleries. Other sectors after go-live |
-| ☐ | GL-C06 | Show the exception loop in the demo | Fix (placeholder) | Not demoing until the checklist is done. Founder (2026-10-26): load one or two demo orgs with the replay script and walk scenarios: a new setup showing value fast, and an established org for specific questions. A placeholder script and seed now |
+| ◐ | GL-C06 | Show the exception loop in the demo | Fix (placeholder) | Not demoing until the checklist is done. Founder (2026-10-26): load one or two demo orgs with the replay script and walk scenarios: a new setup showing value fast, and an established org for specific questions. A placeholder script and seed now. !586: `scripts/demo_orgs.py` loads a new and an established demo org (synthetic, not Whistlebird's real customers) and `docs/demo-script.md` has both scenarios, as placeholders to rehearse |
 
 ### Security (P1)
 
