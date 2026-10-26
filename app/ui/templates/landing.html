@@ -501,7 +501,7 @@
     }
   </style>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Device fingerprint collection for "Remember this device" feature
     // Collects browser characteristics to create a unique device identifier
     function collectDeviceFingerprint() {

@@ -156,7 +156,7 @@
 </aside>
 {# Apply the remembered state before the first paint, so a collapsed sidebar never flashes open.
    With no choice made yet, a narrow laptop or tablet starts as the rail. sidebar-v2.js owns the rest. #}
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     try {
       var saved = window.localStorage.getItem('sidebarCollapsed');

@@ -12,6 +12,7 @@ from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp, invite_bp
 from app.api.routes.org_routes import org_bp, people_pages
+from app.core.security import csp
 from app.core.security.access_policy import setup_access_policy
 from app.core.security.two_factor_policy import resolve_require_admin_2fa, setup_two_factor_policy
 from app.observability import (
@@ -139,6 +140,7 @@ def create_app():
     @app.context_processor
     def _inject_google_sign_in():
         return {
+            "csp_nonce": csp.csp_nonce,
             "google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False),
             "support_email": config.support_email,
         }
@@ -361,6 +363,16 @@ def create_app():
         ]
         return Response(upstream_response.content, status=upstream_response.status_code, headers=response_headers)
 
+    # Intentionally public, rate-limited: the browser posts CSP violation reports with no
+    # session or CSRF token. Only the directive, the blocked origin and path, the page path
+    # and a 40-character sample are logged (app/core/security/csp.py).
+    @app.post(csp.REPORT_PATH)  # nosemgrep: route-missing-requires-auth
+    @limiter.limit("60 per minute")
+    def csp_report():
+        for violation in csp.parse_report(request.get_data(cache=False)):
+            logger.warning("csp_violation", **violation)
+        return "", 204
+
     # Intentionally public, rate-limited ingest endpoint for browser RUM (Faro); the
     # browser has no session-authenticated way to call this before/during page load.
     @app.post("/telemetry")  # nosemgrep: route-missing-requires-auth
@@ -514,24 +526,14 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
-            # static.cloudflareinsights.com is Cloudflare's RUM beacon, auto-injected by
-            # the CF proxy on the deployed environments (it POSTs back to
-            # cloudflareinsights.com/cdn-cgi/rum). Allowed here so it doesn't spam a CSP
-            # violation on every page; disable "Web Analytics / Browser Insights" in the
-            # Cloudflare dashboard instead if the same-origin /telemetry RUM is enough.
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com; "
-                "img-src 'self' data:; "
-                "connect-src 'self' https://cloudflareinsights.com; "
-                # PostHog's vendored session-recording bundle spins up its rrweb
-                # compression worker from a data: URI rather than a same-origin
-                # script file; without this, browsers silently refuse to create
-                # the worker and no recording snapshots are ever captured.
-                "worker-src 'self' data: blob:"
-            )
+            # GL-S03: see app/core/security/csp.py. The strict target goes out report-only on
+            # pages, so the browser tells /csp-report what still needs moving off inline script.
+            framable = response.headers.get("X-Frame-Options") == "SAMEORIGIN"
+            response.headers["Content-Security-Policy"] = csp.enforced_policy(framable=framable)
+            if response.mimetype == "text/html":
+                response.headers["Content-Security-Policy-Report-Only"] = csp.report_only_policy(
+                    csp.csp_nonce(), framable=framable
+                )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
         # This prevents protocol downgrade attacks and cookie hijacking
@@ -552,7 +554,11 @@ def create_app():
         # a CSRF header. The SPA may still send X-CSRFToken; exemption only skips validation.
         # SameSite=Strict on the session cookie limits cross-site cookie use in browsers.
         for endpoint, view in app.view_functions.items():
-            if endpoint.startswith("auth.") or endpoint in {"ingest_faro_telemetry", "ingest_posthog_telemetry"}:
+            if endpoint.startswith("auth.") or endpoint in {
+                "ingest_faro_telemetry",
+                "ingest_posthog_telemetry",
+                "csp_report",
+            }:
                 csrf.exempt(view)
 
         from flask_wtf.csrf import CSRFError

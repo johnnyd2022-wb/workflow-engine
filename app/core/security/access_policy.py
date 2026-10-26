@@ -186,6 +186,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("*.serve_*", None, PUBLIC),
     ("ingest_faro_telemetry", None, PUBLIC),
     ("ingest_posthog_telemetry", None, PUBLIC),
+    ("csp_report", None, PUBLIC),
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),

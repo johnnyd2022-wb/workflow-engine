@@ -42,7 +42,7 @@
       </div>
     {% endcall %}
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function() {
       var CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
       var S = window.__csvInventoryPage = window.__csvInventoryPage || {};

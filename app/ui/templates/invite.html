@@ -78,7 +78,7 @@
         <p>Sign in with <strong>{{ email }}</strong> and your new password.</p>
         <p style="margin-top:16px"><a class="button" href="/?login=1">Sign in</a></p>
       </div>
-      <script>
+      <script nonce="{{ csp_nonce() }}">
         (function () {
           var form = document.querySelector('[data-invite-form]');
           var error = document.querySelector('[data-invite-error]');

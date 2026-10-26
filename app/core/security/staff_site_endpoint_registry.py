@@ -301,6 +301,7 @@ ENDPOINT_COVERAGE = {
     ("record_step.get_record_options", "GET"): "blocked",
     ("record_step.record_page", "GET"): "blocked",
     ("go_live.set_go_live_date", "PUT"): "blocked",
+    ("csp_report", "POST"): "blocked",
     ("ingest_faro_telemetry", "POST"): "blocked",
     ("ingest_posthog_telemetry", "GET"): "blocked",
     ("ingest_posthog_telemetry", "POST"): "blocked",
