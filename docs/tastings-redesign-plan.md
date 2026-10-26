@@ -75,5 +75,7 @@ final images and the three-way comparison belong in the draft MR.
 
 ## Decision
 
+Draft MR !586: https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/586.
+
 Awaiting the founder's style selection. The MR remains draft until the two alternatives
 and the review-only switch are removed and the selected layout is rechecked.
