@@ -1,0 +1,47 @@
+{% extends "legal/_page.html" %}
+{% block title %}Privacy policy{% endblock %}
+{% block description %}How biz-e collects, uses and protects personal information.{% endblock %}
+{% block body %}
+  <h1>Privacy policy</h1>
+  <p class="legal-updated">Updated {{ updated }} · <span class="legal-version">version {{ version }}</span></p>
+  <p class="legal-draft" data-legal-draft><strong>Draft for legal review.</strong> This policy is a placeholder written before launch, following the Privacy Act 2020. It will be replaced by a reviewed version.</p>
+
+  <h2>Who we are</h2>
+  <p>biz-e is run from New Zealand and is responsible for the personal information described here. {% if support_email %}Our privacy contact is <a href="mailto:{{ support_email }}">{{ support_email }}</a>.{% endif %}</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Account details:</strong> your name, email, phone number and business name, and a scrambled (hashed) form of your password.</li>
+    <li><strong>What your business records:</strong> production, stock, suppliers, customers and compliance evidence. Some of it is personal information about other people, such as a customer's contact details. Your business decides what goes in, and we hold it for you.</li>
+    <li><strong>Connected services:</strong> if you connect Xero or sign in with Google, the details they send us (invoices and contacts from Xero; your name and email from Google).</li>
+    <li><strong>How the app is used:</strong> pages visited, errors and performance, used to fix problems. Screen recordings hide all page text and everything typed. Invite links and tokens are removed before anything is sent.</li>
+    <li><strong>Security records:</strong> sign-ins, changes made and the address they came from, kept as an audit trail.</li>
+  </ul>
+
+  <h2>Why we collect it</h2>
+  <p>To run biz-e for your business, keep accounts secure, keep the audit trail your compliance records depend on, support you, and improve the service. If you don't give us account details, we can't create an account.</p>
+
+  <h2>Who sees it</h2>
+  <ul>
+    <li>People in your business you give access to, and auditors you invite, for the time you allow.</li>
+    <li>Services that run biz-e for us under contract: hosting, email and error reporting. They can only use it to provide that service.</li>
+    <li>Xero or Google, only when you connect them.</li>
+    <li>Anyone the law requires us to tell, such as a court order.</li>
+  </ul>
+  <p>We don't sell personal information or use it for advertising.</p>
+
+  <h2>Where it's stored</h2>
+  <p>On secure servers run by Amazon Web Services, which may be outside New Zealand. When information goes overseas, we make sure it's protected in ways comparable to the Privacy Act 2020.</p>
+
+  <h2>How long we keep it</h2>
+  <p>While your account is open. After you cancel, you have 30 days to export your records; we then delete them within 90 days, except what the law needs us to keep longer (for example, tax records).</p>
+
+  <h2>Keeping it safe</h2>
+  <p>Encrypted connections, hashed passwords, two-factor sign-in, each business's records kept separate from every other's, and access logged. If a privacy breach is likely to cause serious harm, we'll tell the people affected and the Privacy Commissioner as soon as practicable.</p>
+
+  <h2>Seeing and correcting your information</h2>
+  <p>You can ask to see the personal information we hold about you and ask us to correct it.{% if support_email %} Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.{% endif %} If your information is held by a business that uses biz-e, we may pass your request to them. If you're not happy with how we respond, you can complain to the <a href="https://www.privacy.org.nz/">Office of the Privacy Commissioner</a>.</p>
+
+  <h2>Cookies</h2>
+  <p>A cookie keeps you signed in and protects your session. Usage measurement stores an anonymous identifier in a cookie and in your browser's storage; it runs through biz-e's own address, not third-party ad trackers.</p>
+{% endblock %}

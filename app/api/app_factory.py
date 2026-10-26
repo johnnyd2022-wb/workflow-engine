@@ -146,6 +146,10 @@ def create_app():
     app.register_blueprint(org_bp)
     app.register_blueprint(people_pages)
 
+    from app.ui.legal import legal_bp
+
+    app.register_blueprint(legal_bp)
+
     # Register core blueprint
     from app.core.backend.backend import core_bp
 

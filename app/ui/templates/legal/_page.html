@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% endblock %} · biz-e</title>
+  <meta name="description" content="{% block description %}{% endblock %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Momo+Trust+Display&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles_2.css">
+  <style>
+    :root { --legal-text: #E5E7EB; --legal-muted: #9CA3AF; --legal-border: rgba(255,255,255,.1); --legal-accent: #2DD4BF; }
+    body { background: #0D0D0D; color: var(--legal-text); font-family: Inter, system-ui, sans-serif; margin: 0; }
+    .legal-nav { border-bottom: 1px solid var(--legal-border); }
+    .legal-nav .container, .legal-main, .legal-footer .container { max-width: 52rem; margin: 0 auto; padding: 0 1.25rem; box-sizing: border-box; }
+    .legal-nav .container { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; }
+    .legal-logo { display: inline-flex; align-items: center; gap: .5rem; color: #F9FAFB; text-decoration: none; font-family: "Momo Trust Display", sans-serif; font-size: 1.5rem; letter-spacing: -.03em; }
+    .legal-logo i { width: 10px; height: 10px; border-radius: 50%; background: var(--legal-accent); box-shadow: 0 0 0 3px rgba(45,212,191,.22); }
+    .legal-links { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
+    .legal-links a { color: var(--legal-muted); text-decoration: none; font-size: .9375rem; }
+    .legal-links a:hover, .legal-links a[aria-current="page"] { color: #F9FAFB; }
+    .legal-main { padding-top: 2.5rem; padding-bottom: 4rem; line-height: 1.65; }
+    .legal-main h1 { font-size: 2.25rem; line-height: 1.15; margin: 0 0 .5rem; color: #F9FAFB; }
+    .legal-main h2 { font-size: 1.25rem; margin: 2.25rem 0 .5rem; color: #F9FAFB; }
+    .legal-main p, .legal-main li { color: var(--legal-text); font-size: 1rem; }
+    .legal-version { white-space: nowrap; }
+    .legal-main ul { padding-left: 1.25rem; }
+    .legal-main a { color: var(--legal-accent); }
+    .legal-main .legal-updated { color: var(--legal-muted); font-size: .875rem; margin: 0 0 1.5rem; }
+    .legal-draft { border: 1px solid rgba(251,191,36,.45); background: rgba(251,191,36,.08); color: #FCD34D; border-radius: .625rem; padding: .875rem 1rem; font-size: .9375rem; margin: 0 0 2rem; }
+    .legal-draft strong { color: #FDE68A; }
+    .legal-footer { border-top: 1px solid var(--legal-border); padding: 1.5rem 0 2.5rem; color: var(--legal-muted); font-size: .875rem; }
+    .legal-footer .container { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; }
+    {% block styles %}{% endblock %}
+  </style>
+</head>
+<body>
+  <nav class="legal-nav" aria-label="Site">
+    <div class="container">
+      <a class="legal-logo" href="/"><i aria-hidden="true"></i>biz-e</a>
+      <div class="legal-links">
+        <a href="/pricing" {% if request.path == '/pricing' %}aria-current="page"{% endif %}>Pricing</a>
+        <a href="/">Sign in</a>
+      </div>
+    </div>
+  </nav>
+  <main class="legal-main">
+    {% block body %}{% endblock %}
+  </main>
+  <footer class="legal-footer">
+    <div class="container">
+      <span>© 2026 biz-e. Production and compliance for New Zealand craft alcohol.</span>
+      <span class="legal-links">
+        <a href="/pricing" {% if request.path == '/pricing' %}aria-current="page"{% endif %}>Pricing</a>
+        <a href="/terms" {% if request.path == '/terms' %}aria-current="page"{% endif %}>Terms</a>
+        <a href="/privacy" {% if request.path == '/privacy' %}aria-current="page"{% endif %}>Privacy</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>

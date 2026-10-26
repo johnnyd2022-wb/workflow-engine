@@ -40,3 +40,8 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
   #page-content .settings-overview .settings-card { padding: 18px; }
 }
 #page-content #settings-load-retry { margin-bottom: 20px; }
+
+/* GL-C02: the terms and privacy policy are always one tap away from Settings. */
+#page-content .settings-legal-links { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 32px 0 8px; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .settings-legal-links a { color: var(--ui-text-muted); text-decoration: underline; text-underline-offset: 2px; }
+#page-content .settings-legal-links a:hover { color: var(--ui-text); }
