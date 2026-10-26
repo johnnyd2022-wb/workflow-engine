@@ -219,6 +219,9 @@ def test_a_figure_draws_a_trend_only_when_its_series_moves(expired_stock_page):
     def series(body):
         flat = body["insight_series"]["active_batches_week"]["points"]
         moving = body["insight_series"]["operator_actions_week"]["points"]
+        # A real Monday's week-to-date series has one point, so it cannot move.
+        # This rendering test explicitly needs two distinct points on every weekday.
+        moving[:] = [{"date": "2026-10-19", "value": 0}, {"date": "2026-10-20", "value": 3}]
         for point in flat:
             point["value"] = 0
         for index, point in enumerate(moving):

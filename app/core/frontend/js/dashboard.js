@@ -544,11 +544,9 @@
         loadDashboard(root);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initDashboardPage);
-    } else {
-        initDashboardPage();
-    }
+    // The script follows its root and CoreAPI is already available. Start now:
+    // DOMContentLoaded waits for unrelated shared/CRM scripts on the first login.
+    initDashboardPage();
 
     // This file sits inside #page-content, so it runs again on every boosted visit. The page
     // root is new each time; the document is not, so its listeners are bound once and reach
@@ -560,10 +558,30 @@
         document.body.addEventListener('htmx:afterSettle', function () {
             if (document.querySelector(ROOT_SELECTOR)) window.__dashboardInit();
         });
+        // History restoration does not emit afterSettle. Its HTML can also carry
+        // loading/loaded markers from a fetch aborted when the user left Home.
+        document.body.addEventListener('htmx:historyRestore', function () {
+            var root = document.querySelector(ROOT_SELECTOR);
+            if (!root) return;
+            window.__dashboardAbort();
+            delete root.dataset.dashboardLoading;
+            delete root.dataset.dashboardLoaded;
+            window.__dashboardInit();
+        });
         // Cancel an in-flight summary fetch the moment the page starts to go away, so it
         // doesn't surface as a "Failed to fetch" error against a detached root.
         document.body.addEventListener('htmx:beforeSwap', function () { window.__dashboardAbort(); });
         window.addEventListener('pagehide', function () { window.__dashboardAbort(); });
+        window.addEventListener('pageshow', function (event) {
+            // Browser Back can restore a document frozen while its request was
+            // aborted by pagehide. Refresh its live data instead of trusting markers.
+            if (!event.persisted) return;
+            var root = document.querySelector(ROOT_SELECTOR);
+            if (!root) return;
+            delete root.dataset.dashboardLoading;
+            delete root.dataset.dashboardLoaded;
+            window.__dashboardInit();
+        });
     }
 
     // Live: the summary aggregates batches, tasks and events -- refresh it when a
