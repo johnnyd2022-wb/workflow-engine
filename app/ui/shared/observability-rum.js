@@ -329,15 +329,20 @@
   // GL-S04: an invite link (/invite/<token>) or a token in a query string must never reach
   // an event, even if a page that shows one starts loading this script.
   var SECRET_PARAMS = /([?&](?:token|code|invite|key|secret|password|state)=)[^&#]*/gi;
+  // An error message can quote a customer's or a person's email address ("x@y already exists").
+  var EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
   function _scrubUrl(value) {
     if (typeof value !== 'string') {
       return value;
     }
-    return value.replace(/\/invite\/[^/?#]+/g, '/invite/[redacted]').replace(SECRET_PARAMS, '$1[redacted]');
+    return value
+      .replace(/\/invite\/[^/?#]+/g, '/invite/[redacted]')
+      .replace(SECRET_PARAMS, '$1[redacted]')
+      .replace(EMAIL, '[email]');
   }
 
   // Every string in an event, at any depth: the referrer, a path attribute, an error message
-  // quoting a URL. The scrub only rewrites invite paths and secret parameters, so it is safe on
+  // quoting a URL. The scrub only rewrites invite paths, secret parameters and email addresses, so it is safe on
   // any text.
   function _scrubDeep(value, depth) {
     if (typeof value === 'string') {

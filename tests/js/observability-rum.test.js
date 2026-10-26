@@ -152,3 +152,15 @@ test('Faro events never carry an invite token, from the referrer or anywhere els
   assert.ok(!/SECRET/.test(sent), sent);
   assert.match(sent, /\/invite\/\[redacted\]/);
 });
+
+test('an error report quoting an email address sends it redacted (GL-S04)', () => {
+  const scrub = runPosthog(true).sanitize_properties;
+  const props = scrub({
+    $exception_message: 'Request failed: jo@whistlebird.co.nz is already a member',
+    $exception_list: [{ value: 'Invite to buyer@liquorland.co.nz failed' }],
+    title: 'People',
+  });
+  assert.equal(props.$exception_message, 'Request failed: [email] is already a member');
+  assert.equal(props.$exception_list[0].value, 'Invite to [email] failed');
+  assert.equal(props.title, 'People');
+});
