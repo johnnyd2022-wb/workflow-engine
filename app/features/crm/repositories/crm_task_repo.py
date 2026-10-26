@@ -92,6 +92,8 @@ class CRMTaskRepository:
         return q.order_by(CRMTask.due_date.asc().nulls_last(), CRMTask.created_at.desc()).all()
 
     def update(self, task: CRMTask, **fields) -> CRMTask:
+        if task.tasting:
+            raise ValueError("Edit this tasting at /crm/tastings?tasting_id=" + str(task.tasting[0].id))
         for k, v in fields.items():
             setattr(task, k, v)
         if fields.get("status") == "completed" and not task.completed_at:
@@ -100,4 +102,6 @@ class CRMTaskRepository:
         return task
 
     def delete(self, task: CRMTask) -> None:
+        if task.tasting:
+            raise ValueError("Cancel this tasting at /crm/tastings?tasting_id=" + str(task.tasting[0].id))
         self.db.delete(task)

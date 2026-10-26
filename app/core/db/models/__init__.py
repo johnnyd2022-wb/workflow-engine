@@ -65,3 +65,5 @@ __all__ = [
     "FeatureSubscription",
     "SystemFindingsCache",
 ]
+
+from app.features.tastings import models as _tasting_models  # noqa: F401,E402

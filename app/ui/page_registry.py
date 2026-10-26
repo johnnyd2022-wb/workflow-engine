@@ -153,6 +153,7 @@ PAGES: tuple[Page, ...] = (
     ),
     Page("/crm", "sales", "overview", "Sales overview", None, "crm"),
     Page("/crm/customers", "sales", "customers", "Customers", None, "crm"),
+    Page("/crm/tastings", "sales", "tastings", "Tastings", None, "crm"),
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
@@ -229,6 +230,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("overview", "Overview", "/crm", ("sales.view",)),
         Tab("customers", "Customers", "/crm/customers", ("sales.view",)),
         Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
+        Tab("tastings", "Tastings", "/crm/tastings", ("sales.view",), when="nz_alcohol"),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
         # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales.
@@ -263,5 +265,11 @@ WORKSPACE_TAB_GROUPS = {
         ("customs",),
         ("licensing",),
     ),
-    "sales": (("overview", "configuration", "excise"), ("customers",), ("tasks",), ("analytics", "matching")),
+    "sales": (
+        ("overview", "configuration", "excise"),
+        ("customers",),
+        ("tasks",),
+        ("tastings",),
+        ("analytics", "matching"),
+    ),
 }

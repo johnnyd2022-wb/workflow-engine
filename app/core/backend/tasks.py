@@ -91,7 +91,9 @@ def _serialise_crm_task(task: Any, names: dict[UUID, str], *, archived: bool = F
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "editable": False,
-        "href": "/crm/tasks?task_id=" + str(task.id),
+        "href": "/crm/tastings?tasting_id=" + str(task.tasting[0].id)
+        if task.tasting
+        else "/crm/tasks?task_id=" + str(task.id),
         "board_lane_id": str(task.board_lane_id) if task.board_lane_id else None,
         "archived": archived,
     }
@@ -543,6 +545,8 @@ def assign_task_to_lane(
         task = session.query(CRMTask).filter(CRMTask.org_id == org_id, CRMTask.id == task_id).first()
     if task is None:
         return None
+    if board == "crm" and task.tasting:
+        raise TaskError("Change tasting status at /crm/tastings?tasting_id=" + str(task.tasting[0].id))
     if lane_id is not None:
         lane = (
             session.query(TaskBoardLane)

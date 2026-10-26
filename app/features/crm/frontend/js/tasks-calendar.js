@@ -487,6 +487,7 @@ function crmTasks() {
     },
 
     startDragTask(task) {
+      if (task.tasting_id) return;
       this.draggingTaskId = task?.id || null;
       this.dragSuppressUntil = Date.now() + 200;
     },
@@ -533,6 +534,7 @@ function crmTasks() {
     },
 
     async toggleDone(task) {
+      if (task.tasting_id && task.href) { window.location.assign(task.href); return; }
       await this.moveTask(task, this.isFinished(task) ? 'pending' : 'completed');
     },
 
@@ -567,6 +569,7 @@ function crmTasks() {
     },
 
     openEdit(task) {
+      if (task.tasting_id && task.href) { window.location.assign(task.href); return; }
       this.ensureCustomerOptionForTask(task);
       this.editingTask = task;
       this.drawerForm = {
@@ -617,6 +620,7 @@ function crmTasks() {
     },
 
     async deleteTask(task) {
+      if (task.tasting_id && task.href) { window.location.assign(task.href); return; }
       if (!confirm(`Delete task "${task.title}"?`)) return;
       try {
         await CRMAPI.deleteTask(task.id);

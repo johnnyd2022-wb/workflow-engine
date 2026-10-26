@@ -548,7 +548,10 @@ def delete_task(task_id: str):
     task_uuid = _uuid_or_none(task_id)
     if task_uuid is None:
         return jsonify({"error": "Invalid task ID"}), 400
-    ok = _crm_service().delete_task(task_uuid, org_id)
+    try:
+        ok = _crm_service().delete_task(task_uuid, org_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
     if not ok:
         return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True}), 200

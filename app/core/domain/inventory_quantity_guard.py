@@ -86,6 +86,7 @@ class InventoryQuantityWriteReason(str, Enum):
     OPENING_BALANCE = "opening_balance"
     # Plan 2.1: part of a lot moved to another location (split into a new lot).
     STOCK_TRANSFER = "stock_transfer"
+    TASTING_DISPATCH = "tasting_dispatch"
 
 
 class InventoryQuantityWriteForbiddenError(RuntimeError):
