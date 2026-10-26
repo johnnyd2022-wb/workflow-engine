@@ -147,7 +147,7 @@
     if (!sampledIn) {
       return;
     }
-    var payload = _baseAttributes(attributes);
+    var payload = _scrubDeep(_baseAttributes(attributes), 0);
     _captureToFaro(name, payload);
     _captureToPosthog(name, payload);
   }
@@ -156,7 +156,7 @@
     if (!sampledIn) {
       return;
     }
-    var payload = _baseAttributes(attributes);
+    var payload = _scrubDeep(_baseAttributes(attributes), 0);
     _captureToFaro('rum.pageview', payload);
     _captureToPosthog('$pageview', Object.assign({}, payload, {
       $current_url: window.location.href,
@@ -313,12 +313,9 @@
           environment: 'browser',
         },
         instrumentations: instrumentations,
+        // The whole item, not just meta.page.url: the SDK's own events and errors carry URLs too.
         beforeSend: function (item) {
-          var page = item && item.meta && item.meta.page;
-          if (page && page.url) {
-            page.url = _scrubUrl(page.url);
-          }
-          return item;
+          return _scrubDeep(item, 0);
         },
         sessionTracking: {
           enabled: true,
@@ -339,16 +336,24 @@
     return value.replace(/\/invite\/[^/?#]+/g, '/invite/[redacted]').replace(SECRET_PARAMS, '$1[redacted]');
   }
 
-  function _scrubProperties(properties) {
-    if (!properties) {
-      return properties;
+  // Every string in an event, at any depth: the referrer, a path attribute, an error message
+  // quoting a URL. The scrub only rewrites invite paths and secret parameters, so it is safe on
+  // any text.
+  function _scrubDeep(value, depth) {
+    if (typeof value === 'string') {
+      return _scrubUrl(value);
     }
-    Object.keys(properties).forEach(function (key) {
-      if (/url|referrer|pathname|href/i.test(key)) {
-        properties[key] = _scrubUrl(properties[key]);
-      }
+    if (!value || typeof value !== 'object' || (depth || 0) > 8) {
+      return value;
+    }
+    Object.keys(value).forEach(function (key) {
+      value[key] = _scrubDeep(value[key], (depth || 0) + 1);
     });
-    return properties;
+    return value;
+  }
+
+  function _scrubProperties(properties) {
+    return _scrubDeep(properties, 0);
   }
 
   function _initPosthog() {

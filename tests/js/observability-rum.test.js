@@ -114,3 +114,41 @@ test('invite links and token parameters never reach an event (GL-S04)', () => {
   assert.equal(props.$pathname, '/invite/[redacted]');
   assert.equal(props.title, 'People');
 });
+
+test('Faro events never carry an invite token, from the referrer or anywhere else (GL-S04)', () => {
+  // Codex on !572: rum.pageview sent document.referrer raw, and beforeSend only scrubbed meta.page.url.
+  const events = [];
+  let beforeSend = null;
+  const window = {
+    __RUM_CONFIG__: { enabled: true, grafanaDataEnabled: true, sampleRate: 1, collectorUrl: '/telemetry' },
+    location: { origin: 'https://app.test', pathname: '/core/dashboard' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    addEventListener: () => {},
+    GrafanaFaroWebSdk: {
+      getWebInstrumentations: () => [],
+      initializeFaro: (config) => {
+        beforeSend = config.beforeSend;
+        return { api: { pushEvent: (name, attributes) => events.push({ name, attributes }) } };
+      },
+    },
+  };
+  const document = {
+    body: { addEventListener: () => {} },
+    addEventListener: () => {},
+    referrer: 'https://app.test/auth/invite/SECRET_INVITE_TOKEN',
+    visibilityState: 'visible',
+  };
+  const math = Object.create(Math);
+  math.random = () => 0.5;
+  vm.runInNewContext(rumSource, { window, document, Math: math, Number, String, RegExp, Uint8Array, Date, Object, Array, JSON });
+
+  const pageview = events.find((e) => e.name === 'rum.pageview');
+  assert.ok(pageview, 'a pageview is sent on load');
+  const item = beforeSend({
+    meta: { page: { url: 'https://app.test/invite/SECRET_INVITE_TOKEN?token=SECRET2' } },
+    payload: { name: 'rum.pageview', attributes: { ...pageview.attributes, from_path: '/invite/SECRET3' } },
+  });
+  const sent = JSON.stringify([events, item]);
+  assert.ok(!/SECRET/.test(sent), sent);
+  assert.match(sent, /\/invite\/\[redacted\]/);
+});
