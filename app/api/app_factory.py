@@ -552,8 +552,11 @@ def create_app():
             # sign-in check (the CSRF secret went with the session). Say "signed out", as a 401
             # would, so the page offers to sign in again. A signed-in session with a stale token
             # (it signed in again in another tab) gets code "csrf", so the page can fetch a fresh
-            # token from /auth/csrf-token and retry. The customer portal keeps Flask-WTF's own 400.
-            if request.path.startswith("/portal"):
+            # token from /auth/csrf-token and retry. Public forms (sign-in, Google sign-in, invite
+            # acceptance) and the customer portal keep Flask-WTF's own 400: nobody was signed in.
+            from app.core.security.access_policy import PUBLIC, requirement_for
+
+            if request.path.startswith("/portal") or requirement_for(request.endpoint or "", request.method) == PUBLIC:
                 return e
             if not session.get("user_id"):
                 return jsonify(
