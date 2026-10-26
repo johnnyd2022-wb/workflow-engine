@@ -67,14 +67,14 @@ def duty_free_sale(customs_org):
     return customs_org
 
 
-def _open(browser, app_url, user, style="1", viewport=None):
+def _open(browser, app_url, user, viewport=None):
     context = browser.new_context(
         base_url=app_url, ignore_https_errors=True, viewport=viewport or {"width": 1440, "height": 900}
     )
     page = context.new_page()
     attach_probe(page)
     login_through_ui(page, user["email"], user["password"])
-    page.goto(f"{TRANSFERS}?style={style}")
+    page.goto(TRANSFERS)
     page.locator(READY).wait_for()
     return page
 
@@ -148,20 +148,14 @@ def test_a_cca_is_added_and_linked_to_its_customer(browser, app_url, customs_org
     page.context.close()
 
 
-# --- CONCEPT ONLY: the three styles at three widths, deleted with the two not chosen ----------------
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("viewport", [{"width": 390, "height": 844}, {"width": 1440, "height": 900}, {"width": 1920, "height": 1080}], ids=["phone", "laptop", "wall"])  # fmt: skip
-def test_each_style_fits_without_sideways_scroll(browser, app_url, duty_free_sale, style, viewport):
-    page = _open(browser, app_url, duty_free_sale, style=style, viewport=viewport)
-    expect(page.locator("[data-customs-transfers-root]")).to_have_attribute("data-transfers-style", style)
+def test_the_register_fits_without_sideways_scroll(browser, app_url, duty_free_sale, viewport):
+    page = _open(browser, app_url, duty_free_sale, viewport=viewport)
     expect(page.locator("[data-tr-row]")).to_have_count(1)
     overflow = page.evaluate(
         "() => { const c = document.getElementById('page-content'); return c.scrollWidth - c.clientWidth; }"
     )
-    assert overflow <= 1, f"style {style} scrolls sideways by {overflow}px"
-    expect(page.locator("[data-tr-places-card]")).to_be_hidden() if style == "3" else expect(
-        page.locator("[data-tr-places-card]")
-    ).to_be_visible()
+    assert overflow <= 1, f"the register scrolls sideways by {overflow}px"
+    expect(page.locator("[data-tr-places-card]")).to_be_visible()
+    expect(page.locator("[data-tr-style-pick]")).to_have_count(0)  # the design switch is gone
     page.context.close()

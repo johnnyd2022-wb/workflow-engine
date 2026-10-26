@@ -8,12 +8,11 @@
   var API = '/api/compliant/nz-alcohol/cca-transfers';
   var PLACES_API = '/api/compliant/nz-alcohol/cca-destinations';
   var STATUS = {
-    needs_details: { text: 'Needs movement details', chip: 'failed', action: 'Record when it left' },
-    receipt_overdue: { text: 'Receipt overdue', chip: 'failed', action: 'Record the receipt' },
-    awaiting_receipt: { text: 'Awaiting receipt', chip: 'open', action: 'Record the receipt' },
-    received: { text: 'Received', chip: 'complete', action: null },
+    needs_details: { text: 'Needs movement details', chip: 'failed' },
+    receipt_overdue: { text: 'Receipt overdue', chip: 'failed' },
+    awaiting_receipt: { text: 'Awaiting receipt', chip: 'open' },
+    received: { text: 'Received', chip: 'complete' },
   };
-  var STYLES = ['1', '2', '3']; // CONCEPT ONLY
 
   function init() {
     var page = document.querySelector('[data-customs-transfers-root]');
@@ -25,26 +24,9 @@
     var body = page.querySelector('[data-tr-body]');
     var summary = page.querySelector('[data-tr-summary]');
     var placesEl = page.querySelector('[data-tr-places]');
-    var placesCard = page.querySelector('[data-tr-places-card]');
     var markBtn = page.querySelector('[data-tr-mark]');
     var markPanel = page.querySelector('[data-tr-mark-panel]');
     var state = { transfers: [], destinations: [], kinds: {}, customers: [], open: null, filter: 'action', editing: null };
-
-    // --- CONCEPT ONLY: the style switch ---------------------------------------------------------
-    function pickStyle(s) {
-      if (STYLES.indexOf(s) === -1) s = '1';
-      page.dataset.transfersStyle = s;
-      try { localStorage.setItem('customs-transfers-style', s); } catch (_) {}
-      page.querySelectorAll('[data-tr-style-pick] button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.style === s)); });
-      render();
-    }
-    function startStyle() {
-      var q = new URLSearchParams(location.search).get('style');
-      if (q) return q;
-      try { return localStorage.getItem('customs-transfers-style') || '1'; } catch (_) { return '1'; }
-    }
-    page.querySelectorAll('[data-tr-style-pick] button').forEach(function (b) { b.addEventListener('click', function () { pickStyle(b.dataset.style); }); });
-    function style() { return page.dataset.transfersStyle || '1'; }
 
     // --- small pieces --------------------------------------------------------------------------
     function when(iso) {
@@ -161,7 +143,7 @@
 
     function toggle(t) { state.open = state.open === t.xero_invoice_id ? null : t.xero_invoice_id; render(); }
 
-    // --- Style 1: the register, as Customs asks for it -------------------------------------------
+    // --- the register, as Customs asks for it (para 15) --------------------------------------------
     function registerView() {
       var shown = state.transfers.filter(function (t) { return state.filter === 'all' || (state.filter === 'action' ? needsAction(t) : !needsAction(t)); });
       var counts = { action: state.transfers.filter(needsAction).length, done: state.transfers.filter(function (t) { return !needsAction(t); }).length, all: state.transfers.length };
@@ -188,84 +170,6 @@
       });
       if (!shown.length) list.append(el('p', { className: 'customs-empty', text: state.filter === 'action' ? 'Nothing to record: every transfer has its movement and receipt.' : 'No transfers here yet.' }));
       return [tabs, list];
-    }
-
-    // --- Style 2: what to record next, then what is done ----------------------------------------
-    function todoView() {
-      var todo = state.transfers.filter(needsAction);
-      var done = state.transfers.filter(function (t) { return !needsAction(t); });
-      var out = [];
-      if (!todo.length) out.push(el('p', { className: 'customs-empty', text: 'Nothing to record: every transfer has its movement and receipt.' }));
-      todo.forEach(function (t) {
-        var s = STATUS[t.status];
-        var card = el('article', { className: 'tr-todo', 'data-tr-row': t.xero_invoice_id }, [
-          el('div', { className: 'tr-todo__head' }, [
-            el('div', { className: 'tr-todo__what' }, [
-              el('strong', { text: s.action + ': ' + t.reference + ' to ' + t.destination.name }),
-              el('span', { text: goods(t) + ' · sold ' + U.dayMonth(t.invoice_date) + (t.departure ? ' · left ' + when(t.departure.moved_at) + ' with ' + t.departure.carrier : '') }),
-            ]),
-            chip(t),
-          ]),
-        ]);
-        var reload = async function () { await load(); };
-        card.append(t.status === 'needs_details' ? departureForm(t, reload) : receiptForm(t, reload));
-        out.push(card);
-      });
-      if (done.length) {
-        var det = el('details', { className: 'tr-done' }, [el('summary', { text: 'Received · ' + U.plural(done.length, 'transfer') })]);
-        var ul = el('ul', { className: 'customs-rec-list' });
-        done.forEach(function (t) {
-          ul.append(el('li', { className: 'customs-rec-row' }, [
-            el('div', { className: 'customs-rec-row__main' }, [el('strong', { text: t.reference + ' to ' + t.destination.name }), el('span', { text: goods(t) + ' · left ' + when(t.departure.moved_at) + ' · ' + t.departure.carrier + ' · received ' + U.dayMonth(t.departure.received_on) + ' · ' + t.departure.receipt_reference })]),
-            el('span', { className: 'customs-rec-row__date', text: t.destination.cca_code }),
-            chip(t),
-          ]));
-        });
-        det.append(ul);
-        out.push(det);
-      }
-      return out;
-    }
-
-    // --- Style 3: one card per destination CCA ------------------------------------------------------
-    function placesView() {
-      var out = [];
-      state.destinations.forEach(function (d) {
-        var mine = state.transfers.filter(function (t) { return t.destination.id === d.id; });
-        var open = mine.filter(needsAction).length;
-        var card = el('article', { className: 'tr-place', 'data-tr-place': d.id }, [
-          el('div', { className: 'tr-place__head' }, [
-            el('div', { className: 'tr-place__who' }, [
-              el('strong', { text: d.name }),
-              el('span', { text: d.kind_label + ' · CCA ' + d.cca_code }),
-              el('span', { text: d.address }),
-              el('span', { text: d.contact_name ? 'Every sale to ' + d.contact_name + ' is a transfer' : 'Sales marked by hand' }),
-            ]),
-            el('span', { className: 'customs-chip customs-chip--' + (open ? 'open' : 'complete'), text: open ? U.plural(open, 'to record', 'to record') : 'Up to date' }),
-          ]),
-        ]);
-        var list = el('div', { className: 'tr-place__sales' });
-        mine.forEach(function (t) {
-          var row = el('button', { type: 'button', className: 'tr-place__sale', 'aria-expanded': String(state.open === t.xero_invoice_id), 'data-tr-row': t.xero_invoice_id }, [
-            el('span', { className: 'tr-place__sale-main' }, [el('strong', { text: t.reference + ' · ' + goods(t) }), el('span', { text: 'Sold ' + U.dayMonth(t.invoice_date) + (t.departure ? ' · left ' + when(t.departure.moved_at) : '') })]),
-            chip(t),
-          ]);
-          row.addEventListener('click', function () { toggle(t); });
-          list.append(row);
-          if (state.open === t.xero_invoice_id) list.append(detail(t));
-        });
-        if (!mine.length) list.append(el('p', { className: 'excise-hint', text: 'No sales to this CCA in the last year.' }));
-        card.append(list);
-        var edit = el('button', { type: 'button', className: 'tr-link', text: 'Edit details' });
-        edit.addEventListener('click', function () { state.editing = d.id; render(); });
-        card.append(state.editing === d.id ? placeForm(d) : edit);
-        out.push(card);
-      });
-      var add = el('button', { type: 'button', className: 'tr-place tr-place--add', 'data-tr-add-place': '' }, [el('strong', { text: '+ Add a CCA you send to' }), el('span', { text: 'A duty free shop, an export warehouse, or a customer\'s licensed area' })]);
-      add.addEventListener('click', function () { state.editing = 'new'; render(); });
-      out.push(state.editing === 'new' ? el('article', { className: 'tr-place' }, [placeForm(null)]) : add);
-      if (!state.destinations.length && state.editing !== 'new') out.unshift(el('p', { className: 'customs-empty', text: 'Add the CCAs you sell into (a duty free shop, an export warehouse) and link each to its customer.' }));
-      return out;
     }
 
     // --- the CCAs you send to ---------------------------------------------------------------------
@@ -368,15 +272,12 @@
       if (c.awaiting_receipt) bits.push(c.awaiting_receipt + ' awaiting receipt');
       if (!todo && state.transfers.length) bits.push('all received');
       summary.textContent = bits.join(' · ');
-      var s = style();
-      var views = { '1': registerView, '2': todoView, '3': placesView };
-      if (!state.transfers.length && s !== '3') {
+      if (!state.transfers.length) {
         body.replaceChildren(el('p', { className: 'customs-empty', text: state.destinations.length ? 'No sales to other CCAs in the last year.' : 'No sales to other CCAs yet. Add the CCAs you sell into below, and link each to its customer.' }));
       } else {
-        body.replaceChildren.apply(body, views[s]());
+        body.replaceChildren.apply(body, registerView());
       }
-      placesCard.hidden = s === '3';
-      if (s !== '3') placesEl.replaceChildren.apply(placesEl, placesList());
+      placesEl.replaceChildren.apply(placesEl, placesList());
     }
 
     async function load() {
@@ -390,7 +291,6 @@
       render();
     }
 
-    pickStyle(startStyle());
     load().catch(function (err) { fail(err.message); }).finally(function () { page.setAttribute('aria-busy', 'false'); });
   }
 

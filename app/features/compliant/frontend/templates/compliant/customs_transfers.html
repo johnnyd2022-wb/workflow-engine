@@ -3,16 +3,9 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page customs-page customs-transfers-page" data-customs-transfers-root data-compliant-root data-transfers-style="1" aria-busy="true">
+<main class="max-content workspace-overview workspace-page customs-page customs-transfers-page" data-customs-transfers-root data-compliant-root aria-busy="true">
   {% set customs_caption = "Sales that went to another business's CCA: when the goods left, who carried them, and the receipt." %}
   {% include "compliant/_customs_header.html" %}
-
-  {# CONCEPT ONLY: the design switch, deleted with the two styles not chosen. #}
-  <div class="tr-style-pick" role="group" aria-label="Design option" data-tr-style-pick>
-    <button type="button" data-style="1">Style 1: Register</button>
-    <button type="button" data-style="2">Style 2: To do</button>
-    <button type="button" data-style="3">Style 3: By destination</button>
-  </div>
 
   <section class="workspace-card customs-card tr-main" aria-labelledby="tr-title">
     <div class="customs-card__head">

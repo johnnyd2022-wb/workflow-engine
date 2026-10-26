@@ -55,7 +55,14 @@ covered transfers between the org's own sites.
 **Looked for but not found:** how Ekos, DistillX5 or Orchestrated lay out in-bond transfers.
 Their help pages were not reachable (403) or don't describe the screen.
 
-## Three directions (all on Customs → Transfers)
+## Chosen: Style 1, the register (founder, 2026-10-26)
+
+Customs → Transfers is the register laid out the way Customs asks for it: sale, destination, goods, when it left, when it was received, and status. It is filtered To do / Received / All, and a row opens its detail and the next form.
+
+- **Style 2 (To do)** lost: it gave the fastest backlog-clearing, but no overview of the register itself.
+- **Style 3 (By destination)** lost: its cards are narrow, and there is no single date-ordered list to show Customs.
+
+## Three directions considered
 
 | | Style 1: Register | Style 2: To do | Style 3: By destination |
 |---|---|---|---|
@@ -97,7 +104,7 @@ Their help pages were not reachable (403) or don't describe the screen.
   - record a movement, then the receipt;
   - the entry page note and its link;
   - adding a CCA linked to a customer;
-  - CONCEPT ONLY: each style at phone, laptop and wall width, with no sideways scroll.
+  - the register at phone, laptop and wall width with no sideways scroll, and no design switch left.
 - Screenshots: `~/.cache/workflow-engine-ui-shots/transfers/01`–`07`. Passes 1–6 found:
   - misaligned register columns;
   - form labels at uneven heights;
@@ -105,4 +112,4 @@ Their help pages were not reachable (403) or don't describe the screen.
   - a form with no heading;
   - a crushed form in Style 3's narrow cards.
   
-  Pass 7 found nothing.
+  Pass 7 found nothing. After the pick, pass 8 of Style 1 alone found nothing.
