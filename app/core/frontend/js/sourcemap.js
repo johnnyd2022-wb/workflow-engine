@@ -2706,7 +2706,7 @@
           ${stepTotal ? `<span class="sm-impact-stat">${stepTotal} step${stepTotal !== 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
-      <button class="sm-trace-clear" onclick="window.smClearTrace()">← Back to browse</button>
+      <button class="sm-trace-clear" data-action="smClearTrace">← Back to browse</button>
     `;
     area.appendChild(header);
 

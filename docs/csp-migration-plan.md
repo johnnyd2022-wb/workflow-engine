@@ -32,7 +32,12 @@ style can't run script. Moving them is cosmetic work with little security return
    - `object-src 'none'`, `base-uri 'self'` and `frame-ancestors` enforced now;
    - the unused `unpkg.com` allowance dropped;
    - a browser walk of every page, full load and boosted, proving nothing is blocked and every inline script passes the nonce policy.
-2. **Inline handlers.** Move all 88 to listeners: `data-action` attributes with one delegated listener per page script. Each page is driven in the browser, and a test ratchet stops new `on*=""` attributes appearing.
+2. **Inline handlers** (done, !588):
+   - All 92 lines of `on*=""` handlers (templates and script-built markup) now use `data-action`, run by one delegated listener (`app/ui/shared/actions.js`) with an allowlist of callable names.
+   - Stop, dismiss and remove go through `data-action-stop`, `data-dismiss` and `data-remove-ancestor`; forms use `data-submit-action`.
+   - Hover styles moved to CSS.
+   - `script-src-attr 'none'` is now **enforced**.
+   - `tests/test_csp.py` ratchets new handler attributes out, and `tests/e2e/test_actions_dispatch.py` drives the dispatcher.
 3. **Alpine.**
    - Swap to `@alpinejs/csp` 3.15.12.
    - Move each inline `x-data="{…}"` object into an `Alpine.data()` component in the page's script.

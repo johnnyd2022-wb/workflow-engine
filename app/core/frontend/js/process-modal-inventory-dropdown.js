@@ -165,8 +165,6 @@
                 data-index="${itemIndex}"
                 data-category="${category}"
                 style="padding: 10px 12px 10px 24px; cursor: pointer; border-bottom: 1px solid var(--border-light); transition: background 0.15s; ${isSelected ? 'background: var(--bg-hover, rgba(0, 0, 0, 0.05));' : ''}"
-                onmouseover="this.style.background='var(--bg-hover, rgba(0, 0, 0, 0.05))'"
-                onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'"
               >
                 <div style="font-weight: 500; color: var(--text-primary); font-size: 13px;">${escapeHtml(displayText)}</div>
                 ${item.is_previous_output ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">From previous step</div>` : ''}

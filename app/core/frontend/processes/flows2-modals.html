@@ -10,7 +10,7 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="event.preventDefault(); addInventoryItem(this); return false;">
+      <form data-submit-action="addInventoryItem">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Material Name</label>
@@ -84,7 +84,7 @@
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete workflow</h2>
-        <button type="button" onclick="cancelFlows2DeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <button type="button" data-action="cancelFlows2DeleteProcess" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -95,8 +95,8 @@
         <p id="flows2-delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="cancelFlows2DeleteProcess()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmFlows2DeleteProcess()" style="background: var(--danger, #ef4444); border-color: var(--danger, #ef4444);">Delete</button>
+        <button type="button" class="btn btn-secondary" data-action="cancelFlows2DeleteProcess">Cancel</button>
+        <button type="button" class="btn btn-primary" data-action="confirmFlows2DeleteProcess" style="background: var(--danger, #ef4444); border-color: var(--danger, #ef4444);">Delete</button>
       </div>
     </div>
   </div>
@@ -112,7 +112,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+        <button data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>

@@ -227,3 +227,26 @@ def test_an_oversized_report_is_refused_without_being_read(_account, monkeypatch
     )
     assert streamed.status_code == 204
     assert seen == [csp.MAX_REPORT_BYTES + 1]
+
+
+# --- step 2: no handler attributes ---------------------------------------------------------------
+
+_HANDLER_ATTR = re.compile(r"""\son[a-z]+\s*=\s*\\?["']""")
+_VENDOR = ("faro-web-sdk", "posthog-array", "htmx.min", ".min.js")
+
+
+def test_no_template_or_script_writes_an_inline_handler():
+    """Ratchet: an on*="" attribute is blocked by script-src-attr 'none'. Use data-action instead."""
+    found = []
+    for path in [*APP.rglob("*.html"), *APP.rglob("*.js")]:
+        if path.name in OWN_POLICY or any(v in path.name for v in _VENDOR):
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if _HANDLER_ATTR.search(line):
+                found.append(f"{path.relative_to(APP)}:{number}: {line.strip()[:100]}")
+    assert not found, "move these to data-action (app/ui/shared/actions.js):\n" + "\n".join(found)
+
+
+def test_the_enforced_policy_now_forbids_handler_attributes(signed_in):
+    enforced = _directives(signed_in.get("/core/dashboard").headers["Content-Security-Policy"])
+    assert enforced["script-src-attr"] == "'none'"
