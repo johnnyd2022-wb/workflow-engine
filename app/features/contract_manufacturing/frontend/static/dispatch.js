@@ -45,7 +45,8 @@
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf, Accept: 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
-      const data = await response.json().catch(() => ({}));
+      let data = {};
+      try { data = await response.json(); } catch (_) { /* an empty body */ }
       if (!response.ok) throw new Error(data.error || 'Unable to save. Please try again.');
       return data;
     };
