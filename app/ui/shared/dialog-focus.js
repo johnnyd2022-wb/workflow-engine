@@ -33,6 +33,10 @@
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
   var CLOSE = '[data-dialog-close], [aria-label^="Close"], [aria-label^="close"], .ss-dialog__close, .pp-close, .modal-close';
 
+  // Elements that stay usable over a modal: the "signed out" notice (session-ended.js), so
+  // signing in again never means closing the form being saved.
+  var LIVE = '[data-live-over-modal]';
+
   var open = [];             // modals currently shown, outermost only, oldest first
   var openers = new Map();   // modal -> the element that had focus when it opened
   var inerted = [];          // elements this script made inert, to undo
@@ -96,7 +100,7 @@
       var parent = node.parentElement;
       if (!parent) break;
       Array.prototype.forEach.call(parent.children, function (sibling) {
-        if (sibling === node || sibling.inert || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(sibling.tagName)) return;
+        if (sibling === node || sibling.inert || sibling.matches(LIVE) || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(sibling.tagName)) return;
         sibling.inert = true;
         inerted.push(sibling);
       });
@@ -109,7 +113,10 @@
     var now = currentModals();
     now.forEach(function (modal) {
       if (open.indexOf(modal) !== -1) return;
-      openers.set(modal, document.activeElement);
+      // A modal that focuses itself on open (the inventory drawer) has already moved focus
+      // inside by now: the opener is the last thing focused outside it.
+      var active = document.activeElement;
+      openers.set(modal, active && modal.contains(active) ? lastOutside : active);
       window.requestAnimationFrame(function () { focusInto(modal); });
     });
     var closed = open.filter(function (modal) { return now.indexOf(modal) === -1; });
@@ -132,6 +139,12 @@
     window.requestAnimationFrame(sync);
   }
 
+  var lastOutside = null;     // the last element focused outside every open modal
+  document.addEventListener('focusin', function (event) {
+    var t = event.target;
+    if (t && t !== document.body && !open.some(function (m) { return m.contains(t); }) && !(t.closest && t.closest(MODAL))) lastOutside = t;
+  });
+
   new MutationObserver(schedule).observe(document.documentElement, {
     subtree: true,
     childList: true,
@@ -146,10 +159,14 @@
     if (!top || !shown(top)) return;
     if (event.key === 'Tab') {
       var list = focusables(top);
+      Array.prototype.forEach.call(document.querySelectorAll(LIVE), function (live) {
+        if (shown(live) && !top.contains(live)) list = list.concat(focusables(live));
+      });
       if (!list.length) { event.preventDefault(); return; }
       var first = list[0];
       var last = list[list.length - 1];
-      if (!top.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+      var inside = list.indexOf(document.activeElement) !== -1;
+      if (!inside) { event.preventDefault(); first.focus(); }
       else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       return;

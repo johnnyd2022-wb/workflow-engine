@@ -112,3 +112,31 @@ def test_what_only_looks_like_a_modal_leaves_the_page_alone(page, markup):
     page.keyboard.press("Tab")
     page.keyboard.press("Shift+Tab")
     assert page.evaluate("document.activeElement.id") == "outside"
+
+
+def test_the_signed_out_notice_stays_usable_over_an_open_sheet(xero, sales_page):  # noqa: F811
+    # Codex on !573: the dialog helper made the notice an inert background sibling.
+    sales_page.goto(HOST + "/crm")
+    sales_page.get_by_role("button", name="Add widget").click()
+    title = sales_page.get_by_placeholder("e.g. Top 5 stockists this month").or_(
+        sales_page.get_by_placeholder("e.g. Top 5 Customers by Monthly Rate")
+    )
+    title.fill("Gin by region")
+    sales_page.route(
+        "**/crm/api/session-probe",
+        lambda route: route.fulfill(status=401, content_type="application/json", body="{}"),
+    )
+    sales_page.evaluate("fetch('/crm/api/session-probe', { method: 'POST' })")
+    notice = sales_page.locator("#session-ended-notice")
+    expect(notice).to_be_visible()
+    sales_page.wait_for_timeout(100)  # the helpers' animation frames
+    assert sales_page.evaluate("document.querySelector('#session-ended-notice').closest('[inert]') === null")
+    link = notice.get_by_role("link", name="Sign in again")
+    for _ in range(30):
+        sales_page.keyboard.press("Tab")
+        if sales_page.evaluate("document.activeElement && document.activeElement.textContent.trim() === 'Sign in again'"):
+            break
+    else:
+        raise AssertionError("Tab never reached the Sign in again link")
+    expect(link).to_be_focused()
+    expect(title).to_have_value("Gin by region")

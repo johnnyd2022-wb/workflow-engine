@@ -89,3 +89,44 @@ def test_an_offline_save_does_not_claim_the_session_ended(logged_in_page: Page):
     _record(page)
     expect(_notification_message(page)).to_contain_text("Network error")
     expect(page.locator("#session-ended-notice")).to_have_count(0)
+
+
+# --- Codex review on !573: the real journey, not a fulfilled 401 ---------------------------
+
+
+_SAVE = """async (name) => {
+  const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  const r = await fetch('/api/core/processes', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify({ name, is_draft: true }),
+  });
+  return r.status;
+}"""
+
+
+def test_signed_out_then_signed_in_elsewhere_the_open_page_saves(logged_in_page: Page, e2e_user):
+    from tests.e2e.conftest import login_through_ui
+
+    page = logged_in_page
+    page.goto("/core/processes")
+    page.wait_for_load_state("networkidle")
+    name = f"Saved after signing in again {time.time()}"
+
+    # The session ends (expiry, or the cookie is lost): real Flask-WTF fails the CSRF check
+    # first, and that now reads as signed out, with the way back in.
+    page.context.clear_cookies()
+    assert page.evaluate(_SAVE, name) == 401
+    expect(page.get_by_role("alert").filter(has_text="You’ve been signed out")).to_be_visible()
+
+    # Sign in for real in another tab: a new session and a new CSRF secret.
+    other = page.context.new_page()
+    login_through_ui(other, e2e_user["email"], e2e_user["password"])
+    other.close()
+
+    # Back on the first page, with its stale token and without reloading: the save goes through.
+    page.bring_to_front()
+    assert page.evaluate(_SAVE, name) == 201
+    listed = page.request.get("/api/core/processes").json()
+    listed = listed.get("processes", listed) if isinstance(listed, dict) else listed
+    assert any(p["name"] == name for p in listed)

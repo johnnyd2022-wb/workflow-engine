@@ -184,6 +184,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),
     ("auth.get_current_user", None, PUBLIC),
+    ("auth.get_csrf_token", frozenset({"GET"}), SIGNED_IN),
     ("auth.logout", None, PUBLIC),
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),

@@ -782,6 +782,20 @@ def logout():
     return jsonify({"message": "Logout successful"}), 200
 
 
+@auth_bp.route("/csrf-token", methods=["GET"])
+@requires_auth
+def get_csrf_token():
+    """A fresh CSRF token for an open page whose token went stale (GL-U03).
+
+    Signing in again in another tab rotates the session and its CSRF secret, so a form left
+    open in the first tab can no longer save. app/ui/shared/session-ended.js fetches this and
+    updates the page's meta tag; only a signed-in session can get one.
+    """
+    from flask_wtf.csrf import generate_csrf
+
+    return jsonify({"csrf_token": generate_csrf()}), 200
+
+
 @auth_bp.route("/me", methods=["GET"])
 def get_current_user():
     """
