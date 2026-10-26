@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from typing import Any
 
 try:
     import structlog
+    import structlog.tracebacks
 except Exception:  # pragma: no cover - fallback for pre-dependency bootstrap
     structlog = None
 
@@ -60,6 +62,51 @@ def redact_sensitive_fields(_logger: Any, _method_name: str, event_dict: dict[st
     return event_dict
 
 
+# GL-S04: personal data and credentials can also arrive inside free text (an error message, a
+# traceback, a Postgres constraint detail), where key-based redaction can't see them.
+_TEXT_RULES = (
+    # Postgres echoes the conflicting values: "Key (email)=(a@b.nz) already exists."
+    (re.compile(r"(Key \([^)]*\)=\()(.*?)(\)( already exists| is not present|$))", re.MULTILINE), r"\1[REDACTED]\3"),
+    # SQLAlchemy's bound-parameter block, should hide_parameters ever be off.
+    (re.compile(r"\[parameters: .*?\]", re.DOTALL), "[parameters: [REDACTED]]"),
+    (re.compile(r"(/invite/)[^/?#\s\"']+", re.IGNORECASE), r"\1[REDACTED]"),
+    (
+        re.compile(r"([?&](?:token|code|invite|key|secret|password|state)=)[^&#\s\"']*", re.IGNORECASE),
+        r"\1[REDACTED]",
+    ),
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[EMAIL]"),
+)
+
+
+def scrub_text(text: str) -> str:
+    for pattern, replacement in _TEXT_RULES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _scrub_strings(value: Any, depth: int = 0) -> Any:
+    if isinstance(value, str):
+        return scrub_text(value)
+    if depth > 12:
+        return value
+    if isinstance(value, dict):
+        return {k: _scrub_strings(v, depth + 1) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_strings(v, depth + 1) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_scrub_strings(v, depth + 1) for v in value)
+    return value
+
+
+def scrub_personal_text(_logger: Any, _method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """Scrub every string in the event, including a rendered traceback, of emails and secrets."""
+    for key, value in list(event_dict.items()):
+        if key == "exc_info":
+            continue  # rendered (and then scrubbed) by the formatter below
+        event_dict[key] = _scrub_strings(value)
+    return event_dict
+
+
 def _resolve_level(level_name: str) -> int:
     return getattr(logging, level_name.upper(), logging.INFO)
 
@@ -93,6 +140,7 @@ def configure_logging(config: Any) -> None:
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         add_otel_context,
         redact_sensitive_fields,
+        scrub_personal_text,
     ]
 
     formatter = structlog.stdlib.ProcessorFormatter(
@@ -100,7 +148,10 @@ def configure_logging(config: Any) -> None:
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             structlog.processors.StackInfoRenderer(),
-            structlog.processors.dict_tracebacks,
+            # Frames without their local variables: a local can hold a password, a recipe or a
+            # whole customer record, and structlog's dict_tracebacks includes them by default.
+            structlog.processors.ExceptionRenderer(structlog.tracebacks.ExceptionDictTransformer(show_locals=False)),
+            scrub_personal_text,  # the traceback's exception messages, now they are text
             renderer,
         ],
     )

@@ -61,6 +61,9 @@ engine = create_engine(
     max_overflow=_max_overflow,
     pool_recycle=_pool_recycle,
     pool_timeout=_pool_timeout,
+    # GL-S04: a failed statement's bound values (a recipe note, a customer's email) must not ride
+    # into error text, and from there into logs, traces and error reports.
+    hide_parameters=True,
 )
 
 # Create session factory
