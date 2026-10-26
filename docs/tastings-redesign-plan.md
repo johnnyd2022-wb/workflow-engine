@@ -79,3 +79,5 @@ Draft MR !586: https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/5
 
 Awaiting the founder's style selection. The MR remains draft until the two alternatives
 and the review-only switch are removed and the selected layout is rechecked.
+
+Navigation integration: Tastings lives under Sales → Tasks, with a subscription-gated action from the Sales overview and Tasks page. This preserves the app's four-primary-destination limit and keeps the tasting workflow next to its shared calendar.

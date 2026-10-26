@@ -22,7 +22,6 @@ from sqlalchemy.orm import backref, relationship
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
-from app.features.crm.models.crm_task import CRMTask  # noqa: F401 -- required by the task relationship
 
 
 class Tasting(TenantScoped, Base):

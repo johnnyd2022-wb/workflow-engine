@@ -191,7 +191,7 @@ def test_tasting_is_linked_from_shared_sales_calendar_and_survives_boosted_round
     page.get_by_role("link", name="Shared calendar", exact=True).click()
     page.wait_for_url("**/crm/tasks?view=week")
     # A normal in-app nav back must initialise a new root, not reuse a run-once flag.
-    page.get_by_role("tab", name="Tastings", exact=True).click()
+    page.get_by_role("link", name="Tastings", exact=True).click()
     expect(page.locator("[data-tasting-content]")).to_be_visible()
     expect(page.locator("[data-tasting-loading]")).to_be_hidden()
     page.get_by_role("link", name="Shared calendar", exact=True).click()

@@ -268,8 +268,7 @@ WORKSPACE_TAB_GROUPS = {
     "sales": (
         ("overview", "configuration", "excise"),
         ("customers",),
-        ("tasks",),
-        ("tastings",),
+        ("tasks", "tastings"),
         ("analytics", "matching"),
     ),
 }

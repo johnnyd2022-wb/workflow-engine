@@ -66,4 +66,6 @@ __all__ = [
     "SystemFindingsCache",
 ]
 
+# Register the module, not its class: CRMTask may itself be the first model imported.
+from app.features.crm.models import crm_task as _crm_task_models  # noqa: F401,E402
 from app.features.tastings import models as _tasting_models  # noqa: F401,E402

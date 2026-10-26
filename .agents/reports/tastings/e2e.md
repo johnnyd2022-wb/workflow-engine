@@ -19,3 +19,5 @@ Shared suite: Production layout, page rendering and full registry-driven boosted
 Final comparison: unchanged main09ba2abd passed the complete92-case shared run (508.79s; `shared-baseline-full.log`). The final serial feature-branch `test_boosted_navigation.py` run passed **68/68** (438.32s; `shared-boosted-repeat.log`), including the new Tastings route. Production-layout/render cases already passed in the original combined run. An abandoned Home-performance browser process, still running after4h28m from the earlier task, was terminated before the serial repeat. No existing test or application code was changed to make the shared checks pass. This records the original transient failure as well as the final green evidence, rather than presenting a first-run-green claim.
 
 VERDICT: clean
+
+Navigation/model integration follow-up: after grouping Tastings under Tasks, the feature browser suite passed20/20 three consecutive times (35.64s,34.77s,37.69s). The normal link from shared Tasks still loads Tastings and the existing boosted/Back assertions remain. Final visual pass06 covers the same71 scenarios; all images read, no defects found, seed purged.
