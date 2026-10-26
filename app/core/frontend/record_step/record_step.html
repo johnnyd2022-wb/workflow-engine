@@ -1,0 +1,56 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Record a production step{% endblock %}
+
+{% block body_class %}record-step-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Carry on a batch or start a new one, in one tap">
+{% endblock %}
+
+{% block content %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='record-step.css') }}">
+  <main class="rs-shell workspace-overview workspace-page" data-record-step-root
+        data-can-design="{{ '1' if can('production.design') else '0' }}">
+    <header class="workspace-header">
+      <div>
+        <h1>Record a production step</h1>
+        <p>Carry on a batch, or start a new one.</p>
+      </div>
+    </header>
+
+    <section class="rs-recorded" data-rs-recorded role="status" hidden></section>
+    <p class="rs-message" data-rs-message role="status" hidden></p>
+    <p class="rs-loading" data-rs-loading>Loading batches and workflows…</p>
+
+    <section class="rs-section" data-rs-batches-section hidden aria-labelledby="rs-batches-title">
+      <div class="rs-section__head">
+        <h2 id="rs-batches-title">Carry on a batch <span class="rs-count" data-rs-batch-count></span></h2>
+        <label class="rs-search" data-rs-search-wrap hidden>
+          <span class="rs-visually-hidden">Find a batch</span>
+          <input type="search" id="rs-search" data-rs-search placeholder="Find a batch" autocomplete="off">
+        </label>
+      </div>
+      <ul class="rs-batches" data-rs-batches></ul>
+      <p class="rs-empty" data-rs-batches-empty hidden></p>
+      <p class="rs-more" data-rs-batches-more hidden></p>
+    </section>
+
+    <section class="rs-section" data-rs-workflows-section hidden aria-labelledby="rs-workflows-title">
+      <div class="rs-section__head">
+        <h2 id="rs-workflows-title">Start a new batch</h2>
+        <label class="rs-search" data-rs-wsearch-wrap hidden>
+          <span class="rs-visually-hidden">Find a workflow</span>
+          <input type="search" id="rs-wsearch" data-rs-wsearch placeholder="Find a workflow" autocomplete="off">
+        </label>
+      </div>
+      <ul class="rs-workflows" data-rs-workflows></ul>
+      <p class="rs-empty" data-rs-workflows-nomatch hidden></p>
+      <p class="rs-more" data-rs-workflows-more hidden></p>
+      <p class="rs-empty" data-rs-workflows-empty hidden>
+        No workflows yet. <a href="/core/flows/create/template-catalog" data-rs-create-workflow>Set one up from a template</a> to start recording batches.
+      </p>
+    </section>
+  </main>
+  <script src="/static/js/record-step.js" defer></script>
+{% endblock %}

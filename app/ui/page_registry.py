@@ -34,6 +34,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core/planner", "production", "planner", "Production demand", None, None),
     Page("/core/planner/board", "production", "planner", "Production board", "/core/planner", None),
     Page("/core/executions/live", "production", "batches", "Batches", None, None),
+    Page("/core/record", "production", "overview", "Record a production step", "/core", None),
     Page("/core/processes", "production", "workflows", "Product workflows", None, None),
     Page("/core/flows", "production", "workflows", "Workflow editor", "/core/processes", None),
     Page("/core/flows/create/start", "production", "workflows", "Create a workflow", "/core/processes", None),

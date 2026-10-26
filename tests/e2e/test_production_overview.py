@@ -149,7 +149,7 @@ def test_recording_production_is_the_main_action_and_is_drawn_as_one(production_
 
     work = page.get_by_role("region", name="Get to work", exact=True)
     main = work.get_by_role("link", name="Record production step")
-    expect(main).to_have_attribute("href", "/core/processes")
+    expect(main).to_have_attribute("href", "/core/record")  # the step picker, not the workflow list
     solid = main.evaluate("el => getComputedStyle(el).backgroundColor")
     for name in ["Trace and recall"]:
         other = work.get_by_role("link", name=name)
