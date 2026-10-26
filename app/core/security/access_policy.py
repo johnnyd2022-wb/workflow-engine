@@ -42,7 +42,13 @@ PERMISSIONS: dict[str, str] = {
     "inventory.view": "See stock on hand, suppliers and traceability",
     "inventory.adjust": "Receive, edit, adjust and remove stock; manage suppliers",
     "sales.view": "See customers, invoices and revenue",
-    "sales.record": "Add customers, notes and tasks; edit customer details; create and authorise invoices",
+    # GL-S01 (founder, 2026-10-26): with FIFO matching, a sale always takes its stock off, so
+    # authorising an invoice reduces stock under sales.record alone. Choosing the batch by hand
+    # or re-running matching moves stock on purpose and also needs inventory.adjust.
+    "sales.record": (
+        "Add customers, notes and tasks; edit customer details; create and authorise invoices "
+        "(with FIFO matching, an authorised invoice takes its stock off the oldest batches)"
+    ),
     "sales.manage": "Connect Xero, map products, configure sales traceability",
     "compliance.view": "See compliance checks, evidence and reports",
     "compliance.record": "Log checks, attach evidence and sign off compliance records",
