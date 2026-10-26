@@ -77,3 +77,22 @@ def test_the_page_renders(account):  # noqa: F811
     resp = account["client"].get("/core/getting-started")
     assert resp.status_code == 200
     assert b"data-getting-started-root" in resp.data
+
+
+def test_a_module_step_leads_and_a_failing_module_cannot_break_the_guide(account, monkeypatch):  # noqa: F811
+    from app.core.backend import getting_started as gs
+
+    def ours(session, org_id):
+        return gs.ProvidedStep("ours", "Your business", "Tell us X", "Why", "/x", "Do X", done=True, fact="X set")
+
+    def broken(session, org_id):
+        raise RuntimeError("module bug")
+
+    def not_for_this_org(session, org_id):
+        return None
+
+    monkeypatch.setattr(gs, "_PROVIDERS", [broken, ours, not_for_this_org])
+    body, steps = _state(account["client"])
+    assert body["steps"][0]["key"] == "ours"
+    assert steps["ours"]["status"] == "done" and steps["ours"]["fact"] == "X set"
+    assert "workflow" in steps

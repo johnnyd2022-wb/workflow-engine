@@ -3,12 +3,15 @@
 Every step's state is read from what the org has actually done (a workflow, a go-live
 date, a completed step, a Xero connection, a mapping, a matched sale), so the guide never
 needs to be ticked and can't drift from the data. A step whose module the org doesn't have
-(Compliance, Sales) is left out rather than shown as undone. A step that needs an earlier
+is left out rather than shown as undone; feature modules add their own steps through
+``register_step_provider`` (Compliance adds "Tell us what you make"). A step that needs an earlier
 one says which, and is "blocked" until then.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template
@@ -25,16 +28,33 @@ logger = get_logger(__name__)
 
 DONE, TODO, BLOCKED = "done", "todo", "blocked"
 
+
+@dataclass(frozen=True)
+class ProvidedStep:
+    """A step a feature module adds at the start of the path (Compliance: what you make)."""
+
+    key: str
+    group: str
+    title: str
+    why: str
+    href: str
+    action: str
+    done: bool
+    fact: str | None = None
+
+
+# Feature modules register a callable (session, org_id) -> ProvidedStep | None; None means the
+# step doesn't apply to this org. Core never knows what the step is about.
+_PROVIDERS: list[Callable[..., ProvidedStep | None]] = []
+
+
+def register_step_provider(provider: Callable[..., ProvidedStep | None]) -> None:
+    if provider not in _PROVIDERS:
+        _PROVIDERS.append(provider)
+
+
 # key, group, title, why, where to do it, the button's words. Order is the suggested order.
 STEPS = (
-    (
-        "business",
-        "Your business",
-        "Tell us what you make",
-        "Gin, beer, wine or more: it decides which rules and records Compliance shows you.",
-        "/compliant/nz-alcohol",
-        "Choose your products",
-    ),
     (
         "workflow",
         "Production",
@@ -92,19 +112,13 @@ NEEDS = {
 }
 
 
-def _modules(session, org_id: UUID) -> dict[str, bool]:
+def _sales_available() -> bool:
     from flask import current_app
 
-    from app.features.compliant.service import nz_alcohol_active
-
-    availability = current_app.extensions.get("product_availability", {})
-    return {
-        "compliance": bool(nz_alcohol_active(session, org_id)),
-        "sales": bool(availability.get("crm")),
-    }
+    return bool(current_app.extensions.get("product_availability", {}).get("crm"))
 
 
-def _facts(session, org_id: UUID, modules: dict[str, bool]) -> dict[str, tuple[bool, str | None]]:
+def _facts(session, org_id: UUID, sales: bool) -> dict[str, tuple[bool, str | None]]:
     """(done, a short fact about it) for each step, from the org's own records."""
     org = session.get(Organisation, org_id)
     workflows = session.query(Process).filter(Process.org_id == org_id, Process.is_draft.is_(False)).count()
@@ -122,13 +136,7 @@ def _facts(session, org_id: UUID, modules: dict[str, bool]) -> dict[str, tuple[b
         ),
         "first_batch": (recorded > 0, f"{recorded} step{'s' if recorded != 1 else ''} recorded" if recorded else None),
     }
-    if modules["compliance"]:
-        from app.features.compliant.service import ComplianceService
-
-        profile = ComplianceService(session).get_profile(org_id)
-        types = ((profile.settings if profile else None) or {}).get("alcohol_product_types") or []
-        facts["business"] = (bool(types), ", ".join(str(t).replace("_", " ") for t in types[:3]) or None)
-    if modules["sales"]:
+    if sales:
         from app.features.crm.models.product_mapping import ProductMapping
         from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
         from app.features.crm.services.sales_sources import XeroSalesSource
@@ -145,9 +153,29 @@ def _facts(session, org_id: UUID, modules: dict[str, bool]) -> dict[str, tuple[b
 
 
 def getting_started(session, org_id: UUID) -> dict:
-    modules = _modules(session, org_id)
-    facts = _facts(session, org_id, modules)
+    facts = _facts(session, org_id, _sales_available())
     steps = []
+    for provider in _PROVIDERS:
+        try:
+            provided = provider(session, org_id)
+        except Exception:  # a module's hint must never break the guide
+            logger.exception("getting_started_provider_failed", provider=getattr(provider, "__name__", "?"))
+            continue
+        if provided is not None:
+            steps.append(
+                {
+                    "key": provided.key,
+                    "group": provided.group,
+                    "title": provided.title,
+                    "why": provided.why,
+                    "href": provided.href,
+                    "action": provided.action,
+                    "status": DONE if provided.done else TODO,
+                    "fact": provided.fact,
+                    "blocked_by": None,
+                    "needs": None,
+                }
+            )
     for key, group, title, why, href, action in STEPS:
         if key not in facts:
             continue  # the org doesn't have this module
