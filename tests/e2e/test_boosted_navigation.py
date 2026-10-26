@@ -224,3 +224,29 @@ def test_back_arrow_goes_up_one_level_on_every_kind_of_page(logged_in_page):
     _settle(page)
     assert arrow.get_attribute("href") == "/core/dashboard"
     assert page.locator(".breadcrumbs li").all_inner_texts() == ["Home", "Go live"]
+
+
+_LAYOUT_JS = """() => {
+  const crumbs = document.querySelector('#page-content .breadcrumbs');
+  return {
+    mains: document.querySelectorAll('#page-content').length,
+    nested: document.querySelectorAll('#page-content #page-content, main.page-content main.page-content').length,
+    crumbTop: crumbs ? Math.round(crumbs.getBoundingClientRect().top) : null,
+  };
+}"""
+
+
+@pytest.mark.parametrize("path", ["/core/go-live", "/core/stocktake"])
+def test_a_boosted_page_sits_where_a_full_load_puts_it(logged_in_page, path):
+    """GL-U04: hx-select="#page-content" put a second <main id="page-content"> inside the first,
+    with its padding, so a page without section tabs sat 32px lower after an in-app link."""
+    page = logged_in_page
+    page.goto(path)
+    _settle(page)
+    full = page.evaluate(_LAYOUT_JS)
+    page.goto("/core/dashboard")
+    _settle(page)
+    _boost(page, path)
+    boosted = page.evaluate(_LAYOUT_JS)
+    assert boosted["mains"] == 1 and boosted["nested"] == 0, boosted
+    assert boosted["crumbTop"] == full["crumbTop"], (boosted, full)
