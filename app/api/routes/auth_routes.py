@@ -30,6 +30,7 @@ from app.core.security.tenant_scope import unscoped
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
 from app.core.utils.log_action import log_action
 from app.observability import get_logger, start_span, traced
+from app.ui.legal import TERMS_VERSION
 
 logger = get_logger(__name__)
 
@@ -251,7 +252,9 @@ def signup():
         user_role = user.role.value
 
         # Log signup
-        log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
+        log_action(
+            "signup", "organisation", org.id, {"org_name": org_name, "terms_version": TERMS_VERSION}, org.id, user.id
+        )
 
         from app.core.utils.emit_event import emit_event
 

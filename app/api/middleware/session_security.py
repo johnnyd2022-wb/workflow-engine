@@ -124,7 +124,10 @@ def setup_session_security(app):
         """Single authoritative update of last_activity_at after the view returns.
         Ensures 4xx/5xx responses still update inactivity without redundant writes (no duplicate Set-Cookie).
         """
-        if session.get("user_id"):
+        # A public page or telemetry beacon isn't activity: it must not revive a session that has
+        # already timed out (its check is skipped for these endpoints).
+        public = request.endpoint in PUBLIC_ENDPOINTS or (request.endpoint or "").endswith(".static")
+        if session.get("user_id") and not public:
             session["last_activity_at"] = datetime.now(UTC).isoformat()
             session.modified = True
         return response

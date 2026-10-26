@@ -1,0 +1,56 @@
+{% extends "legal/_page.html" %}
+{% block title %}Terms of service{% endblock %}
+{% block description %}The terms for using biz-e.{% endblock %}
+{% block body %}
+  <h1>Terms of service</h1>
+  <p class="legal-updated">Updated {{ updated }} · <span class="legal-version">version {{ version }}</span></p>
+  <p class="legal-draft" data-legal-draft><strong>Draft for legal review.</strong> These terms are a placeholder written before launch. They will be replaced by reviewed terms, and you'll be told before they change.</p>
+
+  <h2>1. Who these terms are between</h2>
+  <p>These terms are between biz-e (“we”) and the business that creates an account (“you”). The person who signs up confirms they can agree to them for that business.</p>
+
+  <h2>2. Using biz-e for your business</h2>
+  <p>biz-e is for businesses. You acquire it in trade, so to the extent the law allows, the Consumer Guarantees Act 1993 does not apply, and sections 9, 12A, 13 and 14(1) of the Fair Trading Act 1986 do not apply between us. Nothing in these terms limits a right the law says can't be limited.</p>
+
+  <h2>3. Your account</h2>
+  <ul>
+    <li>Keep sign-in details private and turn on two-factor sign-in for administrators.</li>
+    <li>You decide who in your business has access, and what each person can do.</li>
+    <li>Tell us straight away if you think someone has got into your account.</li>
+  </ul>
+
+  <h2>4. Fees</h2>
+  <p>Fees are on the <a href="/pricing">pricing page</a>, billed monthly in advance in New Zealand dollars plus GST. We'll give you at least 30 days' notice of a price change. If a payment fails, we'll tell you; after 14 days unpaid we may suspend access until it's paid, without deleting anything.</p>
+
+  <h2>5. Cancelling</h2>
+  <p>You can cancel any time by contacting us; the subscription ends at the end of the month already paid for, and part months aren't refunded. We can end the service with 30 days' notice, or sooner if you seriously breach these terms and don't fix it within 14 days of us telling you.</p>
+
+  <h2>6. Your data</h2>
+  <ul>
+    <li>Your records stay yours. We use them to run biz-e for you, and for nothing else without your permission.</li>
+    <li>You can have a full export of your records at any time, and for 30 days after cancelling.</li>
+    <li>After that we delete them within 90 days, except where the law needs us to keep something longer, or it's in a backup that expires on its own schedule.</li>
+    <li>How we handle personal information is in our <a href="/privacy">privacy policy</a>.</li>
+  </ul>
+
+  <h2>7. Compliance records are still yours to check</h2>
+  <p>biz-e helps you prepare excise entries, trace batches and keep compliance evidence. It does not lodge anything with Customs, MPI or a licensing authority unless you do, and it isn't legal or tax advice. You're responsible for checking what you lodge and for meeting your obligations.</p>
+
+  <h2>8. Acceptable use</h2>
+  <p>Don't use biz-e to break the law, to try to get at another business's data, to overload or probe the service, or to resell it without our agreement.</p>
+
+  <h2>9. Availability and changes</h2>
+  <p>We aim to keep biz-e available and backed up, but can't promise it will never be interrupted. We may improve or change features; if we remove something you depend on, we'll tell you in advance.</p>
+
+  <h2>10. Liability</h2>
+  <p>To the extent the law allows, we're not liable for indirect or consequential loss, or loss of profit, revenue or data you could have exported. Our total liability in any 12 months is limited to the fees you paid in those 12 months. This doesn't limit liability for fraud, or anything else the law doesn't allow us to limit.</p>
+
+  <h2>11. Changes to these terms</h2>
+  <p>We'll give you at least 30 days' notice of a material change, by email or in the app. If you don't agree, you can cancel before it takes effect.</p>
+
+  <h2>12. Law</h2>
+  <p>New Zealand law applies, and the New Zealand courts have jurisdiction.</p>
+
+  <h2>Contact</h2>
+  <p>{% if support_email %}<a href="mailto:{{ support_email }}">{{ support_email }}</a>{% else %}Contact details will be published before launch.{% endif %}</p>
+{% endblock %}

@@ -179,6 +179,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("index", None, PUBLIC),
     ("favicon", None, PUBLIC),
     ("landing_diagram", None, PUBLIC),
+    ("legal.*", None, PUBLIC),  # pricing, terms, privacy (GL-C01, GL-C02)
     ("healthcheck", None, PUBLIC),
     ("static", None, PUBLIC),
     ("*.static", None, PUBLIC),

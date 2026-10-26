@@ -30,6 +30,10 @@ PUBLIC_ENDPOINTS = {
     "auth.verify_two_factor",  # 2FA verification during login (pending session only)
     "auth.cancel_2fa",  # Cancel pending 2FA session (no auth required)
     "healthcheck",
+    # GL-C01/C02: pricing, terms and privacy are readable with no session, or an expired one.
+    "legal.pricing",
+    "legal.terms",
+    "legal.privacy",
     "ingest_faro_telemetry",
     "ingest_posthog_telemetry",
     "static",
