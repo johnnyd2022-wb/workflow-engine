@@ -163,7 +163,7 @@
 
   function resolveTriggeredDateText(item, finding, data) {
     var triggered = pickTriggeredDate(item, finding, data);
-    // No date rather than "Unknown" on every card: an NP3 check has no moment it was raised (GL-U04).
+    // No date rather than "Unknown" on every card: some findings have no moment they were raised (GL-U04).
     if (!triggered) return '';
     var formatted = formatDate(triggered);
     return formatted === '—' ? '' : formatted;
