@@ -98,6 +98,14 @@ PAGES: tuple[Page, ...] = (
         "compliant",
     ),
     Page(
+        "/compliant/nz-alcohol/customs/transfers",
+        "compliance",
+        "customs",
+        "Sales to other CCAs",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
+    Page(
         "/compliant/nz-alcohol/customs/records",
         "compliance",
         "customs",

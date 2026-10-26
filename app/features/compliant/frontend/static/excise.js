@@ -7,6 +7,7 @@
 
   var TSW_LOGIN = 'https://www.tsw.govt.nz/external/application/login/app.html';
   var SETTINGS = '/compliant/nz-alcohol/customs/settings';
+  var TRANSFERS = '/compliant/nz-alcohol/customs/transfers';
   var WINDOW = 3; // periods shown before "Earlier": the current one and the two before it
 
   // The SPA shell can swap page content in with HTMX, replacing this section after the
@@ -144,6 +145,10 @@
       items.push({ text: 'Duty rates: Customs sets new rates every 1 July, and the built-in ones only cover removals before ' + fmtDate(d.rates_guide.next_review) + '. Check this period\'s rates against Customs\' table, or add them.', href: SETTINGS + '#customs-rates-title', link: 'Check rates' });
     }
     (d.problems || []).forEach(function (p) {
+      if (p.link === 'transfers') {
+        items.push({ text: U.plural(p.removals, 'sale') + ' to another CCA: ' + p.reason.charAt(0).toLowerCase() + p.reason.slice(1) + '.', href: TRANSFERS, link: 'Record the movement' });
+        return;
+      }
       items.push({ text: p.product + ': ' + p.reason + (p.removals ? ' (' + U.plural(p.removals, 'removal') + ' left out)' : ''), href: SETTINGS + '#product-' + U.slug(p.product) });
     });
     if (!items.length) return null;
@@ -261,6 +266,20 @@
     return el('div', { className: 'customs-table-wrap' }, [table]);
   }
 
+  // GL-P08: sales to another business's CCA are transfers, not removals: say what was left out.
+  function transfersPiece(d) {
+    var moved = d.cca_transfers || [];
+    if (!moved.length) return null;
+    var sales = {};
+    moved.forEach(function (t) { sales[t.reference] = true; });
+    var lal = moved.reduce(function (n, t) { return n + Number(t.lal || 0); }, 0);
+    var p = el('p', { className: 'customs-note', 'data-excise-transfers': '' }, [
+      document.createTextNode('Left out of duty: ' + U.plural(Object.keys(sales).length, 'sale') + ' to another CCA' + (lal ? ' (' + num(lal, 3) + ' LAL)' : '') + ', moved excise-unpaid. '),
+      el('a', { href: TRANSFERS, text: 'Transfers →' }),
+    ]);
+    return p;
+  }
+
   function creditPiece(d) {
     if (!(d.returns || []).length) return null;
     var what = d.returns.map(function (r) { return U.qty(r.quantity) + ' ' + r.unit + ' ' + r.product; }).join(', ');
@@ -322,7 +341,7 @@
   function renderDraft(d) {
     draftEl.replaceChildren();
     // The entry sheet: the four figures to copy (tiles when wide, a list on a phone), the lines, then record it.
-    [headPiece(d), problemsPiece(d), tilesPiece(d), summaryListPiece(d), entryTablePiece(d), creditPiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) draftEl.append(p); });
+    [headPiece(d), problemsPiece(d), tilesPiece(d), summaryListPiece(d), entryTablePiece(d), transfersPiece(d), creditPiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) draftEl.append(p); });
   }
 
   // --- where things stand -----------------------------------------------------------------

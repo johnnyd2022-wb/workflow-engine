@@ -1,4 +1,4 @@
-{# The Customs pages share one header: what the area is for, and its three views. #}
+{# The Customs pages share one header: what the area is for, and its views. #}
 <header class="workspace-header customs-header">
   <div>
     <h1>Customs</h1>
@@ -11,6 +11,7 @@
 <nav class="customs-views" aria-label="Customs">
   <a href="/compliant/nz-alcohol/customs"{% if customs_view == 'entry' %} aria-current="page"{% endif %}>Excise entry</a>
   <a href="/compliant/nz-alcohol/customs/stock"{% if customs_view == 'stock' %} aria-current="page"{% endif %}>Stock</a>
+  <a href="/compliant/nz-alcohol/customs/transfers"{% if customs_view == 'transfers' %} aria-current="page"{% endif %}>Transfers</a>
   <a href="/compliant/nz-alcohol/customs/records"{% if customs_view == 'records' %} aria-current="page"{% endif %}>Records</a>
   <a href="/compliant/nz-alcohol/customs/settings"{% if customs_view == 'settings' %} aria-current="page"{% endif %}>Settings</a>
 </nav>
