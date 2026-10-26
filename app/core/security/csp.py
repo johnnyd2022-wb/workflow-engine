@@ -15,6 +15,7 @@ off both is a migration over several MRs (``docs/csp-migration-plan.md``). Meanw
 from __future__ import annotations
 
 import json
+import re
 import secrets
 from urllib.parse import urlsplit
 
@@ -79,12 +80,40 @@ def report_only_policy(nonce: str, *, framable: bool = False) -> str:
     )
 
 
+# Paths can carry credentials too (GL-S04): an invite link is /invite/<token>, and any other
+# long token-shaped segment (24+ URL-safe characters mixing letters and digits) is treated the
+# same way. Record ids (UUIDs) and script names stay, so a report still says which page and
+# script were involved.
+_INVITE_PATH = re.compile(r"(/invite/)[^/?#\s\"']+", re.IGNORECASE)
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+_TOKEN_SEGMENT = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-])")
+_SECRET_PARAM = re.compile(r"([?&](?:token|code|invite|key|secret|password|state)=)[^&#\s\"']*", re.IGNORECASE)
+REDACTED = "[redacted]"
+
+
+def redact_path(text: str) -> str:
+    """``text`` with invite tokens, token-shaped path segments and secret parameters removed."""
+    text = _INVITE_PATH.sub(r"\1" + REDACTED, text)
+    text = _SECRET_PARAM.sub(r"\1" + REDACTED, text)
+    return _TOKEN_SEGMENT.sub(_token_or_name, text)
+
+
+def _token_or_name(match: re.Match) -> str:
+    word = match.group(0)
+    if _UUID.match(word) or not (re.search(r"[0-9]", word) and re.search(r"[A-Za-z]", word)):
+        return word
+    return REDACTED
+
+
 def _origin_only(url: str) -> str:
-    """A URL down to what the report needs: no query, no fragment (they can carry tokens)."""
+    """A URL down to what the report needs: no query, no fragment, no token in the path.
+
+    Raises ``ValueError`` for a URL that can't be parsed; the caller drops that report.
+    """
     if not url or "://" not in url:
-        return (url or "")[:40]  # keywords such as "inline", "eval"
+        return redact_path((url or "")[:40])  # keywords such as "inline", "eval"
     parts = urlsplit(url)
-    return f"{parts.scheme}://{parts.netloc}{parts.path}"[:300]
+    return redact_path(f"{parts.scheme}://{parts.netloc}{parts.path}")[:300]
 
 
 def parse_report(raw: bytes) -> list[dict]:
@@ -111,14 +140,18 @@ def parse_report(raw: bytes) -> list[dict]:
                     return value
             return ""
 
-        out.append(
-            {
+        line = pick("line-number", "lineNumber") or None
+        try:
+            violation = {
                 "directive": str(pick("effective-directive", "effectiveDirective", "violated-directive"))[:60],
                 "blocked": _origin_only(str(pick("blocked-uri", "blockedURL"))),
-                "page": urlsplit(str(pick("document-uri", "documentURL"))).path[:200],
+                "page": redact_path(urlsplit(str(pick("document-uri", "documentURL"))).path)[:200],
                 "source": _origin_only(str(pick("source-file", "sourceFile"))),
-                "line": pick("line-number", "lineNumber") or None,
-                "sample": str(pick("script-sample", "sample"))[:40],
+                "line": line if isinstance(line, int) and not isinstance(line, bool) else None,
+                # Redacted before it is cut short, so a quoted invite link can't survive half-cut.
+                "sample": redact_path(str(pick("script-sample", "sample"))[:200])[:40],
             }
-        )
+        except ValueError:
+            continue  # an unparseable URL: drop this report, keep the rest of the batch
+        out.append(violation)
     return out

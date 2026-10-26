@@ -6,6 +6,7 @@ import re
 
 import requests
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session
+from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
@@ -366,10 +367,17 @@ def create_app():
     # Intentionally public, rate-limited: the browser posts CSP violation reports with no
     # session or CSRF token. Only the directive, the blocked origin and path, the page path
     # and a 40-character sample are logged (app/core/security/csp.py).
+    # Keyed on the address alone: the default key reads a JSON body for an email, which here
+    # would read the whole body before the size check below.
     @app.post(csp.REPORT_PATH)  # nosemgrep: route-missing-requires-auth
-    @limiter.limit("60 per minute")
+    @limiter.limit("60 per minute", key_func=get_remote_address)
     def csp_report():
-        for violation in csp.parse_report(request.get_data(cache=False)):
+        # Read no more than a report can be: a declared oversized body is refused unread, and an
+        # undeclared one is read only to one byte past the limit (which parse_report then drops).
+        if (request.content_length or 0) > csp.MAX_REPORT_BYTES:
+            return "", 413
+        raw = request.stream.read(csp.MAX_REPORT_BYTES + 1)
+        for violation in csp.parse_report(raw):
             logger.warning("csp_violation", **violation)
         return "", 204
 
