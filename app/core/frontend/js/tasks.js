@@ -63,6 +63,7 @@
       get activeUsers() { return this.users.filter((user) => user.is_active); },
       get filteredTasks() { const query = this.searchQuery.trim().toLowerCase(); return this.tasks.filter((task) => (!this.sourceFilter || this.sourceFilter === 'all' || task.source === this.sourceFilter) && (!this.assigneeFilter || task.assigned_to_user_id === this.assigneeFilter) && (!this.onlyAssigned || task.assigned_to_user_id) && (!this.calSelectedDate || task.due_date === this.calSelectedDate) && (!query || task.title.toLowerCase().includes(query) || String(task.description || '').toLowerCase().includes(query))); },
       get visibleLanes() { return this.lanes.filter((lane) => lane.visible); },
+      get builtInLanes() { return this.lanes.filter((lane) => !lane.custom); },
       laneFor(task) { if (!task) return 'todo'; if (!OPEN.includes(task.status)) return task.status === 'completed' ? 'done' : 'cancelled'; if (task.source === 'core' && task.board_lane_id && this.lanes.some((lane) => lane.custom && lane.id === task.board_lane_id)) return task.board_lane_id; return task.status === 'in_progress' ? 'in-progress' : 'todo'; },
       tasksForLane(lane) { return this.filteredTasks.filter((task) => this.laneFor(task) === lane.id); },
       laneHeaderClass(lane) { return lane.custom ? 'core-tasks__lane-header--custom' : `core-tasks__lane-header--${lane.id}`; },

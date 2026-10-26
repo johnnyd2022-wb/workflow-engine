@@ -61,14 +61,14 @@
                 <template x-for="(row, idx) in visible(breakdown, showAllTop)" :key="row.contact_id">
                   <tr>
                     <td class="sales-analytics__rank" x-text="idx + 1"></td>
-                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                     <td class="sales-analytics__num sales-analytics__money" x-text="formatCurrency(row.total)"></td>
                     <td class="sales-analytics__num sales-analytics__optional" x-text="row.invoice_count"></td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <button type="button" class="workspace-button sales-analytics__more" x-show="breakdown.length > pageSize" :aria-expanded="showAllTop ? 'true' : 'false'" @click="showAllTop = !showAllTop" x-text="showAllTop ? `Show top ${pageSize}` : `Show all ${breakdown.length}`"></button>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="breakdown.length > pageSize" :aria-expanded="showAllTop ? 'true' : 'false'" @click="showAllTop = !showAllTop" x-text="showAllTop ? ('Show top ' + (pageSize)) : ('Show all ' + (breakdown.length))"></button>
           </div>
         </div>
       </section>
@@ -85,15 +85,15 @@
               <tbody>
                 <template x-for="row in visible(churnData, showAllChurn)" :key="row.contact_id">
                   <tr>
-                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                     <td class="sales-analytics__num" x-text="daysAgo(row.days_since_last_invoice)"></td>
-                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.avg_days_between_purchases != null ? `${row.avg_days_between_purchases}d` : '—'"></td>
+                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.avg_days_between_purchases != null ? ('' + (row.avg_days_between_purchases) + 'd') : '—'"></td>
                     <td class="sales-analytics__num"><span class="crm-badge" :class="riskClass(row.risk_tier)" x-text="row.risk_tier || '—'"></span></td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <button type="button" class="workspace-button sales-analytics__more" x-show="churnData.length > pageSize" :aria-expanded="showAllChurn ? 'true' : 'false'" @click="showAllChurn = !showAllChurn" x-text="showAllChurn ? `Show first ${pageSize}` : `Show all ${churnData.length}`"></button>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="churnData.length > pageSize" :aria-expanded="showAllChurn ? 'true' : 'false'" @click="showAllChurn = !showAllChurn" x-text="showAllChurn ? ('Show first ' + (pageSize)) : ('Show all ' + (churnData.length))"></button>
           </div>
         </div>
       </section>
@@ -120,7 +120,7 @@
             <tbody>
               <template x-for="row in visible(filteredContactRows, showAllContact)" :key="row.contact_id">
                 <tr>
-                  <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                  <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                   <td class="sales-analytics__num sales-analytics__optional" x-text="formatDate(row.last_contact_date)"></td>
                   <td class="sales-analytics__num sales-analytics__optional" x-text="row.last_contact_source ? (row.last_contact_source === 'sale' ? 'Sale' : 'Task') : '—'"></td>
                   <td class="sales-analytics__num" x-text="row.days_since_contact == null ? 'No contact recorded' : daysAgo(row.days_since_contact)"></td>
@@ -129,12 +129,12 @@
             </tbody>
           </table>
           <p class="sales-analytics__empty" x-show="filteredContactRows.length === 0">No customers in this group.</p>
-          <button type="button" class="workspace-button sales-analytics__more" x-show="filteredContactRows.length > pageSize" :aria-expanded="showAllContact ? 'true' : 'false'" @click="showAllContact = !showAllContact" x-text="showAllContact ? `Show first ${pageSize}` : `Show all ${filteredContactRows.length}`"></button>
+          <button type="button" class="workspace-button sales-analytics__more" x-show="filteredContactRows.length > pageSize" :aria-expanded="showAllContact ? 'true' : 'false'" @click="showAllContact = !showAllContact" x-text="showAllContact ? ('Show first ' + (pageSize)) : ('Show all ' + (filteredContactRows.length))"></button>
         </div>
       </div>
     </section>
 
-    <section class="workspace-card" aria-labelledby="analytics-recall-title" x-show="Number(contactCompleteness.missing_any || 0) > 0" x-cloak>
+    <section class="workspace-card" aria-labelledby="analytics-recall-title" x-show="(contactCompleteness.missing_any || 0) > 0" x-cloak>
       <div class="workspace-card__header">
         <div>
           <h2 id="analytics-recall-title">Recall contact details</h2>

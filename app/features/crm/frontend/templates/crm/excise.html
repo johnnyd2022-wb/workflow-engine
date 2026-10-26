@@ -31,7 +31,7 @@
                   :aria-pressed="selected === m.month ? 'true' : 'false'"
                   @click="select(m.month)">
             <span class="ex-month__name" x-text="shortMonth(m)"></span>
-            <span class="ex-month__lal" x-text="m.complete ? `${num(m.lal, 1)} LAL` : 'so far'"></span>
+            <span class="ex-month__lal" x-text="m.complete ? ('' + (num(m.lal, 1)) + ' LAL') : 'so far'"></span>
             <span class="ex-month__dot" x-show="m.needs_attention" aria-label="needs attention"></span>
           </button>
         </template>
@@ -46,14 +46,14 @@
 
           <div class="ex-figures">
             <div class="ex-figure"><span class="ex-figure__label">Litres of alcohol</span>
-              <span class="ex-figure__value" x-text="`${num(report.totals.lal, 2)} LAL`"></span>
-              <span class="ex-figure__sub" x-text="`from ${num(report.totals.litres, 2)} L sold`"></span></div>
+              <span class="ex-figure__value" x-text="('' + (num(report.totals.lal, 2)) + ' LAL')"></span>
+              <span class="ex-figure__sub" x-text="('from ' + (num(report.totals.litres, 2)) + ' L sold')"></span></div>
             <div class="ex-figure"><span class="ex-figure__label">Estimated excise duty</span>
               <span class="ex-figure__value" x-text="money(report.totals.duty)"></span>
-              <span class="ex-figure__sub" x-text="`+ ${money(report.totals.levy)} estimated alcohol levy`"></span></div>
+              <span class="ex-figure__sub" x-text="('+ ' + (money(report.totals.levy)) + ' estimated alcohol levy')"></span></div>
             <div class="ex-figure ex-figure--total"><span class="ex-figure__label">Estimated total to Customs</span>
               <span class="ex-figure__value" x-text="money(report.totals.customs)"></span>
-              <span class="ex-figure__sub" x-text="`duty, levy and ${money(report.totals.gst)} GST on the levy`"></span></div>
+              <span class="ex-figure__sub" x-text="('duty, levy and ' + (money(report.totals.gst)) + ' GST on the levy')"></span></div>
           </div>
 
           <div class="crm-card ex-table-card">
@@ -75,7 +75,7 @@
                       <td><span class="col-name" x-text="row.label"></span>
                         <span class="ex-rate" x-text="rateNote(row)"></span></td>
                       <td class="ex-num" data-label="Quantity sold" x-text="units(row)"></td>
-                      <td class="ex-num" data-label="Supplementary qty" x-text="row.supplementary_litres == null ? '—' : `${num(row.supplementary_litres, 3)} L`"></td>
+                      <td class="ex-num" data-label="Supplementary qty" x-text="row.supplementary_litres == null ? '—' : ('' + (num(row.supplementary_litres, 3)) + ' L')"></td>
                       <td class="ex-num" data-label="LAL" x-text="num(row.lal, 3)"></td>
                       <td class="ex-num" data-label="Est. excise duty" x-text="money(row.duty)"></td>
                     </tr>
@@ -85,7 +85,7 @@
                   <tr class="ex-total">
                     <th scope="row">Total</th>
                     <td class="ex-gap"></td>
-                    <td class="ex-num" data-label="Supplementary qty" x-text="`${num(report.totals.litres, 3)} L`"></td>
+                    <td class="ex-num" data-label="Supplementary qty" x-text="('' + (num(report.totals.litres, 3)) + ' L')"></td>
                     <td class="ex-num" data-label="LAL" x-text="num(report.totals.lal, 3)"></td>
                     <td class="ex-num" data-label="Est. excise duty" x-text="money(report.totals.duty)"></td>
                   </tr>
@@ -113,12 +113,12 @@
                   <a :href="fixLink(p)">Fix in Customs setup</a></li>
               </template>
               <li x-show="report.unmapped.count">
-                <span x-text="`${report.unmapped.count} invoice line${report.unmapped.count === 1 ? '' : 's'} not linked to a product, so not counted`"></span>
+                <span x-text="('' + (report.unmapped.count) + ' invoice line' + (report.unmapped.count === 1 ? '' : 's') + ' not linked to a product, so not counted')"></span>
                 <a href="/crm/configuration">Map products</a></li>
             </ul>
           </div>
 
-          <a class="crm-btn crm-btn--secondary crm-btn--sm ex-lodge-link" x-show="report.complete" :href="`/compliant/nz-alcohol/customs?period=${report.month}-01`">Lodged it? Record it in Customs →</a>
+          <a class="crm-btn crm-btn--secondary crm-btn--sm ex-lodge-link" x-show="report.complete" :href="('/compliant/nz-alcohol/customs?period=' + (report.month) + '-01')">Lodged it? Record it in Customs →</a>
           <p class="ex-foot">
             An estimate from <span x-text="sources.join(' and ') || 'your'"></span> sales, using Customs rates in force on the 1st of the month.
             Duty is charged on alcohol removed from your licensed area, which can differ from sales; lodge from

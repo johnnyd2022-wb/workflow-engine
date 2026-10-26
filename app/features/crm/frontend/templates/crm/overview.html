@@ -44,17 +44,17 @@
       <button type="button" class="workspace-tile sales-kpi" @click="openInvoiceModal('this_month')">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">This Month</div>
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.current_month_revenue)"></div>
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.current_month_invoice_count || 0} invoices`"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="('' + (overview.current_month_invoice_count || 0) + ' invoices')"></div>
       </button>
       <button type="button" class="workspace-tile sales-kpi" @click="openInvoiceModal('outstanding')">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Outstanding</div>
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.outstanding_receivables)"></div>
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.outstanding_invoice_count || 0} invoices`"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="('' + (overview.outstanding_invoice_count || 0) + ' invoices')"></div>
       </button>
       <button type="button" class="workspace-tile sales-kpi" @click="openMoMModal()" x-show="monthOnMonthChangePct != null">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Month on month change</div>
         <div class="crm-kpi-value" :style="monthOnMonthChangePct == null ? 'color:var(--text-primary,#111827);' : (monthOnMonthChangePct >= 0 ? 'color:var(--crm-teal);' : 'color:var(--crm-red);')" x-text="formatPercent(monthOnMonthChangePct)"></div>
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`Last ${momPeriodMonths} month${momPeriodMonths > 1 ? 's' : ''} vs prior period`"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="('Last ' + (momPeriodMonths) + ' month' + (momPeriodMonths > 1 ? 's' : '') + ' vs prior period')"></div>
       </button>
     </div>
     </section>
@@ -107,7 +107,7 @@
                 <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
                   <select class="crm-form-select" id="sales-operator-filter" :hidden="!hasOpenTasks" aria-label="Filter tasks by operator" x-model="boardOperatorFilter" style="max-width:220px;">
                     <option value="">All operators</option>
-                    <template x-for="u in operators" :key="`board-op-${u.id}`">
+                    <template x-for="u in operators" :key="('board-op-' + (u.id))">
                       <option :value="u.id" x-text="u.display_name || u.email"></option>
                     </template>
                   </select>
@@ -119,7 +119,7 @@
                 </div>
                 <div class="crm-lane-mobile-selector crm-lane-mobile-selector--overview" x-show="hasOpenTasks">
                   <div class="flow-mode-segmented" role="tablist" aria-label="Overview task lanes">
-                    <template x-for="lane in taskColumns" :key="`overview-${lane.status}`">
+                    <template x-for="lane in taskColumns" :key="('overview-' + (lane.status))">
                       <button
                         type="button"
                         role="tab"
@@ -133,7 +133,7 @@
                   </div>
                 </div>
                 <div class="crm-overview-task-board-grid" x-show="hasOpenTasks">
-                  <template x-for="column in taskColumns" :key="`${widget.id}-${column.status}`">
+                  <template x-for="column in taskColumns" :key="('' + (widget.id) + '-' + (column.status))">
                     <div
                       style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:96px;"
                       @dragover.prevent
@@ -187,7 +187,7 @@
                         <td>
                           <button type="button" style="font-size:.82rem; font-weight:600; border:0; background:none; padding:0; color:inherit; cursor:pointer; text-align:left;" @click="toggleProductDetails(product.description)" :aria-expanded="expandedProductName === product.description" x-text="product.description || '—'"></button>
                           <div x-show="expandedProductName === product.description" x-cloak style="margin-top:6px; font-size:.72rem; color:var(--text-secondary,#6b7280);">
-                            <template x-for="(item, index) in product.xero_items || []" :key="`${item.item_code || ''}-${item.description || ''}-${index}`">
+                            <template x-for="(item, index) in product.xero_items || []" :key="('' + (item.item_code || '') + '-' + (item.description || '') + '-' + (index))">
                               <div><span x-text="item.item_code || 'No item code'"></span><span x-show="item.description && item.description !== product.description"> · <span x-text="item.description"></span></span></div>
                             </template>
                           </div>
@@ -203,8 +203,8 @@
                         <div style="font-size:.82rem; font-weight:800;">All authorised sales</div>
                         <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);">All authorised sale lines, including items awaiting mapping</div>
                       </td>
-                      <td style="text-align:right; font-size:.82rem; font-weight:800;" x-text="formatNumber(overview.product_sales_summary?.total_qty || 0)"></td>
-                      <td style="text-align:right; font-size:.82rem; font-weight:800; color:var(--crm-teal);" x-text="formatCurrency2(overview.product_sales_summary?.total_revenue || 0)"></td>
+                      <td style="text-align:right; font-size:.82rem; font-weight:800;" x-text="formatNumber((overview.product_sales_summary ? overview.product_sales_summary.total_qty : null) || 0)"></td>
+                      <td style="text-align:right; font-size:.82rem; font-weight:800; color:var(--crm-teal);" x-text="formatCurrency2((overview.product_sales_summary ? overview.product_sales_summary.total_revenue : null) || 0)"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -212,8 +212,8 @@
                   <h3 style="font-size:.82rem; margin:0 0 4px;">Xero products needing a mapping (<span x-text="overview.unmapped_products_count"></span>)</h3>
                   <p style="font-size:.74rem; color:var(--text-secondary,#6b7280); margin:0 0 8px;">These items are excluded from product totals until mapped.</p>
                   <ul style="font-size:.76rem; margin:0 0 8px; padding-left:18px;">
-                    <template x-for="(item, index) in overview.unmapped_products || []" :key="`${item.item_code || ''}-${item.description || ''}-${index}`">
-                      <li><span x-text="item.description || 'No description'"></span> · <span x-text="item.item_code || 'No item code'"></span>{% if can('sales.manage') %} <a :href="'/crm/configuration?xero_line=' + encodeURIComponent(item.description || item.item_code || '')">Map</a>{% endif %}</li>
+                    <template x-for="(item, index) in overview.unmapped_products || []" :key="('' + (item.item_code || '') + '-' + (item.description || '') + '-' + (index))">
+                      <li><span x-text="item.description || 'No description'"></span> · <span x-text="item.item_code || 'No item code'"></span>{% if can('sales.manage') %} <a :href="'/crm/configuration?xero_line=' + encode(item.description || item.item_code || '')">Map</a>{% endif %}</li>
                     </template>
                   </ul>
                   {# Product mappings live on the configuration page, which needs sales.manage. #}
@@ -261,7 +261,7 @@
                 <table x-show="widget.viewMode === 'table' && widget.rows && widget.rows.length > 0" class="crm-table crm-table--compact" style="width:100%;">
                   <thead><tr><th x-text="customCol1Label(widget)"></th><th style="text-align:right;">Count</th><th style="text-align:right;">Value</th></tr></thead>
                   <tbody>
-                    <template x-for="(row, idx) in widget.rows" :key="`${widget.id}-${idx}`">
+                    <template x-for="(row, idx) in widget.rows" :key="('' + (widget.id) + '-' + (idx))">
                       <tr>
                         <td style="font-size:.82rem;" x-text="customRowLabel(widget, row)"></td>
                         <td style="text-align:right; font-size:.82rem;" x-text="customRowCount(widget, row)"></td>
@@ -270,7 +270,7 @@
                     </template>
                   </tbody>
                 </table>
-                <canvas :id="`customWidgetChart-${widget.id}`" x-show="widget.viewMode === 'graph' && widget.rows && widget.rows.length > 0" style="width:100%; height:220px; display:block;"></canvas>
+                <canvas :id="('customWidgetChart-' + (widget.id))" x-show="widget.viewMode === 'graph' && widget.rows && widget.rows.length > 0" style="width:100%; height:220px; display:block;"></canvas>
               </div>
             </template>
           </div>
@@ -455,7 +455,7 @@
           <div class="crm-invoice-row">
             <div class="crm-invoice-header" @click="toggleModalInvoice(inv.id)">
               <div class="crm-invoice-meta">
-                <span class="crm-invoice-number" x-text="inv.invoice_number || inv.xero_invoice_id?.slice(0,8)"></span>
+                <span class="crm-invoice-number" x-text="inv.invoice_number || (inv.xero_invoice_id ? inv.xero_invoice_id.slice(0,8) : null)"></span>
                 <span class="crm-badge" :class="invoiceBadgeClass(inv.status)" x-text="inv.status"></span>
                 <template x-if="inv.contact_name"><span class="crm-invoice-date" x-text="inv.contact_name"></span></template>
                 <span class="crm-invoice-date" x-text="formatInvoiceDate(inv.date)"></span>
@@ -482,7 +482,7 @@
                 </tbody>
               </table>
               <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-                <a class="crm-btn crm-btn--secondary crm-btn--sm" :href="'/core/sourcemap?invoice=' + encodeURIComponent(inv.xero_invoice_id)" x-show="inv.xero_invoice_id">Trace stock</a>
+                <a class="crm-btn crm-btn--secondary crm-btn--sm" :href="'/core/sourcemap?invoice=' + encode(inv.xero_invoice_id)" x-show="inv.xero_invoice_id">Trace stock</a>
                 <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="viewInvoice(inv)">View</button>
                 <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)" :disabled="invoiceDownloadId === inv.id">
                   <span x-text="invoiceDownloadId === inv.id ? 'Downloading…' : 'Download PDF'"></span>
