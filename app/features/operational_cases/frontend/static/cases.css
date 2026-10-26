@@ -7,7 +7,7 @@
 }
 
 .oc-header h1 { margin: 4px 0 8px; font-size: 1.5rem; }
-.oc-eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; font-weight: 600; color: var(--text-tertiary, #6b7280); margin: 0; }
+.oc-eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; font-weight: 600; color: var(--ui-text-muted, #5d6778); margin: 0; }
 
 .oc-filter-tabs {
   display: flex;
@@ -78,7 +78,10 @@
   width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); font: inherit;
 }
 .oc-form-error { color: var(--error, #b91c1c); font-size: 0.85rem; }
-.oc-form-actions { display: flex; gap: 8px; }
+.oc-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 4px; }
+.oc-form-actions .oc-btn--primary { padding: 10px 16px; border: 1px solid transparent; border-radius: 8px; background: var(--ui-accent, #0f766e); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.oc-form-actions a { color: var(--ui-accent-strong, #115e59); font-weight: 600; text-decoration: none; }
+html[data-spa-theme="dark"] .oc-form-actions .oc-btn--primary { color: #042f2e; }
 
 .oc-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .oc-timeline li { border-left: 3px solid var(--border-light, #e5e7eb); padding-left: 12px; }
