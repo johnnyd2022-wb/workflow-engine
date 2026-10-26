@@ -195,8 +195,8 @@ def test_late_backdated_removal_keeps_lodged_snapshot_and_identity(db, world):
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("rep_id", str(uuid4())),
-        ("contact_id", str(uuid4())),
+        ("rep_id", "00000000-0000-4000-8000-000000000001"),
+        ("contact_id", "00000000-0000-4000-8000-000000000002"),
         ("starts_at", "2026-10-20T14:00:00"),
         ("starts_at", "2026-10-20T14:00:00+12:00"),
         ("ends_at", "2026-10-20T13:00:00+13:00"),

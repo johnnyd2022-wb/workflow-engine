@@ -13,3 +13,9 @@ Falsifiability evidence inspected: root's real pre-fix browser run `/home/johnny
 No application, test or script was edited by this evaluator. Only this report was added. No unresolved test-validity finding.
 
 VERDICT: valid
+
+## Deterministic pytest collection follow-up
+
+Independently inspected the final `tests/test_tastings.py` diff: only the two import-time `uuid4()` values in `test_validation_and_reference_isolation` were replaced by fixed, syntactically valid version4 UUID strings ending in0001 and0002. The same missing rep/contact reference rejection paths, test body, fixture and `pytest.raises(service.TastingError)` assertion remain unchanged. Randomness was not part of the behavior under test; deterministic values preserve the intended invalid-reference inputs while giving separate xdist collectors identical parameter IDs. Existing hostile-org reference coverage is unaffected. No assertion was weakened, no test skipped, and no source was edited by this evaluator. Root's fresh collection comparison and backend rerun are separate execution evidence; this note is a static independent review of the exact two-line change.
+
+VERDICT: valid

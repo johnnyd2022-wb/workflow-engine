@@ -17,3 +17,5 @@ Page-design intentionally remains draft awaiting layout choice, per its explicit
 
 
 Final shared navigation:68 passed on the feature branch; full unchanged-main comparison92 passed. First combined run's transient failures remain documented in `e2e.md`. Draft MR !586 presents the three layouts; exact-head pipeline is monitored there. No Slack announcement for a draft MR, per the merge-request skill.
+
+CI self-heal: head88d8670e pipeline2991069137 passed17 jobs, including20 Tastings browser/performance cases (39.53s), smoke, migration reversibility and every security/static gate. `relevant_tests` failed at xdist collection because two new parameter values called uuid4() during module import, producing different node IDs per worker. Replaced those two missing-reference UUID inputs with fixed valid, nonexistent UUIDs; rejection assertions unchanged. Independent evaluator confirmed the correction is faithful. Dedicated29-case backend rerun and two fresh-process identical29-node collections pass. The follow-up commit is pushed normally; no force push or test weakening.
