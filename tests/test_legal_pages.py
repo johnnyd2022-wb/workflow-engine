@@ -98,3 +98,19 @@ def test_a_sign_up_records_the_terms_version_it_agreed_to(anonymous, db):
         db.query(User).filter(User.org_id == org.id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
+
+
+@pytest.mark.parametrize("path", ["/pricing", "/terms", "/privacy"])
+def test_an_expired_session_still_reads_the_public_pages(_account, path):  # noqa: F811
+    """Review of !579: a stale cookie from an old visit must not turn a public page into a 401."""
+    from datetime import UTC, datetime, timedelta
+
+    client = _account["make_client"](PASSWORD)
+    with client.session_transaction() as browser_session:
+        browser_session["session_timeout_minutes"] = 5
+        browser_session["last_activity_at"] = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert "data-legal-draft" in resp.get_data(as_text=True)
+    # The app itself still enforces the timeout.
+    assert client.get("/core/settings").status_code in (302, 401)
