@@ -350,6 +350,35 @@ mr_e2e:
     - merge_requests
   allow_failure: false
 
+# A broad relevant_tests fallback intentionally skips E2E. Keep Tastings' subscribed
+# stock/calendar/performance journeys blocking even when this feature changes shared
+# models, app registration or migrations. Reuse the established in-process smoke setup.
+tastings_e2e:
+  extends: mr_e2e
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_tastings_page.py -v
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - .gitlab-ci.yml
+      - app/features/tastings/**/*
+      - app/features/crm/frontend/js/tastings.js
+      - app/features/crm/frontend/css/tastings.css
+      - app/features/crm/frontend/js/tasks-calendar.js
+      - app/features/crm/models/crm_task.py
+      - app/features/crm/repositories/crm_task_repo.py
+      - app/features/crm/routes/api_routes.py
+      - app/features/crm/services/crm_service.py
+      - app/features/compliant/modules/nz_alcohol/**/*
+      - app/core/backend/tasks.py
+      - app/core/security/**/*
+      - app/core/db/migrations/versions/*tastings*
+      - app/api/app_factory.py
+      - app/ui/page_registry.py
+      - tests/e2e/test_tastings_page.py
+  allow_failure: false
+
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
 # stages on main; merge requests run selected regressions and browser smoke above.
 unit_tests:

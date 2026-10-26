@@ -238,3 +238,4 @@
 {"duration_s": null, "findings": 3, "notes": null, "ref": "feat/tastings", "run_type": "chained", "scope": "tastings", "skill": "build-review", "ts": "2026-10-26T12:33:06+00:00", "verdict": "patched"}
 {"duration_s": null, "findings": 1, "notes": null, "ref": "feat/tastings", "run_type": "chained", "scope": "tastings", "skill": "spec-first", "ts": "2026-10-26T12:33:06+00:00", "verdict": "patched"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "feat/tastings", "run_type": "chained", "scope": "tastings", "skill": "spec-critic", "ts": "2026-10-26T12:33:06+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 1, "notes": "Full-backend fallback skips E2E; added dedicated blocking Tastings browser/performance job; CI lint and exact command passed.", "ref": "feat/tastings", "run_type": "chained", "scope": "tastings", "skill": "ci-gate", "ts": "2026-10-26T12:36:01+00:00", "verdict": "patched"}
