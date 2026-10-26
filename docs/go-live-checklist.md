@@ -61,7 +61,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
 | ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
 | ◐ | GL-P08 | Contract producer: one end-to-end test of the case described | Fix | Reclassified Decide + Founder, see below |
-| ☐ | GL-P09 | Guided first-day setup | Decide | The highest-impact design item |
+| ◐ | GL-P09 | Guided first-day setup | Decide | !574: three styles to pick from (setup guide, task list, one step at a time). The highest-impact design item |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
 | ☐ | GL-P11 | Reminders outside the app | Decide + Founder | Needs an email sender, as GL-A04 does |
 | ☐ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | |
@@ -75,7 +75,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-U02b | One name for each place (Customs vs Excise, the two Tasks) | Decide | |
 | ☑ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | !572: deleting a workflow or step silently deleted its batches; now refused, and the delete confirmations state the effect. An audit of confirmation texts |
 | ◐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | !573: production steps (offline and signed-out) and a sign-in-again path for every save. Receiving, counts and evidence still to test. Production steps, receiving, counts and evidence first |
-| ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes |
+| ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes. Found so far: dark-mode headings on Record step are near-invisible; a boosted arrival at pages without section tabs sits 32px lower than a full load |
 | ☑ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | !572 |
 
 ### Conversion (P1)
