@@ -1,0 +1,70 @@
+/* Record a production step (/core/record). Layout comes from workspace-overviews.css; only the
+   page's own pieces are styled here, with the shared --ui-* tokens so dark mode follows. Rows
+   and tiles are large tap targets: this page is used on the production floor, on a phone. */
+#page-content .rs-shell[data-record-step-root] { position: relative; max-width: 1280px; margin: 0 auto; padding: 8px 24px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; }
+@media (max-width: 767px) { #page-content .rs-shell[data-record-step-root] { padding: 4px 16px 40px; gap: 20px; } }
+.rs-shell [hidden] { display: none !important; }
+.rs-visually-hidden { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#page-content .rs-shell .rs-primary { background: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent-strong, #115e59); color: #fff; }
+html[data-spa-theme="dark"] #page-content .rs-shell .rs-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #04211d; }
+
+.rs-loading { margin: 0; color: var(--ui-text-muted); font-size: 14px; }
+.rs-message { margin: 0; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
+.rs-message--error { background: rgba(180, 35, 24, .08); color: #b42318; border: 1px solid rgba(180, 35, 24, .4); }
+html[data-spa-theme="dark"] .rs-message--error { color: #fca5a5; }
+
+/* Just recorded. */
+.rs-recorded { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 18px; border-radius: 10px; background: var(--ui-accent-soft, #e6f6f3); border: 1px solid var(--ui-accent); }
+.rs-recorded__text { margin: 0; font-size: 15px; color: var(--ui-text); line-height: 1.45; }
+.rs-recorded__text strong { color: var(--ui-accent-strong, #115e59); }
+
+/* Sections. */
+.rs-section { display: flex; flex-direction: column; gap: 12px; }
+.rs-section__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+#page-content .rs-section h2 { margin: 0; font-size: 17px; font-weight: 650; color: var(--ui-text); display: flex; align-items: center; gap: 8px; }
+.rs-count { font-size: 13px; font-weight: 600; color: var(--ui-text-muted); background: var(--ui-surface-subtle, #f1f5f9); border-radius: 999px; padding: 2px 9px; }
+.rs-count:empty { display: none; }
+html[data-spa-theme="dark"] .rs-count { background: rgb(255 255 255 / 8%); }
+#page-content .rs-shell #rs-search { width: 280px; max-width: 100%; height: 40px; min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
+@media (max-width: 560px) { .rs-search { flex-basis: 100%; } #page-content .rs-shell #rs-search { width: 100%; } }
+.rs-batches:empty { display: none; }
+.rs-empty { margin: 0; padding: 16px 18px; border: 1px dashed var(--ui-border); border-radius: 10px; color: var(--ui-text-muted); font-size: 14px; }
+.rs-empty a { color: var(--ui-accent-strong, #115e59); font-weight: 600; }
+
+/* Batches in flight: one card, a full-width row each. */
+.rs-batches { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); overflow: hidden; }
+.rs-batches li + li { border-top: 1px solid var(--ui-border); }
+.rs-batch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 130px 16px; align-items: center; gap: 16px; padding: 16px 18px; min-height: 64px; box-sizing: border-box; text-decoration: none; color: inherit; }
+.rs-batch:hover { background: var(--ui-surface-subtle, #f8fafc); }
+.rs-batch:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: -3px; }
+html[data-spa-theme="dark"] .rs-batch:hover { background: rgb(255 255 255 / 4%); }
+.rs-batch.is-recorded { background: var(--ui-accent-soft, #e6f6f3); }
+.rs-batch__main, .rs-batch__step { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rs-batch__workflow { font-size: 15px; font-weight: 650; color: var(--ui-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-batch__label { font-size: 13px; color: var(--ui-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-batch__next { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ui-text-muted); }
+.rs-batch__stepname { font-size: 15px; font-weight: 600; color: var(--ui-accent-strong, #115e59); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-batch__of { font-size: 12px; color: var(--ui-text-muted); }
+.rs-wait { font-size: 13px; color: var(--ui-text-muted); white-space: nowrap; text-align: right; }
+.rs-wait--late { color: #b45309; font-weight: 600; }
+html[data-spa-theme="dark"] .rs-wait--late { color: #fbbf24; }
+.rs-chevron { font-size: 22px; line-height: 1; color: var(--ui-text-muted); }
+@media (max-width: 640px) {
+  .rs-batch { grid-template-columns: minmax(0, 1fr) 16px; grid-template-areas: "main chev" "step chev" "wait chev"; gap: 6px 12px; padding: 14px 16px; }
+  .rs-batch__main { grid-area: main; }
+  .rs-batch__step { grid-area: step; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .rs-wait { grid-area: wait; text-align: left; }
+  .rs-chevron { grid-area: chev; align-self: center; }
+}
+
+/* New batch: a tile per workflow. */
+.rs-workflows { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.rs-workflow { display: flex; align-items: center; gap: 14px; height: 100%; padding: 16px 18px; min-height: 76px; box-sizing: border-box; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); text-decoration: none; color: inherit; }
+.rs-workflow:hover { border-color: var(--ui-accent); }
+.rs-workflow:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+.rs-workflow__plus { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); font-size: 20px; font-weight: 600; line-height: 1; }
+.rs-workflow__main { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rs-workflow__name { font-size: 15px; font-weight: 650; color: var(--ui-text); }
+.rs-workflow__meta { font-size: 13px; color: var(--ui-text-muted); line-height: 1.4; }
+.rs-workflow__inflight { font-size: 12px; font-weight: 600; color: var(--ui-accent-strong, #115e59); }

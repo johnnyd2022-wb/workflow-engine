@@ -154,6 +154,10 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # Record a production step: the Production overview's main button (go-live UX blocker).
+    from app.core.backend.record_step import record_step_bp
+
+    app.register_blueprint(record_step_bp)
     # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
     from app.core.backend.stock_locations import stock_locations_bp
 

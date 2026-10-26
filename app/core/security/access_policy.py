@@ -270,6 +270,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.complete_step", None, "production.record"),
     ("core.amend_execution_step_record", None, "production.record"),  # plan 1.5: correcting a completed step
     ("core.flows_batches_start", None, "production.record"),
+    ("record_step.record_page", None, "production.record"),
+    ("record_step.get_record_options", None, "production.record"),
     ("core.evidence_upload", None, "production.record"),
     ("core.evidence_delete", None, "production.record"),
     ("core.record_wastage", None, "production.record"),

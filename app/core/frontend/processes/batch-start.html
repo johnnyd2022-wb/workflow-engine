@@ -2,6 +2,19 @@
 {% set breadcrumb_leaf = "Record step" %}
 
 {% block body_class %}batch-start-spa{% endblock %}
+
+{# Opened from Record a production step: the trail and the back arrow lead back there. #}
+{% block breadcrumbs %}
+{% if return_to and (return_to == '/core/record' or return_to.startswith('/core/record?')) %}
+<nav class="breadcrumbs" aria-label="Breadcrumb" data-nav-back="/core/record">
+  <ol>
+    <li><a href="/core">Production</a></li>
+    <li><a href="/core/record">Record a production step</a></li>
+    <li aria-current="page" data-breadcrumb-leaf>Record step</li>
+  </ol>
+</nav>
+{% else %}{{ super() }}{% endif %}
+{% endblock %}
 {% block title %}Record step{% endblock %}
 
 

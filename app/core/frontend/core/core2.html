@@ -1154,14 +1154,14 @@
       } else if (stage === 2) {
         primary = { label: 'Create product workflow', href: '/core/flows/create', icon: 'workflow' };
       } else if (stage === 3) {
-        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
       } else {
         // Set up and running: the everyday job on this page is recording production.
-        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
       }
 
       var addInv = { kind: 'addInventory' };
-      var recordExec = { label: 'Record production step', href: '/core/processes' };
+      var recordExec = { label: 'Record production step', href: '/core/record' };
       var trace = { label: 'Trace and recall', href: '/core/sourcemap' };
       var secondaries = [];
       if (stage === 2) {
@@ -1176,7 +1176,7 @@
       function actionAllowed(item) {
         if (item.kind === 'addInventory' || item.addInventoryDropdown) return permissions.canAdjust === 'true';
         if (item.href === '/core/flows/create') return permissions.canDesign === 'true';
-        if (item.href === '/core/processes') return permissions.canRecord === 'true';
+        if (item.href === '/core/record') return permissions.canRecord === 'true';
         if (item.href === '/core/sourcemap') return permissions.canTrace === 'true';
         return true;
       }

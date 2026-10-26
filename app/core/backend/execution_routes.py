@@ -49,6 +49,7 @@ logger = get_logger(__name__)
 
 
 _ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
+_RECORD_PICKER = "/core/record"  # keep in sync with RECORD_PICKER in batch-start-scripts.html
 _EXECUTION_DATA_TRACE_KEYS = {
     "completed_by",
     "completed_by_email",
@@ -105,8 +106,10 @@ def _safe_flow_return_to(value, process_id) -> str:
         norm_path = "/" + norm_path
     if "\\" in norm_path:
         return default
-    # Stay within process workspace routes (blocks /core/flows/../../admin → /admin)
-    if norm_path != _ALLOWED_RETURN_PREFIX and not norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/"):
+    # Stay within process workspace routes (blocks /core/flows/../../admin → /admin), or the
+    # Record a production step picker, which sends people here and wants them back.
+    in_flows = norm_path == _ALLOWED_RETURN_PREFIX or norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/")
+    if not in_flows and norm_path != _RECORD_PICKER:
         return default
     if parsed.fragment:
         frag = unquote(parsed.fragment)

@@ -70,3 +70,13 @@ def test_unsafe_or_empty_returns_process_workspace_default(value):
 )
 def test_flows_workspace_paths_pass_through(value, expected):
     assert _safe_flow_return_to(value, PROCESS_ID) == expected
+
+
+@pytest.mark.parametrize("value", ["/core/record", "/core/record?recorded=abc"])
+def test_the_record_step_picker_is_a_safe_return(value):
+    assert _safe_flow_return_to(value, PROCESS_ID) == value
+
+
+@pytest.mark.parametrize("value", ["/core/recordings", "/core/record/../../admin", "/core/record/x"])
+def test_only_the_picker_itself_is_allowed_outside_flows(value):
+    assert _safe_flow_return_to(value, PROCESS_ID) == EXPECTED_DEFAULT
