@@ -760,6 +760,15 @@ def register_routes(bp):
                 return jsonify({"error": "Process not found"}), 404
 
             return jsonify({"message": "Process deleted successfully"}), 200
+        except IntegrityError:
+            # A batch committed after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {
+                    "error": "This workflow has batches recorded against it, so it can't be deleted: "
+                    "their production records and stock history would go with it."
+                }
+            ), 409
         except Exception:
             # Log the full error for debugging but return generic message to client
             logger.exception("Error deleting process")
@@ -1036,11 +1045,18 @@ def register_routes(bp):
             ), 409
 
         repo = ProcessRepository(db_session)
-        success = repo.delete_step(
-            step_id=step_uuid,
-            process_id=process_uuid,
-            org_id=org_id,
-        )
+        try:
+            success = repo.delete_step(
+                step_id=step_uuid,
+                process_id=process_uuid,
+                org_id=org_id,
+            )
+        except IntegrityError:
+            # A batch recorded this step after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {"error": "A batch has recorded this step, so it can't be deleted without erasing what was recorded."}
+            ), 409
 
         if not success:
             return jsonify({"error": "Step or process not found"}), 404
