@@ -11,6 +11,7 @@ from flask import Blueprint, Response, g, jsonify, render_template, request, sen
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.evidence.evidence_service import get_evidence_for_download
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
 from app.core.db.models.user import User, UserRole
@@ -254,6 +255,7 @@ def update_np3_check_settings(control_id: str):
 
 @api_bp.route("/api/compliant/np3-audit/attestations", methods=["POST"])
 @requires_auth
+@idempotent_write("np3_attestation")  # GL-U03: a retried save adds the evidence once
 def attest_np3_check():
     """Append a focused NP3 self-review without exposing the generic record register."""
     data = request.get_json(silent=True)
@@ -330,6 +332,7 @@ def attest_np3_check():
 
 @api_bp.route("/api/compliant/np3-audit/checks/<control_id>/logs", methods=["POST"])
 @requires_auth
+@idempotent_write("np3_log")  # GL-U03: a retried save adds the evidence once
 def add_np3_check_log(control_id: str):
     """Append a control-specific operational log entry from the check workspace."""
     template = np3_log_template(control_id)
@@ -672,6 +675,7 @@ def list_records():
 
 @api_bp.route("/api/compliant/records", methods=["POST"])
 @requires_auth
+@idempotent_write("compliance_record")  # GL-U03: a retried save adds the evidence once
 def create_record():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):

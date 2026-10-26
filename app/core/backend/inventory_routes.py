@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.core.backend.event_writer import EventWriter
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution
@@ -656,6 +657,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
     @bp.route("/api/core/inventory", methods=["POST"])
     @requires_auth
+    @idempotent_write("inventory_create")  # GL-U03: a retried receipt can't add the stock twice
     def create_inventory_item():
         """Create a new inventory item (typically raw material). Supports barcode; enforces product identity when barcode exists."""
         org_id = UUID(g.org_id)

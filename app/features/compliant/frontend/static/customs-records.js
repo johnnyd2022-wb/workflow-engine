@@ -135,8 +135,10 @@
       form.append(more);
       var save = el('button', { type: 'submit', className: 'workspace-button workspace-button--primary', text: 'Save evidence' });
       form.append(save);
+      var key = null;
       form.addEventListener('submit', async function (e) {
         e.preventDefault(); fail(''); save.disabled = true;
+        key = key || U.saveKey();
         var dueDate = due && due.value ? due.value : null;
         var months = Number(review.value || 0);
         if (!dueDate && months) { var n = new Date(); n.setMonth(n.getMonth() + months); dueDate = n.toISOString().slice(0, 10); }
@@ -146,9 +148,10 @@
             title: title.value, period_start: start ? start.value : null, period_end: end ? end.value : null, due_date: dueDate,
             declared_litres_of_alcohol: lal ? lal.value : null, evidence_reference: ref.value || null,
             source_refs: Array.from(picked.keys()), details: months ? { review_interval_months: months } : {},
-          });
+          }, { 'Idempotency-Key': key });
+          key = null;
           await onSaved();
-        } catch (err) { fail(err.message); save.disabled = false; }
+        } catch (err) { if (!U.keepKeyAfter(err)) key = null; fail(err.message); save.disabled = false; }
       });
       return form;
     }
