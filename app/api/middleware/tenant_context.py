@@ -106,13 +106,16 @@ def setup_tenant_context(app):
                 session.modified = True
                 abort(401, "Session expired or account is unavailable")
 
-            # GL-A02: a session signed in before the password last changed is over. A session from
-            # before stamps existed gets one now, so deploying this signs nobody out.
+            # GL-A02: a session signed in before the password last changed is over. A session with no
+            # stamp predates this check, and nothing on the server says which password it signed in
+            # with, so it ends too: deploying this signs everyone out once.
             stamp = auth_stamp(user.password_hash)
-            if session.get("auth_stamp") is None:
-                session["auth_stamp"] = stamp
-            elif not hmac.compare_digest(str(session["auth_stamp"]), stamp):
-                LOGGER.info("session_ended_by_password_change", user_id=str(user_uuid))
+            current = session.get("auth_stamp")
+            if current is None or not hmac.compare_digest(str(current), stamp):
+                LOGGER.info(
+                    "session_ended_by_password_change" if current is not None else "session_ended_unstamped",
+                    user_id=str(user_uuid),
+                )
                 session.clear()  # nosemgrep: bize-session-clear-without-rotate
                 session.modified = True
                 abort(401, "Session expired or account is unavailable")

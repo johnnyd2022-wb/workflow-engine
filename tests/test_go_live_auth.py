@@ -41,13 +41,21 @@ def test_signing_in_with_the_new_password_works_everywhere(account):  # noqa: F8
     assert fresh.get("/auth/session-timeout").status_code == 200
 
 
-def test_a_session_from_before_stamps_existed_is_kept_then_ends_on_a_change(account):  # noqa: F811
-    # Deploying the check must not sign everyone out: a session with no stamp gets one.
+def test_a_session_from_before_stamps_existed_ends(account):  # noqa: F811
+    # Nothing on the server says which password an unstamped cookie signed in with, so it can't be
+    # trusted to have outlived a password change. Codex's ordering on !571: unstamp, change the
+    # password elsewhere, then use the old cookie: it was a 200.
     other = account["make_client"](PASSWORD)
     with other.session_transaction() as sess:
         sess.pop("auth_stamp", None)
-    assert other.get("/auth/session-timeout").status_code == 200
     assert _change(account["client"], NEW).status_code == 200
+    assert other.get("/auth/session-timeout").status_code == 401
+
+
+def test_an_unstamped_cookie_ends_even_with_no_password_change(account):  # noqa: F811
+    other = account["make_client"](PASSWORD)
+    with other.session_transaction() as sess:
+        sess.pop("auth_stamp", None)
     assert other.get("/auth/session-timeout").status_code == 401
 
 

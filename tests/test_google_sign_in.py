@@ -18,7 +18,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation, OrganisationStatus
 from app.core.db.models.user import User, UserRole
 from app.core.db.models.user_identity import UserIdentity
-from app.core.security.auth_service import AuthService
+from app.core.security.auth_service import AuthService, auth_stamp
 from app.core.security.people import issue_invite
 from app.features.google_sign_in import oidc, routes
 from app.features.google_sign_in.service import GoogleSignInError, authoritative_email, validate_verified_claims
@@ -101,7 +101,12 @@ def _sign_in(browser, claims, monkeypatch, endpoint="start", data=None):
 
 def _authenticate(browser, user):
     with browser.session_transaction() as s:
-        s.update(user_id=str(user.id), org_id=str(user.org_id), user_email=user.email)
+        s.update(
+            user_id=str(user.id),
+            org_id=str(user.org_id),
+            user_email=user.email,
+            auth_stamp=auth_stamp(user.password_hash),
+        )
 
 
 @pytest.mark.parametrize(
