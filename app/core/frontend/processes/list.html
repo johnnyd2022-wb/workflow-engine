@@ -60,7 +60,7 @@
       {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       if (window.__processesListInit) return;
       window.__processesListInit = true;

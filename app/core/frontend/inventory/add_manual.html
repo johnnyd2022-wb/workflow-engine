@@ -129,7 +129,7 @@
       >Add Inventory Item</button>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function() {
       const form = document.getElementById('add-inventory-form');
       if (!form || form.getAttribute('data-add-manual-spa-init') === '1') return;

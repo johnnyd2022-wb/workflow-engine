@@ -571,7 +571,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     window.showNotification = window.showNotification || function(type, title, message) {
       console.log(type + ': ' + title + ' - ' + message);
     };

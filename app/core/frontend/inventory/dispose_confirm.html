@@ -93,7 +93,7 @@
     {% endcall %}
   </div>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       var submitBtn = document.getElementById('dispose-confirm-submit');
       if (!submitBtn) return;

@@ -88,7 +88,7 @@
   {% endfor %}
 </main>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   window.__compliantToolsCatalogue = (function () {
     var map = {};
     ({{ calculators | tojson }}).forEach(function (c) { map[c.key] = c; });

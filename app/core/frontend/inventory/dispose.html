@@ -52,7 +52,7 @@
     </section>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       // Guard on the page's own root, not on window: window survives a boosted swap, so a
       // window flag kept the second visit stuck on "Loading inventory...".

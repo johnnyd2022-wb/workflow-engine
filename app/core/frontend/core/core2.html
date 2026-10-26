@@ -471,7 +471,7 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Configure execution modal callbacks before loading shared script
     window.ExecutionModalConfig = {
       onStepCompleted: async function() {
@@ -482,7 +482,7 @@
   </script>
   {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     {
     // Global variable for notification timeout
     let notificationTimeout = null;
