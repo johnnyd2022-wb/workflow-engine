@@ -42,6 +42,10 @@ Home's banner now reads "Getting started · 5 of 7 done · Next: …" with **Con
 | Best at | Seeing the whole path and acting on the next step in one glance | Coming back later and picking any step; reads like a plan | A first-timer who wants to be told one thing |
 | Gives up | Other steps' explanations are a click away | More to read; the next step is marked, not featured | Seeing every step's detail at once |
 
+**Chosen: Style 1, the setup guide** (the founder's pick on !574, 2026-10-26).
+- **Style 2 (task list)** lost: it reads like a plan, but makes a newcomer scan four cards to find the one thing to do.
+- **Style 3 (one step at a time)** lost: it hides the whole path behind a side list, and on a phone shrinks the path to numbered dots.
+
 **Shared by all three:**
 - progress as "N of M done" with a bar;
 - status always in words ("To do", "Done", "Cannot start yet") alongside colour;
@@ -64,6 +68,6 @@ Home's banner now reads "Getting started · 5 of 7 done · Next: …" with **Con
   - a blocked step;
   - all done, where the Home banner goes away;
   - a failed load;
-  - **CONCEPT ONLY:** each style at 390, 1440 and 1920 with no sideways scroll, and Style 3's go-to-needed step.
+  - the guide at 390, 1440 and 1920 with no sideways scroll.
 - `tests/e2e/dashboard/test_dashboard_today.py`: the Home banner leads here (an intended change).
 - Shots: each style in the real, new and done states at laptop, phone and dark, plus wall, error, Home and a boosted arrival. Seven passes; the last was clean.

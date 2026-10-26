@@ -1,8 +1,5 @@
-"""GL-P09: the Getting started page, a resumable path from sign-up to a traced sale.
-
-Shared behaviour runs against Style 1 (the default). The CONCEPT ONLY group loads each style at
-phone, laptop and wall widths and is deleted with the two styles not chosen.
-"""
+"""GL-P09: the Getting started page, a resumable path from sign-up to a traced sale, laid out
+as a setup guide (Style 1 in !574)."""
 
 from __future__ import annotations
 
@@ -25,9 +22,9 @@ def _serve(page: Page, edit):
     page.route("**/api/core/getting-started", handler)
 
 
-def _open(page: Page, style="1", width=1440):
+def _open(page: Page, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"/core/getting-started?style={style}")
+    page.goto("/core/getting-started")
     page.locator(READY).wait_for()
 
 
@@ -83,31 +80,12 @@ def test_a_failed_load_says_so_and_shows_no_empty_list(logged_in_page: Page):
     page.route("**/api/core/getting-started", lambda r: r.fulfill(status=500, body="{}", content_type="application/json"))
     page.goto("/core/getting-started")
     expect(page.locator("[data-gs-message]")).to_contain_text("Could not load your progress")
-    expect(page.locator("[data-gs-view]:visible")).to_have_count(0)
+    expect(page.locator("[data-gs-guide-card]")).to_be_hidden()
 
 
-# --- CONCEPT ONLY: each style fits every width ------------------------------------------------
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920])
-def test_concept_each_style_fits_without_sideways_scroll(logged_in_page: Page, style, width):
+def test_the_guide_fits_every_width_without_sideways_scroll(logged_in_page: Page, width):
     page = logged_in_page
-    _open(page, style, width)
-    expect(page.locator(f"[data-gs-view='{style}']")).to_be_visible()
+    _open(page, width)
+    expect(page.locator("[data-gs-guide-card]")).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
-
-
-def test_concept_style_3_skips_and_goes_to_the_step_a_blocked_one_needs(logged_in_page: Page):
-    page = logged_in_page
-
-    def block(body):
-        for s in body["steps"]:
-            if s["key"] == "trace":
-                s.update(status="blocked", blocked_by="Match your Xero products first.", needs="mappings")
-
-    _serve(page, block)
-    _open(page, "3")
-    page.locator(".gs-path__step", has_text="Follow a batch to its customers").click()
-    page.get_by_role("button", name="Go to: Match your Xero products to yours").click()
-    expect(page.locator(".gs-path__step[aria-current='step']")).to_contain_text("Match your Xero products")
