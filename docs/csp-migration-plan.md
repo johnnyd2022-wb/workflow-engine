@@ -38,7 +38,7 @@ style can't run script. Moving them is cosmetic work with little security return
    - Hover styles moved to CSS.
    - `script-src-attr 'none'` is now **enforced**.
    - `tests/test_csp.py` ratchets new handler attributes out, and `tests/e2e/test_actions_dispatch.py` drives the dispatcher.
-3. **Alpine** (!MRNUM, done).
+3. **Alpine** (!590, done).
    - Swapped to `@alpinejs/csp` 3.15.12.
    - Inline `x-data="{…}"` objects stay: the CSP build's parser reads object literals. The 11 named components (`crmOverview()` and so on) are registered with `Alpine.data()` in `base_spa.html`, again before each boosted swap is initialised.
    - The parser rejects template literals, `?.`, arrow functions, statement sequences, `+=` and browser globals. 94 expressions were rewritten as concatenation and ternaries; the rest moved into component methods.
