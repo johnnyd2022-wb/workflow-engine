@@ -250,6 +250,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),
     ("go_live.get_go_live", None, ("inventory.view", "production.view")),
+    # --- getting started (GL-P09): a guide over pages that keep their own rules
+    ("getting_started.getting_started_page", None, SIGNED_IN),
+    ("getting_started.get_getting_started", None, SIGNED_IN),
     # --- process design
     ("core.create_process", None, "production.design"),
     ("core.update_process", None, "production.design"),

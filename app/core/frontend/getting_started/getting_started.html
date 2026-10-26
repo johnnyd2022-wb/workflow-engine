@@ -1,0 +1,57 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Getting started{% endblock %}
+
+{% block body_class %}getting-started-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="From sign-up to a traced sale, one step at a time">
+{% endblock %}
+
+{% block content %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='getting-started.css') }}">
+  <main class="gs-shell workspace-overview workspace-page" data-getting-started-root data-gs-style="1">
+    <header class="workspace-header">
+      <div>
+        <h1>Getting started</h1>
+        <p data-gs-lede>From sign-up to your first sale traced back to its batch.</p>
+      </div>
+      {# CONCEPT ONLY: the style switch, removed with the two styles not chosen. #}
+      <div class="gs-style-pick" role="group" aria-label="Design option">
+        <button type="button" data-gs-pick="1" aria-pressed="true">Style 1</button>
+        <button type="button" data-gs-pick="2" aria-pressed="false">Style 2</button>
+        <button type="button" data-gs-pick="3" aria-pressed="false">Style 3</button>
+      </div>
+    </header>
+
+    <p class="gs-message" data-gs-message role="status" hidden></p>
+    <p class="gs-loading" data-gs-loading>Loading your progress…</p>
+
+    <section class="gs-progress" data-gs-progress hidden aria-label="Progress">
+      <p class="gs-progress__text"><strong data-gs-done>0</strong> of <span data-gs-total>0</span> done</p>
+      <div class="gs-progress__bar" aria-hidden="true"><span data-gs-bar></span></div>
+    </section>
+
+    <section class="gs-complete workspace-card" data-gs-complete hidden aria-labelledby="gs-complete-title">
+      <h2 id="gs-complete-title">You're set up</h2>
+      <p>Every step is done: your stock, batches and sales are connected, and a batch traces to its customers. Home shows what needs you each day.</p>
+      <a class="workspace-button workspace-button--primary gs-primary" href="/core/dashboard">Go to Home</a>
+    </section>
+
+    {# Style 1: the setup guide. One card, the next step open, the rest folded. #}
+    <section class="workspace-card gs-guide" data-gs-view="1" hidden aria-labelledby="gs-guide-title">
+      <h2 id="gs-guide-title" class="gs-visually-hidden">Steps</h2>
+      <ol class="gs-guide__list" data-gs-guide></ol>
+    </section>
+
+    {# Style 2: the task list. Grouped rows, each a link, status in words. #}
+    <div class="gs-tasks" data-gs-view="2" hidden data-gs-tasks></div>
+
+    {# Style 3: one step at a time. The next step large, the path beside it. #}
+    <div class="gs-focus" data-gs-view="3" hidden>
+      <nav class="gs-path" aria-label="Setup steps"><ol data-gs-path></ol></nav>
+      <section class="workspace-card gs-current" data-gs-current aria-live="polite"></section>
+    </div>
+  </main>
+  <script src="/static/js/getting-started.js" defer></script>
+{% endblock %}

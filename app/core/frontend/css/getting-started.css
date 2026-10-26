@@ -1,0 +1,116 @@
+/* Getting started (/core/getting-started, GL-P09). Layout comes from workspace-overviews.css;
+   only the page's own pieces are styled here, with the shared --ui-* tokens so dark follows. */
+#page-content .gs-shell[data-getting-started-root] { position: relative; max-width: 960px; margin: 0 auto; padding: 24px 24px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px; }
+@media (max-width: 767px) { #page-content .gs-shell[data-getting-started-root] { padding: 16px 16px 40px; } }
+.gs-shell [hidden] { display: none !important; }
+.gs-shell:not(.is-ready) [data-gs-view] { display: none !important; }
+/* Absolutely positioned inside the nearest positioned box, so hidden text in a scrolling strip
+   can't widen the page. */
+.gs-visually-hidden { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#page-content .gs-shell .gs-primary { background: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent-strong, #115e59); color: #fff; }
+html[data-spa-theme="dark"] #page-content .gs-shell .gs-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #04211d; }
+
+.gs-loading { margin: 0; color: var(--ui-text-muted); font-size: 14px; }
+.gs-message { margin: 0; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
+.gs-message--error { background: rgba(180, 35, 24, .08); color: #b42318; border: 1px solid rgba(180, 35, 24, .4); }
+html[data-spa-theme="dark"] .gs-message--error { color: #fca5a5; }
+
+/* Progress: shared by all three. */
+.gs-progress { display: flex; align-items: center; gap: 16px; }
+.gs-progress__text { margin: 0; font-size: 14px; color: var(--ui-text-muted); white-space: nowrap; }
+.gs-progress__text strong { color: var(--ui-text); font-size: 15px; }
+.gs-progress__bar { flex: 1; height: 6px; border-radius: 999px; background: var(--ui-border); overflow: hidden; }
+.gs-progress__bar span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--ui-accent); transition: width .3s ease; }
+
+.gs-complete h2 { margin: 0 0 6px; font-size: 18px; color: var(--ui-text); }
+.gs-complete p { margin: 0 0 14px; color: var(--ui-text-muted); font-size: 14px; line-height: 1.5; max-width: 62ch; }
+
+/* Status in words, and the mark beside a step. */
+.gs-status { flex-shrink: 0; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.gs-status--todo { background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); }
+.gs-status--done { padding-inline: 0; color: var(--ui-text-muted); }
+.gs-status--blocked { background: var(--ui-surface-subtle, #f1f5f9); color: var(--ui-text-muted); }
+html[data-spa-theme="dark"] .gs-status--todo { color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] .gs-status--blocked { background: rgb(255 255 255 / 6%); }
+.gs-mark { flex-shrink: 0; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-size: 13px; font-weight: 700; border: 1.5px solid var(--ui-border); color: var(--ui-text-muted); box-sizing: border-box; }
+.gs-mark--done { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
+html[data-spa-theme="dark"] .gs-mark--done { color: #04211d; }
+.gs-mark--todo { border-color: var(--ui-accent); color: var(--ui-accent-strong, #115e59); }
+
+.gs-why { margin: 0; color: var(--ui-text-muted); font-size: 14px; line-height: 1.55; max-width: 62ch; }
+.gs-fact { margin: 0; font-size: 13px; font-weight: 600; color: var(--ui-text); }
+.gs-blocked { margin: 0; font-size: 13px; color: var(--ui-text-muted); font-style: italic; }
+
+/* Style 1: setup guide. */
+.gs-guide { padding: 0 !important; overflow: hidden; }
+.gs-guide__list { list-style: none; margin: 0; padding: 0; }
+.gs-guide__item + .gs-guide__item { border-top: 1px solid var(--ui-border); }
+#page-content .gs-guide__toggle { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 14px; padding: 16px 20px; cursor: pointer; }
+#page-content .gs-guide__toggle:hover { background: var(--ui-surface-subtle, #f8fafc); }
+#page-content .gs-guide__toggle:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: -3px; }
+html[data-spa-theme="dark"] #page-content .gs-guide__toggle:hover { background: rgb(255 255 255 / 4%); }
+.gs-guide__text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gs-guide__title { font-size: 15px; font-weight: 600; color: var(--ui-text); }
+.gs-guide__fact { font-size: 13px; color: var(--ui-text-muted); }
+.gs-guide__item--done .gs-guide__title { color: var(--ui-text-muted); font-weight: 500; }
+.gs-guide__body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 0 20px 20px 60px; }
+.gs-guide__item.is-open { background: var(--ui-surface-subtle, #f8fafc); }
+html[data-spa-theme="dark"] .gs-guide__item.is-open { background: rgb(255 255 255 / 3%); }
+@media (max-width: 560px) { .gs-guide__body { padding-left: 20px; } }
+
+/* CONCEPT ONLY: Style 2, task list. */
+.gs-tasks { display: flex; flex-direction: column; gap: 16px; }
+.gs-group h2 { margin: 0 0 6px; font-size: 16px; color: var(--ui-text); }
+.gs-task-list { list-style: none; margin: 0; padding: 0; }
+.gs-task-item + .gs-task-item { border-top: 1px solid var(--ui-border); }
+.gs-task-item:last-child .gs-task { padding-bottom: 0; }
+.gs-task { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 4px; text-decoration: none; color: inherit; border-radius: 6px; }
+a.gs-task:hover .gs-task__title { text-decoration: underline; }
+a.gs-task:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+.gs-task__main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gs-task__title { font-size: 15px; font-weight: 600; color: var(--ui-accent-strong, #115e59); }
+.gs-task--blocked .gs-task__title { color: var(--ui-text-muted); }
+.gs-task__hint { font-size: 13px; color: var(--ui-text-muted); line-height: 1.45; }
+.gs-task-item.is-next .gs-task__title::before { content: "Next · "; color: var(--ui-text-muted); font-weight: 500; }
+
+/* CONCEPT ONLY: Style 3, one step at a time. */
+.gs-focus { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; min-width: 0; max-width: 100%; }
+.gs-path { min-width: 0; max-width: 100%; }
+.gs-path ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+#page-content .gs-path__step { all: unset; position: relative; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--ui-text); }
+#page-content .gs-path__step:hover { background: var(--ui-surface-subtle, #f1f5f9); }
+#page-content .gs-path__step:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 0; }
+#page-content .gs-path__step[aria-current="step"] { background: var(--ui-accent-soft, #e6f6f3); font-weight: 600; }
+html[data-spa-theme="dark"] #page-content .gs-path__step:hover { background: rgb(255 255 255 / 5%); }
+.gs-path__step--done .gs-path__title { color: var(--ui-text-muted); }
+.gs-path__step--blocked .gs-path__title { color: var(--ui-text-muted); }
+.gs-current { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 32px !important; min-height: 280px; }
+.gs-current__eyebrow { margin: 0; font-size: 13px; font-weight: 600; color: var(--ui-text-muted); letter-spacing: .02em; }
+#page-content .gs-current h2 { margin: 0; font-size: 26px; font-weight: 650; line-height: 1.25; color: var(--ui-text); }
+.gs-why--large { font-size: 16px; }
+.gs-current__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+#page-content .gs-goto { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ui-accent-strong, #115e59); padding: 8px 0; }
+#page-content .gs-goto:hover { text-decoration: underline; }
+#page-content .gs-goto:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+#page-content .gs-skip { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ui-text-muted); padding: 8px 4px; }
+#page-content .gs-skip:hover { color: var(--ui-text); text-decoration: underline; }
+#page-content .gs-skip:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+.gs-done-note { margin: 0; font-size: 14px; color: var(--ui-accent-strong, #115e59); font-weight: 600; }
+@media (max-width: 767px) {
+  .gs-focus { grid-template-columns: minmax(0, 1fr); }
+  .gs-path ol { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .gs-path li { flex-shrink: 0; }
+  #page-content .gs-path__step { width: auto; padding: 6px; }
+  .gs-path__title { display: none; }
+  .gs-path__step[aria-current="step"] .gs-path__title { display: inline; }
+  .gs-current { padding: 22px !important; min-height: 0; }
+  #page-content .gs-current h2 { font-size: 22px; }
+}
+
+/* CONCEPT ONLY: the style switch. */
+.gs-style-pick { display: inline-flex; border: 1px solid var(--ui-border); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+#page-content .gs-style-pick button { all: unset; cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--ui-text-muted); }
+#page-content .gs-style-pick button + button { border-left: 1px solid var(--ui-border); }
+#page-content .gs-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); }
+#page-content .gs-style-pick button:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: -3px; }
