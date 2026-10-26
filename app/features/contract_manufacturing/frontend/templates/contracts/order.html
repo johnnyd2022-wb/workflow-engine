@@ -56,6 +56,29 @@
     {% endif %}
   </section>
   {% endfor %}
+  {% if order.status in ['confirmed', 'completed'] %}
+  {# GL-P08: every departure from the CCA is a transfer to the customer's CCA or a removal for duty. #}
+  <section class="contract-card contract-dispatch" data-contract-dispatch data-order-id="{{ order.id }}"
+           data-can-dispatch="{{ 'true' if can('inventory.adjust') else 'false' }}"
+           data-can-receipt="{{ 'true' if can('inventory.adjust', 'compliance.record') else 'false' }}" aria-labelledby="dispatch-title">
+    <h2 id="dispatch-title">Dispatch</h2>
+    {% if order.duty_responsibility == 'producer_licensee' %}
+    <p class="contract-dispatch__rule" data-dispatch-rule="removal">You are liable for duty on this order: each dispatch is a removal from your CCA, entered on the excise return for the day it leaves.</p>
+    {% else %}
+    <p class="contract-dispatch__rule" data-dispatch-rule="transfer">The customer is liable for duty: each dispatch is a transfer to their CCA ({{ order.customer_cca_reference }}), left out of your excise return. Record their acknowledgement when it arrives.</p>
+    {% endif %}
+    <div data-dispatch-list><p class="contract-dispatch__hint">Loading dispatches…</p></div>
+    <form hx-boost="false" class="contract-dispatch__form" data-dispatch-form hidden>
+      <fieldset data-dispatch-lots><legend>What is leaving</legend></fieldset>
+      <div class="contract-dispatch__row">
+        <label>Left on<input type="datetime-local" name="moved_at" required><span class="contract-dispatch__hint">NZ time</span></label>
+        <label>Carrier<input name="carrier" maxlength="200" required placeholder="e.g. Mainfreight"></label>
+        <label>Consignment note<input name="consignment_note" maxlength="200" placeholder="Optional"></label>
+      </div>
+      <button class="btn btn-primary" type="submit">Record dispatch</button>
+    </form>
+  </section>
+  {% endif %}
   {% if can('sales.record') and order.status not in ['completed','cancelled'] %}
   <section class="contract-card"><h2>Add product</h2>
     <form hx-boost="false" data-contract-api="/api/core/contract-orders/{{ order.id }}/lines" data-method="POST">
@@ -66,4 +89,4 @@
   {% endif %}
 </main>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('contracts.static', filename='orders.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('contracts.static', filename='orders.js') }}"></script><script src="{{ url_for('contracts.static', filename='dispatch.js') }}"></script>{% endblock %}

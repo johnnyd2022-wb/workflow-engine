@@ -105,7 +105,7 @@
       form.addEventListener('submit', async function (e) {
         e.preventDefault(); fail(''); save.disabled = true;
         try {
-          await api('PUT', API + '/' + t.departure.id + '/receipt', { received_on: on.value, receipt_reference: ref.value });
+          await api('PUT', t.receipt_url, { received_on: on.value, receipt_reference: ref.value });
           await onDone();
         } catch (err) { fail(err.message); save.disabled = false; }
       });
@@ -117,9 +117,10 @@
       var wrap = el('div', { className: 'tr-detail', 'data-tr-detail': t.xero_invoice_id });
       var facts = el('dl', { className: 'customs-rec-facts' });
       function fact(k, v) { facts.append(el('dt', { text: k }), el('dd', { text: v })); }
-      fact('Sale', sale(t));
+      fact(t.kind === 'contract' ? 'Dispatch' : 'Sale', sale(t));
       fact('Went to', t.destination.name + ' · CCA ' + t.destination.cca_code);
-      fact('Address', t.destination.address);
+      if (t.destination.address) fact('Address', t.destination.address);
+      if (t.kind === 'contract') fact('Order', t.reference.replace(/ dispatch$/, ''));
       fact('Goods', goods(t));
       fact('Left', moved(t));
       fact('Received', received(t));
@@ -127,7 +128,7 @@
       var reload = async function () { state.open = null; await load(); };
       if (t.status === 'needs_details') wrap.append(el('h3', { className: 'customs-sub', text: 'Record when it left' }), departureForm(t, reload));
       else if (t.status !== 'received') wrap.append(el('h3', { className: 'customs-sub', text: 'Record the receipt' }), receiptForm(t, reload));
-      if (t.departure) {
+      if (t.departure && t.kind !== 'contract') {
         var more = el('details', { className: 'customs-rec-form__more' }, [el('summary', { text: 'Correct the movement' })]);
         more.append(departureForm(t, reload));
         var undo = el('button', { type: 'button', className: 'workspace-button tr-undo', text: 'Not a transfer: remove the movement' });

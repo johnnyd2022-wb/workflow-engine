@@ -327,6 +327,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Contract orders (7.2a): production sees order demand, never CRM contact details;
     # Sales sees commercial lines, with recipe/spec references removed by the DTO.
     ("contracts.list_customers", None, "sales.view"),
+    # GL-P08: a dispatch takes stock off; the receipt is the customer's acknowledgement for Customs.
+    ("contracts.list_dispatches", None, ("sales.view", "production.view", "inventory.view")),
+    ("contracts.dispatch_order", None, "inventory.adjust"),
+    ("contracts.record_dispatch_receipt", None, ("inventory.adjust", "compliance.record")),
     ("contracts.list_materials", None, "inventory.view"),
     ("contracts.materials_page", None, "inventory.view"),
     ("contracts.receive_customer_material", None, "inventory.adjust"),

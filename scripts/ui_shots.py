@@ -63,6 +63,7 @@ SEED_KINDS = (
     "planner",
     "board",
     "contracts",
+    "dispatch",
     "stocktake",
     "customers",
     "suppliers",
@@ -1524,6 +1525,70 @@ def _seed_contracts(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_contract_dispatch(db, org_id, inv) -> None:
+    """GL-P08 part 2, on top of the contracts seed: a batch and finished bottles for HS-1042
+    (producer liable, so a dispatch is a removal) and KB-0217 (customer liable, a transfer), and
+    one earlier KB-0217 dispatch still waiting for the customer's receipt."""
+    from datetime import datetime
+    from datetime import time as clock
+    from zoneinfo import ZoneInfo
+
+    from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
+    from app.features.contract_manufacturing.models.dispatch import ContractDispatch, ContractDispatchLine
+    from app.features.contract_manufacturing.models.orders import ContractOrder, ContractOrderExecution
+    from tests.factories import ExecutionFactory, ProcessFactory
+
+    process = ProcessFactory(org_id=org_id, name="Contract bottling")
+    today = date.today()
+    for reference, product, made, batch_code in (
+        ("HS-1042", "Harbour Navy Gin 700 mL", 600, "HNG-0412"),
+        ("KB-0217", "Kawakawa Bitters 200 mL", 240, "KWB-0219"),
+    ):
+        order = db.query(ContractOrder).filter_by(org_id=org_id, reference=reference).one()
+        line = order.lines[0]
+        batch = ExecutionFactory(org_id=org_id, process_id=process.id)
+        db.add(ContractOrderExecution(org_id=org_id, order_id=order.id, line_id=line.id, execution_id=batch.id))
+        lot = inv.create_inventory_item(
+            org_id=org_id,
+            name=product,
+            quantity=str(made),
+            unit="bottles",
+            inventory_type="final_product",
+            supplier_batch_number=batch_code,
+            source_execution_id=batch.id,
+            commit=False,
+        )
+        db.flush()
+        if reference == "KB-0217":
+            nz = ZoneInfo("Pacific/Auckland")
+            left = ContractDispatch(
+                org_id=org_id,
+                order_id=order.id,
+                treatment="cca_transfer",
+                destination_name="Kererū Botanicals",
+                destination_cca=order.customer_cca_reference,
+                moved_at=datetime.combine(today - timedelta(days=6), clock(14, 15), tzinfo=nz),
+                carrier="NZ Couriers",
+                consignment_note="NZC-88120",
+            )
+            db.add(left)
+            db.flush()
+            db.add(
+                ContractDispatchLine(
+                    org_id=org_id,
+                    dispatch_id=left.id,
+                    inventory_item_id=lot.id,
+                    product_name=product,
+                    quantity=Decimal(120),
+                    unit="bottles",
+                )
+            )
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.CONTRACT_DISPATCH):
+                lot.quantity = Decimal(made - 120)
+                db.flush()
+    db.commit()
+
+
 def _seed_stocktake(db, org_id, inv) -> None:
     """Stocktakes over the stock seed's finished goods: one finished in July with every line
     matching, and one under way today with a line short, one over, one under investigation and
@@ -2130,6 +2195,7 @@ def cmd_seed(args) -> int:
             "planner": _seed_planner,
             "board": _seed_board,
             "contracts": _seed_contracts,
+            "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,
             "suppliers": _seed_suppliers,
         }[kind](db, org.id, inv)

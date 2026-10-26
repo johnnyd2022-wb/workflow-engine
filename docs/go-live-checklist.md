@@ -61,7 +61,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
 | ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
-| ◐ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free. Part 1 (sales to another CCA, the movement register, Customs → Transfers) in !580; part 2 (dispatching contract orders) follows |
+| ☑ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free. Part 1 (sales to another CCA, the movement register, Customs → Transfers) in !580; part 2 (dispatching contract orders: a removal when the producer is liable, a transfer to the customer's CCA otherwise) in !582 |
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
 | ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. Go-live blocker; leave it out of assessments not about go-live |
@@ -78,14 +78,14 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ◐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | !573: production steps (offline and signed-out) and a sign-in-again path for every save. Receiving, counts and evidence still to test. Production steps, receiving, counts and evidence first |
 | ☑ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes. A boosted arrival at pages without section tabs sat 32px lower than a full load (fixed in !575). !585: a contrast measurement of every registry page in both themes (under 3:1 flagged), down from 13 dark and 1 light pattern to none, starting with the near-invisible Record step headings; pinned by a browser test. !591: the other states, 45 pages each. Every API failing: seven pages left "Loading…" beside the error and two showed an empty state as if there were nothing (notifications, stock); now each says it didn't load. Empty org: NP3 notifications read "Unknown" for a date, and two empty states used retired or internal names. Phone (390px) and 200% zoom: nothing wider than the screen. No permission (Sales, Production, Auditor): blocked pages land on Home with a notice saying why. Expired session: covered by GL-U03's sign-in-again path (!573) |
 | ☑ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | !572 |
-| ◐ | GL-U06 | Record production step opens a picker: every batch in flight and a start-new-batch list, two taps to any step | Fix (founder: go-live blocker) | !576 |
+| ☑ | GL-U06 | Record production step opens a picker: every batch in flight and a start-new-batch list, two taps to any step | Fix (founder: go-live blocker) | !576 |
 
 ### Conversion (P1)
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ◐ | GL-C01 | Pricing, inclusions, cancellation | Fix | Founder (2026-10-26): placeholders for now. Compliance (NZ Alcohol) is NZD 250 + GST a month; inclusions and cancellation are placeholder text until confirmed |
-| ◐ | GL-C02 | Privacy and service terms linked at signup and in the app | Fix | Founder (2026-10-26): placeholder terms, modelled on what NZ SaaS products publish (Privacy Act 2020, Consumer Guarantees Act and Fair Trading Act in-trade exclusions, data in AWS, exit and deletion). Marked as drafts for legal review |
+| ☑ | GL-C01 | Pricing, inclusions, cancellation | Fix | !579 (placeholder pages; the founder's review is GL-A06). Founder (2026-10-26): placeholders for now. Compliance (NZ Alcohol) is NZD 250 + GST a month; inclusions and cancellation are placeholder text until confirmed |
+| ☑ | GL-C02 | Privacy and service terms linked at signup and in the app | Fix | !579 (placeholder pages, linked at sign-up, landing and Settings; review is GL-A06). Founder (2026-10-26): placeholder terms, modelled on what NZ SaaS products publish (Privacy Act 2020, Consumer Guarantees Act and Fair Trading Act in-trade exclusions, data in AWS, exit and deletion). Marked as drafts for legal review |
 | ☐ | GL-C03 | Import templates with an error report and a preview | Decide | |
 | ☐ | GL-C04 | Help and contact on every page, with a reference ID | Decide | |
 | ◐ | GL-C05 | Sector-specific example journeys | Fix | Founder (2026-10-26): Whistlebird is the worked example for distilleries. Other sectors after go-live |
@@ -106,6 +106,5 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 - **GL-P07: advertising multi-site and planning.** This is a rule about what to claim, not a code change; the Sites page already says which flows are on. I'd keep it in the sales playbook rather than here.
 - **GL-P12: commercial depth.** I agree with the report and would build these only when a named buyer is missing one; listing them here invites building ahead of demand.
 - **The "ten times better" targets.** Founder (2026-10-26): present options once the other items are addressed.
-- **GL-P08: contract producers.** Settled by the founder on 2026-10-26 (see the row): every departure from a CCA is a CCA transfer or an excise removal.
 - **GL-S03: tightening the CSP.** Agreed 2026-10-26: a planned migration over several MRs, starting now.
 - **No archive for workflows.** After !572 a workflow with batches can't be deleted, and there's no "archive" to hide old ones. Worth a design item if old workflows clutter the list.
