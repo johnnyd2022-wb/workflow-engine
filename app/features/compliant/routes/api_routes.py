@@ -1056,6 +1056,7 @@ def list_excise_categories():
         {
             "categories": excise_tariff.catalogue(date.today()),
             "source": excise_tariff.SOURCE,
+            "guide": excise_tariff.guide_status(date.today()),
         }
     ), 200
 

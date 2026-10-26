@@ -147,7 +147,7 @@
     if (!sampledIn) {
       return;
     }
-    var payload = _baseAttributes(attributes);
+    var payload = _scrubDeep(_baseAttributes(attributes), 0);
     _captureToFaro(name, payload);
     _captureToPosthog(name, payload);
   }
@@ -156,7 +156,7 @@
     if (!sampledIn) {
       return;
     }
-    var payload = _baseAttributes(attributes);
+    var payload = _scrubDeep(_baseAttributes(attributes), 0);
     _captureToFaro('rum.pageview', payload);
     _captureToPosthog('$pageview', Object.assign({}, payload, {
       $current_url: window.location.href,
@@ -313,6 +313,10 @@
           environment: 'browser',
         },
         instrumentations: instrumentations,
+        // The whole item, not just meta.page.url: the SDK's own events and errors carry URLs too.
+        beforeSend: function (item) {
+          return _scrubDeep(item, 0);
+        },
         sessionTracking: {
           enabled: true,
           // The outer sampledIn check is the single session-level sampler.
@@ -320,6 +324,36 @@
         },
       });
     } catch (_err) {}
+  }
+
+  // GL-S04: an invite link (/invite/<token>) or a token in a query string must never reach
+  // an event, even if a page that shows one starts loading this script.
+  var SECRET_PARAMS = /([?&](?:token|code|invite|key|secret|password|state)=)[^&#]*/gi;
+  function _scrubUrl(value) {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    return value.replace(/\/invite\/[^/?#]+/g, '/invite/[redacted]').replace(SECRET_PARAMS, '$1[redacted]');
+  }
+
+  // Every string in an event, at any depth: the referrer, a path attribute, an error message
+  // quoting a URL. The scrub only rewrites invite paths and secret parameters, so it is safe on
+  // any text.
+  function _scrubDeep(value, depth) {
+    if (typeof value === 'string') {
+      return _scrubUrl(value);
+    }
+    if (!value || typeof value !== 'object' || (depth || 0) > 8) {
+      return value;
+    }
+    Object.keys(value).forEach(function (key) {
+      value[key] = _scrubDeep(value[key], (depth || 0) + 1);
+    });
+    return value;
+  }
+
+  function _scrubProperties(properties) {
+    return _scrubDeep(properties, 0);
   }
 
   function _initPosthog() {
@@ -347,8 +381,12 @@
         disable_session_recording: false,
         mask_all_text: maskInputs,
         mask_all_element_attributes: true,
+        sanitize_properties: _scrubProperties,
         session_recording: {
           maskAllInputs: maskInputs,
+          // mask_all_text only covers autocapture. Replays need their own text mask, or they
+          // record customer names, contact details, recipes and invite links (GL-S04).
+          maskTextSelector: maskInputs ? '*' : null,
         },
         loaded: function (instance) {
           posthog = instance;

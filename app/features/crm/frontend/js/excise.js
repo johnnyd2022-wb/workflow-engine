@@ -9,6 +9,11 @@ function crmExcise() {
     months: [],
     sources: [],
     ratesSource: null,
+    // Whether the month shown is past the built-in rates' review date (its own check, not today's).
+    get ratesStale() {
+      const source = (this.report && this.report.rates_source) || this.ratesSource;
+      return !!(source && source.guide && source.guide.out_of_date);
+    },
     selected: null,
     report: null,
 

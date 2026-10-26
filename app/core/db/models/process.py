@@ -49,7 +49,12 @@ class Process(TenantScoped, Base):
         order_by="Step.position,Step.step_number",
         cascade="all, delete-orphan",
     )
-    executions = relationship("Execution", back_populates="process", cascade="all, delete-orphan")
+    # Never cascade a delete to batches (GL-U02c): passive_deletes="all" leaves them to the
+    # executions.process_id foreign key, which refuses to delete a workflow that has any,
+    # including one committed after the route's own check.
+    executions = relationship(
+        "Execution", back_populates="process", cascade="save-update, merge", passive_deletes="all"
+    )
 
     def __repr__(self):
         return f"<Process(id={self.id}, name={self.name}, org_id={self.org_id})>"

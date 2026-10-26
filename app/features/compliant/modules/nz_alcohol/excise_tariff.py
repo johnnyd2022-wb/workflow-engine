@@ -280,6 +280,23 @@ def levy_rate(abv: Decimal | None, on: date) -> tuple[str, Decimal] | None:
     return None
 
 
+def next_review() -> date:
+    """When this guide goes out of date: the 1 July after its newest rates.
+
+    Customs adjusts alcohol duty and the levy every 1 July, so the guide can't know a rate from
+    that day until someone adds it here. Whichever of duty or levy is older decides.
+    """
+    newest_duty = max(start for _, history in RATES.values() for start, _ in history)
+    newest_levy = max(start for _, _, history in LEVY for start, _ in history)
+    return date(min(newest_duty, newest_levy).year + 1, 7, 1)
+
+
+def guide_status(on: date) -> dict:
+    """Whether the built-in rates cover ``on`` (GL-P06): past the review date they are last year's."""
+    review = next_review()
+    return {"next_review": review.isoformat(), "out_of_date": on >= review}
+
+
 def catalogue(on: date) -> list[dict]:
     """Product types for the picker, with the rate each band carries on ``on``."""
     out = []

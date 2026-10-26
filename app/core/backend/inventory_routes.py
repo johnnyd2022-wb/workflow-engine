@@ -1035,6 +1035,15 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 return jsonify({"error": "Inventory item not found"}), 404
 
             return jsonify({"message": "Inventory item deleted successfully"}), 200
+        except IntegrityError:
+            # Movements, sales, transfers and counts all keep their item (GL-U02c): say so, not "failed".
+            db_session.rollback()
+            return jsonify(
+                {
+                    "error": "This item has stock history (movements, sales, transfers or counts), so it can't be "
+                    "deleted. Adjust it to zero or dispose of it instead; its history stays."
+                }
+            ), 409
         except Exception:
             logger.exception("Error deleting inventory item")
             return jsonify({"error": "Failed to delete inventory item"}), 500

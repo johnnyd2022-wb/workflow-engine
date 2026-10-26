@@ -365,6 +365,10 @@ class Config:
         return self.get("email", "receiver_email", "")
 
     @property
+    def support_email(self) -> str:
+        return self.get("email", "support_email", "")
+
+    @property
     def invoice_button_enabled(self) -> bool:
         return self.getboolean("features", "invoice_button_enabled", False)
 

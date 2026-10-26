@@ -233,7 +233,7 @@ def month_report(session: Session, org_id: UUID, start: date, today: date | None
     start = month_start(start)
     lines, unmapped = sales_sources.sale_lines(session, org_id, start, next_month(start))
     report = _report(_Context(session, org_id), start, lines, unmapped, today or date.today())
-    return {**report, "sources": _sources(session, org_id), "rates_source": rates_source()}
+    return {**report, "sources": _sources(session, org_id), "rates_source": rates_source(start)}
 
 
 def months(session: Session, org_id: UUID, today: date | None = None) -> list[dict]:
@@ -271,5 +271,10 @@ def months(session: Session, org_id: UUID, today: date | None = None) -> list[di
     return out
 
 
-def rates_source() -> dict:
-    return {"excise": excise_tariff.SOURCE, "levy": excise_tariff.LEVY_SOURCE, "gst_rate": _s(excise_tariff.GST_RATE)}
+def rates_source(on: date | None = None) -> dict:
+    return {
+        "excise": excise_tariff.SOURCE,
+        "levy": excise_tariff.LEVY_SOURCE,
+        "gst_rate": _s(excise_tariff.GST_RATE),
+        "guide": excise_tariff.guide_status(on or date.today()),
+    }

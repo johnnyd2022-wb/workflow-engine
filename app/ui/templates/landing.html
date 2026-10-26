@@ -404,6 +404,16 @@
         <button type="submit" id="login-submit-btn" class="btn btn-hero btn-lg" style="width: 100%;">
           Sign In
         </button>
+        {% if support_email %}
+        <details id="login-help" style="font-size: 0.875rem; color: var(--text-muted, #94a3b8);">
+          <summary style="cursor: pointer;">Forgotten your password or locked out?</summary>
+          <p style="margin: 0.5rem 0 0; line-height: 1.5;">
+            Email <a href="mailto:{{ support_email }}?subject=Help%20signing%20in" style="color: inherit; font-weight: 600;">{{ support_email }}</a>
+            from the address you sign in with. We'll check it's you, then send a new sign-in link.
+            We'll never ask for your password. A lock after too many wrong tries clears itself within a few minutes.
+          </p>
+        </details>
+        {% endif %}
       </form>
     </div>
   </div>

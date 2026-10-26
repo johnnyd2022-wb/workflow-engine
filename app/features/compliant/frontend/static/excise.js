@@ -140,6 +140,9 @@
   function problemsPiece(d) {
     var items = [];
     if (d.legacy_unavailable) items.push({ text: 'Multiple-site excise needs a separate, complete entry for each source CCA. This view is for review only and cannot be recorded as lodged.' });
+    if (d.rates_guide && d.rates_guide.out_of_date) {
+      items.push({ text: 'Duty rates: Customs sets new rates every 1 July, and the built-in ones only cover removals before ' + fmtDate(d.rates_guide.next_review) + '. Check this period\'s rates against Customs\' table, or add them.', href: SETTINGS + '#customs-rates-title', link: 'Check rates' });
+    }
     (d.problems || []).forEach(function (p) {
       items.push({ text: p.product + ': ' + p.reason + (p.removals ? ' (' + U.plural(p.removals, 'removal') + ' left out)' : ''), href: SETTINGS + '#product-' + U.slug(p.product) });
     });
@@ -149,7 +152,7 @@
     var ul = el('ul');
     items.forEach(function (t) {
       var li = el('li', { text: t.text + ' ' });
-      if (t.href) li.append(el('a', { href: t.href, text: 'Fix in Settings' }));
+      if (t.href) li.append(el('a', { href: t.href, text: t.link || 'Fix in Settings' }));
       ul.append(li);
     });
     box.append(ul);

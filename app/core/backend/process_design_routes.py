@@ -12,7 +12,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
-from app.core.db.models.execution import ExecutionStatus
+from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
@@ -737,6 +738,20 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process ID"}), 400
 
+        # The ORM cascades a process to its executions, so a delete would take every batch's
+        # production record with it. Refuse instead and say why (GL-U02c).
+        batches = (
+            db_session.query(Execution).filter(Execution.org_id == org_id, Execution.process_id == process_uuid).count()
+        )
+        if batches:
+            return jsonify(
+                {
+                    "error": f"This workflow has {batches} batch{'es' if batches != 1 else ''} recorded against it, "
+                    "so it can't be deleted: their production records and stock history would go with it.",
+                    "batches": batches,
+                }
+            ), 409
+
         repo = ProcessRepository(db_session)
         try:
             success = repo.delete_process(process_id=process_uuid, org_id=org_id)
@@ -745,6 +760,15 @@ def register_routes(bp):
                 return jsonify({"error": "Process not found"}), 404
 
             return jsonify({"message": "Process deleted successfully"}), 200
+        except IntegrityError:
+            # A batch committed after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {
+                    "error": "This workflow has batches recorded against it, so it can't be deleted: "
+                    "their production records and stock history would go with it."
+                }
+            ), 409
         except Exception:
             # Log the full error for debugging but return generic message to client
             logger.exception("Error deleting process")
@@ -1000,12 +1024,39 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process or step ID"}), 400
 
-        repo = ProcessRepository(db_session)
-        success = repo.delete_step(
-            step_id=step_uuid,
-            process_id=process_uuid,
-            org_id=org_id,
+        # A step's ExecutionSteps cascade with it: refuse rather than erase what batches recorded.
+        recorded = (
+            db_session.query(ExecutionStep)
+            .join(Execution, Execution.id == ExecutionStep.execution_id)
+            .filter(
+                ExecutionStep.step_id == step_uuid,
+                Execution.process_id == process_uuid,
+                Execution.org_id == org_id,
+            )
+            .count()
         )
+        if recorded:
+            return jsonify(
+                {
+                    "error": f"{recorded} batch{'es have' if recorded != 1 else ' has'} recorded this step, "
+                    "so it can't be deleted without erasing what was recorded.",
+                    "batches": recorded,
+                }
+            ), 409
+
+        repo = ProcessRepository(db_session)
+        try:
+            success = repo.delete_step(
+                step_id=step_uuid,
+                process_id=process_uuid,
+                org_id=org_id,
+            )
+        except IntegrityError:
+            # A batch recorded this step after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {"error": "A batch has recorded this step, so it can't be deleted without erasing what was recorded."}
+            ), 409
 
         if not success:
             return jsonify({"error": "Step or process not found"}), 404

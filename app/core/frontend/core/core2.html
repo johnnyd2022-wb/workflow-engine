@@ -3262,7 +3262,7 @@
       currentDeleteInventoryName = itemName;
       const modal = document.getElementById('delete-inventory-confirmation-modal');
       const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
-      messageEl.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
+      messageEl.textContent = `Delete "${itemName}"? This can't be undone. Only stock with no history can be deleted: anything moved, sold, wasted or counted stays in the records (adjust it to zero instead).`;
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
@@ -3486,7 +3486,7 @@
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Gin distillation">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
@@ -3555,7 +3555,7 @@
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Juniper berries">
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
