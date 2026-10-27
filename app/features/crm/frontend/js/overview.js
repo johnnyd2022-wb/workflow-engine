@@ -4,6 +4,8 @@ function crmOverview() {
   const SYSTEM_WIDGET_PREFS_KEY = 'crm_overview_system_widget_prefs_v1';
 
   return {
+    // Markup can't reach window globals under the CSP build of Alpine (GL-S03).
+    encode(value) { return encodeURIComponent(value); },
     loading: true,
     loadError: false,
     loadErrorStatus: null,
