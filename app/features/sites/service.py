@@ -182,3 +182,52 @@ def overview(session, org_id):
         "kinds": KINDS,
         "additional_site_operations_available": operations,
     }
+
+
+def choices(session, org_id):
+    """What a site picker or site lens offers: active sites with their stock areas, the default,
+    and whether more than one can be chosen. With any gate closed there is nothing to choose and
+    pages show no site control at all."""
+    org = session.query(Organisation).filter(Organisation.id == org_id).one()
+    on = sites_on(session, org_id, org.multiple_sites_enabled)
+    if not on:
+        return {"on": False, "default_id": None, "sites": []}
+    sites = (
+        session.query(Site)
+        .filter(Site.org_id == org_id, Site.is_active.is_(True))
+        .order_by(Site.is_default.desc(), Site.name)
+        .all()
+    )
+    areas = (
+        session.query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    default = next((site for site in sites if site.is_default), None)
+    return {
+        "on": True,
+        "default_id": str(default.id) if default else None,
+        "sites": [
+            {
+                "id": str(site.id),
+                "name": site.name,
+                "kind": site.kind,
+                "is_default": bool(site.is_default),
+                "areas": [{"id": str(a.id), "name": a.name} for a in areas if a.site_id == site.id],
+            }
+            for site in sites
+        ],
+    }
+
+
+def site_named(session, org_id, name):
+    """An active site by its name, ignoring case; None when there is no such site."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return None
+    return (
+        session.query(Site)
+        .filter(Site.org_id == org_id, Site.is_active.is_(True), func.lower(Site.name) == wanted)
+        .one_or_none()
+    )

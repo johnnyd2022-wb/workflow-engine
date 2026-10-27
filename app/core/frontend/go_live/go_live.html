@@ -74,6 +74,8 @@
     <section class="gl-step" data-gl-step="count" aria-labelledby="gl-count-title">
       <h2 class="gl-step-title" id="gl-count-title"><span class="gl-num">3</span>Count what's on hand</h2>
       <p class="gl-hint">One entry per batch you can tell apart. Bottles are whole numbers; put a part-filled bottle under Library stock in mL. Unknown dates can stay blank.</p>
+      {# With several sites, count one site at a time; each count is recorded where it was taken. #}
+      <div data-site-pick hidden></div>
 
       <h3 style="margin: 6px 0 0; font-size: 15px;">Finished goods</h3>
       <div data-gl-products><p class="gl-hint">Loading…</p></div>

@@ -156,7 +156,8 @@ def register_routes(bp):
         - Item Name: required, sanitized (control chars removed), max 255 chars.
         - Quantity: required, must be numeric, must be > 0.
         - Unit: required, must be in allowed list (see unit_conversion.CONVERSION_FACTORS).
-        - Optional columns: Supplier Name, Purchase Date, Batch Number, Expiry Date.
+        - Optional columns: Supplier Name, Purchase Date, Batch Number, Expiry Date, Site (with
+          multiple sites on: an active site's name, overriding the site chosen for the file).
         - Dates: parsed as YYYY-MM-DD, DD/MM/YYYY, or MM/DD/YYYY; invalid dates left empty.
         - On commit (csv_commit): same checks re-applied; duplicate batch (same org + name + batch number)
           skips that row; other rows still commit (see csv_commit).
@@ -202,6 +203,7 @@ def register_routes(bp):
                 "purchase date": "purchase_date",
                 "batch number": "batch_number",
                 "expiry date": "expiry_date",
+                "site": "site",
             }
             col_map = {}
             for h in reader.fieldnames or []:
@@ -230,6 +232,7 @@ def register_routes(bp):
                 purchase_date = _parse_date(row.get(col_map.get("purchase_date") or ""))
                 batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
                 expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
+                site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
 
                 status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
                 unit = canonical_unit if canonical_unit else unit_raw
@@ -245,6 +248,7 @@ def register_routes(bp):
                         "purchase_date": purchase_date.isoformat() if purchase_date else None,
                         "batch_number": batch_number,
                         "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                        "site": site,
                     }
                 )
 
@@ -258,6 +262,18 @@ def register_routes(bp):
                     "max_rows_allowed": CSV_MAX_ROWS,
                 }
             )
+
+    def _row_site(org_id, site_name):
+        """A row's "site" column, when multiple sites are on; None if no active site has that name."""
+        from app.core.db.models.organisation import Organisation
+        from app.core.db.site_entitlement import sites_on
+        from app.features.sites.service import site_named
+
+        org = db_session.get(Organisation, org_id)
+        if org is None or not sites_on(db_session, org_id, org.multiple_sites_enabled):
+            return None
+        site = site_named(db_session, org_id, site_name)
+        return site.id if site is not None else None
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
@@ -280,11 +296,23 @@ def register_routes(bp):
             errors = []
             # Phase 1: validate all rows with shared logic; do not create yet
             validated = []
+            # One site for the file (checked like any other site hint), or a "site" column per row.
+            file_site = getattr(g, "validated_site_id", None)
+            sites_by_name = {}
             for r in rows:
                 name = _sanitize(r.get("name"), 255)
                 qty_str = (r.get("quantity") or "").strip()
                 unit_raw = (r.get("unit") or "").strip()
                 status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
+                site_id = file_site
+                site_name = _sanitize(r.get("site"), 120)
+                if status == "ok" and site_name:
+                    key = site_name.lower()
+                    if key not in sites_by_name:
+                        sites_by_name[key] = _row_site(org_id, site_name)
+                    site_id = sites_by_name[key]
+                    if site_id is None:
+                        status, message = "error", f"No active site called {site_name}"
                 if status != "ok":
                     errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
                     continue
@@ -294,6 +322,7 @@ def register_routes(bp):
                         "name": name,
                         "quantity_str": quantity_str_for_storage,
                         "canonical_unit": canonical_unit,
+                        "site_id": site_id,
                     }
                 )
 
@@ -344,6 +373,7 @@ def register_routes(bp):
                             expiry_date=expiry_date,
                             extra_data=extra_data,
                             commit=False,
+                            site_id=v["site_id"],
                         )
                         created.append(
                             {

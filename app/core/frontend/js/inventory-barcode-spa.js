@@ -288,6 +288,8 @@
     var form = document.getElementById('barcode-add-inventory-form');
     if (!form || form.getAttribute('data-barcode-inv-bound') === '1') return;
     form.setAttribute('data-barcode-inv-bound', '1');
+    // Where the scanned stock goes; only shown with multiple sites on (site-picker.js).
+    var sitePick = window.BizeSite ? window.BizeSite.mount(form.querySelector('[data-site-pick]')) : null;
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -324,6 +326,7 @@
           console.error('CoreAPI.createInventoryItem is not available.', payload);
           return false;
         }
+        if (window.BizeSite) window.BizeSite.into(payload, sitePick);
         await window.CoreAPI.createInventoryItem(payload);
         if (window.showNotification) {
           window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');

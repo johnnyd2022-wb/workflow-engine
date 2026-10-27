@@ -26,6 +26,11 @@
           </div>
         </section>
 
+        <section class="spa-form-section" data-csv-site hidden>
+          <div data-site-pick></div>
+          <p class="site-pick__hint">For every row. Add a <strong>Site</strong> column to send some rows somewhere else.</p>
+        </section>
+
         <div id="csv-drop-zone" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 24px; text-align: center; background: var(--ui-surface-subtle, #f9fafb); cursor: pointer; min-height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;">
           <span style="color: var(--text-secondary); font-size: 14px;">Drop CSV here or</span>
           <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
@@ -50,6 +55,10 @@
       S.pendingRows = null;
       S.acceptedRows = null;
       S.totalReviewCount = 0;
+      // One site for the file, only with multiple sites on; a Site column overrides it per row.
+      var siteSection = document.querySelector('[data-csv-site]');
+      S.sitePick = window.BizeSite && siteSection ? window.BizeSite.mount(siteSection.querySelector('[data-site-pick]'), { label: 'Site for this file' }) : null;
+      if (S.sitePick) S.sitePick.ready.then(function (h) { siteSection.hidden = !h.select; });
 
       var DUP_FORM_SUMMARY = 'This Item name, Supplier and Batch number already exists in inventory. Please review the highlighted fields below.';
 
@@ -302,7 +311,7 @@
         if (wrap) {
           wrap.innerHTML = '<p class="csv-review-saving" role="status">Saving inventory…</p>';
         }
-        CoreAPI.inventoryCsvCommit({ rows: S.acceptedRows }).then(function(res) {
+        CoreAPI.inventoryCsvCommit(window.BizeSite ? window.BizeSite.into({ rows: S.acceptedRows }, S.sitePick) : { rows: S.acceptedRows }).then(function(res) {
           var hasErr = res.errors && res.errors.length;
           if (hasErr) {
             if (res.created && res.created.length) {

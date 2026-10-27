@@ -305,6 +305,8 @@ html[data-spa-theme="dark"] #page-content .inv-view-page {
   #page-content .inv-view-page .inv-row .inv-cell-expiry { grid-column: 2; grid-row: 2; text-align: right; }
   #page-content .inv-view-page .inv-row .inv-cell-expiry .inv-expiry { align-items: flex-end; }
   #page-content .inv-view-page .inv-row .inv-cell-expiry > .inv-muted { display: none; }
+  #page-content .inv-view-page .inv-row td.inv-cell-where { grid-column: 1 / -1; grid-row: 3; font-size: 13px; }
+  #page-content .inv-view-page .inv-row td.inv-cell-where .inv-muted { font-size: 13px; }
   #page-content .inv-view-page .inv-row td.inv-cell-go,
   #page-content .inv-view-page .inv-row td.inv-cell-trend,
   #page-content .inv-view-page .inv-row td.inv-cell-since { display: none; }
@@ -577,4 +579,41 @@ body:has(.inv-view-page) .inv-edit-input:focus { outline-color: var(--ui-accent,
   body:has(.inv-view-page) .inv-edit-title { font-size: 20px; font-weight: 600; }
   body:has(.inv-view-page) .inv-edit-form { flex: 1 1 auto; padding: 20px 24px 0; }
   body:has(.inv-view-page) .inv-edit-actions { position: sticky; bottom: 0; margin: auto -24px 0; padding: 14px 24px; border-top: 1px solid var(--ui-border, #e2e8f0); background: var(--bg-card, #fff); }
+}
+
+/* ── Sites (GL-P07 A3): only with multiple sites on and more than one active site ─── */
+/* .inv-select forces display with !important, so its hidden state has to say so too. */
+#page-content .inv-view-page .inv-select[hidden] { display: none !important; }
+#page-content .inv-view-page .inv-where-split { display: flex; flex-direction: column; gap: 2px; }
+#page-content .inv-view-page .inv-where-split__line { display: flex; justify-content: space-between; gap: 12px; color: var(--ui-text-muted, #64748b); }
+#page-content .inv-view-page .inv-where-split__qty { font-variant-numeric: tabular-nums; color: var(--ui-text, #172033); }
+#page-content .inv-view-page .inv-cell-where { max-width: 240px; font-size: 13px; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
+
+/* CONCEPT ONLY: the site lens layout switch. */
+#page-content .inv-view-page .inv-style-pick { display: inline-flex; border: 1px solid var(--ui-border); border-radius: 999px; overflow: hidden; }
+#page-content .inv-view-page .inv-style-pick button { padding: 6px 12px; border: 0; background: var(--ui-surface); color: var(--ui-text-muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+#page-content .inv-view-page .inv-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+
+/* CONCEPT ONLY: Style 1, a tab per site above the list. */
+#page-content .inv-view-page .inv-site-tabs { display: flex; gap: 4px; margin: -4px 0 16px; padding-bottom: 0; border-bottom: 1px solid var(--ui-border, #e2e8f0); overflow-x: auto; }
+#page-content .inv-view-page .inv-site-tab { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--ui-text-muted, #64748b); font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#page-content .inv-view-page .inv-site-tab:hover { color: var(--ui-text, #172033); }
+#page-content .inv-view-page .inv-site-tab[aria-pressed="true"] { border-bottom-color: var(--ui-accent, #0f766e); color: var(--ui-text, #172033); }
+#page-content .inv-view-page .inv-site-tab__count { padding: 1px 7px; border-radius: 999px; background: var(--ui-surface-subtle, #f1f5f9); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ui-text-muted, #64748b); }
+#page-content .inv-view-page .inv-site-tab[aria-pressed="true"] .inv-site-tab__count { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+#page-content .inv-view-page .inv-site-tab:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: -2px; }
+
+/* CONCEPT ONLY: Style 3, a card per site, remembered between visits. */
+#page-content .inv-view-page .inv-site-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 18px; }
+#page-content .inv-view-page .inv-site-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 10px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); text-align: left; cursor: pointer; }
+#page-content .inv-view-page .inv-site-card:hover { border-color: var(--ui-accent, #0f766e); }
+#page-content .inv-view-page .inv-site-card.is-active { border-color: var(--ui-accent, #0f766e); box-shadow: inset 0 0 0 1px var(--ui-accent, #0f766e); }
+#page-content .inv-view-page .inv-site-card__name { font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
+#page-content .inv-view-page .inv-site-card strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#page-content .inv-view-page .inv-site-card__note { font-size: 12px; color: var(--ui-text-muted, #64748b); }
+#page-content .inv-view-page .inv-site-card__note.is-attention { color: var(--inv-attention); }
+#page-content .inv-view-page .inv-site-card__note.is-overdue { color: var(--inv-overdue); }
+#page-content .inv-view-page .inv-site-card:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: 2px; }
+@media (max-width: 767px) {
+  #page-content .inv-view-page .inv-site-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

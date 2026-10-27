@@ -62,9 +62,16 @@
   var state = {
     q: '', type: '', supplier: '', process: '', status: '',
     expFrom: '', expTo: '', purFrom: '', purTo: '', metaKey: '', metaText: '',
-    sort: 'name', dir: 'asc', group: false, item: '',
+    sort: 'name', dir: 'asc', group: false, item: '', site: '',
   };
-  var URL_KEYS = ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText', 'item'];
+  var URL_KEYS = ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText', 'item', 'site'];
+  // Sites (GL-P07 A3): only with multiple sites on and more than one active site; otherwise the
+  // page is exactly as it was, with no site column or control.
+  var sites = [];
+  var LENS_KEY = 'inventoryView.site';
+  // CONCEPT ONLY: which site lens layout is showing (1 tabs, 2 filter, 3 remembered site cards).
+  var STYLE_KEY = 'inventoryView.siteStyle';
+  var siteStyle = '1';
 
   function $(selector) { return root.querySelector(selector); }
   var els = {
@@ -95,6 +102,10 @@
     drawerTitle: $('#inv-drawer-title'),
     drawerEyebrow: $('[data-inv-drawer-eyebrow]'),
     backdrop: $('[data-inv-backdrop]'),
+    siteTabs: $('[data-inv-sites]'),
+    siteFilter: $('#inv-filter-site'),
+    siteCards: $('[data-inv-site-cards]'),
+    stylePick: $('[data-inv-style-pick]'),
   };
   var lastFocus = null;
 
@@ -326,6 +337,10 @@
     itemTd.appendChild(el('span', 'inv-row__sub', sub || (item.inventory_type === 'raw_material' ? 'No supplier recorded' : 'No process recorded')));
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(item.inventory_type)));
+    if (sitesShown()) {
+      var where = whereText(item);
+      tr.appendChild(cell('inv-cell-where', el('span', where ? '' : 'inv-muted', where || (state.site ? 'At the site' : '—'))));
+    }
     tr.appendChild(qtyCell(row.qty, item.unit));
     tr.appendChild(cell('inv-cell-trend', sparkline(item, 84, 28)));
     tr.appendChild(cell('inv-cell-expiry', expiryNode(row.expiry)));
@@ -345,6 +360,7 @@
     itemTd.appendChild(el('span', 'inv-row__sub', plural(row.members.length, 'lot')));
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(row.members[0].item.inventory_type)));
+    if (sitesShown()) tr.appendChild(cell('inv-cell-where', groupWhere(row)));
     tr.appendChild(qtyCell(row.qty, row.unit));
     tr.appendChild(cell('inv-cell-trend'));
     tr.appendChild(cell('inv-cell-expiry', expiryNode(row.expiry)));
@@ -359,15 +375,47 @@
     tr.dataset.groupKey = row.key;
     return tr;
   }
+  /** A product's lots across places, one line each with its quantity, or the one place they all are. */
+  function groupWhere(row) {
+    var bySite = {}, order = [];
+    row.members.forEach(function (m) {
+      var key = state.site ? (m.item.location_name || 'At the site') : ((siteById(m.item.site_id) || {}).name || '—');
+      if (!(key in bySite)) { bySite[key] = 0; order.push(key); }
+      bySite[key] += m.qty;
+    });
+    if (order.length === 1) return el('span', 'inv-muted', order[0]);
+    // One line per place: "Seaview bond store  240".
+    var list = el('span', 'inv-where-split');
+    order.forEach(function (k) {
+      var line = el('span', 'inv-where-split__line');
+      line.appendChild(el('span', '', k));
+      line.appendChild(el('span', 'inv-where-split__qty', fmtQty(bySite[k])));
+      list.appendChild(line);
+    });
+    return list;
+  }
   function cssEscape(value) {
     return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────
   function stock() { return items.filter(onHand); }
+  function sitesShown() { return sites.length > 1; }
+  function siteById(id) { return sites.filter(function (x) { return x.id === id; })[0] || null; }
+  function atSite(item) { return !state.site || item.site_id === state.site; }
+  /** Stock on hand at the chosen site (all sites when none is chosen). */
+  function scoped() { return stock().filter(atSite); }
+  /** "Gracefield distillery · Bottling room"; just the area once one site is chosen. */
+  function whereText(item) {
+    var site = siteById(item.site_id);
+    var parts = [];
+    if (site && !state.site) parts.push(site.name);
+    if (item.location_name) parts.push(item.location_name);
+    return parts.join(' · ');
+  }
 
   function renderGlance() {
-    var all = stock();
+    var all = scoped();
     els.glance.replaceChildren();
     Object.keys(STATUSES).forEach(function (key) {
       var def = STATUSES[key];
@@ -387,10 +435,10 @@
   }
 
   function renderSegments() {
-    var scoped = stock().filter(function (item) { return passes(item, { type: true }); });
+    var inScope = scoped().filter(function (item) { return passes(item, { type: true }); });
     els.segments.replaceChildren();
     [['', 'All']].concat(Object.keys(TYPES).map(function (k) { return [k, TYPES[k].label]; })).forEach(function (pair) {
-      var n = pair[0] ? scoped.filter(function (i) { return i.inventory_type === pair[0]; }).length : scoped.length;
+      var n = pair[0] ? inScope.filter(function (i) { return i.inventory_type === pair[0]; }).length : inScope.length;
       var btn = el('button', 'inv-segment');
       btn.type = 'button';
       btn.setAttribute('aria-pressed', state.type === pair[0] ? 'true' : 'false');
@@ -407,6 +455,7 @@
   function activeFilters() {
     var out = [];
     function add(key, label) { out.push({ keys: [].concat(key), label: label }); }
+    if (state.site && siteStyle === '2' && siteById(state.site)) add('site', 'Site: ' + siteById(state.site).name);
     if (state.status) add('status', STATUSES[state.status].label);
     if (state.type) add('type', 'Type: ' + TYPES[state.type].label);
     if (state.supplier) add('supplier', 'Supplier: ' + state.supplier);
@@ -454,15 +503,22 @@
   }
   function clearFilters() {
     ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText']
+      .concat(siteStyle === '2' ? ['site'] : [])
       .forEach(function (k) { state[k] = ''; });
     syncControls();
     render();
     els.search.focus();
   }
 
+  function columns() {
+    if (!sitesShown()) return COLUMNS;
+    var out = COLUMNS.slice();
+    out.splice(2, 0, { key: 'where', label: state.site ? 'Area' : 'Where' });
+    return out;
+  }
   function renderHead() {
     var tr = el('tr');
-    COLUMNS.forEach(function (col) {
+    columns().forEach(function (col) {
       var th = el('th', 'inv-th inv-th--' + col.key + (col.numeric ? ' inv-th--num' : ''));
       th.scope = 'col';
       if (!col.sortable) {
@@ -489,20 +545,21 @@
   }
 
   function renderTable() {
-    var all = stock();
+    var all = scoped();
     var filtered = all.filter(function (item) { return passes(item); });
     var rows = buildRows(filtered);
 
     els.loading.hidden = true;
-    if (filtered.length === all.length) els.count.textContent = plural(all.length, 'line') + ' on hand';
-    else els.count.textContent = filtered.length + ' of ' + plural(all.length, 'line');
+    var here = state.site && siteById(state.site) ? ' at ' + siteById(state.site).name : '';
+    if (filtered.length === all.length) els.count.textContent = plural(all.length, 'line') + ' on hand' + here;
+    else els.count.textContent = filtered.length + ' of ' + plural(all.length, 'line') + here;
 
     els.empty.replaceChildren();
     els.empty.hidden = !!filtered.length;
     els.tableWrap.hidden = !filtered.length;
     if (!filtered.length) {
       els.tbody.replaceChildren();
-      els.empty.appendChild(el('strong', '', all.length ? 'No stock matches these filters' : 'No inventory on hand yet'));
+      els.empty.appendChild(el('strong', '', all.length ? 'No stock matches these filters' : (here ? 'Nothing on hand' + here : 'No inventory on hand yet')));
       els.empty.appendChild(el('span', '', all.length
         ? 'Try a different search, or clear the filters to see everything on hand.'
         : 'Stock appears here as you add it or as batches produce it.'));
@@ -524,7 +581,82 @@
     els.tbody.replaceChildren(fragment);
   }
 
+  // ── Sites: the lens over everything above (GL-P07 A3) ───────────────────────────────
+  function setSite(id) {
+    state.site = siteById(id) ? id : '';
+    if (siteStyle === '3') { try { window.localStorage.setItem(LENS_KEY, state.site); } catch (e) { /* private mode */ } }
+    syncControls();
+    renderHead();
+    render();
+  }
+  function siteFigures(siteId) {
+    var lines = stock().filter(function (i) { return !siteId || i.site_id === siteId; });
+    return {
+      lines: lines.length,
+      expiring: lines.filter(STATUSES.expiring.test).length,
+      expired: lines.filter(STATUSES.expired.test).length,
+    };
+  }
+  function siteOptions(select, allLabel) {
+    select.replaceChildren();
+    var all = el('option', '', allLabel);
+    all.value = '';
+    select.appendChild(all);
+    sites.forEach(function (site) {
+      var option = el('option', '', site.name);
+      option.value = site.id;
+      select.appendChild(option);
+    });
+    select.value = state.site;
+  }
+  function renderSites() {
+    var on = sitesShown();
+    if (els.stylePick) els.stylePick.hidden = !on;
+    [els.siteTabs, els.siteCards].forEach(function (n) { if (n) n.hidden = true; });
+    if (els.siteFilter) els.siteFilter.hidden = true;
+    if (!on) return;
+    if (siteStyle === '1') {
+      // Style 1: one tab per site above the list, each with its line count.
+      els.siteTabs.replaceChildren();
+      [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
+        var btn = el('button', 'inv-site-tab');
+        btn.type = 'button';
+        btn.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
+        btn.appendChild(document.createTextNode(site.name));
+        btn.appendChild(el('span', 'inv-site-tab__count', String(siteFigures(site.id).lines)));
+        btn.addEventListener('click', function () { setSite(site.id); });
+        els.siteTabs.appendChild(btn);
+      });
+      els.siteTabs.hidden = false;
+    } else if (siteStyle === '2') {
+      // Style 2: a Site filter beside Supplier and Process; the chip says when it is on.
+      siteOptions(els.siteFilter, 'Site');
+      els.siteFilter.classList.toggle('has-value', !!state.site);
+      els.siteFilter.hidden = false;
+    } else {
+      // Style 3: a card per site to compare and jump between; the choice is remembered.
+      els.siteCards.replaceChildren();
+      [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
+        var f = siteFigures(site.id);
+        var card = el('button', 'inv-site-card' + (state.site === site.id ? ' is-active' : ''));
+        card.type = 'button';
+        card.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
+        card.appendChild(el('span', 'inv-site-card__name', site.name));
+        card.appendChild(el('strong', '', plural(f.lines, 'line')));
+        var notes = [];
+        if (f.expired) notes.push(f.expired + ' expired');
+        if (f.expiring) notes.push(f.expiring + ' expiring');
+        card.appendChild(el('span', 'inv-site-card__note' + (f.expired ? ' is-overdue' : f.expiring ? ' is-attention' : ''), notes.join(' · ') || 'Nothing expiring'));
+        card.addEventListener('click', function () { setSite(site.id); });
+        els.siteCards.appendChild(card);
+      });
+      els.siteCards.hidden = false;
+    }
+  }
+
   function render() {
+    renderSites();
+    renderHead();
     renderGlance();
     renderSegments();
     renderActive();
@@ -576,6 +708,7 @@
     els.metaKey.value = state.metaKey;
     els.metaText.value = state.metaText;
     els.group.setAttribute('aria-pressed', state.group ? 'true' : 'false');
+    if (els.siteFilter) els.siteFilter.value = state.site;
   }
   function bind(node, key) {
     function onChange() {
@@ -603,6 +736,16 @@
       els.more.hidden = !open;
       els.moreToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) els.expFrom.focus();
+    });
+    if (els.siteFilter) els.siteFilter.addEventListener('change', function () { setSite(els.siteFilter.value); });
+    // CONCEPT ONLY: the lens layout switch.
+    if (els.stylePick) els.stylePick.querySelectorAll('[data-inv-style]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        siteStyle = b.dataset.invStyle;
+        try { window.localStorage.setItem(STYLE_KEY, siteStyle); } catch (e) { /* private mode */ }
+        applyStyle();
+        render();
+      });
     });
     els.group.addEventListener('click', function () {
       state.group = !state.group;
@@ -691,6 +834,10 @@
 
     var details = section('Details');
     var list = el('dl', 'inv-facts');
+    if (sitesShown()) {
+      var site = siteById(item.site_id);
+      fact(list, 'Where', [site ? site.name : '', item.location_name || ''].filter(Boolean).join(' · '));
+    }
     fact(list, 'Supplier', item.supplier);
     fact(list, 'Batch number', item.supplier_batch_number);
     fact(list, 'Process', item.process_name);
@@ -910,7 +1057,39 @@
     });
   }
 
+  // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
+  function readStyle() {
+    var fromUrl = new URLSearchParams(window.location.search).get('style');
+    var saved = null;
+    try { saved = window.localStorage.getItem(STYLE_KEY); } catch (e) { /* private mode */ }
+    siteStyle = ['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1');
+  }
+  function applyStyle() {
+    root.setAttribute('data-inv-site-style', siteStyle);
+    if (els.stylePick) els.stylePick.querySelectorAll('[data-inv-style]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.invStyle === siteStyle ? 'true' : 'false');
+    });
+  }
+  // ────────────────────────────────────────────────────────────────────────────────────────
+
+  function loadSites() {
+    if (!window.BizeSite) return;
+    window.BizeSite.choices().then(function (data) {
+      if (!root.isConnected) return;
+      sites = data.on ? data.sites : [];
+      if (!state.site && siteStyle === '3') {
+        try { state.site = window.localStorage.getItem(LENS_KEY) || ''; } catch (e) { /* private mode */ }
+      }
+      if (state.site && !siteById(state.site)) state.site = '';
+      syncControls();
+      renderHead();
+      if (items.length) render();
+    });
+  }
+
   function start() {
+    readStyle();
+    applyStyle();
     readUrl();
     syncControls();
     wireControls();
@@ -925,6 +1104,7 @@
         onChange: function () { if (root.isConnected) load(); else off(); },
       });
     }
+    loadSites();
     load();
   }
 

@@ -1,0 +1,4 @@
+/* The shared "Site" control (app/ui/shared/site-picker.js). Hidden entirely while multiple sites are off. */
+.site-pick { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); }
+.site-pick__hint { display: block; margin-top: 4px; font-size: 13px; font-weight: 400; color: var(--ui-text-muted, #64748b); }
+[data-site-pick][hidden] { display: none !important; }
