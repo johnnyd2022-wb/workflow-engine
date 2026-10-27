@@ -1,8 +1,8 @@
 """NZ Alcohol's notes for the Sites page: which sites and areas sit inside a Customs-licensed area.
 
-Coverage is the Customs licences register (premises.py): a licence covers a whole site (no
-location) or one stock area, for dated periods. Anything outside a current licence holds
-duty-paid stock only.
+Coverage is the Customs licences register (premises.py): a licence covers a site's main area
+(no location) or one named stock area, for dated periods. A named area needs its own record;
+anything outside a current licence holds duty-paid stock only.
 """
 
 from sqlalchemy import or_
@@ -39,14 +39,22 @@ class NZAlcoholSiteNotes:
                 by_site.setdefault(coverage.site_id, []).append(label)
             else:
                 by_area[coverage.location_id] = label
+        # A site-level record licenses the site's main area (stock not placed in a named area);
+        # a named area is licensed only by a record of its own (premises.licence_for_area).
         site_notes, licensed = {}, []
         for site in sites:
             whole = by_site.get(site.id, [])
             own = [a for a in areas if a.site_id == site.id]
             parts = [a for a in own if a.id in by_area]
-            if whole or (parts and len(parts) == len(own)):
-                numbers = whole or sorted({by_area[a.id] for a in parts})
+            numbers = sorted(set(whole) | {by_area[a.id] for a in parts})
+            if numbers and len(parts) == len(own):
                 note = {"text": "Customs-licensed: " + ", ".join(numbers), "short": "Licensed", "tone": "ok"}
+            elif whole:
+                note = {
+                    "text": f"Customs-licensed main area ({', '.join(whole)}); {len(parts)} of its {len(own)} areas",
+                    "short": f"Main area, {len(parts)} of {len(own)} areas",
+                    "tone": "ok",
+                }
             elif parts:
                 note = {
                     "text": f"Customs-licensed: {len(parts)} of its {len(own)} areas",
@@ -64,7 +72,7 @@ class NZAlcoholSiteNotes:
             site_notes[str(site.id)] = [{**note, "href": PREMISES}]
         area_notes = {}
         for area in areas:
-            licence = by_area.get(area.id) or (by_site.get(area.site_id) or [None])[0]
+            licence = by_area.get(area.id)
             area_notes[str(area.id)] = (
                 {"text": licence, "tone": "ok", "href": PREMISES}
                 if licence

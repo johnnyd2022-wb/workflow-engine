@@ -115,3 +115,20 @@ def test_without_a_compliance_profile_core_gets_no_notes(db, premises_world):  #
         "label": None,
         "step": None,
     }
+
+
+def test_a_site_wide_licence_covers_the_main_area_not_a_named_one(db, premises_world):  # noqa: F811
+    # premises.licence_for_area: a named area needs a record of its own.
+    orgs, sites, _, _ = premises_world
+    main = sites[0]
+    bay = StockLocation(id=uuid4(), org_id=orgs[0].id, site_id=main.id, name="Bay 9")
+    db.add(bay)
+    db.flush()
+    licence = premises.add_licence(db, orgs[0].id, licence_data())
+    premises.add_coverage(db, orgs[0].id, coverage_data(licence, main))
+    notes = NZAlcoholSiteNotes().notes(db, orgs[0].id, [main], [bay], ON)
+    assert notes["areas"][str(bay.id)]["text"] == "Duty-paid"
+    assert premises.licence_for_area(db, orgs[0].id, main.id, bay.id, ON) is None
+    site = notes["sites"][str(main.id)][0]
+    assert site["text"] == "Customs-licensed main area (Manufacturing area CCA-123); 0 of its 1 areas"
+    assert site["short"] == "Main area, 0 of 1 areas"
