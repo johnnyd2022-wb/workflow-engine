@@ -250,11 +250,13 @@
 
     function render() {
       if (!state.controls.length) {
+        summaryEl.removeAttribute('data-loading');
         summaryEl.textContent = 'Switch on the NZ Alcohol module in Compliance settings to keep records for Customs.';
         checksEl.replaceChildren();
         return;
       }
       var current = state.controls.filter(function (c) { return c.state === 'compliant'; }).length;
+      summaryEl.removeAttribute('data-loading');
       summaryEl.textContent = current + ' of ' + state.controls.length + ' checks have current proof · ' + U.plural(state.records.length, 'record') + ' kept';
       checksEl.replaceChildren.apply(checksEl, state.controls.map(checkRow));
     }

@@ -8,7 +8,7 @@
     <div><h1>Stock transfers</h1><p>Dispatch stock, track it in transit and record what arrived.</p></div>
     <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Inventory</a></div>
   </header>
-  <div class="workspace-notice" role="status" aria-live="polite" data-transfers-message hidden></div>
+  <div class="workspace-notice" role="alert" data-transfers-message hidden></div>
   <div class="workspace-stack">
     {% if can('inventory.adjust') %}
     <section class="transfers-card workspace-card" data-transfer-create hidden aria-labelledby="transfers-dispatch-title">

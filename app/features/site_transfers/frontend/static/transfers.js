@@ -92,7 +92,7 @@
   async function load() {
     const [position, choices] = await Promise.all([api('/api/core/site-transfers'), api('/api/core/site-transfers/options')]);
     options = choices; available = position.operations_available;
-    state.textContent = available ? (position.transfers.length ? '' : 'No stock in transit.') : 'Transfers are awaiting operational release. Existing records remain available.';
+    state.textContent = available ? (position.transfers.length ? '' : 'No stock in transit.') : 'Moving stock between sites isn’t switched on for your organisation yet. Transfers already recorded stay here.';
     const siteNames = new Map(options.sites.map(site => [site.id, site.name]));
     if (form) {
       root.querySelector('[data-transfer-create]').hidden = !available || !options.requirements.can_authorise;
@@ -125,5 +125,8 @@
     result.approval = Object.fromEntries([...data.entries()].filter(([key, value]) => key.startsWith('approval.') && value).map(([key, value]) => [key.slice(9), value]));
     return result;
   }, () => form.reset());
-  load().catch(showError);
+  load().catch(error => {
+    showError(error);
+    state.textContent = 'Not loaded. Reload the page to try again.';
+  });
 })();

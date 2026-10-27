@@ -163,9 +163,10 @@
 
   function resolveTriggeredDateText(item, finding, data) {
     var triggered = pickTriggeredDate(item, finding, data);
-    if (!triggered) return 'Unknown';
+    // No date rather than "Unknown" on every card: some findings have no moment they were raised (GL-U04).
+    if (!triggered) return '';
     var formatted = formatDate(triggered);
-    return formatted === '—' ? 'Unknown' : formatted;
+    return formatted === '—' ? '' : formatted;
   }
 
   function categoryLabel(checkId) {
@@ -309,7 +310,7 @@
       var data = await api.getSystemFindings();
       return (data && Array.isArray(data.findings)) ? data.findings : [];
     } catch (e) {
-      return [];
+      return null; // not "none": the page must not say all is clear when it couldn't ask (GL-U04)
     }
   }
 
@@ -857,12 +858,14 @@
       dateVal.style.alignItems = 'center';
       dateVal.style.gap = '8px';
       dateVal.style.flexWrap = 'wrap';
-      dateVal.appendChild(document.createTextNode(record.triggeredDateText || 'Unknown'));
+      if (record.triggeredDateText) dateVal.appendChild(document.createTextNode(record.triggeredDateText));
       dateVal.appendChild(statusEl);
       dateField.appendChild(dateVal);
       inner.appendChild(dateField);
     } else {
-      appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || 'Unknown', false, 'notifications-list-item__field--date');
+      if (record.triggeredDateText) {
+        appendLabeledField(inner, 'Date triggered:', record.triggeredDateText, false, 'notifications-list-item__field--date');
+      }
     }
     appendLabeledField(
       inner,
@@ -1085,6 +1088,11 @@
 
     var todayKey = todayDateKey();
     var findings = await fetchFindings();
+    if (findings === null) {
+      listEl.innerHTML = '';
+      ensureEmptyState(0, "Couldn't load notifications. Reload the page to try again.");
+      return;
+    }
 
     var activeRecords = buildNotificationRecords(findings, todayKey);
     var archiveRecords = buildArchivedRecords(findings, todayKey);
