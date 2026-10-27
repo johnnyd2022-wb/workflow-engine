@@ -754,6 +754,13 @@
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
       }
     });
+    // GL-U03: a form with no action is driven by its own script (it would only submit to this same
+    // URL natively). Boosting must never send it too: when the script's save failed, htmx's GET of
+    // the form reloaded the page with the fields in the URL and the error gone.
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+      var d = evt && evt.detail;
+      if (d && d.boosted && d.elt && d.elt.tagName === 'FORM' && !d.elt.hasAttribute('action')) evt.preventDefault();
+    });
     document.body.addEventListener('htmx:beforeRequest', function (evt) {
       var tgt = evt && evt.detail && evt.detail.target;
       if (!tgt || tgt.id !== 'page-content') return;

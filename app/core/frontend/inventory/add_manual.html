@@ -225,6 +225,7 @@
         } catch (ePre) {}
       })();
 
+      var saveKey = null; // GL-U03: kept across retries of one receipt, cleared once it is saved
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -296,7 +297,11 @@
             return false;
           }
 
-          await window.CoreAPI.createInventoryItem(payload);
+          // GL-U03: one key per thing being received. If this save reached the server but the reply
+          // was lost, pressing Save again replays it rather than adding the stock twice.
+          if (!saveKey) saveKey = window.CoreAPI._newIdempotencyKey();
+          await window.CoreAPI.createInventoryItem(payload, { idempotencyKey: saveKey });
+          saveKey = null;
 
           window.showNotification && window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');
 
@@ -312,6 +317,8 @@
           } catch (eR) {}
           window.location.href = '/core';
         } catch (err) {
+          // The server said no (bad input, permission): the next attempt is a new request.
+          if (err && err.status && err.status < 500 && err.status !== 401) saveKey = null;
           console.error('Failed to create inventory item', err);
           window.showNotification && window.showNotification('error', 'Failed to Add Item', 'There was a problem saving this inventory item.');
         }

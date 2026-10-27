@@ -24,9 +24,15 @@
   async function api(url, options) {
     var response = await fetch(url, options || {});
     var body = await response.json().catch(function () { return {}; });
-    if (!response.ok) throw new Error(body.error || 'Request failed');
+    if (!response.ok) { var err = new Error(body.error || 'Request failed'); err.status = response.status; throw err; }
     return body;
   }
+  // GL-U03: one key per save, kept across retries, so evidence whose reply was lost isn't added twice.
+  function newKey() {
+    return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'k-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function keyed(key) { return Object.assign(csrfHeaders(), { 'Idempotency-Key': key }); }
+  function keepKeyAfter(err) { return !err || !err.status || err.status >= 500 || err.status === 401; }
 
 
   var MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -280,6 +286,7 @@
     submit.className = 'workspace-button workspace-button--primary';
     submit.textContent = 'Sign off this review';
     form.appendChild(submit);
+    var attestKey = null;
     form.addEventListener('submit', async function (event) {
       event.preventDefault();
       var values = {};
@@ -290,9 +297,10 @@
       submit.textContent = 'Saving review…';
       try {
         showError('');
+        attestKey = attestKey || newKey();
         var saved = await api('/api/compliant/np3-audit/attestations', {
           method: 'POST',
-          headers: csrfHeaders(),
+          headers: keyed(attestKey),
           body: JSON.stringify({
             control_id: check.control_id,
             how_we_meet: how.value,
@@ -302,10 +310,12 @@
             confirmed: checkBox.checked,
           }),
         });
+        attestKey = null;
         var failed = await uploadFiles(attachments, saved.record.id);
         await load();
         if (failed.length) showError('Review saved, but these files were not attached: ' + failed.join('; '));
       } catch (err) {
+        if (!keepKeyAfter(err)) attestKey = null;
         showError(err.message);
         submit.disabled = false;
         submit.textContent = 'Sign off this review';
@@ -440,6 +450,7 @@
     submit.className = 'workspace-button workspace-button--primary';
     submit.textContent = 'Add log entry';
     form.appendChild(submit);
+    var logKey = null;
     form.addEventListener('submit', async function (event) {
       event.preventDefault();
       var fields = {};
@@ -448,15 +459,18 @@
       submit.textContent = 'Saving entry…';
       try {
         showError('');
+        logKey = logKey || newKey();
         var savedEntry = await api('/api/compliant/np3-audit/checks/' + encodeURIComponent(check.control_id) + '/logs', {
           method: 'POST',
-          headers: csrfHeaders(),
+          headers: keyed(logKey),
           body: JSON.stringify({ fields: fields }),
         });
+        logKey = null;
         var failedFiles = await uploadFiles(logFiles, savedEntry.record.id);
         await load();
         if (failedFiles.length) showError('Entry saved, but these files were not attached: ' + failedFiles.join('; '));
       } catch (err) {
+        if (!keepKeyAfter(err)) logKey = null;
         showError(err.message);
         submit.disabled = false;
         submit.textContent = 'Add log entry';

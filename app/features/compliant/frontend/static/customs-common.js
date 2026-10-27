@@ -5,15 +5,22 @@
 
   function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
 
-  async function api(method, url, body) {
-    var headers = { Accept: 'application/json' };
+  async function api(method, url, body, extraHeaders) {
+    var headers = Object.assign({ Accept: 'application/json' }, extraHeaders || {});
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET') headers['X-CSRFToken'] = csrf();
     var res = await fetch(url, { method: method, credentials: 'include', headers: headers, body: body === undefined ? undefined : JSON.stringify(body) });
     var data = {}; try { data = await res.json(); } catch (_) {}
-    if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+    if (!res.ok) { var err = new Error(data.error || ('Request failed (' + res.status + ')')); err.status = res.status; throw err; }
     return data;
   }
+
+  // GL-U03: one key per thing being saved, kept across retries, so a save whose reply was lost
+  // isn't added twice. Dropped once it saves, or when the server says no (the next try is new).
+  function saveKey() {
+    return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'k-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function keepKeyAfter(err) { return !err || !err.status || err.status >= 500 || err.status === 401; }
 
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
@@ -80,7 +87,7 @@
   }
 
   window.CustomsUI = {
-    api: api, el: el, fmtDate: fmtDate, shortDate: shortDate, money: money, wholeMoney: wholeMoney, num: num,
+    api: api, saveKey: saveKey, keepKeyAfter: keepKeyAfter, el: el, fmtDate: fmtDate, shortDate: shortDate, money: money, wholeMoney: wholeMoney, num: num,
     qty: qty, amount: amount, dayMonth: dayMonth, todayIso: todayIso, daysUntil: daysUntil, plural: plural, slug: slug, failer: failer, markNotLoaded: markNotLoaded, fact: fact,
   };
 })();

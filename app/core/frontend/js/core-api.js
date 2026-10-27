@@ -424,10 +424,12 @@ window.CoreAPI = window.CoreAPI || {
         return this.getExpiredMaterials();
     },
     
-    async createInventoryItem(data) {
+    /** opts.idempotencyKey (GL-U03): the same key on a retry replays the first save instead of adding twice. */
+    async createInventoryItem(data, opts = {}) {
         return this.request('/inventory', {
             method: 'POST',
             body: data,
+            headers: opts.idempotencyKey ? {'Idempotency-Key': opts.idempotencyKey} : undefined,
         });
     },
 
