@@ -110,6 +110,17 @@ html[data-spa-theme="dark"] {
   --ui-border: var(--border-default, rgb(255 255 255 / 14%));
   --ui-shadow-card: 0 2px 8px rgb(0 0 0 / 18%);
 }
+/* GL-U04: --ui-text and friends are declared on :root as var(--text-primary, ...), and a custom
+   property is resolved where it is declared. The dark theme sets --text-primary and the rest on
+   #page-content (spa-theme.css), so on :root these tokens still held the light values: pages that
+   read them got near-black text on the dark page. Declare them again where the dark values live. */
+html[data-spa-theme="dark"] #page-content.page-content {
+  --ui-text: var(--text-primary, #ffffff);
+  --ui-text-muted: var(--text-secondary, #d6dee6);
+  --ui-surface: var(--bg-card, #121212);
+  --ui-surface-subtle: var(--bg-secondary, #161616);
+  --ui-border: var(--border-default, rgb(255 255 255 / 14%));
+}
 html[data-spa-theme="dark"] .ui-button { color: #10201f; }
 
 /* Signed out mid-save (app/ui/shared/session-ended.js, GL-U03). */

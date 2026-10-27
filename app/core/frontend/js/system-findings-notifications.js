@@ -1106,7 +1106,7 @@
     if (!pager) { pager = document.createElement('nav'); pager.id = 'oc-findings-pager'; listEl.after(pager); }
     pager.replaceChildren();
     if (totalRecords > 25) ['Previous findings', 'Next findings'].forEach(function (label, i) {
-      var button = document.createElement('button'); button.textContent = label; button.type = 'button';
+      var button = document.createElement('button'); button.textContent = label; button.type = 'button'; button.className = 'btn btn-secondary btn-sm';
       button.disabled = i === 0 ? casePage === 0 : (casePage + 1) * 25 >= totalRecords;
       button.addEventListener('click', function () { casePage += i === 0 ? -1 : 1; renderCards(); }); pager.appendChild(button);
     });
