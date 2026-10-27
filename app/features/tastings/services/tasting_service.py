@@ -239,7 +239,7 @@ def save_event(db, org_id, actor_id, data, event_id=None):
                 raise TastingError("Tasting stock not found")
             allocations.append(TastingAllocation(org_id=org_id, **{key: source_id}, quantity=quantity))
     if event is None:
-        task = CRMTask(org_id=org_id, title=fields["title"], created_by_user_id=actor_id)
+        task = CRMTask(org_id=org_id, title=fields["title"], task_type="tasting", created_by_user_id=actor_id)
         db.add(task)
         db.flush()
         event = Tasting(org_id=org_id, task_id=task.id, created_by=actor_id, **fields)

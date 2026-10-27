@@ -91,9 +91,8 @@ def _serialise_crm_task(task: Any, names: dict[UUID, str], *, archived: bool = F
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "editable": False,
-        "href": "/crm/tastings?tasting_id=" + str(task.tasting[0].id)
-        if task.tasting
-        else "/crm/tasks?task_id=" + str(task.id),
+        "task_type": task.task_type or "general",
+        "href": "/crm/tasks?task_id=" + str(task.id),
         "board_lane_id": str(task.board_lane_id) if task.board_lane_id else None,
         "archived": archived,
     }
@@ -138,9 +137,15 @@ def _all_task_rows(
 
         _ = XeroContact
 
+        from app.features.crm.repositories.crm_task_repo import visible_task_filter
+
         crm_rows = (
             session.query(CRMTask)
-            .filter(CRMTask.org_id == org_id, _archive_filter(CRMTask, archive, cutoff))
+            .filter(
+                CRMTask.org_id == org_id,
+                _archive_filter(CRMTask, archive, cutoff),
+                visible_task_filter(session, org_id),
+            )
             .limit(TASK_BOARD_QUERY_LIMIT)
             .all()
         )
@@ -546,7 +551,7 @@ def assign_task_to_lane(
     if task is None:
         return None
     if board == "crm" and task.tasting:
-        raise TaskError("Change tasting status at /crm/tastings?tasting_id=" + str(task.tasting[0].id))
+        raise TaskError("Change tasting status at /crm/tasks?task_id=" + str(task.id))
     if lane_id is not None:
         lane = (
             session.query(TaskBoardLane)

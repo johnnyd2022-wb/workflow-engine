@@ -1,4 +1,6 @@
-# Tastings page design research — 26 October 2026
+# Tastings in Tasks — design research and chosen workflow
+
+The chosen implementation is **Sales → Tasks**, with General, Call, Email and subscription-gated Tasting types. The existing Board/List/Week views remain available together. See the founder refinement below; the three initial standalone concepts are historical design research.
 
 What the page must answer: where am I tasting next, who is going, what stock can I take,
 and is that stock removal recorded for excise?
@@ -77,7 +79,26 @@ final images and the three-way comparison belong in the draft MR.
 
 Draft MR !586: https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/586.
 
-Awaiting the founder's style selection. The MR remains draft until the two alternatives
-and the review-only switch are removed and the selected layout is rechecked.
+The founder selected integration into Tasks on27 October. The standalone concepts and their switch have been removed; Board/List/Week are supported task views. This is a chosen-direction refinement under page-design, so no further style selection is required.
 
 Navigation integration: Tastings lives under Sales → Tasks, with a subscription-gated action from the Sales overview and Tasks page. This preserves the app's four-primary-destination limit and keeps the tasting workflow next to its shared calendar.
+
+
+## Founder refinement: one task workflow (2026-10-27)
+
+The founder chose integration into Tasks rather than a standalone tasting scheduler. This supersedes the three draft concepts above. Keep the established Board/List/Week toggle and use a type filter; the same task opens specialized details in place. No further layout pick is required.
+
+| Research | Observed pattern | Application here |
+|---|---|---|
+| [HubSpot task creation](https://knowledge.hubspot.com/tasks/create-tasks) | Tasks carry a type, assignee and CRM associations in their creation flow. | One New task entry; Type selects general/call/email/tasting. Carry already-entered common fields. |
+| [Salesforce retail visits](https://trailhead.salesforce.com/content/learn/projects/plan-and-manage-store-visits-with-consumer-goods-cloud/complete-a-visit-on-your-mobile) | A visit provides a context for execution and product/inventory activities. | Tasting task details own venue, planned stock and attributable sampling outcome together. No separate completion checkbox bypass. |
+| [Vinsight non-sale movements](https://docs.vinsight.net/non-sale-product-movements) | Samples/pours use explicit non-sale dispatch records and stock locations, with tax treatment. | Retain an explicit removal ledger and reason; show actual removal separately from volume sampled. Avoid requiring a fake customer or zero-price order. Tax examples in its docs are jurisdiction-specific, not adopted as NZ rules. |
+| [Linear custom views](https://linear.app/docs/custom-views) | Filters define which records appear independently of list/board presentation. | Type filter survives Board/List/Week changes and is encoded in a shareable URL. |
+| [Todoist boards](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI) | The same tasks can be shown as list, board or calendar; details open from a card. | Preserve existing task views and open tasting details without changing page. |
+| [NN/g progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) | Specialized controls appear after the user asks for them. | Only choosing Tasting reveals venue and stock fields; reusable Tasting stock is a secondary panel. |
+
+These sources do not demonstrate an authenticated NZ-specific partial-bottle workflow; conservation and excise safeguards remain our existing reviewed implementation. No competitor benchmark or legal equivalence is claimed.
+
+Implemented journey: New task → choose Tasting → venue/time/rep (prefilled common fields) → save once. A task card identifies the venue, NZ time and Planned/Stock out/Completed state. Open the card to confirm removal, then enter measured samples used. A 700mL bottle with150mL used leaves550mL in the Tasting stock panel, reusable without a second removal. General tasks retain their current small form.
+
+Checks: task-type backfill and subscription/API gates; single-record creation; generic-task regressions; view/filter/deep-link/history behavior; stock lifecycle and fractional units; busy/quiet/empty/error/loading/editor/detail/stock panel at390/1440/1920 and dark. Screenshot evidence from the initial concepts is historical; the final MR will replace it with this unified flow.

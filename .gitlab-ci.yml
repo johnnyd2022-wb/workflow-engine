@@ -365,6 +365,9 @@ tastings_e2e:
       - app/features/tastings/**/*
       - app/features/crm/frontend/js/tastings.js
       - app/features/crm/frontend/css/tastings.css
+      - app/features/crm/frontend/templates/crm/tasks.html
+      - app/features/crm/frontend/css/tasks.css
+      - app/features/crm/routes/page_routes.py
       - app/features/crm/frontend/js/tasks-calendar.js
       - app/features/crm/models/crm_task.py
       - app/features/crm/repositories/crm_task_repo.py

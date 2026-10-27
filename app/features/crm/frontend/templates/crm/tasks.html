@@ -11,13 +11,18 @@
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='tasks.css') }}">
 <div id="tasks-page" class="max-content crm-root workspace-overview tasks-page" x-data="crmTasks()"
      data-tasks-style="1" :data-tasks-style="style" :aria-busy="loading ? 'true' : 'false'" aria-busy="true"
+     @tasting-changed.window="loadTasks()" @tasting-draft-return.window="restoreTastingDraft($event.detail)"
+     data-tastings-enabled="{{ 'true' if tastings_enabled else 'false' }}"
      data-me="{{ g.current_user.id if g.current_user else '' }}">
   <header class="workspace-header">
     <div>
       <h1>Tasks</h1>
       <p class="tasks-summary" aria-live="polite" x-text="summaryLine">Follow-ups for your customers, and who is doing them.</p>
     </div>
-    <button type="button" class="workspace-button workspace-button--primary" data-new-task @click="openCreate()">New task</button>
+    <div class="tasks-header-actions">
+      {% if tastings_enabled %}<button type="button" class="tasks-text-action" @click="openTastingStock()">Tasting stock</button>{% endif %}
+      {% if can('sales.record') %}<button type="button" class="workspace-button workspace-button--primary" data-new-task @click="openCreate()">New task</button>{% endif %}
+    </div>
   </header>
 
   {# The same follow-ups in three views; the choice is remembered in this browser. #}
@@ -47,6 +52,7 @@
         </template>
       </select>
     </label>
+    <label class="tasks-type-filter" for="tasks-type"><span class="tasks-sr">Task type filter</span><select id="tasks-type" x-model="typeFilter" @change="rememberType()"><option value="">All types</option><option value="general">General</option><option value="call">Call</option><option value="email">Email</option>{% if tastings_enabled %}<option value="tasting">Tastings</option>{% endif %}</select></label>
     <button type="button" class="tasks-text-action" x-show="filtersOn" x-cloak @click="clearFilters()">Clear</button>
     <span class="tasks-toolbar__spacer"></span>
     <button type="button" class="tasks-text-action tasks-board-only" @click="openLaneModal()">Add lane</button>
@@ -61,7 +67,7 @@
   <template x-if="!loading && !tasks.length && !error">
     <section class="workspace-card tasks-empty">
       <h2>No tasks yet</h2>
-      <p>Add a follow-up for a customer: a call, a tasting, an order to confirm.</p>
+      <p>Add a follow-up for a customer: a call, an email, an order to confirm.</p>
       <button type="button" class="workspace-button workspace-button--primary" @click="openCreate()">New task</button>
     </section>
   </template>
@@ -99,8 +105,9 @@
             </header>
             <div class="tasks-lane__cards" x-show="lane.id !== 'finished' || showFinished">
               <template x-for="task in tasksForLane(lane)" :key="task.id">
-                <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" draggable="true"
+                <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" :draggable="!task.tasting_id"
                         @click="handleCardClick(task)" @dragstart="startDragTask(task)" @dragend="endDragTask()">
+                  <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-card__title" x-text="task.title"></span>
                   <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
                   <span class="tasks-card__foot">
@@ -126,9 +133,10 @@
           <ul>
             <template x-for="task in group.tasks" :key="task.id">
               <li class="tasks-row" :class="{ 'tasks-row--done': isFinished(task) }">
-                <button type="button" class="tasks-tick" :aria-label="(isFinished(task) ? 'Reopen: ' : 'Mark done: ') + task.title"
+                <button type="button" class="tasks-tick" :aria-label="(task.tasting_id ? 'Record tasting outcome: ' : (isFinished(task) ? 'Reopen: ' : 'Mark done: ')) + task.title"
                         :aria-pressed="isFinished(task) ? 'true' : 'false'" @click="toggleDone(task)"></button>
                 <button type="button" class="tasks-row__main" @click="openEdit(task)">
+                  <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-row__title" x-text="task.title"></span>
                   <span class="tasks-row__who" x-text="[whoLine(task), stageWords(task)].filter(Boolean).join(' · ')"></span>
                 </button>
@@ -156,7 +164,8 @@
         <div class="tasks-tray__cards">
           <template x-for="task in overdueBeforeWeek" :key="`od-${task.id}`">
             <button type="button" class="tasks-card" @click="openEdit(task)">
-              <span class="tasks-card__title" x-text="task.title"></span>
+              <span class="tasks-type-cue" x-text="typeWords(task)"></span>
+                  <span class="tasks-card__title" x-text="task.title"></span>
               <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
               <span class="tasks-due tasks-due--late" x-text="dueWords(task)"></span>
             </button>
@@ -169,7 +178,8 @@
             <header><span x-text="day.dow"></span> <strong x-text="day.dom"></strong> <em x-show="day.isToday">Today</em></header>
             <template x-for="task in day.tasks" :key="`${day.iso}-${task.id}`">
               <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" @click="openEdit(task)">
-                <span class="tasks-card__title" x-text="task.title"></span>
+                <span class="tasks-type-cue" x-text="typeWords(task)"></span>
+                  <span class="tasks-card__title" x-text="task.title"></span>
                 <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
                 <span class="tasks-card__foot">
                   <span class="tasks-due tasks-due--late" x-show="day.isPast && !isFinished(task)" x-text="dueWords(task)"></span>
@@ -186,7 +196,8 @@
         <div class="tasks-tray__cards">
           <template x-for="task in undatedTasks" :key="`nd-${task.id}`">
             <button type="button" class="tasks-card" @click="openEdit(task)">
-              <span class="tasks-card__title" x-text="task.title"></span>
+              <span class="tasks-type-cue" x-text="typeWords(task)"></span>
+                  <span class="tasks-card__title" x-text="task.title"></span>
               <span class="tasks-card__who" x-text="whoLine(task)" x-show="whoLine(task)"></span>
             </button>
           </template>
@@ -224,6 +235,9 @@
       </div>
 
       <div class="crm-task-sheet__body">
+        <div class="crm-form-group"><label class="crm-form-label" for="task-type">Type</label>
+          <select id="task-type" class="crm-form-select" x-model="drawerForm.task_type" @change="changeTaskType()"><option value="general">General</option><option value="call">Call</option><option value="email">Email</option>{% if tastings_enabled %}<option value="tasting" :disabled="!!editingTask">Tasting</option>{% endif %}</select>
+        </div>
         <div class="crm-form-group">
           <label class="crm-form-label" for="task-title">Title <span class="tasks-required">*</span></label>
           <input id="task-title" class="crm-form-input" x-model="drawerForm.title" placeholder="e.g. Confirm the Christmas order" @keydown.enter.prevent="saveTask()">
@@ -293,6 +307,7 @@
     </div>
   </div>
 
+{% if tastings_enabled %}{% include "tastings/index.html" %}{% endif %}
 </div>
 
 {% endblock %}

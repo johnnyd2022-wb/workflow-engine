@@ -139,11 +139,14 @@ class XeroContactRepository:
             XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
             XeroInvoice.date <= today,
         )
+        from app.features.crm.repositories.crm_task_repo import visible_task_filter
+
         task_day = func.date(func.coalesce(CRMTask.completed_at, CRMTask.created_at))
         tasks = self.db.query(CRMTask.contact_id, func.max(task_day)).filter(
             CRMTask.org_id == org_id,
             CRMTask.contact_id.isnot(None),
             CRMTask.status != "cancelled",
+            visible_task_filter(self.db, org_id),
             task_day <= today,
         )
         if contact_ids is not None:

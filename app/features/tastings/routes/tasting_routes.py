@@ -3,7 +3,7 @@
 from datetime import date, datetime, time, timedelta
 
 import structlog
-from flask import Blueprint, abort, g, jsonify, render_template, request
+from flask import Blueprint, abort, g, jsonify, redirect, request
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -43,7 +43,11 @@ def invalid_request(error):
 @bp.get("/crm/tastings")
 @requires_auth
 def home():
-    return render_template("tastings/index.html", active_page="crm")
+    event_id = request.args.get("tasting_id")
+    if event_id:
+        event = service.get_event(db_session(), g.current_org_id, event_id)
+        return redirect("/crm/tasks?task_id=" + str(event.task_id))
+    return redirect("/crm/tasks?type=tasting")
 
 
 @bp.get("/api/crm/tastings")

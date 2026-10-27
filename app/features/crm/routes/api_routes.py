@@ -5,7 +5,7 @@ from io import BytesIO
 from uuid import UUID
 
 import requests
-from flask import Blueprint, g, jsonify, request, send_file
+from flask import Blueprint, abort, g, jsonify, request, send_file
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from xero_python.exceptions import OpenApiException
 
@@ -517,6 +517,27 @@ def list_tasks():
 def create_task():
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
+    if not isinstance(data, dict):
+        return jsonify(error="Use a task object"), 400
+    if data.get("task_type") == "tasting":
+        from app.features.compliant.service import nz_alcohol_active
+        from app.features.tastings.routes.tasting_routes import _write
+        from app.features.tastings.services import tasting_service
+
+        if not nz_alcohol_active(db_session(), org_id):
+            abort(404)
+        if set(data) != {"task_type", "tasting"}:
+            return jsonify(error="Supply tasting details with the task type"), 400
+        try:
+            response = _write(tasting_service.save_event, data["tasting"])
+        except tasting_service.TastingError as exc:
+            db_session().rollback()
+            return jsonify(error=str(exc)), exc.status
+        event = response.get_json()["tasting"]
+        from app.features.crm.services.crm_service import _serialise_task
+
+        row = _crm_service().task_repo.get_by_id(UUID(event["task_id"]), org_id)
+        return jsonify(task=_serialise_task(row, db=db_session()), tasting=event), 201
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
@@ -525,6 +546,27 @@ def create_task():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"task": task}), 201
+
+
+@api_bp.route("/api/crm/tasks/<task_id>", methods=["GET"])
+@requires_auth
+def get_task(task_id: str):
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.repositories.crm_task_repo import visible_task_filter
+    from app.features.crm.services.crm_service import _serialise_task
+
+    task_uuid = _uuid_or_none(task_id)
+    if task_uuid is None:
+        return jsonify(error="Invalid task ID"), 400
+    db = db_session()
+    task = (
+        db.query(CRMTask)
+        .filter(CRMTask.org_id == g.current_org_id, CRMTask.id == task_uuid, visible_task_filter(db, g.current_org_id))
+        .first()
+    )
+    if task is None:
+        abort(404)
+    return jsonify(task=_serialise_task(task, db=db))
 
 
 @api_bp.route("/api/crm/tasks/<task_id>", methods=["PUT"])

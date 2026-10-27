@@ -1955,6 +1955,26 @@ def _seed_tastings(db, org_id, inv) -> None:
 
     rep = db.query(User).filter(User.org_id == org_id).order_by(User.created_at).first()
     today = datetime.now(ZoneInfo("Pacific/Auckland")).date()
+    from app.features.crm.models.crm_task import CRMTask
+
+    rep.first_name = "Alex"
+    rep.last_name = "Taylor"
+    for kind, title, status in [
+        ("call", "Confirm the Christmas order", "pending"),
+        ("email", "Send the spring product list", "in_progress"),
+        ("general", "Prepare the bottle display", "pending"),
+    ]:
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                task_type=kind,
+                title=title,
+                status=status,
+                due_date=today,
+                assigned_to_user_id=rep.id,
+                created_by_user_id=rep.id,
+            )
+        )
     products = []
     for index, (name, abv, batch) in enumerate(
         [

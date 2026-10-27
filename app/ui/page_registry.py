@@ -230,7 +230,6 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("overview", "Overview", "/crm", ("sales.view",)),
         Tab("customers", "Customers", "/crm/customers", ("sales.view",)),
         Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
-        Tab("tastings", "Tastings", "/crm/tastings", ("sales.view",), when="nz_alcohol"),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
         # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales.
@@ -268,7 +267,7 @@ WORKSPACE_TAB_GROUPS = {
     "sales": (
         ("overview", "configuration", "excise"),
         ("customers",),
-        ("tasks", "tastings"),
+        ("tasks",),
         ("analytics", "matching"),
     ),
 }

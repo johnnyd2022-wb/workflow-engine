@@ -16,8 +16,6 @@
     }
     function nzDay(value) { var p = parts(value); return p.year + '-' + p.month + '-' + p.day; }
     function wall(value) { var p = parts(value); return p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute; }
-    function addDays(day, count) { var d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + count); return d.toISOString().slice(0, 10); }
-    function monday(day) { var d = new Date(day + 'T12:00:00Z'); return addDays(day, -((d.getUTCDay() + 6) % 7)); }
     function dateLabel(day, options) { return new Intl.DateTimeFormat('en-NZ', Object.assign({ timeZone: TZ, day: 'numeric', month: 'short' }, options || {})).format(new Date(day + 'T00:00:00Z')); }
     function timeLabel(value) { return new Intl.DateTimeFormat('en-NZ', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(new Date(value)); }
     function nzISO(raw) {
@@ -46,11 +44,12 @@
         var canDispatch = root.dataset.canDispatch === 'true';
         var controller = new AbortController();
         root._tastingsAbort = function () { controller.abort(); delete root._tastingsAbort; };
-        var state = { events: [], pool: [], choices: { reps: [], contacts: [], stock: [] }, week: monday(nzDay(Date.now())), style: '1', search: '', filter: '', lines: [], editing: null, detail: null, poolOffset: 0, choiceOffset: 0, peopleOffset: 0, choiceToken: 0, peopleToken: 0, loadToken: 0, busy: false };
+        var state = { pool: [], choices: { reps: [], contacts: [], stock: [] }, lines: [], editing: null, detail: null, poolOffset: 0, choiceOffset: 0, peopleOffset: 0, choiceToken: 0, peopleToken: 0, loadToken: 0, busy: false, draft: null };
         var editor = $('#tasting-editor');
         var detail = $('#tasting-detail');
         var form = $('#tasting-form');
-        editor.close(); detail.close();
+        var stockDialog = $("#tasting-stock");
+        editor.close(); detail.close(); stockDialog.close();
         function error(node, message) { node.textContent = message; node.hidden = !message; }
         function notice(message) { error($('[data-tasting-status]'), message); }
         async function api(path, options) {
@@ -61,7 +60,7 @@
                 var csrf = document.querySelector('meta[name="csrf-token"]');
                 if (csrf) headers['X-CSRFToken'] = csrf.content;
             }
-            var response = await fetch('/api/crm/tastings' + path, Object.assign({}, options, { headers: headers, credentials: 'same-origin', signal: controller.signal }));
+            var response = await fetch((options.taskCreate ? '/api/crm/tasks' : '/api/crm/tastings' + path), Object.assign({}, options, { headers: headers, credentials: 'same-origin', signal: controller.signal }));
             var body = await response.json().catch(function () { return {}; });
             if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The tasting could not be loaded. Try again.');
             return body;
@@ -73,104 +72,42 @@
             if (value && !choices.some(function (choice) { return choice.id === value; })) option(select, value, 'Previously selected person');
             select.value = value || '';
         }
-        function filteredEvents() {
-            var q = state.search.trim().toLowerCase();
-            return state.events.filter(function (event) {
-                return (!state.filter || statusOf(event) === state.filter) && (!q || [event.title, event.venue_name, event.rep_name, event.venue_address].join(' ').toLowerCase().includes(q));
-            }).sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); });
-        }
-        function card(event, withDate) {
-            var button = el('button', 'tasting-event'); button.type = 'button'; button.dataset.tastingId = event.id;
-            var time = el('span', 'tasting-event-time', (withDate ? dateLabel(nzDay(event.starts_at)) + ' · ' : '') + timeLabel(event.starts_at));
-            var main = el('span'); main.append(el('span', 'tasting-event-title', event.title));
-            main.append(el('span', 'tasting-event-meta', [event.venue_name, event.rep_name].filter(Boolean).join(' · ')));
-            var status = el('span', 'tasting-event-status', STATES[statusOf(event)]); status.dataset.state = statusOf(event);
-            button.append(time, main, status); button.addEventListener('click', function () { openDetail(event.id); });
-            return button;
-        }
-        function renderEvents() {
-            var host = $('[data-tasting-events]'); host.replaceChildren();
-            var rows = filteredEvents();
-            var isWeek = state.style === '2';
-            if (isWeek) rows = rows.filter(function (r) { var day = nzDay(r.starts_at); return day >= state.week && day < addDays(state.week, 7); });
-            $('[data-tasting-empty]').hidden = rows.length > 0;
-            var filtered = !!(state.search || state.filter);
-            $('[data-tasting-empty-title]').textContent = filtered ? 'No tastings match' : 'No tastings scheduled';
-            $('[data-tasting-empty-text]').textContent = filtered ? 'Try another search or clear the filters.' : 'Book your next venue visit, then choose the stock to take.';
-            $('[data-tasting-clear]').hidden = !filtered;
-            $('[data-tasting-range]').textContent = dateLabel(state.week) + ' – ' + dateLabel(addDays(state.week, isWeek ? 6 : 41));
-            $('[data-tasting-view-title]').textContent = ({ '1': 'Coming up', '2': 'The week ahead', '3': 'From booking to outcome' })[state.style];
-            if (!rows.length) return;
-            if (isWeek) {
-                var grid = el('div', 'tasting-week');
-                for (var i = 0; i < 7; i++) {
-                    var day = addDays(state.week, i); var column = el('section', 'tasting-week-day');
-                    column.dataset.today = String(day === nzDay(Date.now()));
-                    column.append(el('h3', '', dateLabel(day, { weekday: 'short' })));
-                    var todayRows = rows.filter(function (r) { return nzDay(r.starts_at) === day; });
-                    todayRows.forEach(function (r) { column.append(card(r, false)); });
-                    if (!todayRows.length) column.append(el('p', 'tasting-week-empty', 'No tastings'));
-                    grid.append(column);
-                }
-                host.append(grid);
-            } else if (state.style === '3') {
-                var board = el('div', 'tasting-board');
-                Object.keys(STATES).forEach(function (key) {
-                    var lane = el('section', 'tasting-board-lane'); lane.dataset.state = key;
-                    var laneRows = rows.filter(function (r) { return statusOf(r) === key; });
-                    var heading = el('h3', '', STATES[key]); heading.append(el('small', '', laneRows.length)); lane.append(heading);
-                    laneRows.forEach(function (r) { lane.append(card(r, true)); });
-                    if (!laneRows.length) lane.append(el('p', 'workspace-caption', 'Nothing here'));
-                    board.append(lane);
-                }); host.append(board);
-            } else {
-                var groups = new Map();
-                rows.forEach(function (r) { var day = nzDay(r.starts_at); if (!groups.has(day)) groups.set(day, []); groups.get(day).push(r); });
-                groups.forEach(function (events, day) {
-                    var group = el('section', 'tasting-day'); group.append(el('h3', 'tasting-day-title', dateLabel(day, { weekday: 'long' })));
-                    events.forEach(function (r) { group.append(card(r, false)); }); host.append(group);
-                });
-            }
-        }
         function renderPool() {
             var host = $('[data-tasting-pool]'); host.replaceChildren();
             $('[data-tasting-pool-empty]').hidden = state.pool.length > 0;
-            $('[data-tasting-pool-count]').textContent = state.pool.length + (state.poolMore ? '+' : '');
             state.pool.forEach(function (lot) {
                 var row = el('article', 'tasting-pool-lot'); row.dataset.tastingLotId = lot.id; row.append(el('h3', '', lot.product));
                 row.append(el('p', '', (lot.batch ? 'Batch ' + lot.batch + ' · ' : '') + dutyLabel(lot)));
                 var available = el('p'); available.append(el('strong', '', amount(lot.available_volume_ml) + ' mL'), document.createTextNode(' available')); row.append(available);
                 if (Number(lot.reserved_volume_ml) > 0) row.append(el('p', '', amount(lot.reserved_volume_ml) + ' mL assigned to a tasting'));
-                if (canRecord && Number(lot.available_volume_ml) > 0) { var reuse = el('button', 'tasting-text-button', 'Use at a tasting'); reuse.type = 'button'; reuse.addEventListener('click', function () { openEditor(null, lot); }); row.append(reuse); }
+                if (canRecord && Number(lot.available_volume_ml) > 0) { var reuse = el('button', 'tasting-text-button', 'Use at a tasting'); reuse.type = 'button'; reuse.addEventListener('click', function () { stockDialog.close(); state.draft = null; openEditor(null, lot); }); row.append(reuse); }
                 host.append(row);
             });
             $('[data-tasting-pool-more]').hidden = !state.poolMore;
         }
-        function render() {
-            $('[data-tasting-upcoming]').textContent = state.events.filter(function (r) { return statusOf(r) === 'planned'; }).length;
-            $('[data-tasting-out]').textContent = state.events.filter(function (r) { return statusOf(r) === 'dispatched'; }).length;
-            renderEvents(); renderPool();
-        }
-        async function load(quiet) {
+        async function loadPool(more) {
             var token = ++state.loadToken;
-            if (!quiet) { $('[data-tasting-loading]').hidden = false; $('[data-tasting-content]').hidden = true; }
-            $('[data-tasting-error]').hidden = true;
+            error($('[data-tasting-pool-error]'), ''); $('[data-tasting-pool-retry]').hidden = true;
+            $('[data-tasting-pool-loading]').hidden = false; $('[data-tasting-pool-more]').disabled = true;
+            var offset = more ? state.poolOffset + 50 : 0;
             try {
-                var results = await Promise.all([api('?start=' + state.week + '&end=' + addDays(state.week, 42)), api('/pool')]);
+                var result = await api('/pool' + (offset ? '?offset=' + offset : ''));
                 if (!root.isConnected || token !== state.loadToken) return;
-                state.events = results[0].tastings || []; state.pool = results[1].lots || []; state.poolOffset = 0; state.poolMore = !!results[1].has_more;
-                $('[data-tasting-truncated]').hidden = !results[0].truncated;
-                render(); $('[data-tasting-content]').hidden = false;
+                state.pool = more ? state.pool.concat(result.lots || []) : result.lots || []; state.poolOffset = offset; state.poolMore = !!result.has_more; renderPool();
             } catch (err) {
-                if (err.name === 'AbortError' || !root.isConnected) return;
-                $('[data-tasting-error]').hidden = false; $('[data-tasting-error-text]').textContent = err.message;
-            } finally { if (token === state.loadToken) $('[data-tasting-loading]').hidden = true; }
+                if (err.name === 'AbortError') return;
+                state.poolRetryMore = !!more; error($('[data-tasting-pool-error]'), err.message); $('[data-tasting-pool-retry]').hidden = false;
+                throw err;
+            } finally { if (token === state.loadToken) { $('[data-tasting-pool-loading]').hidden = true; $('[data-tasting-pool-more]').disabled = false; } }
         }
-        function pickStyle(style) {
-            state.style = ['1', '2', '3'].includes(style) ? style : '1'; root.dataset.tastingsStyle = state.style;
-            root.querySelectorAll('[data-tasting-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.tastingStyle === state.style)); });
-            try { localStorage.setItem('tastings-concept-style', state.style); } catch (_e) { /* private browsing */ }
-            renderEvents();
+        async function load() {
+            root.dispatchEvent(new CustomEvent('tasting-changed', { bubbles: true }));
+            // Accounting writes must remain visibly successful if a subsequent pool refresh fails.
+            if (stockDialog.open) await loadPool().catch(function () {});
+        }
+        function captureDraft() {
+            state.draft = { fields: {}, lines: state.lines.map(function (line) { return Object.assign({}, line); }) };
+            Array.from(form.elements).forEach(function (field) { if (field.name) state.draft.fields[field.name] = field.value; });
         }
         function renderLines() {
             var host = $('[data-tasting-lines]'); host.replaceChildren();
@@ -223,16 +160,33 @@
             selectedChoices(form.elements.rep_id, state.choices.reps, form.elements.rep_id.value, 'Choose a rep');
             selectedChoices(form.elements.contact_id, state.choices.contacts, form.elements.contact_id.value, 'No linked customer');
         }
-        async function openEditor(event, pool) {
+        async function openEditor(event, pool, seed) {
             if (!canRecord) return;
             state.editing = event ? event.id : null; form.reset(); error($('[data-tasting-form-error]'), ''); $('#tasting-stock-search').value = ''; $('#tasting-people-search').value = '';
             state.lines = event ? (event.allocations || []).map(function (line) { return Object.assign({}, line); }) : pool ? [{ source_pool_id: pool.id, quantity: String(Math.min(100, Number(pool.available_volume_ml))) }] : [];
-            $('#tasting-editor-title').textContent = event ? 'Edit tasting' : 'Schedule a tasting';
+            $('#tasting-editor-title').textContent = event ? 'Edit tasting task' : 'New tasting task';
+            $('#tasting-task-type').value = 'tasting'; $('#tasting-task-type').disabled = !!event;
             ['title', 'venue_name', 'venue_address', 'venue_type', 'licence_reference', 'notes'].forEach(function (key) { form.elements[key].value = event && event[key] || (key === 'venue_type' ? 'external' : ''); });
             var day = nzDay(Date.now()); form.elements.starts.value = event ? wall(event.starts_at) : day + 'T17:00'; form.elements.ends.value = event ? wall(event.ends_at) : day + 'T19:00';
             selectedChoices(form.elements.rep_id, state.choices.reps, event && event.rep_id, 'Choose a rep'); selectedChoices(form.elements.contact_id, state.choices.contacts, event && event.contact_id, 'No linked customer');
+            if (!event && !pool && state.draft) {
+                Object.keys(state.draft.fields).forEach(function (key) { form.elements[key].value = state.draft.fields[key]; });
+                state.lines = state.draft.lines.map(function (line) { return Object.assign({}, line); });
+            }
+            if (seed) {
+                form.elements.title.value = seed.title || ''; form.elements.notes.value = seed.description || '';
+                selectedChoices(form.elements.rep_id, state.choices.reps, seed.assigned_to_user_id, 'Choose a rep');
+                selectedChoices(form.elements.contact_id, state.choices.contacts, seed.contact_id, 'No linked customer');
+                if (seed.due_date && seed.due_date !== form.elements.starts.value.slice(0, 10)) {
+                    var delta = (Date.parse(seed.due_date) - Date.parse(form.elements.starts.value.slice(0, 10))) / 86400000;
+                    ['starts', 'ends'].forEach(function (key) {
+                        var field = form.elements[key]; var date = new Date(field.value.slice(0, 10) + 'T12:00:00Z');
+                        date.setUTCDate(date.getUTCDate() + delta); field.value = date.toISOString().slice(0, 10) + field.value.slice(10);
+                    });
+                }
+            }
             if (detail.open) detail.close(); renderLines(); editor.showModal();
-            try { await Promise.all([choices(false), people(false)]); if (event) { form.elements.rep_id.value = event.rep_id || ''; form.elements.contact_id.value = event.contact_id || ''; } }
+            try { await Promise.all([choices(false), people(false), loadPool()]); renderLines(); if (event) { form.elements.rep_id.value = event.rep_id || ''; form.elements.contact_id.value = event.contact_id || ''; } }
             catch (err) { if (err.name !== 'AbortError') error($('[data-tasting-form-error]'), err.message); }
         }
         function fact(label, value) { var node = el('div', 'tasting-detail-fact'); node.append(el('span', '', label), el('span', '', value || 'Not recorded')); return node; }
@@ -300,36 +254,46 @@
         form.addEventListener('submit', async function (e) {
             e.preventDefault(); if (state.busy) return;
             var target = $('[data-tasting-form-error]'); error(target, '');
+            if (form.elements.title.value.length > 160 || form.elements.notes.value.length > 4000) { error(target, 'Keep the tasting name within 160 characters and notes within 4,000 characters. Your draft has been retained.'); return; }
             try {
                 var data = {}; ['title', 'venue_name', 'venue_address', 'venue_type', 'licence_reference', 'notes', 'rep_id'].forEach(function (key) { data[key] = form.elements[key].value; });
                 data.contact_id = form.elements.contact_id.value || null; data.starts_at = nzISO(form.elements.starts.value); data.ends_at = nzISO(form.elements.ends.value);
                 data.allocations = state.lines.map(function (line) { var result = { quantity: line.quantity }; if (line.source_pool_id) result.source_pool_id = line.source_pool_id; else result.source_item_id = line.source_item_id; return result; });
                 state.busy = true; $('[data-tasting-save]').disabled = true;
-                var result = await api(state.editing ? '/' + state.editing : '', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) });
-                editor.close(); await load(true); showDetail(result.tasting); notice('Tasting saved to the shared Sales and Production calendar.');
+                var result = state.editing ? await api('/' + state.editing, { method: 'PUT', body: JSON.stringify(data) }) : await api('', { method: 'POST', body: JSON.stringify({ task_type: 'tasting', tasting: data }), taskCreate: true });
+                state.draft = null; editor.close(); await load(true); showDetail(result.tasting); notice('Tasting saved to the shared Sales and Production calendar.');
             } catch (err) { if (err.name !== 'AbortError') error(target, err.message); }
             finally { state.busy = false; $('[data-tasting-save]').disabled = false; }
         });
         root.querySelectorAll('[data-tasting-new]').forEach(function (button) { button.addEventListener('click', function () { openEditor(null); }); });
         root.querySelectorAll('[data-tasting-close]').forEach(function (button) { button.addEventListener('click', function () { button.closest('dialog').close(); }); });
-        root.querySelectorAll('[data-tasting-style]').forEach(function (button) { button.addEventListener('click', function () { pickStyle(button.dataset.tastingStyle); }); });
-        $('#tasting-search').addEventListener('input', function (e) { state.search = e.target.value; renderEvents(); });
-        $('#tasting-state').addEventListener('change', function (e) { state.filter = e.target.value; renderEvents(); });
-        $('[data-tasting-clear]').addEventListener('click', function () { state.search = ''; state.filter = ''; $('#tasting-search').value = ''; $('#tasting-state').value = ''; renderEvents(); });
         $('[data-tasting-add-line]').addEventListener('click', function () { if (state.lines.length >= 20) return; state.lines.push({ quantity: '1' }); renderLines(); });
         ['people', 'stock'].forEach(function (kind) { $('#tasting-' + kind + '-search').addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); $('[data-tasting-find-' + kind + ']').click(); } }); });
         $('[data-tasting-find-people]').addEventListener('click', function () { people(false).catch(function (err) { error($('[data-tasting-form-error]'), err.message); }); });
         $('[data-tasting-people-more]').addEventListener('click', function () { people(true).catch(function (err) { error($('[data-tasting-form-error]'), err.message); }); });
         $('[data-tasting-find-stock]').addEventListener('click', function () { choices(false).catch(function (err) { if (err.name !== 'AbortError') error($('[data-tasting-form-error]'), err.message); }); });
         $('[data-tasting-stock-more]').addEventListener('click', function () { choices(true).catch(function (err) { if (err.name !== 'AbortError') error($('[data-tasting-form-error]'), err.message); }); });
-        $('[data-tasting-pool-more]').addEventListener('click', async function () { try { var result = await api('/pool?offset=' + (state.poolOffset + 50)); state.pool = state.pool.concat(result.lots || []); state.poolOffset += 50; state.poolMore = !!result.has_more; renderPool(); } catch (err) { if (err.name !== 'AbortError') notice(err.message); } });
-        $('[data-tasting-prev]').addEventListener('click', function () { state.week = addDays(state.week, -7); load(); });
-        $('[data-tasting-next]').addEventListener('click', function () { state.week = addDays(state.week, 7); load(); });
-        $('[data-tasting-today]').addEventListener('click', function () { state.week = monday(nzDay(Date.now())); load(); });
-        $('[data-tasting-retry]').addEventListener('click', function () { load(); });
-        var style = new URLSearchParams(location.search).get('style');
-        try { style = style || localStorage.getItem('tastings-concept-style'); } catch (_e) { /* private browsing */ }
-        pickStyle(style); load().then(function () { var id = new URLSearchParams(location.search).get('tasting_id'); if (id) openDetail(id); });
+        $('[data-tasting-pool-more]').addEventListener('click', function () { loadPool(true).catch(function () {}); });
+        $('[data-tasting-pool-retry]').addEventListener('click', function () { loadPool(state.poolRetryMore).catch(function () {}); });
+        $('#tasting-task-type').addEventListener('change', function (event) {
+            if (state.editing || event.target.value === 'tasting') return;
+            captureDraft(); editor.close();
+            var contact = state.choices.contacts.find(function (person) { return person.id === form.elements.contact_id.value; }) || {};
+            root.dispatchEvent(new CustomEvent('tasting-draft-return', { bubbles: true, detail: {
+                task_type: event.target.value, title: form.elements.title.value, description: form.elements.notes.value,
+                due_date: form.elements.starts.value.slice(0, 10), assigned_to_user_id: form.elements.rep_id.value,
+                contact_id: form.elements.contact_id.value,
+                contact_name: form.elements.contact_id.selectedOptions[0]?.textContent || '',
+                contact_email: contact.email_address || contact.email || '', contact_phone: contact.phone_number || contact.phone || '',
+                assigned_to_name: form.elements.rep_id.selectedOptions[0]?.textContent || ''
+            } }));
+        });
+        root._tastings = {
+            create: function (seed, fresh) { if (fresh) state.draft = null; return openEditor(null, null, seed); },
+            detail: openDetail,
+            stock: function () { stockDialog.showModal(); loadPool().catch(function () {}); }
+        };
+
     }
     window.__tastingsInit = init;
     if (!window.__tastingsShellBound) {

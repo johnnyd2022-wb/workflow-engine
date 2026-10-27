@@ -31,7 +31,12 @@ def crm_customer_detail(contact_id: str):
 @page_bp.route("/crm/tasks", methods=["GET"])
 @requires_auth
 def crm_tasks():
-    return render_template("crm/tasks.html", active_page="crm")
+    from app.core.db import db_session
+    from app.features.compliant.service import nz_alcohol_active
+
+    return render_template(
+        "crm/tasks.html", active_page="crm", tastings_enabled=nz_alcohol_active(db_session(), g.current_org_id)
+    )
 
 
 @page_bp.route("/crm/analytics", methods=["GET"])

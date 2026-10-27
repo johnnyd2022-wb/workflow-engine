@@ -1,3 +1,5 @@
+> UI direction superseded by the founder-selected typed Tasks refinement in [tastings-tasks.md](tastings-tasks.md). The original stock/excise acceptance criteria remain in force; the standalone concept choice below is historical.
+
 # SPEC: tastings
 status: approved-unattended
 name: Tastings

@@ -704,6 +704,9 @@ class CRMService:
     def create_task(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
         from datetime import date
 
+        task_type = data.get("task_type", "general")
+        if not isinstance(task_type, str) or task_type not in {"general", "call", "email"}:
+            raise ValueError("Use the tasting task form for tasting details, or choose General, Call or Email")
         due_date_raw = data.get("due_date")
         due_date = None
         if due_date_raw:
@@ -726,6 +729,7 @@ class CRMService:
             description=data.get("description"),
             due_date=due_date,
             priority=data.get("priority", "medium"),
+            task_type=task_type,
             assigned_to_user_id=_assignee(self.db, org_id, assigned_raw),
             created_by_user_id=user_id,
         )
@@ -737,6 +741,7 @@ class CRMService:
             entity_id=task.id,
             payload={
                 "task_id": str(task.id),
+                "task_type": task.task_type,
                 "title": task.title,
                 "status": task.status,
                 "priority": task.priority,
@@ -754,8 +759,21 @@ class CRMService:
             self._log_access_denied(org_id=org_id, ref_kind="task_id", ref_id=task_id)
             return None
 
+        if "task_type" in data and (
+            not isinstance(data["task_type"], str) or data["task_type"] not in {"general", "call", "email"}
+        ):
+            raise ValueError("A tasting type cannot be attached or removed through ordinary task editing")
         before = _task_event_snapshot(task)
-        allowed = {"title", "description", "due_date", "status", "priority", "assigned_to_user_id", "contact_id"}
+        allowed = {
+            "title",
+            "description",
+            "due_date",
+            "status",
+            "priority",
+            "assigned_to_user_id",
+            "contact_id",
+            "task_type",
+        }
         updates = {k: v for k, v in data.items() if k in allowed}
 
         if "due_date" in updates and isinstance(updates["due_date"], str):
@@ -1259,6 +1277,7 @@ def _dict_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, dict[
 def _task_event_snapshot(task) -> dict[str, Any]:
     return {
         "task_id": str(task.id),
+        "task_type": task.task_type,
         "title": task.title,
         "status": task.status,
         "priority": task.priority,
@@ -1432,8 +1451,12 @@ def _serialise_task(t, db=None) -> dict:
         "contact_id": str(t.contact_id) if t.contact_id else None,
         "contact_name": customer.name if customer else None,
         "contact_email": customer.email_address if customer else None,
+        "task_type": t.task_type or "general",
         "tasting_id": str(t.tasting[0].id) if t.tasting else None,
-        "href": "/crm/tastings?tasting_id=" + str(t.tasting[0].id) if t.tasting else None,
+        "tasting_status": t.tasting[0].status if t.tasting else None,
+        "tasting_starts_at": t.tasting[0].starts_at.isoformat() if t.tasting else None,
+        "tasting_venue": t.tasting[0].venue_name if t.tasting else None,
+        "href": "/crm/tasks?task_id=" + str(t.id) if t.tasting else None,
         "editable": not bool(t.tasting),
         "contact_phone": customer.phone_number if customer else None,
         "title": t.title,

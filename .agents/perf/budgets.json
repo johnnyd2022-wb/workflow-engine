@@ -175,7 +175,7 @@
   "feature_measure": {
     "tastings": {
       "pages": [
-        "/crm/tastings"
+        "/crm/tasks"
       ],
       "api": [
         "/api/crm/tastings",

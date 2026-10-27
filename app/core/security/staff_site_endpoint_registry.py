@@ -271,6 +271,7 @@ ENDPOINT_COVERAGE = {
     ("crm.crm_api.list_mappings", "GET"): "blocked",
     ("crm.crm_api.list_task_lanes", "GET"): "blocked",
     ("crm.crm_api.list_tasks", "GET"): "blocked",
+    ("crm.crm_api.get_task", "GET"): "blocked",
     ("crm.crm_api.monthly_sales", "GET"): "blocked",
     ("crm.crm_api.rankings", "GET"): "blocked",
     ("crm.crm_api.reorder_task_lanes", "PUT"): "blocked",

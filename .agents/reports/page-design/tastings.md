@@ -1,3 +1,23 @@
+# PAGE DESIGN — Tastings in Tasks — 2026-10-27
+
+plan: docs/tastings-redesign-plan.md
+research: original3 comparables/2 craft/1 pattern source plus refinement HubSpot, Salesforce, Vinsight, Linear, Todoist and NN/g; primary NZ domain basis retained in plan
+direction chosen: founder requested Tasks integration, superseding standalone Agenda/Week/Preparation concepts. Existing Tasks Board/List/Week are all supported views; no new style pick is pending.
+passes: original01–06; refinement07–09. All45 PNGs from07, all45 from08, and all47 from final09 were opened/read. Final09 scenarios succeeded and defect list is empty.
+screenshots: ~/.cache/workflow-engine-ui-shots/tastings/09;47 final images uploaded into MR evidence; no PNGs tracked.
+
+One New task entry exposes Type. Ordinary types use the small existing drawer. Selecting Tasting carries title, date, rep, customer and notes into specialized details with no preliminary save; toggling back retains both common and tasting-specific draft values. Cards open detail in the same workspace. Tasting stock is secondary and preserves reusable partial bottles separately from Library.
+
+Refinement corrections: embedded dialog theme inheritance; phone filters sharing a row; visible in-dialog pagination error/retry; restored customer/rep options for selections outside the ordinary initial list. New browser regressions cover each functional defect. Final screenshots add pagination failure and recovery while keeping all earlier busy/quiet/filtered-empty/dark/phone/wall/editor/detail/stock/loading/error and sibling states. Interactions include search/clear, type/filter changes, open/close, save, stock reuse and boosted leave/return.
+
+Validation:43 combined browser cases passed (27 Tastings,16 existing Tasks);93 shared browser regressions passed. Independent HTML/JS clean and test evaluator valid. Repeat runs and exact-head CI are recorded in tasks-verification.md/MR. Seed cleanup is required before final handoff; MR readiness waits for green CI.
+
+Remaining product limits: recurrence, POS/offline integrations, completed-outcome amendment and return-to-bond are outside this feature. No open style decision. The earlier six-pass design history is retained below for traceability.
+
+verdict: patched (selected UI finalized; MR transition follows exact-head CI)
+
+---
+
 # PAGE DESIGN — Tastings — 2026-10-27
 
 plan: docs/tastings-redesign-plan.md
