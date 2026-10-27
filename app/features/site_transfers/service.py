@@ -481,6 +481,10 @@ def serialise_transfer(transfer):
         "source_location_id": str(transfer.source_location_id) if transfer.source_location_id else None,
         "destination_location_id": str(transfer.destination_location_id) if transfer.destination_location_id else None,
         "product_name": transfer.source_snapshot["name"],
+        # Names as they were when it left, so an archived or renamed site still reads right.
+        "source_site_name": (transfer.source_snapshot.get("source_site") or {}).get("name"),
+        "destination_site_name": (transfer.source_snapshot.get("destination_site") or {}).get("name"),
+        "batch": transfer.source_snapshot.get("supplier_batch_number"),
         "quantity": str(transfer.quantity),
         "received_quantity": str(transfer.received_quantity),
         "confirmed_loss_quantity": str(transfer.loss_quantity),

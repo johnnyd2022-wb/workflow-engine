@@ -20,7 +20,7 @@ READY = ".sales-settings[aria-busy='false']"
 
 def _open(page, width=1440, query=""):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?{query.lstrip("&")}")
+    page.goto(f"{PAGE}?{query.lstrip('&')}")
     page.locator(READY).wait_for()
 
 

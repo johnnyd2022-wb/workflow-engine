@@ -15,6 +15,7 @@
         {% if can('inventory.adjust') %}<a class="workspace-button workspace-button--primary" href="/core/inventory/add">Add to inventory</a>{% endif %}
       </div>
     </header>
+    <div class="inv-moved" role="status" aria-live="polite" data-inv-moved hidden></div>
     <div class="workspace-stack">
       <section class="workspace-card" aria-labelledby="inv-view-glance-title">
         <h2 id="inv-view-glance-title">At a glance</h2>

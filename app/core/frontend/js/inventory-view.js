@@ -837,7 +837,42 @@
       edit.dataset.expiry = datePart(item.expiry_date);
       edit.dataset.barcode = item.barcode || '';
       els.drawerFoot.appendChild(edit);
+      // Moving it: to another area here, or to another site (GL-P07 A4). Offered once there is
+      // somewhere to move it to.
+      if (window.BizeMove && sitesShown()) {
+        var move = el('button', 'workspace-button inv-drawer__move', 'Move…');
+        move.type = 'button';
+        move.dataset.invMove = '';
+        move.addEventListener('click', function () {
+          var site = siteById(item.site_id);
+          window.BizeMove.open({
+            id: item.id, name: item.name, quantity: qty(item), unit: item.unit, site_id: item.site_id,
+            location_id: item.location_id,
+            where: [site ? site.name : '', item.location_name || ''].filter(Boolean).join(' · '),
+          }, { onDone: function (done) {
+            showMoved(done);
+            load();
+          } });
+        });
+        els.drawerFoot.insertBefore(move, edit);
+      }
     }
+  }
+
+  // After a move: say where it went in plain words, with the next step for a dispatch.
+  function showMoved(done) {
+    var note = $('[data-inv-moved]');
+    if (!note) return;
+    note.replaceChildren();
+    note.appendChild(el('span', '', done.dispatched
+      ? 'On its way to ' + done.label + '. It shows as in transit until it is received there.'
+      : 'Moved to ' + done.label + '.'));
+    if (done.dispatched) {
+      var link = el('a', 'inv-moved__link', 'Stock transfers');
+      link.href = '/core/site-transfers';
+      note.appendChild(link);
+    }
+    note.hidden = false;
   }
 
   function loadHistory(itemId, sectionEl, body) {

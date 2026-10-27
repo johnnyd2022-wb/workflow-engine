@@ -77,7 +77,9 @@ def test_all_done_says_so_and_home_drops_the_strip(logged_in_page: Page):
 
 def test_a_failed_load_says_so_and_shows_no_empty_list(logged_in_page: Page):
     page = logged_in_page
-    page.route("**/api/core/getting-started", lambda r: r.fulfill(status=500, body="{}", content_type="application/json"))
+    page.route(
+        "**/api/core/getting-started", lambda r: r.fulfill(status=500, body="{}", content_type="application/json")
+    )
     page.goto("/core/getting-started")
     expect(page.locator("[data-gs-message]")).to_contain_text("Could not load your progress")
     expect(page.locator("[data-gs-guide-card]")).to_be_hidden()

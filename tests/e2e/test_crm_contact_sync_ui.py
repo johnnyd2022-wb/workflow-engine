@@ -60,7 +60,7 @@ def sales_page(client, browser):
             route.abort()
             return
         headers = {"Content-Type": request.headers.get("content-type", "application/json")}
-        for name in ("x-csrftoken", "hx-request", "hx-boosted", "hx-current-url"):
+        for name in ("x-csrftoken", "hx-request", "hx-boosted", "hx-current-url", "idempotency-key"):
             if request.headers.get(name):
                 headers[name] = request.headers[name]
         response = client.open(
