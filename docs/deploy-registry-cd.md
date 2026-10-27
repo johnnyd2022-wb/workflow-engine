@@ -144,8 +144,10 @@ image reference as `$1` (what the CD jobs above do).
 
 ### Manual staging safeguards
 
-For a human-triggered local build, `scripts/run_test.sh` now requires a clean checkout
-of freshly fetched main, backs up the existing test database before migrations, checks
+For a human-triggered local build, `scripts/run_test.sh` now requires clean tracked
+files at freshly fetched main and builds from that commit's archive, leaving local
+untracked files untouched and outside the image. It backs up the existing test database
+before migrations, checks
 a candidate alongside the running app, and restores the previous app on failed
 handover. It binds loopback port 8001 and retains a stopped previous container after
 success. See [manual deployment and recovery](production-deploy.md#manual-staging-deployment).

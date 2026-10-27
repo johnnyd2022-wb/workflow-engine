@@ -30,7 +30,7 @@ and triggers downstream comms only after a confirmed-healthy deploy.
 ## 0. This repo's existing deploy mechanism — extend it, don't replace it
 
 `scripts/run_prod.sh` is the current human-triggered production entrypoint. It loads
-KeePassXC secrets, requires clean freshly fetched main, builds a uniquely tagged image,
+KeePassXC secrets, requires clean tracked files at freshly fetched main, builds a uniquely tagged image from that commit's archive,
 takes a fail-closed database backup, migrates, checks a candidate, and hands over the
 loopback port with automatic app rollback if handover fails. See
 [deployment safeguards](../../../docs/production-deploy.md). The default host port is
@@ -43,8 +43,8 @@ a separate human release step; `run_prod.sh` does not create or push Git tags.
 
 ## 1. Deploy
 
-After the release-manager's stated go, the human operator runs from a clean checkout
-at current main:
+After the release-manager's stated go, the human operator runs from current main with
+clean tracked files. Untracked local files remain outside the image:
 
 ```bash
 ./scripts/run_prod.sh
@@ -86,7 +86,7 @@ and for any ad-hoc smoke check you want to run by hand.
 
 `scripts/run_prod.sh` now checks a candidate while the previous app stays running,
 then automatically restores the previous container if handover fails. It requires a
-clean checkout at freshly fetched `origin/main`, so **do not check out an old tag and
+clean tracked files at freshly fetched `origin/main`, so **do not check out an old tag and
 call it as a rollback**. After a successful deploy it retains the previous stopped
 container. Follow [the production deployment recovery procedure](../../../docs/production-deploy.md)
 for manual container recovery and the schema-compatibility constraints. App rollback

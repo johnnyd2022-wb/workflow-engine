@@ -43,7 +43,14 @@ elif command == "curl":
 elif command == "docker":
     op = a[0]
     if op == "build":
+        context = pathlib.Path(a[-1])
+        s["build_context"] = str(context)
+        if not (context / "Dockerfile.multi").is_file(): rc = 1
+        if not (context / "tracked").read_text() == "original": rc = 1
+        if (context / "untracked").exists(): rc = 1
+        s["build_snapshot_clean"] = not rc
         if scenario == "build": rc = 1
+        if scenario == "build_signal": os.kill(os.getppid(), signal.SIGTERM)
         if scenario == "edit_during_build": pathlib.Path("tracked").write_text("changed")
         if scenario == "commit_during_build":
             subprocess.run(["git", "commit", "--allow-empty", "-m", "new"], check=True, capture_output=True)
@@ -103,6 +110,7 @@ def deploy(tmp_path, request):
     for name in ("run_prod.sh", "run_test.sh", "prod_db.sh", "deploy_common.sh"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     (repo / "tracked").write_text("original")
+    (repo / "Dockerfile.multi").write_text("FROM scratch\n")
     git(repo, "init", "-b", "main")
     git(repo, "config", "user.email", "test@example.invalid")
     git(repo, "config", "user.name", "Deploy test")
@@ -166,12 +174,10 @@ def deploy(tmp_path, request):
     return d
 
 
-@pytest.mark.parametrize("dirty", ["tracked", "untracked", "staged", "ahead", "behind", "fetch", "index"])
+@pytest.mark.parametrize("dirty", ["tracked", "staged", "ahead", "behind", "fetch", "index"])
 def test_checkout_guard_precedes_secrets_and_docker(deploy, dirty):
     if dirty == "tracked":
         (deploy.repo / "tracked").write_text("dirty")
-    elif dirty == "untracked":
-        (deploy.repo / "untracked").touch()
     elif dirty == "staged":
         (deploy.repo / "tracked").write_text("dirty")
         git(deploy.repo, "add", "tracked")
@@ -190,11 +196,22 @@ def test_checkout_guard_precedes_secrets_and_docker(deploy, dirty):
     deploy.assert_old_serving()
 
 
+def test_untracked_files_are_left_in_place_and_excluded_from_build(deploy):
+    local_file = deploy.repo / "untracked"
+    local_file.write_text("local report or secret must not enter Docker")
+    deploy.run()
+    assert deploy.result.returncode == 0, deploy.result.stderr
+    assert deploy.state["build_snapshot_clean"]
+    assert local_file.read_text() == "local report or secret must not enter Docker"
+    assert not Path(deploy.state["build_context"]).exists()
+
+
 @pytest.mark.parametrize(
     "scenario",
     [
         "secrets",
         "build",
+        "build_signal",
         "edit_during_build",
         "commit_during_build",
         "backup",
@@ -212,6 +229,8 @@ def test_pre_cutover_failures_leave_old_app_untouched(deploy, scenario):
     if scenario in ("backup", "invalid_backup"):
         assert not any(c[:2] == ["docker", "run"] for c in deploy.calls)
         assert not list((deploy.home / f"db-backups/{deploy.app_name}").glob("*.dump"))
+    if scenario == "build_signal":
+        assert not Path(deploy.state["build_context"]).exists()
 
 
 @pytest.mark.parametrize(

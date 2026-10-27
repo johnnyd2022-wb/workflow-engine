@@ -5,9 +5,9 @@
 #   PROD_HOST_PORT=8010 scripts/run_prod.sh
 #
 # What it does, in order, stopping at the first failure:
-#   0. requires a clean checkout of freshly fetched origin/main and takes a deploy lock
+#   0. requires clean tracked files at freshly fetched origin/main and takes a deploy lock
 #   1. loads production secrets from KeePassXC (scripts/prod_secrets.py); never from a file
-#   2. builds the `production` image
+#   2. builds the `production` image from an archive of that commit
 #   3. makes sure the database container is up (scripts/prod_db.sh)
 #   4. backs the database up (including on first deploy) -- a failed backup stops the deploy
 #   5. runs migrations with the new image
@@ -59,7 +59,7 @@ SECRET_ENV=(-e ENVIRONMENT=prod -e POSTGRES_PASSWORD -e FLASK_SECRET_KEY -e BACK
     -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET)
 
 echo "== Build"
-docker build --target production -f Dockerfile.multi -t "$IMAGE" .
+build_image_from_head production "$IMAGE" "$source_sha"
 # Catch edits or a newer main arriving during the build before touching the database.
 check_checkout "$source_sha"
 

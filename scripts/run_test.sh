@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Human-triggered staging deploy from clean current main. Build, back up, migrate,
+# Human-triggered staging deploy from clean tracked files at current main. Build, back up, migrate,
 # check a candidate alongside the running app, then hand over with app rollback.
 # TEST_HOST_PORT defaults to 8001. The registry CD path is deploy_test_simple.sh.
 set -euo pipefail
@@ -63,7 +63,7 @@ APP_ARGS=(--add-host host.docker.internal:host-gateway
     -e XERO_CLIENT_ID_TEST -e XERO_CLIENT_SECRET_TEST -e xero_client_id_test -e xero_client_secret_test)
 
 echo "== Build"
-docker build --target test -f Dockerfile.multi -t "$IMAGE" .
+build_image_from_head test "$IMAGE" "$source_sha"
 check_checkout "$source_sha"
 
 echo "== Database backup"
