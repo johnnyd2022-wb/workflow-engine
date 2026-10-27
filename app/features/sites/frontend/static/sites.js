@@ -1,9 +1,6 @@
 (function () {
   'use strict';
 
-  // CONCEPT ONLY: the style switch goes when one style is chosen.
-  var STYLE_KEY = 'st-style';
-
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (k) {
@@ -23,7 +20,6 @@
     var message = $('[data-sites-message]');
     var loadError = $('[data-sites-load-error]');
     var register = $('[data-sites-register]');
-    var panel = $('[data-sites-panel]');
     var siteDialog = $('[data-site-dialog]');
     var siteForm = $('[data-sites-create]');
     var siteError = $('[data-site-error]');
@@ -34,8 +30,6 @@
     var editing = null;
     var areaSite = null;
     var selected = null;
-    var step = null;
-    var style = '1';
 
     async function api(method, path, body) {
       var headers = { Accept: 'application/json' };
@@ -56,24 +50,6 @@
       message.className = 'st-message' + (ok ? ' st-message--ok' : ' st-message--error');
       message.hidden = !text;
     }
-
-    // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
-    function readStyle() {
-      var fromUrl = new URLSearchParams(window.location.search).get('style');
-      var saved = null;
-      try { saved = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
-      setStyle(['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1'), false);
-    }
-    function setStyle(next, remember) {
-      style = next;
-      root.setAttribute('data-sites-style', next);
-      root.querySelectorAll('[data-st-style]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.stStyle === next ? 'true' : 'false'); });
-      if (remember) { try { window.localStorage.setItem(STYLE_KEY, next); } catch (_) { /* private mode */ } }
-    }
-    root.querySelectorAll('[data-st-style]').forEach(function (b) {
-      b.addEventListener('click', function () { setStyle(b.dataset.stStyle, true); if (state) render(); });
-    });
-    // ────────────────────────────────────────────────────────────────────────────────────────
 
     function active() { return state.sites.filter(function (s) { return s.is_active; }); }
     function defaultSite() { return state.sites.filter(function (s) { return s.is_default; })[0] || null; }
@@ -127,19 +103,16 @@
       var list = steps();
       var left = list.filter(function (s) { return !s.done && !s.optional; }).length;
       var card = $('[data-sites-setup]');
-      // Style 3 keeps the steps as its rail; Styles 1 and 2 hide them once nothing required is left.
-      card.hidden = style !== '3' && left === 0;
+      // Once nothing required is left the steps step aside; the cards say the rest.
+      card.hidden = left === 0;
       $('[data-sites-setup-summary]').textContent = left ? plural(left, 'step') + ' left.' : 'All set. Revisit any step below.';
       var ol = $('[data-sites-steps]');
       ol.replaceChildren();
       list.forEach(function (s, i) {
-        var li = el('li', { className: 'st-step' + (s.done ? ' st-step--done' : '') + (step === s.key ? ' st-step--current' : ''), 'data-step': s.key });
+        var li = el('li', { className: 'st-step' + (s.done ? ' st-step--done' : ''), 'data-step': s.key });
         var mark = el('span', { className: 'st-step__mark', 'aria-hidden': 'true', text: s.done ? '✓' : String(i + 1) });
         var body = el('div', { className: 'st-step__body' });
-        var title = style === '3'
-          ? el('button', { type: 'button', className: 'st-step__title st-step__pick', text: s.title + (s.optional ? ' (optional)' : '') })
-          : el('strong', { className: 'st-step__title', text: s.title + (s.optional ? ' (optional)' : '') });
-        if (style === '3') title.addEventListener('click', function () { step = s.key; render(); });
+        var title = el('strong', { className: 'st-step__title', text: s.title + (s.optional ? ' (optional)' : '') });
         body.append(title, el('span', { className: 'st-sr', text: s.done ? ' (done)' : ' (to do)' }), el('p', { className: 'st-step__detail', text: s.detail }));
         if (s.action && !s.done) {
           var b = el('button', { type: 'button', className: 'workspace-button', text: s.action.label });
@@ -152,11 +125,10 @@
       });
     }
 
-    /** A compliance note as a pill; `brief` uses the module's short form for a table cell. */
-    function note(n, brief) {
+    /** A compliance note as a pill, linking to where it is managed. */
+    function note(n) {
       if (!n) return null;
-      var attrs = { className: 'st-note st-note--' + n.tone, text: brief && n.short ? n.short : n.text };
-      if (brief && n.short) attrs.title = n.text;
+      var attrs = { className: 'st-note st-note--' + n.tone, text: n.text };
       if (n.href) attrs.href = n.href;
       return el(n.href ? 'a' : 'span', attrs);
     }
@@ -198,7 +170,7 @@
       return ul;
     }
 
-    // Style 1: a card per site, everything about it in one place.
+    // A card per site, everything about it in one place.
     function renderCards() {
       var grid = el('div', { className: 'st-grid' });
       state.sites.forEach(function (site) {
@@ -217,72 +189,17 @@
       return grid;
     }
 
-    // Style 2: a compact register; the chosen site opens beside it.
-    function renderTable() {
-      if (!state.sites.some(function (s) { return s.id === selected; })) selected = (defaultSite() || state.sites[0] || {}).id;
-      var table = el('table', { className: 'st-table' });
-      var label = state.compliance && state.compliance.label;
-      var head = el('tr', {}, [['Site'], ['Stock', 'st-num'], ['Batches', 'st-num'], ['Areas', 'st-num st-wide'], label ? [label, 'st-wide'] : null].filter(Boolean).map(function (h) { return el('th', { scope: 'col', text: h[0], className: h[1] || '' }); }));
-      table.append(el('thead', {}, [head]));
-      var body = el('tbody');
-      state.sites.forEach(function (site) {
-        var tr = el('tr', { className: 'st-row' + (site.id === selected ? ' st-row--selected' : '') + (site.is_active ? '' : ' st-site--archived'), 'data-site-id': site.id, tabindex: '0', 'aria-selected': site.id === selected ? 'true' : 'false' });
-        var nameCell = el('td', {}, [el('strong', {}, [site.name, tags(site)]), el('span', { className: 'st-kind', text: kindLabel(site) })]);
-        tr.append(nameCell, el('td', { className: 'st-num', text: String(site.stock_lines || 0) }), el('td', { className: 'st-num', text: String(site.batches_under_way || 0) }), el('td', { className: 'st-num st-wide', text: String((site.areas || []).length) }));
-        if (label) tr.append(el('td', { className: 'st-wide' }, [note((site.notes || [])[0], true)]));
-        function pick() { selected = site.id; render(); }
-        tr.addEventListener('click', pick);
-        tr.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
-        body.append(tr);
-      });
-      table.append(body);
-      var site = state.sites.filter(function (s) { return s.id === selected; })[0];
-      panel.replaceChildren();
-      if (site) {
-        panel.append(el('h3', {}, [site.name, tags(site)]), el('p', { className: 'st-kind', text: kindLabel(site) + (site.address ? ' · ' + site.address : '') }), figures(site));
-        (site.notes || []).forEach(function (n) { panel.append(note(n)); });
-        panel.append(el('h4', { className: 'st-subhead', text: 'Stock areas' }), areaList(site), actionLinks(site));
-      }
-      return el('div', { className: 'st-table-wrap' }, [table]);
-    }
-
-    // Style 3: the setup steps are the page; the chosen step shows its sites below.
-    function renderStepDetail() {
-      var wrap = el('div', { className: 'st-step-detail' });
-      var current = step || 'sites';
-      var list = el('ul', { className: 'st-compact' });
-      state.sites.forEach(function (site) {
-        var li = el('li', { className: 'st-compact__row' + (site.is_active ? '' : ' st-site--archived'), 'data-site-id': site.id });
-        var what = el('div', { className: 'st-compact__what' }, [el('strong', {}, [site.name, tags(site)]), el('span', { className: 'st-kind', text: kindLabel(site) })]);
-        li.append(what);
-        if (current === 'areas') li.append(areaList(site));
-        else if (current === 'licences') li.append(note((site.notes || [])[0]) || el('span', { text: '' }));
-        else {
-          li.append(figures(site));
-          (site.notes || []).forEach(function (n) { li.append(note(n)); });
-        }
-        li.append(actionLinks(site));
-        list.append(li);
-      });
-      var label = (state.compliance && state.compliance.label) || 'Compliance';
-      var titles = { sites: 'Your sites', default: 'The default site', areas: 'Stock areas at each site', licences: label + ' status of each site' };
-      wrap.append(el('h3', { className: 'st-step-detail__title', text: titles[current] }), list);
-      return wrap;
-    }
-
     function render() {
       $('[data-sites-intro]').hidden = true;
       $('[data-sites-setup]').hidden = true;
       $('[data-sites-body]').hidden = true;
       $('[data-sites-foot]').hidden = true;
       $('[data-sites-add]').hidden = true;
-      panel.hidden = true;
       if (!state.entitled || !state.enabled) { renderIntro(); return; }
       $('[data-sites-add]').hidden = false;
       renderSetup();
       $('[data-sites-body]').hidden = false;
-      panel.hidden = style !== '2';
-      register.replaceChildren(style === '2' ? renderTable() : (style === '3' ? renderStepDetail() : renderCards()));
+      register.replaceChildren(renderCards());
       var live = active().length;
       var archived = state.sites.length - live;
       $('[data-sites-summary]').textContent = plural(live, 'active site') + (archived ? ' · ' + archived + ' archived' : '') + '.';
@@ -385,7 +302,6 @@
       }
     });
 
-    readStyle();
     load();
   }
   // Runs at first load and after every boosted swap that brings the page in (page-init.js).

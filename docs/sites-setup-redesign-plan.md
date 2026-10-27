@@ -24,7 +24,12 @@ Settings → Sites (`/core/sites`). The Sites list from !566 (Style 1, "List") w
 
 **Looked for, not found:** a competitor that shows Customs/bond status on its location list. InnoVint treats bonds as places but documents the transfer, not a location overview. That is the 10x: the site card says, from the register, whether stock there is under bond.
 
-## Three directions
+## Chosen: Style 1, site cards (founder, 2026-10-28)
+
+- **Style 2 (register and panel)** lost because two to six sites don't need a table, and the panel hid each site's areas behind a click.
+- **Style 3 (guided setup)** lost because setup is done once; afterwards the steps took the first screen from the sites themselves.
+
+## Three directions (as presented)
 
 | | Style 1: Site cards | Style 2: Register and panel | Style 3: Guided setup |
 |---|---|---|---|
@@ -43,5 +48,5 @@ Settings → Sites (`/core/sites`). The Sites list from !566 (Style 1, "List") w
 
 ## Checks
 
-- Browser: off/not-in-plan, switch on, add a site, add an area, make default, figures and Customs status per site, a failed load; CONCEPT ONLY layout checks for the three styles at phone, laptop and wall.
+- Browser: off/not-in-plan, switch on, add a site, add an area, make default, figures and Customs status per site, a failed load; no sideways scroll at phone, laptop and wall.
 - Shots: busy multi-site org, a plain org without the plan, phone, wall, dark, the dialogs, arriving by the Settings tab.

@@ -3,19 +3,13 @@
 {% block body_class %}sites-page{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('sites.static', filename='sites.css') }}">
-<div class="max-content workspace-overview st-page" data-sites-root data-sites-style="1" aria-busy="true">
+<div class="max-content workspace-overview st-page" data-sites-root aria-busy="true">
   <header class="workspace-header">
     <div>
       <h1>Sites</h1>
       <p class="workspace-caption">Where you make, store and sell. Stock and batches are recorded at a site; anything without one goes to the default.</p>
     </div>
     <div class="workspace-header__actions">
-      {# CONCEPT ONLY: the style switch goes when one style is chosen. #}
-      <div class="st-style-pick" role="group" aria-label="Layout (concept)">
-        <button type="button" data-st-style="1" aria-pressed="true">Style 1</button>
-        <button type="button" data-st-style="2" aria-pressed="false">Style 2</button>
-        <button type="button" data-st-style="3" aria-pressed="false">Style 3</button>
-      </div>
       <button type="button" class="workspace-button workspace-button--primary" data-sites-add hidden>Add a site</button>
     </div>
   </header>
@@ -47,8 +41,6 @@
 
   <section class="st-body" data-sites-body hidden>
     <div class="st-register" data-sites-register aria-label="Your sites"></div>
-    {# Style 2: the chosen site, beside the register. #}
-    <aside class="st-panel" data-sites-panel aria-live="polite" hidden></aside>
   </section>
 
   <footer class="st-foot" data-sites-foot hidden>

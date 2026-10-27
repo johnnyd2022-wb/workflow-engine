@@ -1,4 +1,4 @@
-/* Sites (docs/sites-setup-redesign-plan.md). Style 1 is the base; Styles 2 and 3 are CONCEPT ONLY blocks. */
+/* Sites (docs/sites-setup-redesign-plan.md): a card per site, with the setup steps above until they are done. */
 #page-content .st-page { display: flex; flex-direction: column; gap: 20px; padding-bottom: 64px; }
 #page-content .st-page .workspace-header { margin-bottom: 0; }
 #page-content .st-page [hidden] { display: none !important; }
@@ -80,59 +80,3 @@ html[data-spa-theme="dark"] #page-content .st-message--error { border-color: rgb
   #page-content .st-card { padding: 18px; }
   #page-content .st-intro { flex-direction: column; align-items: stretch; }
 }
-
-/* CONCEPT ONLY: the style switch. */
-#page-content .st-style-pick { display: inline-flex; border: 1px solid var(--ui-border); border-radius: 999px; overflow: hidden; }
-#page-content .st-style-pick button { padding: 6px 12px; border: 0; background: var(--ui-surface); color: var(--ui-text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content .st-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
-
-/* CONCEPT ONLY: Style 2, a register with the chosen site beside it. */
-#page-content [data-sites-style="2"] .st-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
-#page-content [data-sites-style="2"] .st-table-wrap { overflow-x: auto; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); }
-#page-content [data-sites-style="2"] .st-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-#page-content [data-sites-style="2"] .st-table th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: var(--ui-text-muted); border-bottom: 1px solid var(--ui-border); }
-#page-content [data-sites-style="2"] .st-table td { padding: 12px 16px; border-bottom: 1px solid var(--ui-border); vertical-align: top; color: var(--ui-text); }
-#page-content [data-sites-style="2"] .st-table tr:last-child td { border-bottom: 0; }
-#page-content [data-sites-style="2"] .st-table strong { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
-#page-content [data-sites-style="2"] .st-table .st-num { width: 1%; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#page-content [data-sites-style="2"] .st-table th,
-#page-content [data-sites-style="2"] .st-table .st-note,
-#page-content [data-sites-style="2"] .st-table .st-tag { white-space: nowrap; }
-@media (max-width: 600px) {
-  /* On a phone the register keeps what is read every time; areas and status are one tap away. */
-  #page-content [data-sites-style="2"] .st-table .st-wide { display: none; }
-  #page-content [data-sites-style="2"] .st-table th,
-  #page-content [data-sites-style="2"] .st-table td { padding: 12px; }
-}
-#page-content [data-sites-style="2"] .st-row { cursor: pointer; outline: 0; }
-#page-content [data-sites-style="2"] .st-row:hover { background: var(--ui-surface-subtle); }
-#page-content [data-sites-style="2"] .st-row--selected { background: var(--ui-surface-subtle); box-shadow: inset 3px 0 0 var(--ui-accent); }
-#page-content [data-sites-style="2"] .st-row:focus-visible { box-shadow: inset 0 0 0 2px var(--ui-accent); }
-#page-content [data-sites-style="2"] .st-panel { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); }
-#page-content [data-sites-style="2"] .st-panel h3 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; font-size: 18px; }
-@media (max-width: 900px) {
-  #page-content [data-sites-style="2"] .st-body { grid-template-columns: minmax(0, 1fr); }
-  #page-content [data-sites-style="2"] .st-panel { position: static; }
-}
-
-/* CONCEPT ONLY: Style 3, the setup steps as the page. */
-#page-content [data-sites-style="3"] .st-steps { grid-template-columns: minmax(0, 1fr); }
-#page-content [data-sites-style="3"] .st-step--current { border-color: var(--ui-accent); box-shadow: inset 3px 0 0 var(--ui-accent); }
-#page-content [data-sites-style="3"] .st-step__pick { padding: 0; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--ui-text); text-align: left; cursor: pointer; }
-#page-content [data-sites-style="3"] .st-step__pick:hover { color: var(--ui-accent-strong); text-decoration: underline; }
-@media (min-width: 1100px) {
-  #page-content [data-sites-style="3"] { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: 20px; align-items: start; }
-  #page-content [data-sites-style="3"] > .workspace-header,
-  #page-content [data-sites-style="3"] > .st-message,
-  #page-content [data-sites-style="3"] > .st-intro,
-  #page-content [data-sites-style="3"] > .st-foot { grid-column: 1 / -1; }
-  #page-content [data-sites-style="3"] > .st-setup { grid-column: 1; }
-  #page-content [data-sites-style="3"] > .st-body { grid-column: 2; }
-}
-#page-content [data-sites-style="3"] .st-step-detail { padding: 20px 22px; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); }
-#page-content [data-sites-style="3"] .st-step-detail__title { margin: 0 0 8px; font-size: 16px; }
-#page-content [data-sites-style="3"] .st-compact { margin: 0; padding: 0; list-style: none; }
-#page-content [data-sites-style="3"] .st-compact__row { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--ui-border); }
-#page-content [data-sites-style="3"] .st-compact__row:first-child { border-top: 0; }
-#page-content [data-sites-style="3"] .st-compact__what strong { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 15px; }
-#page-content [data-sites-style="3"] .st-actions { margin-top: 0; padding-top: 0; }

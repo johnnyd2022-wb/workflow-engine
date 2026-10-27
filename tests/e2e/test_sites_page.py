@@ -32,9 +32,9 @@ def user(_member, db):  # noqa: F811
     return _member
 
 
-def _open(page, width=1440, style="1"):
+def _open(page, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}")
+    page.goto(PAGE)
     page.locator(READY).wait_for()
 
 
@@ -110,16 +110,10 @@ def test_sites_that_did_not_load_leave_nothing_to_act_on(sales_page):  # noqa: F
     expect(sales_page.get_by_role("button", name="Switch on")).to_be_visible()
 
 
-# CONCEPT ONLY: deleted with the two styles not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_style_fits_without_sideways_scroll(sales_page, client, width, style):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(sales_page, client, width):  # noqa: F811
     _on(client, "Bond store", "Cellar door")
-    _open(sales_page, width=width, style=style)
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator(SITES)).to_have_count(3)
     expect(sales_page.locator("[data-sites-foot]")).to_be_visible()
-    if style == "2":
-        expect(sales_page.locator("[data-sites-panel]")).to_be_visible()
-    if style == "3":
-        expect(sales_page.locator("[data-sites-setup]")).to_be_visible()
