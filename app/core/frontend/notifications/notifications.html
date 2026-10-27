@@ -8,19 +8,11 @@
 
 {% block content %}
 <div id="notifications-page-marker" hidden aria-hidden="true"></div>
-<main class="nt-page workspace-overview workspace-page" data-notifications-page data-notifications-style="1" aria-busy="true">
+<main class="nt-page workspace-overview workspace-page" data-notifications-page aria-busy="true">
   <header class="workspace-header">
     <div>
       <h1>Notifications</h1>
       <p>What needs you, late first. Each one has the action that resolves it.</p>
-    </div>
-    <div class="workspace-header__actions">
-      {# CONCEPT ONLY: the style switch goes when one style is chosen. #}
-      <div class="nt-style-pick" role="group" aria-label="Layout (concept)" data-nt-style-pick>
-        <button type="button" data-nt-style="1" aria-pressed="true">Style 1</button>
-        <button type="button" data-nt-style="2" aria-pressed="false">Style 2</button>
-        <button type="button" data-nt-style="3" aria-pressed="false">Style 3</button>
-      </div>
     </div>
   </header>
 
@@ -34,11 +26,7 @@
     </div>
     <div class="nt-chips nt-chips--areas" role="group" aria-label="Show" data-nt-areas></div>
     <p class="nt-summary" data-nt-summary aria-live="polite"></p>
-    <div class="nt-body" data-nt-body>
-      <div class="nt-list" data-nt-list><p class="nt-empty" data-loading>Loading notifications…</p></div>
-      {# Style 2 only: the chosen notification, with every action. #}
-      <aside class="nt-detail" data-nt-detail aria-live="polite" hidden></aside>
-    </div>
+    <div class="nt-list" data-nt-list><p class="nt-empty" data-loading>Loading notifications…</p></div>
   </section>
 </main>
 {# Inside the content block and deferred: boosted navigation swaps only #page-content, and core-api.js

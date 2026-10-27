@@ -57,7 +57,16 @@
 - Katana's and MRPeasy's handling of an expired batch: their docs cover expiry dates, not an alert or a dispose step.
 - A Polaris pattern for always-visible row shortcuts: current Polaris puts row actions in a menu.
 
-## Three directions to choose from
+## Chosen: Style 1, the work queue (founder, 2026-10-27)
+
+Every fix is one click from the moment the page loads, in the order it matters, which is the brief: as few clicks as possible to get value.
+
+- **Style 2 lost:** reaching the action took a click first, and on a phone the detail pushed the list down.
+- **Style 3 lost:** grouping by area hid urgency across areas. Its bulk "Dispose all N expired" was kept: it sits beside the section heading when two or more lots have expired.
+
+The section below is kept as the record of what was compared.
+
+## Three directions compared
 
 | | Style 1: Work queue | Style 2: Inbox and detail | Style 3: By area |
 |---|---|---|---|

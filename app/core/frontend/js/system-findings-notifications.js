@@ -14,8 +14,6 @@
 
   var DAY = 24 * 3600 * 1000;
   var SOON_DAYS = 7;
-  // CONCEPT ONLY: the style switch goes when one style is chosen.
-  var STYLE_KEY = 'nt-style';
 
   // Core checks' areas. Module checks name their own (system_finding.area or .category).
   var CORE_AREAS = {
@@ -223,26 +221,22 @@
         due: alert.due_date,
         primary: href ? { label: text(alert.action_label, 'Open'), href: href } : null
       });
-      // A summary counts the alerts beside it: it heads their group instead of being one more row.
+      // A summary counts the alerts beside it, so it is only a row when it stands alone.
       if (alert.summary) summary = r; else rows.push(r);
     });
     if (summary && !rows.length) rows.push(summary);
-    return { rows: rows, summary: summary && rows.indexOf(summary) === -1 ? summary : null };
+    return rows;
   }
 
   function buildAll(findings) {
     var all = [];
-    var summaries = {};
     findings.forEach(function (f) {
       var checkId = f && f.check_id != null ? String(f.check_id) : '';
       if (!checkId) return;
       var data = f.data && typeof f.data === 'object' ? f.data : {};
       var rows;
-      if (Array.isArray(data.system_alerts) && data.system_alerts.length) {
-        var built = fromModule(checkId, data);
-        rows = built.rows;
-        if (built.summary) summaries[built.summary.area] = built.summary;
-      } else if (checkId === 'expired_materials') rows = fromExpired(checkId, data);
+      if (Array.isArray(data.system_alerts) && data.system_alerts.length) rows = fromModule(checkId, data);
+      else if (checkId === 'expired_materials') rows = fromExpired(checkId, data);
       else if (checkId === 'output_expiry') rows = fromOutputDate(checkId, data, 'expired');
       else if (checkId === 'output_ready_date') rows = fromOutputDate(checkId, data, 'ready');
       else if (checkId === 'untracked_items') rows = fromUntracked(checkId, data);
@@ -254,7 +248,7 @@
     all.sort(function (a, b) {
       return (order[a.timing.bucket] - order[b.timing.bucket]) || (a.timing.ms - b.timing.ms) || a.title.localeCompare(b.title);
     });
-    return { rows: all, summaries: summaries };
+    return all;
   }
 
   // ── The page ───────────────────────────────────────────────────────────────────────────
@@ -263,10 +257,10 @@
     root.dataset.bound = '1';
     var $ = function (sel) { return root.querySelector(sel); };
     var els = {
-      list: $('[data-nt-list]'), detail: $('[data-nt-detail]'), areas: $('[data-nt-areas]'),
+      list: $('[data-nt-list]'), areas: $('[data-nt-areas]'),
       summary: $('[data-nt-summary]'), heading: $('[data-nt-heading]')
     };
-    var state = { view: 'active', area: '', style: '1', selected: null, all: [], summaries: {}, caseStatus: {} };
+    var state = { view: 'active', area: '', all: [], caseStatus: {} };
 
     function el(tag, className, content) {
       var node = document.createElement(tag);
@@ -279,25 +273,6 @@
       a.href = action.href;
       return a;
     }
-
-    // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
-    function readStyle() {
-      var fromUrl = new URLSearchParams(window.location.search).get('style');
-      var saved = null;
-      try { saved = window.localStorage.getItem(STYLE_KEY); } catch (e) { /* private mode */ }
-      var style = ['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1');
-      setStyle(style, false);
-    }
-    function setStyle(style, remember) {
-      state.style = style;
-      root.setAttribute('data-notifications-style', style);
-      root.querySelectorAll('[data-nt-style]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.ntStyle === style ? 'true' : 'false'); });
-      if (remember) { try { window.localStorage.setItem(STYLE_KEY, style); } catch (e) { /* private mode */ } }
-    }
-    root.querySelectorAll('[data-nt-style]').forEach(function (b) {
-      b.addEventListener('click', function () { setStyle(b.dataset.ntStyle, true); render(); });
-    });
-    // ────────────────────────────────────────────────────────────────────────────────────────
 
     function categoryFilter() {
       var c = (new URLSearchParams(window.location.search).get('category') || '').toLowerCase();
@@ -367,25 +342,6 @@
       wrap.append(toggle, menu);
       return wrap;
     }
-    /** Style 2's detail has room to show hiding as plain buttons rather than a ⋯ menu. */
-    function hideButtons(r) {
-      var wrap = el('div', 'nt-detail__hide');
-      function btn(label, fn) {
-        var b = el('button', 'nt-detail__hide-btn', label);
-        b.type = 'button';
-        b.addEventListener('click', function () { fn(); render(); });
-        wrap.appendChild(b);
-      }
-      if (state.view === 'archive') {
-        btn('Show again', function () { store(function (s) { s.removeItem(snoozeKey(r)); s.removeItem(hideKey(r)); }); });
-      } else {
-        btn('Hide until tomorrow', function () { store(function (s) { s.setItem(snoozeKey(r), todayKey()); }); });
-        btn('Hide for this session', function () { store(function (s) { s.setItem(hideKey(r), '1'); }); });
-      }
-      wrap.appendChild(el('span', 'nt-detail__hide-note', 'Only on this browser; the work stays open.'));
-      return wrap;
-    }
-
     function closeMenus() {
       root.querySelectorAll('.nt-more__menu').forEach(function (m) { m.hidden = true; });
       root.querySelectorAll('.nt-more__toggle').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
@@ -397,12 +353,12 @@
     }
 
     /** One notification as a row: what, why, when, and its fix as a button. */
-    function row(r, compact) {
+    function row(r) {
       var li = el('li', 'nt-row nt-row--' + r.timing.bucket);
       li.dataset.checkId = r.checkId;
       li.dataset.itemKey = r.itemKey;
       var main = el('div', 'nt-row__main');
-      if (!compact) main.appendChild(el('span', 'nt-row__area', r.area));
+      main.appendChild(el('span', 'nt-row__area', r.area));
       main.appendChild(el('p', 'nt-row__title', r.title));
       if (r.detail) main.appendChild(el('p', 'nt-row__detail', r.detail));
       var more = secondaries(r);
@@ -424,115 +380,31 @@
       ['late', 'Late'], ['soon', 'This week'], ['undated', 'To check'], ['later', 'Coming up']
     ];
 
-    // Style 1: sections by how late, each row with its action.
+    // Sections by how late, each row with its action.
+    /** Several expired lots in one section: dispose of them together, on one Record disposal page. */
+    function bulkDispose(items) {
+      var lots = items.filter(function (r) { return r.lotId; }).map(function (r) { return r.lotId; });
+      return lots.length > 1 ? { label: 'Dispose all ' + lots.length + ' expired', href: disposeHref(lots) } : null;
+    }
+
     function renderQueue(rows) {
       var frag = document.createDocumentFragment();
       BUCKETS.forEach(function (b) {
         var inBucket = rows.filter(function (r) { return r.timing.bucket === b[0]; });
         if (!inBucket.length) return;
         var section = el('section', 'nt-section nt-section--' + b[0]);
+        var head = el('div', 'nt-section__head');
         var h = el('h3', 'nt-section__title', b[1]);
         h.appendChild(el('span', 'nt-section__count', String(inBucket.length)));
+        head.appendChild(h);
+        var bulk = bulkDispose(inBucket);
+        if (bulk) head.appendChild(link(bulk, 'nt-row__link nt-section__bulk'));
         var ul = el('ul', 'nt-rows');
         inBucket.forEach(function (r) { ul.appendChild(row(r)); });
-        section.append(h, ul);
+        section.append(head, ul);
         frag.appendChild(section);
       });
       return frag;
-    }
-
-    // Style 2: a quiet list; the chosen one is beside it with every action.
-    function renderInbox(rows) {
-      var ul = el('ul', 'nt-inbox');
-      ul.setAttribute('role', 'listbox');
-      ul.setAttribute('aria-label', 'Notifications');
-      if (!rows.some(function (r) { return r.itemKey === state.selected; })) state.selected = rows.length ? rows[0].itemKey : null;
-      rows.forEach(function (r, i) {
-        var li = el('li', 'nt-inbox__item nt-inbox__item--' + r.timing.bucket);
-        li.setAttribute('role', 'option');
-        li.tabIndex = r.itemKey === state.selected ? 0 : -1;
-        li.setAttribute('aria-selected', r.itemKey === state.selected ? 'true' : 'false');
-        li.dataset.itemKey = r.itemKey;
-        li.dataset.checkId = r.checkId;
-        li.appendChild(el('span', 'nt-inbox__title', r.title));
-        var meta = el('span', 'nt-inbox__meta', r.area);
-        var w = when(r);
-        if (w) { meta.appendChild(document.createTextNode(' · ')); meta.appendChild(w); }
-        li.appendChild(meta);
-        li.addEventListener('click', function () { select(r.itemKey, true); });
-        li.addEventListener('keydown', function (ev) {
-          var to = null;
-          if (ev.key === 'ArrowDown' || ev.key === 'j') to = rows[i + 1];
-          if (ev.key === 'ArrowUp' || ev.key === 'k') to = rows[i - 1];
-          if (to) { ev.preventDefault(); select(to.itemKey, true); }
-          if (ev.key === 'Enter' && r.primary) { ev.preventDefault(); window.location.href = r.primary.href; }
-        });
-        ul.appendChild(li);
-      });
-      renderDetail(rows);
-      return ul;
-    }
-    function select(key, focus) {
-      state.selected = key;
-      els.list.querySelectorAll('.nt-inbox__item').forEach(function (li) {
-        var on = li.dataset.itemKey === key;
-        li.setAttribute('aria-selected', on ? 'true' : 'false');
-        li.tabIndex = on ? 0 : -1;
-        if (on && focus) li.focus();
-      });
-      renderDetail(visible().filter(areaMatch));
-    }
-    function renderDetail(rows) {
-      var r = rows.filter(function (x) { return x.itemKey === state.selected; })[0];
-      els.detail.replaceChildren();
-      if (!r) return;
-      els.detail.appendChild(el('p', 'nt-detail__area', r.area));
-      els.detail.appendChild(el('h3', 'nt-detail__title', r.title));
-      var w = when(r);
-      if (w) els.detail.appendChild(w);
-      if (r.detail) els.detail.appendChild(el('p', 'nt-detail__text', r.detail));
-      var actions = el('div', 'nt-detail__actions');
-      if (r.primary) actions.appendChild(link(r.primary, 'workspace-button workspace-button--primary'));
-      secondaries(r).forEach(function (a) { actions.appendChild(link(a, 'workspace-button')); });
-      els.detail.appendChild(actions);
-      els.detail.appendChild(hideButtons(r));
-    }
-
-    // Style 3: one card per area, most late first, with the area's bulk action where there is one.
-    function renderAreas(rows) {
-      var groups = {};
-      rows.forEach(function (r) { (groups[r.area] = groups[r.area] || []).push(r); });
-      var names = Object.keys(groups).sort(function (a, b) {
-        var late = function (n) { return groups[n].filter(function (r) { return r.timing.bucket === 'late'; }).length; };
-        return (late(b) - late(a)) || (groups[b].length - groups[a].length) || a.localeCompare(b);
-      });
-      var frag = document.createDocumentFragment();
-      names.forEach(function (name) {
-        var items = groups[name];
-        var lateCount = items.filter(function (r) { return r.timing.bucket === 'late'; }).length;
-        var card = el('section', 'nt-group');
-        var head = el('div', 'nt-group__head');
-        var titles = el('div', 'nt-group__titles');
-        titles.appendChild(el('h3', 'nt-group__title', name));
-        var counts = el('p', 'nt-group__counts', plural(items.length, 'notification'));
-        if (lateCount) { counts.appendChild(document.createTextNode(' · ')); counts.appendChild(el('span', 'nt-when nt-when--late', lateCount + ' late')); }
-        titles.appendChild(counts);
-        var summary = state.summaries[name];
-        if (summary && summary.detail) titles.appendChild(el('p', 'nt-group__summary', summary.detail));
-        head.appendChild(titles);
-        var bulk = bulkAction(items) || (summary && summary.primary);
-        if (bulk) head.appendChild(link(bulk, 'workspace-button nt-group__bulk'));
-        var ul = el('ul', 'nt-rows');
-        items.forEach(function (r) { ul.appendChild(row(r, true)); });
-        card.append(head, ul);
-        frag.appendChild(card);
-      });
-      return frag;
-    }
-    /** Several expired lots: dispose of them together, on one Record disposal page. */
-    function bulkAction(items) {
-      var lots = items.filter(function (r) { return r.checkId === 'expired_materials' && r.lotId; }).map(function (r) { return r.lotId; });
-      return lots.length > 1 ? { label: 'Dispose all ' + lots.length + ' expired', href: disposeHref(lots) } : null;
     }
 
     function areaMatch(r) { return !state.area || r.area === state.area; }
@@ -557,7 +429,6 @@
     function empty(message) {
       var p = el('p', 'nt-empty', message);
       els.list.replaceChildren(p);
-      els.detail.hidden = true;
     }
 
     function render() {
@@ -574,9 +445,7 @@
         empty(state.view === 'archive' ? 'Nothing hidden.' : (categoryFilter() ? 'Nothing here needs you.' : 'Nothing needs you right now.'));
         return;
       }
-      els.detail.hidden = state.style !== '2';
-      var content = state.style === '2' ? renderInbox(shown) : state.style === '3' ? renderAreas(shown) : renderQueue(shown);
-      els.list.replaceChildren(content);
+      els.list.replaceChildren(renderQueue(shown));
     }
 
     async function load() {
@@ -594,9 +463,7 @@
         root.setAttribute('aria-busy', 'false');
         return;
       }
-      var built = buildAll(data.findings);
-      state.all = built.rows;
-      state.summaries = built.summaries;
+      state.all = buildAll(data.findings);
       await loadCases(state.all);
       if (!root.isConnected) return;
       render();
@@ -616,7 +483,6 @@
     root.addEventListener('click', function (ev) { if (!ev.target.closest('.nt-more')) closeMenus(); });
     root.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeMenus(); });
 
-    readStyle();
     if (window.LiveSync) {
       window.LiveSync.subscribe({
         key: 'notifications-cases',

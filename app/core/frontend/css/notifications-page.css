@@ -1,5 +1,5 @@
 /* Notifications (docs/notifications-redesign-plan.md). Tokens from design-system.css; layout from
-   workspace-overviews.css. Style 1 is the base; Styles 2 and 3 are CONCEPT ONLY blocks below. */
+   workspace-overviews.css. */
 
 #page-content .nt-page {
   --nt-late: #b42318;
@@ -33,9 +33,11 @@ html[data-spa-theme="dark"] #page-content .nt-page {
 #page-content .nt-when--late { color: var(--nt-late); }
 #page-content .nt-when--soon { color: var(--nt-soon); }
 
-/* Style 1 (base): sections by how late. */
+/* Sections by how late. */
 #page-content .nt-section { margin-top: 20px; }
-#page-content .nt-section__title { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: var(--ui-text-muted); }
+#page-content .nt-section__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin: 0 0 4px; }
+#page-content .nt-section__bulk { font-size: 13px; }
+#page-content .nt-section__title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: var(--ui-text-muted); }
 #page-content .nt-section--late .nt-section__title { color: var(--nt-late); }
 #page-content .nt-section__count { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--ui-surface-subtle); color: var(--ui-text-muted); font-size: 12px; text-align: center; }
 #page-content .nt-section--late .nt-section__count { background: var(--nt-late-soft); color: var(--nt-late); }
@@ -64,9 +66,6 @@ html[data-spa-theme="dark"] #page-content .nt-page {
 #page-content .nt-more__item:focus-visible { background: var(--ui-surface-subtle); }
 #page-content .nt-more__note { margin: 4px 10px 2px; color: var(--ui-text-muted); font-size: 12px; }
 
-#page-content .nt-detail[hidden],
-#page-content [data-notifications-style] .nt-detail[hidden] { display: none; }
-
 @media (max-width: 720px) {
   /* One line of chips that scrolls sideways, so the first notification is on the first screen. */
   #page-content .nt-chips--areas { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -76,51 +75,3 @@ html[data-spa-theme="dark"] #page-content .nt-page {
   #page-content .nt-row__side { justify-content: flex-start; flex-wrap: wrap; }
   #page-content .nt-row__side .nt-more { margin-left: auto; }
 }
-
-/* CONCEPT ONLY: the style switch. */
-#page-content .nt-style-pick { display: inline-flex; border: 1px solid var(--ui-border); border-radius: 999px; overflow: hidden; }
-#page-content .nt-style-pick button { padding: 6px 12px; border: 0; background: var(--ui-surface); color: var(--ui-text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content .nt-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
-
-/* CONCEPT ONLY: Style 2, a quiet list with the chosen notification beside it. */
-#page-content [data-notifications-style="2"] .nt-body:has(> .nt-detail[hidden]) { display: block; }
-#page-content [data-notifications-style="2"] .nt-body { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: start; margin-top: 8px; }
-#page-content [data-notifications-style="2"] .nt-inbox { list-style: none; margin: 0; padding: 0; max-height: 72vh; overflow-y: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); }
-#page-content [data-notifications-style="2"] .nt-inbox__item { display: grid; gap: 2px; padding: 10px 14px; border-top: 1px solid var(--ui-border); border-left: 3px solid transparent; cursor: pointer; outline: 0; }
-#page-content [data-notifications-style="2"] .nt-inbox__item:first-child { border-top: 0; }
-#page-content [data-notifications-style="2"] .nt-inbox__item--late { border-left-color: var(--nt-late); }
-#page-content [data-notifications-style="2"] .nt-inbox__item--soon { border-left-color: var(--nt-soon); }
-#page-content [data-notifications-style="2"] .nt-inbox__item:hover { background: var(--ui-surface-subtle); }
-#page-content [data-notifications-style="2"] .nt-inbox__item[aria-selected="true"] { background: var(--ui-accent-soft); }
-#page-content [data-notifications-style="2"] .nt-inbox__item:focus-visible { box-shadow: inset 0 0 0 2px var(--ui-accent); }
-#page-content [data-notifications-style="2"] .nt-inbox__title { color: var(--ui-text); font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-#page-content [data-notifications-style="2"] .nt-inbox__meta { color: var(--ui-text-muted); font-size: 12px; }
-#page-content [data-notifications-style="2"] .nt-inbox__meta .nt-when { font-size: 12px; }
-#page-content [data-notifications-style="2"] .nt-detail { position: sticky; top: 16px; display: grid; gap: 10px; align-content: start; padding: 20px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
-#page-content [data-notifications-style="2"] .nt-detail__area { margin: 0; color: var(--ui-text-muted); font-size: 12px; font-weight: 600; }
-#page-content [data-notifications-style="2"] .nt-detail__title { margin: 0; font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
-#page-content [data-notifications-style="2"] .nt-detail__text { margin: 0; color: var(--ui-text-muted); font-size: 14px; line-height: 1.5; }
-#page-content [data-notifications-style="2"] .nt-detail__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-#page-content [data-notifications-style="2"] .nt-detail__hide { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-top: 10px; border-top: 1px solid var(--ui-border); }
-#page-content [data-notifications-style="2"] .nt-detail__hide-btn { padding: 4px 0; border: 0; background: none; color: var(--ui-accent-strong); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content [data-notifications-style="2"] .nt-detail__hide-btn:hover { text-decoration: underline; }
-#page-content [data-notifications-style="2"] .nt-detail__hide-note { color: var(--ui-text-muted); font-size: 12px; }
-@media (max-width: 860px) {
-  #page-content [data-notifications-style="2"] .nt-body { grid-template-columns: minmax(0, 1fr); }
-  #page-content [data-notifications-style="2"] .nt-detail { position: static; order: -1; }
-  #page-content [data-notifications-style="2"] .nt-inbox { max-height: none; }
-}
-
-/* CONCEPT ONLY: Style 3, one card per area. */
-#page-content [data-notifications-style="3"] .nt-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; margin-top: 12px; align-items: start; }
-#page-content [data-notifications-style="3"] .nt-list > .nt-empty { grid-column: 1 / -1; }
-#page-content [data-notifications-style="3"] .nt-group { padding: 16px 18px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
-#page-content [data-notifications-style="3"] .nt-group__head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-start; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--ui-border); }
-#page-content [data-notifications-style="3"] .nt-group__titles { min-width: 0; }
-#page-content [data-notifications-style="3"] .nt-group__title { margin: 0; font-size: 16px; }
-#page-content [data-notifications-style="3"] .nt-group__counts { margin: 2px 0 0; color: var(--ui-text-muted); font-size: 13px; }
-#page-content [data-notifications-style="3"] .nt-group__summary { margin: 4px 0 0; color: var(--ui-text-muted); font-size: 13px; }
-#page-content [data-notifications-style="3"] .nt-row { grid-template-columns: minmax(0, 1fr); padding: 12px 0; }
-#page-content [data-notifications-style="3"] .nt-row__side { justify-content: flex-start; }
-#page-content [data-notifications-style="3"] .nt-row__side .nt-more { margin-left: auto; }
-#page-content [data-notifications-style="3"] .nt-row__title { font-size: 14px; }
