@@ -23,7 +23,12 @@ A1 (!597) put multiple sites behind three gates; A2 (!598) made Settings → Sit
 
 **Our 10x:** nobody normally chooses a site. Every add form opens on where *you* last worked (else the default), and a single-site business sees nothing new at all.
 
-## Three directions for the Inventory lens
+## Chosen: Style 1, site tabs (founder, 2026-10-28)
+
+- **Style 2 (site filter)** lost because a filter is easy to forget: people would read a narrowed list as the whole business.
+- **Style 3 (site cards)** lost on height: it pushed the stock list down for a comparison the tab counts already give.
+
+## Three directions for the Inventory lens (as presented)
 
 | | Style 1: Site tabs | Style 2: Site filter | Style 3: Site cards |
 |---|---|---|---|
@@ -55,4 +60,4 @@ One shared control (`app/ui/shared/site-picker.js`) on manual add, barcode scan,
 ## Checks
 
 - Unit: choices and their gates; where each line is and the site filter; CSV file site, row site, unknown site, site column while off; opening stock site; per-site area names; the migration round trip in an isolated schema.
-- Browser: a single-site business sees nothing new; where each line is and narrowing by tab (kept in the URL); the add form opens on the site last used; CONCEPT ONLY fit for each style at phone, laptop and wall.
+- Browser: a single-site business sees nothing new; where each line is and narrowing by tab (kept in the URL); the add form opens on the site last used; the tabs fit and narrow at phone, laptop and wall.

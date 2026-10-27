@@ -7,16 +7,10 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content workspace-overview workspace-page inv-view-page" data-inventory-view data-inv-site-style="1" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}">
+  <div class="max-content workspace-overview workspace-page inv-view-page" data-inventory-view data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}">
     <header class="workspace-header">
       <div><h1>Inventory</h1><p>Everything on hand, with where it came from and where it has been used.</p></div>
       <div class="workspace-header__actions">
-        {# CONCEPT ONLY: the site lens layouts; shown only with several sites. #}
-        <div class="inv-style-pick" role="group" aria-label="Site layout (concept)" data-inv-style-pick hidden>
-          <button type="button" data-inv-style="1" aria-pressed="true">Style 1</button>
-          <button type="button" data-inv-style="2" aria-pressed="false">Style 2</button>
-          <button type="button" data-inv-style="3" aria-pressed="false">Style 3</button>
-        </div>
         <a class="workspace-button" href="/core/inventory/live">Live inventory</a>
         {% if can('inventory.adjust') %}<a class="workspace-button workspace-button--primary" href="/core/inventory/add">Add to inventory</a>{% endif %}
       </div>
@@ -25,13 +19,11 @@
       <section class="workspace-card" aria-labelledby="inv-view-glance-title">
         <h2 id="inv-view-glance-title">At a glance</h2>
         <p class="workspace-caption">Select a group to filter the list.</p>
-        {# Style 3: one card per site, to compare them and jump between them; the choice is remembered. #}
-        <div class="inv-site-cards" data-inv-site-cards hidden></div>
         <div class="inv-glance" data-inv-glance aria-live="polite"></div>
       </section>
 
       <section class="workspace-card inv-stock" aria-labelledby="inv-view-results-title">
-        {# Style 1: a tab per site above the list. #}
+        {# With several sites: a tab per site above the list. #}
         <div class="inv-site-tabs" role="group" aria-label="Site" data-inv-sites hidden></div>
         <div class="inv-toolbar">
           <div>
@@ -47,8 +39,6 @@
         <div class="inv-controls" id="inv-view-filters">
           <div class="inv-segments" role="group" aria-label="Type" data-inv-segments></div>
           <div class="inv-controls__filters">
-            {# Style 2: the site is one more filter. #}
-            <select id="inv-filter-site" class="inv-select" aria-label="Site" hidden><option value="">Site</option></select>
             <select id="inv-filter-supplier" class="inv-select" aria-label="Supplier"><option value="">Supplier</option></select>
             <select id="inv-filter-process" class="inv-select" aria-label="Process"><option value="">Process</option></select>
             <button type="button" class="inv-control" data-inv-more-toggle aria-expanded="false" aria-controls="inv-view-more">

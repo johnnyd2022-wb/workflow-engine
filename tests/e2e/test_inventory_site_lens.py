@@ -53,9 +53,9 @@ def _two_sites(client):  # noqa: F811
     return bond
 
 
-def _open(page, style="1", width=1440):
+def _open(page, width=1440):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{BASE}/core/inventory/view?style={style}")
+    page.goto(f"{BASE}/core/inventory/view")
     page.locator(ROWS).first.wait_for()
 
 
@@ -65,8 +65,6 @@ def test_a_single_site_business_sees_no_site_controls(sales_page, client):  # no
     _open(sales_page)
     expect(sales_page.locator(".inv-th--where")).to_have_count(0)
     expect(sales_page.locator("[data-inv-sites]")).to_be_hidden()
-    expect(sales_page.locator("#inv-filter-site")).to_be_hidden()
-    expect(sales_page.locator("[data-inv-style-pick]")).to_be_hidden()
     sales_page.goto(f"{BASE}/core/inventory/add/manual")
     sales_page.locator("#add-inventory-name").wait_for()
     expect(sales_page.locator("[data-site-select]")).to_have_count(0)
@@ -105,19 +103,11 @@ def test_the_add_form_opens_on_the_site_last_used(sales_page, client, db):  # no
     expect(sales_page.locator("[data-site-select]")).to_have_value(bond["id"])
 
 
-# CONCEPT ONLY: deleted with the two site lens styles not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_site_lens_fits_and_narrows(sales_page, client, style, width):  # noqa: F811
+def test_the_site_tabs_fit_and_narrow(sales_page, client, width):  # noqa: F811
     _two_sites(client)
-    _open(sales_page, style=style, width=width)
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    if style == "1":
-        sales_page.locator(".inv-site-tab", has_text="Bond store").click()
-    elif style == "2":
-        bond = sales_page.locator("#inv-filter-site option", has_text="Bond store").get_attribute("value")
-        sales_page.locator("#inv-filter-site").select_option(bond)
-    else:
-        sales_page.locator(".inv-site-card", has_text="Bond store").click()
+    sales_page.locator(".inv-site-tab", has_text="Bond store").click()
     expect(sales_page.locator(ROWS)).to_have_count(1)
     expect(sales_page.locator(ROWS).first).to_contain_text("Orris")

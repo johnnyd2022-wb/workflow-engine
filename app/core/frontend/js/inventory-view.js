@@ -68,10 +68,6 @@
   // Sites (GL-P07 A3): only with multiple sites on and more than one active site; otherwise the
   // page is exactly as it was, with no site column or control.
   var sites = [];
-  var LENS_KEY = 'inventoryView.site';
-  // CONCEPT ONLY: which site lens layout is showing (1 tabs, 2 filter, 3 remembered site cards).
-  var STYLE_KEY = 'inventoryView.siteStyle';
-  var siteStyle = '1';
 
   function $(selector) { return root.querySelector(selector); }
   var els = {
@@ -103,9 +99,6 @@
     drawerEyebrow: $('[data-inv-drawer-eyebrow]'),
     backdrop: $('[data-inv-backdrop]'),
     siteTabs: $('[data-inv-sites]'),
-    siteFilter: $('#inv-filter-site'),
-    siteCards: $('[data-inv-site-cards]'),
-    stylePick: $('[data-inv-style-pick]'),
   };
   var lastFocus = null;
 
@@ -455,7 +448,6 @@
   function activeFilters() {
     var out = [];
     function add(key, label) { out.push({ keys: [].concat(key), label: label }); }
-    if (state.site && siteStyle === '2' && siteById(state.site)) add('site', 'Site: ' + siteById(state.site).name);
     if (state.status) add('status', STATUSES[state.status].label);
     if (state.type) add('type', 'Type: ' + TYPES[state.type].label);
     if (state.supplier) add('supplier', 'Supplier: ' + state.supplier);
@@ -503,7 +495,6 @@
   }
   function clearFilters() {
     ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText']
-      .concat(siteStyle === '2' ? ['site'] : [])
       .forEach(function (k) { state[k] = ''; });
     syncControls();
     render();
@@ -584,74 +575,28 @@
   // ── Sites: the lens over everything above (GL-P07 A3) ───────────────────────────────
   function setSite(id) {
     state.site = siteById(id) ? id : '';
-    if (siteStyle === '3') { try { window.localStorage.setItem(LENS_KEY, state.site); } catch (e) { /* private mode */ } }
     syncControls();
     renderHead();
     render();
   }
-  function siteFigures(siteId) {
-    var lines = stock().filter(function (i) { return !siteId || i.site_id === siteId; });
-    return {
-      lines: lines.length,
-      expiring: lines.filter(STATUSES.expiring.test).length,
-      expired: lines.filter(STATUSES.expired.test).length,
-    };
-  }
-  function siteOptions(select, allLabel) {
-    select.replaceChildren();
-    var all = el('option', '', allLabel);
-    all.value = '';
-    select.appendChild(all);
-    sites.forEach(function (site) {
-      var option = el('option', '', site.name);
-      option.value = site.id;
-      select.appendChild(option);
-    });
-    select.value = state.site;
+  function siteLines(siteId) {
+    return stock().filter(function (i) { return !siteId || i.site_id === siteId; }).length;
   }
   function renderSites() {
-    var on = sitesShown();
-    if (els.stylePick) els.stylePick.hidden = !on;
-    [els.siteTabs, els.siteCards].forEach(function (n) { if (n) n.hidden = true; });
-    if (els.siteFilter) els.siteFilter.hidden = true;
-    if (!on) return;
-    if (siteStyle === '1') {
-      // Style 1: one tab per site above the list, each with its line count.
-      els.siteTabs.replaceChildren();
-      [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
-        var btn = el('button', 'inv-site-tab');
-        btn.type = 'button';
-        btn.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
-        btn.appendChild(document.createTextNode(site.name));
-        btn.appendChild(el('span', 'inv-site-tab__count', String(siteFigures(site.id).lines)));
-        btn.addEventListener('click', function () { setSite(site.id); });
-        els.siteTabs.appendChild(btn);
-      });
-      els.siteTabs.hidden = false;
-    } else if (siteStyle === '2') {
-      // Style 2: a Site filter beside Supplier and Process; the chip says when it is on.
-      siteOptions(els.siteFilter, 'Site');
-      els.siteFilter.classList.toggle('has-value', !!state.site);
-      els.siteFilter.hidden = false;
-    } else {
-      // Style 3: a card per site to compare and jump between; the choice is remembered.
-      els.siteCards.replaceChildren();
-      [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
-        var f = siteFigures(site.id);
-        var card = el('button', 'inv-site-card' + (state.site === site.id ? ' is-active' : ''));
-        card.type = 'button';
-        card.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
-        card.appendChild(el('span', 'inv-site-card__name', site.name));
-        card.appendChild(el('strong', '', plural(f.lines, 'line')));
-        var notes = [];
-        if (f.expired) notes.push(f.expired + ' expired');
-        if (f.expiring) notes.push(f.expiring + ' expiring');
-        card.appendChild(el('span', 'inv-site-card__note' + (f.expired ? ' is-overdue' : f.expiring ? ' is-attention' : ''), notes.join(' · ') || 'Nothing expiring'));
-        card.addEventListener('click', function () { setSite(site.id); });
-        els.siteCards.appendChild(card);
-      });
-      els.siteCards.hidden = false;
-    }
+    els.siteTabs.hidden = !sitesShown();
+    if (!sitesShown()) return;
+    // A tab per site above the list, each with its line count. The site is a scope, not a
+    // filter: "Clear filters" keeps it.
+    els.siteTabs.replaceChildren();
+    [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
+      var btn = el('button', 'inv-site-tab');
+      btn.type = 'button';
+      btn.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
+      btn.appendChild(document.createTextNode(site.name));
+      btn.appendChild(el('span', 'inv-site-tab__count', String(siteLines(site.id))));
+      btn.addEventListener('click', function () { setSite(site.id); });
+      els.siteTabs.appendChild(btn);
+    });
   }
 
   function render() {
@@ -708,7 +653,6 @@
     els.metaKey.value = state.metaKey;
     els.metaText.value = state.metaText;
     els.group.setAttribute('aria-pressed', state.group ? 'true' : 'false');
-    if (els.siteFilter) els.siteFilter.value = state.site;
   }
   function bind(node, key) {
     function onChange() {
@@ -736,16 +680,6 @@
       els.more.hidden = !open;
       els.moreToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) els.expFrom.focus();
-    });
-    if (els.siteFilter) els.siteFilter.addEventListener('change', function () { setSite(els.siteFilter.value); });
-    // CONCEPT ONLY: the lens layout switch.
-    if (els.stylePick) els.stylePick.querySelectorAll('[data-inv-style]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        siteStyle = b.dataset.invStyle;
-        try { window.localStorage.setItem(STYLE_KEY, siteStyle); } catch (e) { /* private mode */ }
-        applyStyle();
-        render();
-      });
     });
     els.group.addEventListener('click', function () {
       state.group = !state.group;
@@ -1057,29 +991,11 @@
     });
   }
 
-  // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
-  function readStyle() {
-    var fromUrl = new URLSearchParams(window.location.search).get('style');
-    var saved = null;
-    try { saved = window.localStorage.getItem(STYLE_KEY); } catch (e) { /* private mode */ }
-    siteStyle = ['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1');
-  }
-  function applyStyle() {
-    root.setAttribute('data-inv-site-style', siteStyle);
-    if (els.stylePick) els.stylePick.querySelectorAll('[data-inv-style]').forEach(function (b) {
-      b.setAttribute('aria-pressed', b.dataset.invStyle === siteStyle ? 'true' : 'false');
-    });
-  }
-  // ────────────────────────────────────────────────────────────────────────────────────────
-
   function loadSites() {
     if (!window.BizeSite) return;
     window.BizeSite.choices().then(function (data) {
       if (!root.isConnected) return;
       sites = data.on ? data.sites : [];
-      if (!state.site && siteStyle === '3') {
-        try { state.site = window.localStorage.getItem(LENS_KEY) || ''; } catch (e) { /* private mode */ }
-      }
       if (state.site && !siteById(state.site)) state.site = '';
       syncControls();
       renderHead();
@@ -1088,8 +1004,6 @@
   }
 
   function start() {
-    readStyle();
-    applyStyle();
     readUrl();
     syncControls();
     wireControls();
