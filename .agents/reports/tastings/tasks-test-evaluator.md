@@ -59,3 +59,13 @@ Independently read the final two test corrections and root's real focused execut
 All earlier static and mutation evidence remains applicable. No application/test/script was edited by this evaluator, and no test-validity finding remains open. This is the independent validity grade; the caller still runs its required final aggregate checks and CI.
 
 VERDICT: valid
+
+## Fresh-main optimized Home reader follow-up
+
+Independently inspected the two added assertions in `test_ac1_lapse_hides_specialized_tasks_from_crm_core_and_direct_read` after merging main `1468fea4`, together with `CRMTaskRepository.dashboard_open_tasks`. The first requires the real tasting task to appear in `get_dashboard_overview(...)["open_tasks"]` while subscribed; the second requires the exact ordinary-task-only ID set after disabling the profile. Existing CRM/Core/direct-read assertions remain unchanged. These are faithful, falsifiable strengthening assertions: an always-empty reader fails the first, while a reader which forgets the lapse filter fails the second. No expected value is computed with the reader under test.
+
+The optimized query projects one scalar `is_tasting` flag from either the persisted type **or** actual tasting association, preserving protection of linked records even if their type is stale. It scopes tasks/customer joins to the organization, filters to open states, and does not apply a limit before the subscription exclusion. Ordinary-only results avoid a new entitlement query; specialized results check the existing subscription and remove protected rows before public dictionaries reach the caller. No extra ORM per-row hydration is introduced by the scalar relationship predicate. The test covers normal linked/type-consistent records; it does not separately construct a stale-type linked task or directly assert every dashboard aggregate.
+
+Read root's actual `/home/johnny/.cache/tastings/typed-main-backend2.log`: **31 passed**,14 existing Flask-Limiter warnings,18.45s, covering the typed tests, unchanged constant-query Home checks and CSP checks. This run was executed by root; this follow-up is a read-only review, not a claimed additional run or fresh mutation probe. Earlier mutation evidence remains applicable. No application/test/script changes were made by this evaluator and no validity finding is open.
+
+VERDICT: valid

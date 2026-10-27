@@ -102,11 +102,13 @@ def test_ac1_lapse_hides_specialized_tasks_from_crm_core_and_direct_read(db, wor
     regular = CRMService(db).create_task(org.id, {"title": "keep ordinary work"}, rep.id)
     # Assert the specialized record was visible first: a no-op empty reader cannot pass.
     assert task_id in {t["id"] for t in CRMService(db).list_tasks(org.id)}
+    assert task_id in {t["id"] for t in CRMService(db).get_dashboard_overview(org.id)["open_tasks"]}
     profile = db.query(ComplianceProfile).filter_by(org_id=org.id).one()
     profile.enabled = False
     db.commit()
     assert {t["id"] for t in CRMService(db).list_tasks(org.id)} == {regular["id"]}
     assert task_id not in {t["id"] for t in core_list_tasks(db, org.id)}
+    assert {t["id"] for t in CRMService(db).get_dashboard_overview(org.id)["open_tasks"]} == {regular["id"]}
     assert typed_client.get("/api/crm/tasks/" + task_id).status_code == 404
     assert typed_client.get("/api/crm/tastings/" + data["tasting"]["id"]).status_code == 404
     assert (

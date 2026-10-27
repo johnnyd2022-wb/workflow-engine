@@ -52,4 +52,22 @@ Eleven hostile/authority/lapse assertions completed. Probe data was purged; no m
 
 No new feature-scoped security vulnerability remains open. No learned rule was added because this manual pass found no new vulnerability class; the two scanner matches above already have rules and are intentional migration constructs. Later source changes and exact-head CI still require their normal checks.
 
+## Fresh-main integration security delta
+
+Re-reviewed after merging main `1468fea4`, which introduces `CRMTaskRepository.dashboard_open_tasks` for Home's narrow projection. Root added the existing `visible_task_filter(self.db, org_id)` to that reader's SQL filter, alongside the explicit authenticated org and open-status predicates, before ordering/materialization. This closes the newly introduced alternate read path without hydrating all task/event models or filtering returned records after collection. The customer outer join retains its own same-org predicate.
+
+Read `get_dashboard_overview`, the repository projection and surrounding existing task readers together. Home's service delegates its entire task collection to this filtered method; no second unfiltered task query exists in that service. Active subscribers retain their open tasting records; after lapse, both typed and relationship-linked tasting tasks are excluded by the same shared policy as other generic readers. Ordinary open tasks and the narrow response fields remain unchanged. No mutation, new authorization shortcut, lifecycle action or stock write is introduced.
+
+The existing lapse test now proves that the tasting appears through `get_dashboard_overview()["open_tasks"]` before disabling NZ Alcohol and that the exact remaining set afterward is the independently created ordinary task. This catches both the original lapse leak and a degenerate implementation that always returns no tasks. I inspected the assertions and ran scoped `git diff --check`; no database mutation or test execution was performed for this read-only delta. Root's in-progress private-DB backend run remains its own evidence.
+
+No open finding in this merged Home-reader integration.
+
+### Final Home projection revision — supersedes the eager SQL-filter implementation above
+
+Read the final `dashboard_open_tasks` implementation after the constant-query tests identified the eager subscription lookup's cost. The task SQL now projects `is_tasting` as `(task_type == 'tasting') OR EXISTS(actual linked event)` alongside the same narrow task/customer fields. Authenticated org and open-status predicates remain in SQL, and the customer join remains same-org. The EXISTS is part of that one projection query; it does not hydrate task/event objects or execute one ORM query per row. The linked task identity is unique and protected by the existing same-org task/event constraints.
+
+Only when at least one projected row is specialized does the reader call `nz_alcohol_active` once. If inactive, it excludes every specialized row **before returning the public task dictionaries**, so Home's caller cannot count, link or serialize them. This reader has no limit/pagination; filtering here therefore cannot underfill a page or expose totals derived from unfiltered specialized rows. Matching either the declared type or actual event link preserves the earlier protection against stale/unbackfilled labels. Empty/ordinary-only collections incur no subscription query from this method.
+
+This final pattern retains the subscription security boundary and avoids the eager lookup's extra ordinary-tenant query count. Structural review establishes one scalar projection and at most one entitlement decision, not a measured latency result; root's constant-query and lapse test reruns supply runtime confirmation separately. The existing regression still proves specialized visibility before lapse and the exact ordinary-only set afterward through the actual Home service. No new finding, database mutation or test/source edit in this review.
+
 VERDICT: clean

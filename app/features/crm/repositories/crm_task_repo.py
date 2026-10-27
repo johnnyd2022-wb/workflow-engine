@@ -116,15 +116,27 @@ class CRMTaskRepository:
                 CRMTask.priority,
                 CRMTask.status,
                 XeroContact.name.label("contact_name"),
+                ((CRMTask.task_type == "tasting") | CRMTask.tasting.any()).label("is_tasting"),
             )
             .outerjoin(
                 XeroContact,
                 (XeroContact.id == CRMTask.contact_id) & (XeroContact.org_id == org_id),
             )
-            .filter(CRMTask.org_id == org_id, CRMTask.status.in_(("pending", "in_progress")))
+            .filter(
+                CRMTask.org_id == org_id,
+                CRMTask.status.in_(("pending", "in_progress")),
+            )
             .order_by(CRMTask.due_date.asc().nulls_last(), CRMTask.created_at.desc())
             .all()  # Counts and date series require every open task, never archived task history.
         )
+        # Keep ordinary Home requests at their four-query projection. The scalar
+        # relationship check is part of the task query, with no ORM hydration/N+1.
+        # There is no pagination/limit here: filter before the caller counts tasks.
+        if any(row.is_tasting for row in rows):
+            from app.features.compliant.service import nz_alcohol_active
+
+            if not nz_alcohol_active(self.db, org_id):
+                rows = [row for row in rows if not row.is_tasting]
         return [
             {
                 "id": str(row.id),
