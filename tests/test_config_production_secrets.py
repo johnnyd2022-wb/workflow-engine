@@ -125,7 +125,7 @@ def test_production_image_and_run_script_use_the_config_file_name():
     """``ENVIRONMENT`` picks ``app/config/<name>.ini``; only ``prod.ini`` exists."""
     dockerfile = (REPO_ROOT / "Dockerfile.multi").read_text()
     # Docker accepts the stage keyword in any case ("as" or "AS").
-    production_stage = re.split(r"(?i)\bas production\b", dockerfile, maxsplit=1)[1]
+    production_stage = re.split(r"(?im)^FROM\s+base\s+AS\s+production\s*$", dockerfile, maxsplit=1)[1]
     assert "ENV ENVIRONMENT=prod\n" in production_stage
     assert "ENVIRONMENT=prod" in (REPO_ROOT / "scripts" / "run_prod.sh").read_text()
     assert (REPO_ROOT / "app" / "config" / "prod.ini").is_file()
