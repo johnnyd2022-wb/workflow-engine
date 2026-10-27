@@ -100,3 +100,35 @@ def test_ac2_dashboard_shows_inline_error_when_summary_fetch_fails(logged_in_pag
     loading_el = page.locator("[data-dashboard-loading]")
     if loading_el.count() > 0:
         expect(loading_el).to_be_hidden()
+
+
+def test_home_requests_data_before_unrelated_shell_scripts_finish(logged_in_page: Page):
+    """A slow settings asset must not hold Home's live data behind DOMContentLoaded."""
+    page = logged_in_page
+    held = []
+    page.route("**/ui/shared/workflow-engine-settings.js", lambda route: held.append(route))
+    try:
+        with page.expect_request("**/api/core/dashboard/summary*", timeout=5000):
+            page.goto("/core/dashboard", wait_until="commit")
+        expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+        expect(page.locator("[data-dashboard-error]")).to_be_hidden()
+        expect(page.locator("[data-dashboard-core-summary]")).not_to_contain_text("Loading")
+        assert page.evaluate("document.readyState") == "loading"
+    finally:
+        for route in held:
+            route.continue_()
+        page.unroute("**/ui/shared/workflow-engine-settings.js")
+    page.wait_for_load_state("networkidle")
+    assert_clean_page(page)
+
+
+def test_home_refreshes_live_data_when_browser_restores_frozen_document(logged_in_page: Page):
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    page.wait_for_load_state("networkidle")
+    with page.expect_request("**/api/core/dashboard/summary*"):
+        page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+    expect(page.locator("[data-dashboard-error]")).to_be_hidden()
+    expect(page.locator("[data-dashboard-core-summary]")).not_to_contain_text("Loading")
+    assert_clean_page(page)

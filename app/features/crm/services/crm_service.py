@@ -963,6 +963,33 @@ class CRMService:
         unmapped.sort(key=lambda item: item["total_revenue"], reverse=True)
         return ranked_products[:limit] if limit is not None else ranked_products, unmapped[:20], len(unmapped)
 
+    def get_dashboard_overview(self, org_id: UUID) -> dict:
+        """Home's live sales totals and open tasks, without Sales' analysis tables.
+
+        No product rankings, customer breakdowns, contact enrichment or archived tasks
+        belong on the initial Home request. Keep the full overview for Sales itself.
+        """
+        today = date.today()
+        month_start = today.replace(day=1)
+        previous_start = (
+            month_start.replace(year=month_start.year - 1, month=12)
+            if month_start.month == 1
+            else month_start.replace(month=month_start.month - 1)
+        )
+        next_start = (
+            month_start.replace(year=month_start.year + 1, month=1)
+            if month_start.month == 12
+            else month_start.replace(month=month_start.month + 1)
+        )
+        current = self.invoice_repo.sales_totals_for_period(org_id, month_start, next_start)["total"]
+        previous = self.invoice_repo.sales_totals_for_period(org_id, previous_start, month_start)["total"]
+        return {
+            "current_month_revenue": current,
+            "outstanding_receivables": self.invoice_repo.outstanding_receivables(org_id)["total"],
+            "revenue_vs_last_month_pct": round(((current - previous) / previous) * 100, 1) if previous else None,
+            "open_tasks": self.task_repo.dashboard_open_tasks(org_id),
+        }
+
     def get_overview(self, org_id: UUID) -> dict:
         from datetime import date, timedelta
 

@@ -977,7 +977,7 @@ def get_dashboard_summary():
             from app.features.crm.services.crm_service import CRMService
 
             crm_service = CRMService(db_session)
-            crm_overview = crm_service.get_overview(org_id)
+            crm_overview = crm_service.get_dashboard_overview(org_id)
             trace_cfg = crm_service.get_traceability_config(org_id)
             open_tasks_for_insights = crm_overview.get("open_tasks") or []
             tasks_summary = _dashboard_summarize_tasks(
