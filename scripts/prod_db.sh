@@ -74,13 +74,9 @@ status)
     fi
     ;;
 backup)
-    running || { echo "$CONTAINER is not running." >&2; exit 1; }
-    mkdir -p "$BACKUP_DIR"
-    file="$BACKUP_DIR/workflow-engine-prod-$(date +%Y-%m-%d-%H%M%S).dump"
-    docker exec "$CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB_NAME" >"$file"
-    # A dump that cannot be listed is not a backup.
-    docker exec -i "$CONTAINER" pg_restore -l <"$file" >/dev/null
-    echo "$file"
+    # shellcheck source=scripts/deploy_common.sh
+    source "$repo_root/scripts/deploy_common.sh"
+    backup_database "$CONTAINER" "$DB_USER" "$DB_NAME" "$BACKUP_DIR" workflow-engine-prod
     ;;
 psql)
     exec docker exec -it "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME"

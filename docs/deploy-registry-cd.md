@@ -141,3 +141,14 @@ is already in place for it.
 `scripts/deploy_test_simple.sh` still works exactly as before when run with no arguments — it
 builds locally, same as always. The registry-pull path only activates when it's given an
 image reference as `$1` (what the CD jobs above do).
+
+### Manual staging safeguards
+
+For a human-triggered local build, `scripts/run_test.sh` now requires a clean checkout
+of freshly fetched main, backs up the existing test database before migrations, checks
+a candidate alongside the running app, and restores the previous app on failed
+handover. It binds loopback port 8001 and retains a stopped previous container after
+success. See [manual deployment and recovery](production-deploy.md#manual-staging-deployment).
+The registry CD path described here still uses `deploy_test_simple.sh` and its
+`:test-stable` flow. Its locking/rollback is separate; avoid concurrent manual and CI
+deployments. No production backup or database is involved in a staging deploy.
