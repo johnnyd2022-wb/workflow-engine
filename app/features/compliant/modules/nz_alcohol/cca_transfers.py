@@ -290,10 +290,16 @@ def register(session, org_id: UUID, since: date | None = None, today: date | Non
     )
     sales: dict[str, dict] = {}
     for allocation, inv in rows:
+        transfer = transfers[inv.xero_invoice_id]
+        departure = transfer["departure"]
         sale = sales.setdefault(
             inv.xero_invoice_id,
             {
-                **transfers[inv.xero_invoice_id],
+                **transfer,
+                "kind": "sale",
+                "receipt_url": f"/api/compliant/nz-alcohol/cca-transfers/{departure['id']}/receipt"
+                if departure
+                else None,
                 "reference": inv.invoice_number or inv.xero_invoice_id,
                 "invoice_date": inv.date.isoformat() if inv.date else None,
                 "customer": contacts.get(inv.contact_id),
@@ -312,10 +318,80 @@ def register(session, org_id: UUID, since: date | None = None, today: date | Non
             for g in sorted(sale["goods"].values(), key=lambda g: g["product"])
         ]
         out.append(sale)
+    out.extend(_contract_rows(session, org_id, since, today))
     order = {"needs_details": 0, "receipt_overdue": 1, "awaiting_receipt": 2, "received": 3}
     out.sort(key=lambda s: (order[s["status"]], s["invoice_date"] or ""), reverse=False)
     counts = {k: sum(1 for s in out if s["status"] == k) for k in order}
     return {"since": since.isoformat(), "transfers": out, "counts": counts}
+
+
+def _contract_rows(session, org_id: UUID, since: date, today: date) -> list[dict]:
+    """Contract goods dispatched to the customer's CCA (GL-P08 part 2), shaped like a sale's row."""
+    from datetime import datetime as _dt
+
+    from sqlalchemy import or_
+
+    from app.features.compliant.modules.nz_alcohol.excise import _base_name
+    from app.features.contract_manufacturing.models.dispatch import ContractDispatch
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+    from app.features.contract_manufacturing.services.dispatches import dispatch_dict
+
+    rows = (
+        session.query(ContractDispatch, ContractOrder.reference)
+        .join(
+            ContractOrder,
+            (ContractOrder.org_id == ContractDispatch.org_id) & (ContractOrder.id == ContractDispatch.order_id),
+        )
+        .filter(
+            ContractDispatch.org_id == org_id,
+            ContractDispatch.treatment == "cca_transfer",
+            or_(
+                ContractDispatch.moved_at >= _dt.combine(since, _dt.min.time(), tzinfo=NZ),
+                ContractDispatch.received_on.is_(None),
+            ),
+        )
+        .all()
+    )
+    out = []
+    for row, reference in rows:
+        d = dispatch_dict(row, today)
+        goods: dict = {}
+        for line in d["lines"]:
+            key = (_base_name(line["product_name"]), line["unit"])
+            g = goods.setdefault(key, {"product": key[0], "unit": key[1], "quantity": Decimal("0")})
+            g["quantity"] += Decimal(line["quantity"])
+        out.append(
+            {
+                "kind": "contract",
+                "xero_invoice_id": f"contract-{d['id']}",
+                "order_id": d["order_id"],
+                "destination": {
+                    "id": None,
+                    "name": row.destination_name,
+                    "cca_code": row.destination_cca,
+                    "address": "",
+                    "kind": "manufacturer",
+                    "kind_label": "Contract customer",
+                },
+                "status": d["status"],
+                "departure": {
+                    "id": d["id"],
+                    **{
+                        k: d[k] for k in ("moved_at", "carrier", "consignment_note", "received_on", "receipt_reference")
+                    },
+                    "notes": None,
+                },
+                "receipt_url": f"/api/core/contract-orders/{d['order_id']}/dispatches/{d['id']}/receipt",
+                "reference": f"{reference} dispatch",
+                "invoice_date": _nz_day(row.moved_at).isoformat(),
+                "customer": row.destination_name,
+                "goods": [
+                    {**g, "quantity": format(g["quantity"].normalize(), "f")}
+                    for g in sorted(goods.values(), key=lambda g: g["product"])
+                ],
+            }
+        )
+    return out
 
 
 # --- the register row -----------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 <p>{{ order.status|capitalize }} · Requested due date {{ order.due_date }}</p>
 <p class="shared-at">Producer shared revision {{ order.revision }} at {{ order.shared_at[:16]|replace('T',' ') }} UTC</p>
 <section>
-<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% {% if order.progress.milestones %}of shared milestones{% else %}complete (shared by producer){% endif %}</p>{% endif %}{% if order.progress.milestones %}<ul>{% for milestone in order.progress.milestones %}<li>Batch {{ milestone.batch_id }} · {{ milestone.label }} · {{ milestone.status|replace('_', ' ') }}</li>{% endfor %}</ul>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
+<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% {% if order.progress.milestones %}of shared milestones{% else %}complete (shared by producer){% endif %}</p>{% endif %}{% if order.progress.milestones %}<ul>{% for milestone in order.progress.milestones %}<li>{{ milestone.batch_name or 'Batch' }} · {{ milestone.label }} · {{ milestone.status|replace('_', ' ') }}</li>{% endfor %}</ul>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
 <section>
 <h2>2. When it'll be ready</h2>
 <p>{{ order.timing.reason }}</p>
@@ -11,7 +11,7 @@
 <h2>3. How much</h2>{% for line in order.quantities.lines %}<p>{{ line.product_name }} · Ordered {{ line.ordered }} {{ line.unit }}</p>{% endfor %}<p>{{ order.quantities.reason }}</p>
 </section>
 <section>
-<h2>4. Your batches</h2>{% for batch in order.batches['items'] %}<p>Batch <code>{{ batch.batch_id }}</code>{% if batch.bottling_date %} · Bottled {{ batch.bottling_date }}{% endif %}</p>{% else %}<p>Batches not shared yet.</p>{% endfor %}</section>
+<h2>4. Your batches</h2>{% for batch in order.batches['items'] %}<p>{{ batch.batch_name or ('Batch ' ~ loop.index) }}{% if batch.bottling_date %} · Bottled {{ batch.bottling_date }}{% endif %}</p>{% else %}<p>Batches not shared yet.</p>{% endfor %}</section>
 <section>
 <h2>5. Quality</h2>{% if order.quality.actual_abv is not none %}<p>Shared actual ABV: {{ order.quality.actual_abv }}%</p>{% endif %}{% if order.quality.spec_abv is not none %}<p>Shared specification ABV: {{ order.quality.spec_abv }}%</p>{% endif %}<p>{{ order.quality.reason }}</p>
 </section>

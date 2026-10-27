@@ -12,6 +12,7 @@ from app.features.contract_manufacturing.models.portal import PortalDocument, Po
 from app.features.contract_manufacturing.services.orders import (
     ContractOrderService,
     OrderError,
+    batch_view,
     identifier,
     object_body,
     text_value,
@@ -133,7 +134,12 @@ def publish_order(db, org_id, actor_id, order_id, data):
         if row is None:
             raise OrderError("Shared document not found for this order", 404)
         documents.append(document_dto(row))
-    batches = {str(link.execution_id) for line in order.lines for link in line.batches}
+    batch_names = {
+        str(link.execution_id): batch_view(link.execution)["customer_name"]
+        for line in order.lines
+        for link in line.batches
+    }
+    batches = set(batch_names)
     bottling_dates = data.get("bottling_dates", {})
     if not isinstance(bottling_dates, dict) or set(bottling_dates) - batches:
         raise OrderError("Bottling dates must refer only to this order's linked batches")
@@ -171,7 +177,7 @@ def publish_order(db, org_id, actor_id, order_id, data):
             "lines": [
                 {
                     "product_name": line.product_name,
-                    "ordered": format(line.quantity, "f"),
+                    "ordered": format(line.quantity.normalize(), "f"),  # 600, not 600.0000
                     "unit": line.unit,
                     "in_production": None,
                     "finished": None,
@@ -184,7 +190,10 @@ def publish_order(db, org_id, actor_id, order_id, data):
         },
         "batches": {
             "available": bool(batches),
-            "items": [{"batch_id": batch_id, "bottling_date": dates.get(batch_id)} for batch_id in sorted(batches)],
+            "items": [
+                {"batch_id": batch_id, "batch_name": batch_names[batch_id], "bottling_date": dates.get(batch_id)}
+                for batch_id in sorted(batches)
+            ],
         },
         "quality": {
             "available": actual_abv is not None or spec_abv is not None,
@@ -261,13 +270,13 @@ def publication_dto(payload):
             raise OrderError("Published order is unavailable", 404)
         result[section] = {key: copy.deepcopy(source.get(key)) for key in keys}
     for section, container, keys in (
-        ("progress", "milestones", ("batch_id", "label", "status")),
+        ("progress", "milestones", ("batch_id", "batch_name", "label", "status")),
         (
             "quantities",
             "lines",
             ("product_name", "ordered", "unit", "in_production", "finished", "dispatched", "still_to_come"),
         ),
-        ("batches", "items", ("batch_id", "bottling_date")),
+        ("batches", "items", ("batch_id", "batch_name", "bottling_date")),
         ("documents", "items", ("id", "title", "content_type", "sha256")),
     ):
         items = payload.get(section, {}).get(container, [])

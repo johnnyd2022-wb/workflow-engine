@@ -3,10 +3,12 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import selectinload
 
 from app.core.backend.event_writer import EventWriter
+from app.core.backend.record_step import _batch_label
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
@@ -134,8 +136,9 @@ class ContractOrderService:
             ContractOrderExecution.org_id == self.org_id
         )
         return [
-            {"id": str(row.id), "label": f"{row.process.name} · {row.started_at.date()} · {str(row.id)[:8]}"}
+            {"id": str(row.id), "label": batch_view(row)["text"]}
             for row in self.db.query(Execution)
+            .options(selectinload(Execution.process), selectinload(Execution.execution_steps))
             .filter(
                 Execution.org_id == self.org_id,
                 ~Execution.id.in_(assigned),
@@ -192,12 +195,7 @@ class ContractOrderService:
                 raise OrderError("Unknown order status")
             query = query.filter(ContractOrder.status == status)
         return (
-            query.options(
-                selectinload(ContractOrder.customer),
-                selectinload(ContractOrder.lines)
-                .selectinload(ContractOrderLine.batches)
-                .selectinload(ContractOrderExecution.execution),
-            )
+            query.options(selectinload(ContractOrder.customer), *_BATCH_LOADING)
             .order_by(ContractOrder.due_date, ContractOrder.created_at)
             .all()
         )
@@ -206,7 +204,7 @@ class ContractOrderService:
         query = self.db.query(ContractOrder).filter(
             ContractOrder.org_id == self.org_id, ContractOrder.id == identifier(order_id, "order_id")
         )
-        row = query.with_for_update().populate_existing().first() if lock else query.first()
+        row = query.with_for_update().populate_existing().first() if lock else query.options(*_BATCH_LOADING).first()
         if row is None:
             raise OrderError("Order not found", 404)
         return row
@@ -500,17 +498,58 @@ def serialize_customer(row):
     }
 
 
+# What a person needs to recognise a batch: the batch number recorded on it, its workflow and when
+# it started. Never the batch's database id.
+_NZ = ZoneInfo("Pacific/Auckland")
+_BATCH_LOADING = (
+    selectinload(ContractOrder.lines)
+    .selectinload(ContractOrderLine.batches)
+    .selectinload(ContractOrderExecution.execution)
+    .options(selectinload(Execution.process), selectinload(Execution.execution_steps)),
+)
+
+
+def batch_view(execution):
+    # nosemgrep: orm-relationship-access-in-loop -- callers selectinload process and steps
+    steps = sorted(execution.execution_steps, key=lambda s: s.step_number or 0)
+    number = _batch_label(steps)
+    workflow = execution.process.name if execution.process is not None else "Untitled workflow"
+    started = execution.started_at or execution.created_at
+    local = started.astimezone(_NZ) if started else None
+    when = f"{local.day} {local:%b %Y} {local:%H:%M}" if local else None
+    text = " · ".join(
+        part for part in (f"Batch {number}" if number else None, workflow, f"started {when}" if when else None) if part
+    )
+    day = f"{local.day} {local:%b %Y}" if local else None
+    return {
+        "number": number,
+        # For the customer portal: their batch, never the producer's workflow names or ids.
+        "customer_name": f"Batch {number}" if number else (f"Batch started {day}" if day else "Batch"),
+        "workflow": workflow,
+        "started_at": started.isoformat() if started else None,
+        "text": text,
+        "href": f"/core/flows/batches/start?id={execution.process_id}&execution_id={execution.id}",
+    }
+
+
 def serialize_line(row, production=False):
     result = {
         "id": str(row.id),
         "order_id": str(row.order_id),
         "product_name": row.product_name,
         "quantity": format(row.quantity, "f"),
+        # For reading: 600, not the stored 600.0000.
+        "quantity_text": format(row.quantity.normalize(), "f"),
         "unit": row.unit,
         "materials_source": row.materials_source,
         "batch_count": len(row.batches),
         "batches": [
-            {"execution_id": str(link.execution_id), "status": link.execution.status.value} for link in row.batches
+            {
+                "execution_id": str(link.execution_id),
+                "status": link.execution.status.value,
+                **batch_view(link.execution),
+            }
+            for link in row.batches
         ],
     }
     if production:

@@ -291,7 +291,7 @@
     var det = el('details', { className: 'customs-breakdown' });
     var count = (d.lines || []).reduce(function (n, l) { return n + l.removals.length; }, 0);
     det.append(el('summary', { text: 'Where these figures come from · ' + U.plural(count, 'removal') }));
-    var kinds = { sale: 'Sold', moved_out: 'Moved out' };
+    var kinds = { sale: 'Sold', moved_out: 'Moved out', contract_dispatch: 'Contract dispatch' };
     (d.lines || []).forEach(function (l) {
       det.append(el('h4', { text: l.product + ' · ' + U.amount(l.units, l.unit) + ' · ' + l.lal + ' LAL' }));
       var ul = el('ul');

@@ -110,7 +110,7 @@ def period_label(start: date, end: date) -> str:
 
 @dataclass
 class Removal:
-    kind: str  # "sale" | "moved_out" | "returned" | "cca_transfer"
+    kind: str  # "sale" | "moved_out" | "returned" | "cca_transfer" | "contract_dispatch"
     occurred_on: date
     recorded_at: datetime | None
     item: InventoryItem
@@ -208,6 +208,84 @@ def removals_between(session: Session, org_id: UUID, start: date, end: date) -> 
     from app.features.tastings.services.excise_adapter import legacy_removals
 
     out.extend(legacy_removals(session, org_id, start, end))
+    out.extend(_contract_dispatches(session, org_id, start, end, locations))
+    return out
+
+
+def _contract_dispatches(session: Session, org_id: UUID, start: date, end: date, locations: dict) -> list[Removal]:
+    """GL-P08: a contract order's goods leaving the CCA, on the NZ day they left.
+
+    Producer-liable goods are a removal for duty; customer-liable goods are a transfer to the
+    customer's CCA, listed with the other transfers and left out of duty.
+    """
+    from zoneinfo import ZoneInfo
+
+    from app.features.contract_manufacturing.models.dispatch import ContractDispatch, ContractDispatchLine
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+    from app.features.contract_manufacturing.services.dispatches import dispatch_dict
+
+    nz = ZoneInfo("Pacific/Auckland")
+    rows = (
+        session.query(ContractDispatch, ContractOrder.reference)
+        .join(
+            ContractOrder,
+            (ContractOrder.org_id == ContractDispatch.org_id) & (ContractOrder.id == ContractDispatch.order_id),
+        )
+        .filter(
+            ContractDispatch.org_id == org_id,
+            ContractDispatch.moved_at >= datetime.combine(start, datetime.min.time(), tzinfo=nz),
+            ContractDispatch.moved_at < datetime.combine(end, datetime.min.time(), tzinfo=nz),
+        )
+        .all()
+    )
+    if not rows:
+        return []
+    lines = (
+        session.query(ContractDispatchLine)
+        .filter(
+            ContractDispatchLine.org_id == org_id,
+            ContractDispatchLine.dispatch_id.in_([d.id for d, _ in rows]),
+        )
+        .all()
+    )
+    items = {
+        i.id: i
+        for i in session.query(InventoryItem).filter(
+            InventoryItem.org_id == org_id, InventoryItem.id.in_({line.inventory_item_id for line in lines})
+        )
+    }
+    by_dispatch: dict = {}
+    for line in lines:
+        by_dispatch.setdefault(line.dispatch_id, []).append(line)
+    out: list[Removal] = []
+    for dispatch, reference in rows:
+        transfer = None
+        if dispatch.treatment == "cca_transfer":
+            d = dispatch_dict(dispatch)
+            transfer = {
+                "contract_dispatch_id": d["id"],
+                "destination": {"name": dispatch.destination_name, "cca_code": dispatch.destination_cca},
+                "status": d["status"],
+                "departure": {
+                    k: d[k] for k in ("moved_at", "carrier", "consignment_note", "received_on", "receipt_reference")
+                },
+            }
+        for line in by_dispatch.get(dispatch.id, []):
+            item = items.get(line.inventory_item_id)
+            if item is None or not _licensed(item, locations):
+                continue  # already outside the licensed area: counted when it left
+            out.append(
+                Removal(
+                    kind="cca_transfer" if transfer else "contract_dispatch",
+                    occurred_on=dispatch.moved_at.astimezone(nz).date(),
+                    recorded_at=dispatch.created_at,
+                    item=item,
+                    quantity=Decimal(str(line.quantity)),
+                    reference=f"{reference} dispatch",
+                    customer=dispatch.destination_name,
+                    transfer=transfer,
+                )
+            )
     return out
 
 

@@ -81,9 +81,7 @@ Customs → Transfers is the register laid out the way Customs asks for it: sale
 
 ## Not in this change
 
-- **Dispatching contract orders** (GL-P08 part 2). Contract goods leave without a Xero sale, so
-  they need a dispatch record that takes the stock off. It follows in its own MR: a
-  customer-liable order's dispatch is a transfer here, and a producer-liable one is a removal.
+- **Dispatching contract orders** (GL-P08 part 2): done in its own MR. See "Part 2" below.
 - **A period that is already lodged** keeps its snapshot. Marking one of its sales as a transfer
   afterwards doesn't credit the duty paid: raise a duty credit with Customs, as for returns.
 - **An export of the register** (CSV or PDF for Customs).
@@ -113,3 +111,23 @@ Customs → Transfers is the register laid out the way Customs asks for it: sale
   - a crushed form in Style 3's narrow cards.
   
   Pass 7 found nothing. After the pick, pass 8 of Style 1 alone found nothing.
+
+## Part 2: dispatching contract orders
+
+Contract goods leave without a Xero sale, so a confirmed or completed contract order now has a **Dispatch** section on its page. It records:
+- what is leaving, taken from the lots the order's batches made;
+- when it left (NZ time);
+- the carrier;
+- the consignment note.
+
+Recording it takes the stock off the lot (write reason `contract_dispatch`). The order's duty responsibility, fixed when the goods leave, decides the treatment:
+
+| Duty responsibility | Treatment | Where it shows |
+|---|---|---|
+| Producer as licensee | A removal for duty | The excise draft for the NZ day it left ("Contract dispatch" in the breakdown) |
+| Customer as licensee, or underbond to the customer's CCA | A transfer to the customer's CCA (para 7 general authorisation) | Left out of duty; in the draft's transfers and in Customs → Transfers until the customer's receipt is recorded |
+
+The receipt can be recorded from the order page or from Customs → Transfers. A removal has no receipt.
+Only the order's own lots can be dispatched, never more than a lot holds, and counted goods in whole units. Dispatching needs `inventory.adjust`, and the receipt needs `inventory.adjust` or `compliance.record`.
+
+Dispatch is added to the existing order page as one section, not as three styles: it is one step on a page whose design hasn't been through the three-style process. Its register rows reuse Customs → Transfers (Style 1, chosen 2026-10-26).

@@ -87,6 +87,8 @@ class InventoryQuantityWriteReason(str, Enum):
     # Plan 2.1: part of a lot moved to another location (split into a new lot).
     STOCK_TRANSFER = "stock_transfer"
     TASTING_DISPATCH = "tasting_dispatch"
+    # GL-P08: contract goods dispatched to the customer's CCA, or removed for duty.
+    CONTRACT_DISPATCH = "contract_dispatch"
 
 
 class InventoryQuantityWriteForbiddenError(RuntimeError):

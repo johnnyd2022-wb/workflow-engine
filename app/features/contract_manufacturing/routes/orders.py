@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
 from app.core.security.permissions import has_permission, requires_auth
+from app.features.contract_manufacturing.services import dispatches
 from app.features.contract_manufacturing.services.orders import (
     DUTY_RESPONSIBILITIES,
     MATERIALS_SOURCES,
@@ -176,6 +177,42 @@ def unlink_batch(order_id, line_id, execution_id):
     service().unlink_batch(order_id, line_id, execution_id)
     db_session.commit()
     return "", 204
+
+
+# --- dispatch (GL-P08 part 2): every departure is a CCA transfer or a removal for duty ----------
+
+
+@bp.get("/api/core/contract-orders/<uuid:order_id>/dispatches")
+@requires_auth
+@handled
+def list_dispatches(order_id):
+    db = db_session()
+    org = UUID(g.org_id)
+    can_dispatch = has_permission(g.current_user, "inventory.adjust")
+    return jsonify(
+        {
+            "dispatches": dispatches.dispatches(db, org, order_id),
+            "dispatchable": dispatches.dispatchable(db, org, order_id) if can_dispatch else [],
+        }
+    )
+
+
+@bp.post("/api/core/contract-orders/<uuid:order_id>/dispatches")
+@requires_auth
+@handled
+def dispatch_order(order_id):
+    row = dispatches.dispatch(db_session(), UUID(g.org_id), order_id, request.get_json(silent=True), g.current_user.id)
+    db_session.commit()
+    return jsonify(dispatches.dispatch_dict(row)), 201
+
+
+@bp.put("/api/core/contract-orders/<uuid:order_id>/dispatches/<uuid:dispatch_id>/receipt")
+@requires_auth
+@handled
+def record_dispatch_receipt(order_id, dispatch_id):
+    row = dispatches.record_receipt(db_session(), UUID(g.org_id), order_id, dispatch_id, request.get_json(silent=True))
+    db_session.commit()
+    return jsonify(dispatches.dispatch_dict(row)), 200
 
 
 def page_context():
