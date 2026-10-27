@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import expect
 
+from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.stock_location import StockLocation
 from app.core.db.models.user import UserRole
 from app.core.security.tenant_scope import unscoped
@@ -39,6 +40,8 @@ def _clean_stock(org, db):  # noqa: F811
     yield
     db.rollback()
     with unscoped():
+        # A save sent with an Idempotency-Key leaves its replay record behind.
+        db.query(ApiIdempotencyKey).filter(ApiIdempotencyKey.org_id == org.id).delete(synchronize_session=False)
         clear_org_synthetic_data(db, org.id)
         db.query(StockLocation).filter(StockLocation.org_id == org.id).delete(synchronize_session=False)
         db.commit()
