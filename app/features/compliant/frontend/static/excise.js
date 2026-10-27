@@ -21,10 +21,12 @@
   var el = U.el, api = U.api, fmtDate = U.fmtDate, shortDate = U.shortDate, money = U.money, num = U.num;
   var fail = U.failer(page);
   var periodsEl = root.querySelector('[data-excise-periods]');
+  var ccasEl = root.querySelector('[data-excise-ccas]');
   var draftEl = root.querySelector('[data-excise-draft]');
   var positionEl = page.querySelector('[data-customs-position]');
 
-  var state = { period: null, periods: [], draft: null, frequency: 'monthly', remindersFrom: null, showAll: false, showUntracked: false, position: null };
+  // With several sites each CCA licence has its own entries (GL-P07 A5); cca is the one shown.
+  var state = { cca: new URLSearchParams(window.location.search).get('cca'), period: null, periods: [], draft: null, frequency: 'monthly', remindersFrom: null, showAll: false, showUntracked: false, position: null };
 
   function rateText(l) {
     if (!l.rate) return 'no rate';
@@ -91,7 +93,7 @@
   }
 
   async function loadPeriods() {
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise/periods');
+    var data = await api('GET', '/api/compliant/nz-alcohol/excise/periods' + (state.cca ? '?cca=' + encodeURIComponent(state.cca) : ''));
     var s = data.settings || {};
     state.frequency = s.frequency || 'monthly';
     state.remindersFrom = s.reminders_from || null;
@@ -112,10 +114,31 @@
   async function loadDraft(start) {
     state.period = start;
     renderPeriods();
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise?period=' + encodeURIComponent(start));
+    var data = await api('GET', '/api/compliant/nz-alcohol/excise?period=' + encodeURIComponent(start) + (state.cca ? '&cca=' + encodeURIComponent(state.cca) : ''));
     if (state.period !== start) return;
     state.draft = data.draft;
+    if (data.draft.cca) state.cca = data.draft.cca.id;
+    renderCcas(data.draft);
     renderDraft(data.draft);
+  }
+
+  // One tab per CCA licence, each saying whether its entry for this period is lodged.
+  function renderCcas(d) {
+    if (!ccasEl) return;
+    ccasEl.replaceChildren();
+    ccasEl.hidden = !(d.ccas || []).length;
+    (d.ccas || []).forEach(function (c) {
+      var active = d.cca && d.cca.id === c.id;
+      var tab = el('button', { type: 'button', className: 'excise-cca' + (active ? ' excise-cca--active' : ''), 'aria-pressed': active ? 'true' : 'false', 'data-cca': c.id });
+      tab.append(el('strong', { text: c.number }), el('span', { className: 'excise-cca__name', text: c.name }),
+        el('span', { className: 'excise-cca__state excise-cca__state--' + (c.lodged ? 'lodged' : 'todo'), text: c.lodged ? 'Lodged' : (d.open ? 'In progress' : 'To lodge') }));
+      tab.addEventListener('click', async function () {
+        if (state.cca === c.id) return;
+        state.cca = c.id;
+        try { await loadPeriods(); await loadDraft(state.period); } catch (err) { fail(err.message); }
+      });
+      ccasEl.append(tab);
+    });
   }
 
   // --- the pieces the entry is built from ----------------------------------------------
@@ -140,7 +163,6 @@
 
   function problemsPiece(d) {
     var items = [];
-    if (d.legacy_unavailable) items.push({ text: 'Multiple-site excise needs a separate, complete entry for each source CCA. This view is for review only and cannot be recorded as lodged.' });
     if (d.rates_guide && d.rates_guide.out_of_date) {
       items.push({ text: 'Duty rates: Customs sets new rates every 1 July, and the built-in ones only cover removals before ' + fmtDate(d.rates_guide.next_review) + '. Check this period\'s rates against Customs\' table, or add them.', href: SETTINGS + '#customs-rates-title', link: 'Check rates' });
     }
@@ -153,7 +175,7 @@
     });
     if (!items.length) return null;
     var box = el('div', { className: 'customs-attention', role: 'note' });
-    box.append(el('strong', { text: d.legacy_unavailable ? 'Not lodgeable here' : 'Fix before lodging' }));
+    box.append(el('strong', { text: d.entry ? 'Fix before lodging' : 'Nothing to lodge yet' }));
     var ul = el('ul');
     items.forEach(function (t) {
       var li = el('li', { text: t.text + ' ' });
@@ -232,7 +254,7 @@
     var e = d.entry;
     if (!e && (d.lines || []).length) return savedLinesPiece(d);
     if (!e || !e.lines.length) {
-      if (d.legacy_unavailable) return el('p', { className: 'customs-empty', text: 'No removals are shown by this legacy calculation.' });
+      if (!d.entry) return null;
       if (d.open) return el('p', { className: 'customs-empty', text: 'Nothing has left the licensed area yet this period.' });
       return el('div', { className: 'customs-empty customs-empty--nil' }, [
         el('strong', { text: 'Nothing was removed this period.' }),
@@ -319,19 +341,22 @@
   }
 
   function lodgePiece(d) {
-    if (d.status === 'lodged' || d.open || d.legacy_unavailable) return null;
+    if (d.status === 'lodged' || d.open || !d.entry) return null;
     var nil = isNil(d);
     var form = el('form', { className: 'customs-lodge' });
     var ref = el('input', { name: 'entry_reference', id: 'excise-entry-ref', placeholder: 'Customs entry number (optional)', maxlength: '100', 'aria-label': 'Customs entry number' });
     var on = el('input', { name: 'lodged_on', id: 'excise-lodged-on', type: 'date', 'aria-label': 'Lodged on' });
     on.value = U.todayIso();
-    var btn = el('button', { type: 'submit', className: 'workspace-button workspace-button--primary', text: nil ? 'Record nil return as lodged' : 'Record as lodged' });
+    var forCca = d.cca ? ' for ' + d.cca.number : '';
+    var btn = el('button', { type: 'submit', className: 'workspace-button workspace-button--primary', text: (nil ? 'Record nil return as lodged' : 'Record as lodged') + forCca });
     form.append(ref, on, btn);
     form.addEventListener('submit', async function (e) {
       e.preventDefault(); fail(''); btn.disabled = true;
       try {
-        var res = await api('POST', '/api/compliant/nz-alcohol/excise/lodge', { period_start: d.period_start, lodged_on: on.value, entry_reference: ref.value });
-        state.draft = res.draft; await loadPeriods(); renderDraft(res.draft); loadPosition();
+        var body = { period_start: d.period_start, lodged_on: on.value, entry_reference: ref.value };
+        if (d.cca) body.cca = d.cca.id;
+        var res = await api('POST', '/api/compliant/nz-alcohol/excise/lodge', body);
+        state.draft = res.draft; await loadPeriods(); renderCcas(res.draft); renderDraft(res.draft); loadPosition();
         page.dispatchEvent(new CustomEvent('customs:lodged'));
       } catch (err) { fail(err.message); btn.disabled = false; }
     });
@@ -355,7 +380,7 @@
       ? U.fact('To lodge', U.plural(toLodge, 'entry', 'entries'), p.overdue_periods ? p.overdue_periods + ' overdue' : 'Next due ' + shortDate((state.periods.find(function (x) { return !x.open && x.status !== 'lodged'; }) || {}).due), p.overdue_periods ? 'bad' : 'warn')
       : U.fact('To lodge', 'All lodged', 'Next: ' + (p.this_period || {}).label + ' after it ends', 'good');
     var thisPeriod = p.this_period || {};
-    var periodFact = U.fact(thisPeriod.label ? thisPeriod.label + ' so far' : 'This period', thisPeriod.estimate != null ? money(thisPeriod.estimate) : num(thisPeriod.total_lal || 0, 3) + ' LAL', thisPeriod.estimate != null ? num(thisPeriod.total_lal || 0, 3) + ' LAL removed' : 'Estimate once every product is set up');
+    var periodFact = U.fact(thisPeriod.label ? thisPeriod.label + ' so far' + (thisPeriod.ccas > 1 ? ', ' + thisPeriod.ccas + ' CCAs' : '') : 'This period', thisPeriod.estimate != null ? money(thisPeriod.estimate) : num(thisPeriod.total_lal || 0, 3) + ' LAL', thisPeriod.estimate != null ? num(thisPeriod.total_lal || 0, 3) + ' LAL removed' : 'Estimate once every product is set up');
     var stockFact = st.open_differences
       ? U.fact('Stocktake', U.plural(st.open_differences, 'difference') + ' open', money(st.open_duty) + ' duty if removed', 'warn')
       : U.fact('Stocktake', st.next_due ? (st.overdue ? 'Overdue' : 'Due ' + U.dayMonth(st.next_due)) : 'Not scheduled', st.last_completed_on ? 'Last counted ' + fmtDate(st.last_completed_on) : 'No stocktake yet', st.overdue ? 'bad' : '');

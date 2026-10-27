@@ -634,18 +634,24 @@ class InventoryRepository:
             raise ValueError("The stock is already there")
 
         def licensed(location_id) -> bool:
-            if location_id is None:
-                return True
-            loc = (
-                self.db.query(StockLocation)
-                .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
-                .one_or_none()
-            )
-            if loc is None:
-                raise ValueError("Location not found")
-            if loc.site_id != item.site_id:
-                raise ValueError("Moving between sites requires a recorded dispatch and receipt")
-            return bool(loc.inside_licensed_area)
+            if location_id is not None:
+                loc = (
+                    self.db.query(StockLocation)
+                    .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
+                    .one_or_none()
+                )
+                if loc is None:
+                    raise ValueError("Location not found")
+                if loc.site_id != item.site_id:
+                    raise ValueError("Moving between sites requires a recorded dispatch and receipt")
+            # The compliance module's register decides when it has one (GL-P07 A5); otherwise
+            # unplaced stock is inside the licensed area and an area says so with its flag.
+            from app.features.compliant.platform.licensed_areas import licensed_place
+
+            decided = licensed_place(self.db, org_id, item.site_id, location_id, occurred_on)
+            if decided is not None:
+                return decided
+            return True if location_id is None else bool(loc.inside_licensed_area)
 
         was_in, now_in = licensed(item.location_id), licensed(to_location_id)
         direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")

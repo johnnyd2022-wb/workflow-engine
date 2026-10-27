@@ -1787,6 +1787,7 @@ def _seed_premises(db, org_id, inv) -> None:
     )
     db.flush()
     for licence, site, place, start, end, evidence in (
+        (lma, distillery, None, 700, None, "Approved site plan rev B: main floor"),
         (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
         (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
         (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
@@ -1858,7 +1859,16 @@ def _seed_moves(db, org_id, inv) -> None:
         ("Barrel-aged Gin 500ml", "45"),
         ("Gin base spirit", "80"),
     ):
-        db.add(AlcoholProductProfile(org_id=org_id, inventory_name=gin, product_type="spirits", abv_percent=abv))
+        db.add(
+            AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=gin,
+                product_type="spirits",
+                abv_percent=abv,
+                pack_volume_ml=Decimal("500" if "500ml" in gin else "700"),
+                excise_category="gin",
+            )
+        )
     db.flush()
     places = {p.name: p for p in db.query(StockLocation).filter(StockLocation.org_id == org_id)}
     actor = db.query(User).filter(User.org_id == org_id).first()

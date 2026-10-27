@@ -884,14 +884,26 @@ def _parse_iso(value, field):
 @api_bp.route("/api/compliant/nz-alcohol/excise", methods=["GET"])
 @requires_auth
 def get_excise_period():
+    """One period's entry; with several sites, one CCA licence's (``cca``, else the first)."""
     excise, cfg = _excise_cfg()
     try:
         day = _parse_iso(request.args["period"], "period") if request.args.get("period") else None
+        licence_id = _cca_param(request.args.get("cca"))
+        if day is None:
+            day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
+        current = excise.draft(db_session, _org_id(), day, cfg["frequency"], licence_id=licence_id)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    if day is None:
-        day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
-    return jsonify({"settings": cfg, "draft": excise.draft(db_session, _org_id(), day, cfg["frequency"])}), 200
+    return jsonify({"settings": cfg, "draft": current}), 200
+
+
+def _cca_param(value):
+    if not value:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        raise ValueError("cca must be a CCA licence id") from None
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/periods", methods=["GET"])
@@ -901,8 +913,19 @@ def list_excise_periods():
     from app.features.compliant.models.excise import ExciseLodgement
 
     excise, cfg = _excise_cfg()
+    try:
+        licence_id = _cca_param(request.args.get("cca"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if licence_id is None and excise.per_cca(db_session, _org_id()):
+        current = excise.period_for(date.today(), cfg["frequency"])
+        first = excise.cca_licences(db_session, _org_id(), current[0], current[1])
+        licence_id = first[0].id if first else None
     lodged = {
-        r.period_start: r for r in db_session.query(ExciseLodgement).filter(ExciseLodgement.org_id == _org_id()).all()
+        r.period_start: r
+        for r in db_session.query(ExciseLodgement).filter(
+            ExciseLodgement.org_id == _org_id(), ExciseLodgement.licence_id.is_not_distinct_from(licence_id)
+        )
     }
     start = excise.period_for(date.today(), cfg["frequency"])[0]
     rows = []
@@ -969,8 +992,16 @@ def lodge_excise_period():
     try:
         start = _parse_iso(data.get("period_start"), "period_start")
         lodged_on = _parse_iso(data.get("lodged_on") or date.today().isoformat(), "lodged_on")
+        licence_id = _cca_param(data.get("cca"))
         record = excise.lodge(
-            db_session, _org_id(), start, cfg["frequency"], lodged_on, data.get("entry_reference"), g.current_user.id
+            db_session,
+            _org_id(),
+            start,
+            cfg["frequency"],
+            lodged_on,
+            data.get("entry_reference"),
+            g.current_user.id,
+            licence_id=licence_id,
         )
         db_session.commit()
     except ValueError as e:
@@ -985,11 +1016,12 @@ def lodge_excise_period():
         _org_id(),
         {
             "period_start": record.period_start.isoformat(),
+            "cca": str(record.licence_id) if record.licence_id else None,
             "nil_return": record.nil_return,
             "total_lal": (record.snapshot or {}).get("total_lal"),
         },
     )
-    return jsonify({"draft": excise.draft(db_session, _org_id(), start, cfg["frequency"])}), 201
+    return jsonify({"draft": excise.draft(db_session, _org_id(), start, cfg["frequency"], licence_id=licence_id)}), 201
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/rates", methods=["GET"])

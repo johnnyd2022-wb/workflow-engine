@@ -205,6 +205,15 @@ def choices(session, org_id):
         .all()
     )
     default = next((site for site in sites if site.is_default), None)
+    # Inside the licensed area or not: the compliance module's register when it has one,
+    # else each area's own flag (and stock not placed in an area counts as inside).
+    from app.features.compliant.platform.licensed_areas import licensed_map
+
+    licensed = licensed_map(session, org_id, sites, areas)
+
+    def area_licensed(area):
+        return licensed["areas"][str(area.id)] if licensed else bool(area.inside_licensed_area)
+
     return {
         "on": True,
         "default_id": str(default.id) if default else None,
@@ -214,8 +223,9 @@ def choices(session, org_id):
                 "name": site.name,
                 "kind": site.kind,
                 "is_default": bool(site.is_default),
+                "main_area_licensed": licensed["sites"][str(site.id)] if licensed else True,
                 "areas": [
-                    {"id": str(a.id), "name": a.name, "inside_licensed_area": bool(a.inside_licensed_area)}
+                    {"id": str(a.id), "name": a.name, "inside_licensed_area": area_licensed(a)}
                     for a in areas
                     if a.site_id == site.id
                 ],
