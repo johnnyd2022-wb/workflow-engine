@@ -17,7 +17,8 @@ def _np3_system_alerts(queue: list[dict], overall_alert: dict | None, label: str
     """Describe national-programme work in the generic Core finding/notification contract."""
     alerts = []
     if overall_alert:
-        alerts.append({"id": "np3-overall", **overall_alert, "action_label": f"Open {label}"})
+        # "summary": a count of the alerts below it, so Notifications shows it as their heading, not a row.
+        alerts.append({"id": "np3-overall", **overall_alert, "action_label": f"Open {label}", "summary": True})
     for index, action in enumerate(queue):
         control_id = str(action.get("control_id") or "")
         if not control_id:
@@ -101,6 +102,7 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
     system_finding = (
         {
             "category": f"{label} compliance",
+            "area": "Food safety",
             "action": {"href": "/compliant/nz-alcohol/food-safety", "label": f"Open {label}"},
             "details": system_alerts[:6],
         }
@@ -161,6 +163,7 @@ def run_excise_check(org_id: UUID, session: Session) -> CheckResult:
         data={
             "system_finding": {
                 "category": "Customs excise" + (" (overdue)" if overdue else ""),
+                "area": "Customs",
                 "action": {"href": alert["href"], "label": alert["action_label"]},
                 "details": [alert],
             },
@@ -171,6 +174,14 @@ def run_excise_check(org_id: UUID, session: Session) -> CheckResult:
 
 STOCKTAKE_CHECK_ID = "compliant.nz_alcohol.stocktake"
 STOCKTAKE_REMIND_DAYS = 14
+
+
+def _day(value) -> str:
+    """An ISO date as people write it: 27 Oct 2026."""
+    try:
+        return date.fromisoformat(str(value)[:10]).strftime("%-d %b %Y")
+    except ValueError:
+        return str(value)
 
 
 def stocktake_alerts(session: Session, org_id: UUID, settings: dict | None, today: date) -> list[dict]:
@@ -200,14 +211,17 @@ def stocktake_alerts(session: Session, org_id: UUID, settings: dict | None, toda
         sign = "" if v["variance"].startswith("-") else "+"
         lal, duty = (v["measure"] or "").lstrip("-"), (v["cost"] or "").lstrip("-")
         money = (f", {lal} LAL" + (f", ${duty} duty" if duty else "")) if lal else ""
+        batch = f"batch {v['batch']}" if v["batch"] else "no batch"
         what = (
-            f"under investigation until {v['investigate_until']}" if v["status"] == "investigating" else "not resolved"
+            f"under investigation until {_day(v['investigate_until'])}"
+            if v["status"] == "investigating"
+            else "not resolved yet"
         )
         alerts.append(
             {
                 "id": f"stocktake-variance-{v['line_id']}",
                 "title": f"Stocktake variance: {v['product']} {sign}{v['variance']} {v['unit']}",
-                "description": f"Counted {v['counted_on']} (batch {v['batch'] or 'n/a'}{money}), {what}.",
+                "description": f"Counted {_day(v['counted_on'])} ({batch}{money}), {what}.",
                 "due_date": v["investigate_until"] or v["counted_on"],
                 "href": f"/core/stocktake?id={v['stocktake_id']}",
                 "action_label": "Resolve",
@@ -233,6 +247,7 @@ def run_stocktake_check(org_id: UUID, session: Session) -> CheckResult:
         data={
             "system_finding": {
                 "category": "Customs stocktake",
+                "area": "Customs",
                 "action": {"href": "/core/stocktake", "label": "Open stocktake"},
                 "details": alerts,
             },
@@ -261,6 +276,7 @@ def run_verification_check(org_id: UUID, session: Session) -> CheckResult:
         data={
             "system_finding": {
                 "category": "Food safety verification",
+                "area": "Food safety",
                 "action": {"href": "/compliant/nz-alcohol/food-safety#verification", "label": "Open verification"},
                 "details": alerts,
             },
@@ -289,6 +305,7 @@ def run_licensing_check(org_id: UUID, session: Session) -> CheckResult:
         data={
             "system_finding": {
                 "category": "Alcohol licensing",
+                "area": "Licensing",
                 "action": {"href": "/compliant/nz-alcohol/licensing", "label": "Open licensing"},
                 "details": alerts,
             },
@@ -316,6 +333,7 @@ def run_movement_registration_check(org_id: UUID, session: Session) -> CheckResu
         data={
             "system_finding": {
                 "category": "Destination registrations",
+                "area": "Customs",
                 "action": {"href": "/core/site-transfers", "label": "Review transfers"},
                 "details": alerts,
             },

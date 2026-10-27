@@ -104,7 +104,8 @@ def test_a_new_orgs_notifications_carry_no_unknown_date(browser, app_url, compli
         login_through_ui(page, compliance_user["email"], compliance_user["password"])
         page.goto("/core/notifications")
         content = page.locator("#page-content")
-        expect(content.get_by_text("NP3 compliance needs attention").first).to_be_visible()
+        # Its notifications are the programme's checks (the "needs attention" count heads them).
+        expect(content.locator(".nt-row", has_text="Add evidence").first).to_be_visible()
         expect(content.get_by_text("Unknown", exact=True)).to_have_count(0)
     finally:
         context.close()

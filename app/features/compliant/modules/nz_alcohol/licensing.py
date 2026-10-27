@@ -443,9 +443,9 @@ def checks(session: Session, org_id: UUID, today: date) -> list[dict]:
         elif record.status in ("open", "failed"):
             state, reason = "attention", "Open or failed record"
         elif record.due_date and record.due_date < today:
-            state, reason = "overdue", f"Review overdue since {record.due_date.isoformat()}"
+            state, reason = "overdue", f"Review overdue since {record.due_date.strftime('%-d %b %Y')}"
         elif record.due_date and record.due_date <= today + timedelta(days=CHECK_REVIEW_SOON_DAYS):
-            state, reason = "due", f"Review due {record.due_date.isoformat()}"
+            state, reason = "due", f"Review due {record.due_date.strftime('%-d %b %Y')}"
         else:
             state, reason = "current", "Current"
         out.append(
@@ -524,10 +524,20 @@ def overview(session: Session, org_id: UUID, today: date, now: datetime | None =
     }
 
 
+def _shorten(text: str, limit: int) -> str:
+    """At most ``limit`` characters, cut at a word with an ellipsis rather than mid-word."""
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
     """Nothing lapses unnoticed: renewals, certificates, annual fees, events and check reviews."""
     out = []
+    # Each alert lands on the part of Licensing that resolves it.
     href = "/compliant/nz-alcohol/licensing"
+    licences_href, managers_href, checks_href = f"{href}#lic-licences", f"{href}#lic-managers", f"{href}#lic-checks"
     licences = (
         session.query(LiquorLicence)
         .filter(LiquorLicence.org_id == org_id, LiquorLicence.status == "current")
@@ -548,8 +558,8 @@ def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
                     "description": f"Expires {lic.expires_on.strftime('%-d %b %Y')}. Renewals are due at least 20 "
                     "working days before expiry.",
                     "due_date": _iso(file_by),
-                    "href": href,
-                    "action_label": "Open licensing",
+                    "href": licences_href,
+                    "action_label": "Open the licence",
                 }
             )
         if lic.annual_fee_due_on and today >= lic.annual_fee_due_on - timedelta(days=FEE_REMIND_DAYS):
@@ -560,8 +570,8 @@ def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
                     "description": ("Overdue. " if today > lic.annual_fee_due_on else "")
                     + "Pay the council's annual fee invoice, then mark it paid.",
                     "due_date": _iso(lic.annual_fee_due_on),
-                    "href": href,
-                    "action_label": "Open licensing",
+                    "href": licences_href,
+                    "action_label": "Mark the fee paid",
                 }
             )
         if (
@@ -575,8 +585,8 @@ def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
                     "title": f"{lic.event_name}: name the manager on duty",
                     "description": f"The event starts {lic.event_starts_on.strftime('%-d %b %Y')}.",
                     "due_date": _iso(lic.event_starts_on),
-                    "href": href,
-                    "action_label": "Open licensing",
+                    "href": licences_href,
+                    "action_label": "Name the manager",
                 }
             )
     managers = (
@@ -599,8 +609,8 @@ def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
                     ),
                     "description": st["label"] + ".",
                     "due_date": _iso(cert.expires_on),
-                    "href": href,
-                    "action_label": "Open licensing",
+                    "href": managers_href,
+                    "action_label": "Open certificates",
                 }
             )
     for check in checks(session, org_id, today):
@@ -608,11 +618,11 @@ def alerts(session: Session, org_id: UUID, today: date) -> list[dict]:
             out.append(
                 {
                     "id": f"licensing-check-{check['control_id']}-{check['latest']['review_due']}",
-                    "title": f"Licensing check: {check['description'][:90]}",
+                    "title": f"Licensing check: {_shorten(check['description'], 90)}",
                     "description": check["reason"] + ".",
                     "due_date": check["latest"]["review_due"],
-                    "href": href,
-                    "action_label": "Open licensing",
+                    "href": checks_href,
+                    "action_label": "Record the check",
                 }
             )
     return out

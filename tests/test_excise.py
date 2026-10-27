@@ -273,7 +273,9 @@ def test_nil_return_and_reminder(world):
     alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
     assert alert["title"] == "Excise nil return for August 2026 due 21 Sep 2026"
     assert alert["due_date"] == "2026-09-21" and alert["overdue"] is False
-    assert alert["href"] == "/crm/excise?month=2026-08" and alert["action_label"] == "See the figures"
+    # It lands where the entry is lodged and recorded as lodged.
+    assert alert["href"] == "/compliant/nz-alcohol/customs?period=2026-08-01"
+    assert alert["action_label"] == "Prepare the entry"
     assert excise.reminder(db, org.id, profile, today=date(2026, 9, 22))["overdue"] is True
 
     lodged = client.post(

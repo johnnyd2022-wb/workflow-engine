@@ -1,1156 +1,634 @@
 /**
- * Notifications page: flat list of system findings — one card per underlying item,
- * sorted newest-first. Uses CoreAPI.getSystemFindings() only (no banner HTML).
+ * Notifications: what needs you, late first, each with the action that resolves it.
+ *
+ * Reads CoreAPI.getSystemFindings(). Core's own checks (expired stock, output dates, untracked
+ * items, tasks) are turned into notifications here; every other check describes its own in the
+ * generic module contract (data.system_alerts: title, description, due_date, href, action_label,
+ * optional area and summary) and is rendered without this file knowing which module sent it.
+ *
+ * Every notification has one primary action, shown as a button on the row, plus any secondary
+ * links. Hiding is per browser (sessionStorage), and the menu says so.
  */
 (function () {
   'use strict';
 
-  var currentTab = 'active'; var casePage = 0;
+  var DAY = 24 * 3600 * 1000;
+  var SOON_DAYS = 7;
+  // CONCEPT ONLY: the style switch goes when one style is chosen.
+  var STYLE_KEY = 'nt-style';
 
-  var CATEGORY_LABELS = {
-    expired_materials: 'Expired raw materials',
-    output_expiry: 'Custom output expiry',
-    output_ready_date: 'Output ready date',
-    untracked_items: 'Untracked items',
+  // Core checks' areas. Module checks name their own (system_finding.area or .category).
+  var CORE_AREAS = {
+    expired_materials: 'Stock',
+    output_expiry: 'Stock',
+    untracked_items: 'Stock',
+    output_ready_date: 'Production',
     tasks_due: 'Tasks'
   };
 
-  /** Deep-link filter: ?category= matches system status bar routing (see core2 health nav). */
-  var NOTIFY_CATEGORY_CHECKS = {
+  /** ?category= links from the Production overview's health bar. */
+  var CATEGORY_CHECKS = {
     traceability: ['untracked_items'],
     inventory: ['expired_materials', 'output_expiry'],
     availability: ['output_ready_date']
   };
 
-  function getActiveNotificationCategoryFilter() {
-    try {
-      var q = new URLSearchParams(window.location.search || '');
-      var c = (q.get('category') || '').trim().toLowerCase();
-      if (Object.prototype.hasOwnProperty.call(NOTIFY_CATEGORY_CHECKS, c)) {
-        return c;
-      }
-    } catch (e) {
-      /* ignore */
-    }
-    return null;
-  }
-
-  function recordMatchesNotificationCategory(record, category) {
-    var allowed = NOTIFY_CATEGORY_CHECKS[category];
-    if (!allowed || !record || record.checkId == null) {
-      return false;
-    }
-    return allowed.indexOf(String(record.checkId)) !== -1;
-  }
-
-  function ensureCategoryFilterStrip(category) {
-    var listEl = document.getElementById('system-findings-list');
-    if (!listEl || !listEl.parentNode) {
-      return;
-    }
-    var id = 'notifications-category-filter-strip';
-    var strip = document.getElementById(id);
-    if (!category) {
-      if (strip) {
-        strip.remove();
-      }
-      return;
-    }
-    var labels = { traceability: 'Traceability', inventory: 'Inventory', availability: 'Availability' };
-    if (!strip) {
-      strip = document.createElement('div');
-      strip.id = id;
-      strip.className = 'notifications-category-filter-strip';
-      listEl.parentNode.insertBefore(strip, listEl);
-    }
-    strip.textContent = '';
-    var p = document.createElement('p');
-    p.className = 'notifications-category-filter-strip__text';
-    p.appendChild(document.createTextNode('Filtered to '));
-    var strong = document.createElement('strong');
-    strong.textContent = labels[category] || category;
-    p.appendChild(strong);
-    p.appendChild(document.createTextNode('. '));
-    var a = document.createElement('a');
-    a.href = '/core/notifications';
-    a.className = 'notifications-category-filter-strip__clear';
-    a.setAttribute('hx-boost', 'false');
-    a.textContent = 'Show all notifications';
-    p.appendChild(a);
-    strip.appendChild(p);
-  }
-
-  function todayDateKey() {
+  // ── Dates in words ─────────────────────────────────────────────────────────────────────
+  function todayStart() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function todayKey() {
     var d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
+  function parseDay(value) {
+    if (!value) return null;
+    var text = String(value);
+    var d = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(text + 'T00:00:00') : new Date(text);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  function shortDate(d) {
+    var opts = { day: 'numeric', month: 'short' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString('en-NZ', opts);
+  }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+  /** 2.8, not the stored 2.8000. */
+  function amount(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n.toLocaleString('en-NZ', { maximumFractionDigits: 3 }) : String(value);
+  }
 
-  /** org/user scoping so a shared browser profile can't leak one login's hidden
-   * notifications into another org/user's view of the same session (spec: "Scope new
-   * hide keys by org/user/source"). Falls back to unscoped if the meta tags are absent
-   * (e.g. an older cached page) rather than throwing. */
-  function currentScopeTag() {
+  /** How late, in a bucket and in words. `kind` changes the verb: an expiry, a ready date or a due date. */
+  function timing(dueValue, kind) {
+    var due = parseDay(dueValue);
+    if (!due) return { bucket: 'undated', words: '', days: null, ms: Infinity };
+    var days = Math.round((due - todayStart()) / DAY);
+    var words;
+    if (kind === 'expired') {
+      words = days < 0 ? 'Expired ' + plural(-days, 'day') + ' ago' : (days === 0 ? 'Expires today' : 'Expires ' + shortDate(due));
+    } else if (kind === 'ready') {
+      words = days <= 0 ? 'Ready now' : 'Ready ' + shortDate(due);
+    } else if (days < 0) {
+      words = plural(-days, 'day') + ' late';
+    } else if (days === 0) {
+      words = 'Due today';
+    } else if (days === 1) {
+      words = 'Due tomorrow';
+    } else if (days <= SOON_DAYS) {
+      words = 'Due in ' + days + ' days';
+    } else {
+      words = 'Due ' + shortDate(due);
+    }
+    var late = kind === 'ready' ? false : days < 0;
+    var bucket = late ? 'late' : (kind !== 'ready' && days <= SOON_DAYS ? 'soon' : 'later');
+    return { bucket: bucket, words: words, days: days, ms: due.getTime() };
+  }
+
+  // ── Hiding (this browser only) ─────────────────────────────────────────────────────────
+  function scopeTag() {
     var org = document.querySelector('meta[name="current-org-id"]');
     var user = document.querySelector('meta[name="current-user-id"]');
     return (org && org.getAttribute('content') || '') + '_' + (user && user.getAttribute('content') || '');
   }
-
-  function ignoreKey(checkId, itemKey) {
-    return 'corechecks_finding_ignore_date_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
+  // Keys unchanged from the previous page, so what someone hid stays hidden.
+  function snoozeKey(r) { return 'corechecks_finding_ignore_date_' + scopeTag() + '_' + r.checkId + '_' + r.itemKey; }
+  function hideKey(r) { return 'corechecks_finding_dismissed_' + scopeTag() + '_' + r.checkId + '_' + r.itemKey; }
+  function store(fn) { try { return fn(window.sessionStorage); } catch (e) { return null; } }
+  function hiddenState(r) {
+    if (store(function (s) { return s.getItem(hideKey(r)); }) === '1') return 'hidden';
+    if (store(function (s) { return s.getItem(snoozeKey(r)); }) === todayKey()) return 'snoozed';
+    return null;
   }
 
-  function dismissedKey(checkId, itemKey) {
-    return 'corechecks_finding_dismissed_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
-  }
-
-  function isIgnoredToday(checkId, itemKey, todayKey) {
-    return sessionStorage.getItem(ignoreKey(checkId, itemKey)) === todayKey;
-  }
-
-  function isDismissed(checkId, itemKey) {
-    return sessionStorage.getItem(dismissedKey(checkId, itemKey)) === '1';
-  }
-
-  function parseDateMs(dateStr) {
-    if (!dateStr) return null;
-    try {
-      var d = new Date(dateStr);
-      var t = d.getTime();
-      if (Number.isNaN(t)) return null;
-      return t;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '—';
-    try {
-      var d = new Date(dateStr);
-      if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' });
-    } catch (e) {
-      return '—';
-    }
-  }
-
-  function pickTriggeredDate(item, finding, data) {
-    var itemMeta = item && item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
-    var dataMeta = data && data.metadata && typeof data.metadata === 'object' ? data.metadata : {};
-    var candidates = [
-      item && item.notification_triggered_at,
-      item && item.triggered_at,
-      item && item.detected_at,
-      item && item.created_at,
-      item && item.purchase_date,
-      item && item.evaluated_at,
-      itemMeta.evaluated_at,
-      finding && finding.triggered_at,
-      finding && finding.detected_at,
-      finding && finding.created_at,
-      finding && finding.updated_at,
-      data && data.triggered_at,
-      data && data.detected_at,
-      data && data.evaluated_at,
-      data && data.generated_at,
-      dataMeta.evaluated_at
-    ];
-    for (var i = 0; i < candidates.length; i += 1) {
-      if (parseDateMs(candidates[i])) return String(candidates[i]);
-    }
-    return '';
-  }
-
-  function resolveTriggeredDateText(item, finding, data) {
-    var triggered = pickTriggeredDate(item, finding, data);
-    // No date rather than "Unknown" on every card: some findings have no moment they were raised (GL-U04).
-    if (!triggered) return '';
-    var formatted = formatDate(triggered);
-    return formatted === '—' ? '' : formatted;
-  }
-
-  function categoryLabel(checkId) {
-    return CATEGORY_LABELS[checkId] || String(checkId || '').replace(/_/g, ' ') || 'System finding';
-  }
-
-  function moduleSystemAlerts(data) {
-    return data && Array.isArray(data.system_alerts) ? data.system_alerts.filter(function (alert) {
-      return alert && typeof alert === 'object' && alert.id != null;
-    }) : [];
-  }
-
-  function moduleFindingCategory(checkId, data) {
-    var finding = data && data.system_finding && typeof data.system_finding === 'object' ? data.system_finding : null;
-    return finding && finding.category ? String(finding.category) : categoryLabel(checkId);
-  }
-
-  function safeInternalHref(value) {
+  // ── Notifications from the findings ────────────────────────────────────────────────────
+  function safeHref(value) {
     var href = value == null ? '' : String(value).trim();
     return href.charAt(0) === '/' && href.charAt(1) !== '/' ? href : '';
   }
-
-  function moduleAlertRecord(checkId, finding, data, alert) {
-    var due = alert.due_date ? String(alert.due_date) : '';
-    var href = safeInternalHref(alert.href);
-    return {
-      checkId: checkId,
-      itemKey: 'module_' + String(alert.id),
-      sortMs: parseDateMs(due) || 0,
-      triggeredDateText: due ? formatDate(due) : resolveTriggeredDateText(null, finding, data),
-      systemFinding: moduleFindingCategory(checkId, data),
-      summaryText: String(alert.title || 'System action needed'),
-      detailText: String(alert.description || 'Open this finding to complete the next action.'),
-      detailDateCaption: due ? 'Review due:' : null,
-      detailDateText: due ? formatDate(due) : null,
-      itemName: null,
-      extraFields: [],
-      actions: href ? [{ type: 'link', href: href, label: String(alert.action_label || 'Open'), boost: false }] : []
-    };
+  function text(value, fallback) {
+    var t = value == null ? '' : String(value).trim();
+    return t || fallback;
+  }
+  function lotHref(id) { return '/core/inventory/view?item=' + encodeURIComponent(id); }
+  /** Record disposal with these lots, all of each, and the reason already filled in. */
+  function disposeHref(ids) {
+    return '/core/inventory/dispose?item_ids=' + ids.map(encodeURIComponent).join(',') + '&whole=1&reason=Expired';
   }
 
-  function safeUnique(arr) {
-    var out = [];
-    var seen = new Set();
-    (arr || []).forEach(function (x) {
-      var s = x == null ? '' : String(x);
-      if (!s) return;
-      if (seen.has(s)) return;
-      seen.add(s);
-      out.push(s);
-    });
-    return out;
+  function record(fields) {
+    var t = timing(fields.due, fields.dueKind);
+    return Object.assign({ secondary: [], detail: '', area: 'Other' }, fields, { timing: t });
   }
 
-  function fallbackText(value, fallbackValue) {
-    if (value == null) return fallbackValue;
-    var text = String(value).trim();
-    return text ? text : fallbackValue;
-  }
-
-  function itemKeyOutputExpiry(x) {
-    var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
-    var exp = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
-    var sid = x && x.step_id != null ? String(x.step_id) : '';
-    return 'oe_' + iid + '_' + sid + '_' + exp;
-  }
-
-  function itemKeyOutputReady(x) {
-    var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
-    var rd = x && x.ready_date ? String(x.ready_date) : '';
-    var sid = x && x.step_id != null ? String(x.step_id) : '';
-    return 'ord_' + iid + '_' + sid + '_' + rd;
-  }
-
-  function itemKeyUntracked(u) {
-    return u && u.id != null ? 'ut_' + String(u.id) : '';
-  }
-
-  function sourceEntityIdFromUntrackedItemKey(itemKey) {
-    if (!itemKey || itemKey.indexOf('ut_') !== 0) return null;
-    return itemKey.slice(3);
-  }
-
-  /** Batch-fetch case status for the untracked_items cards about to render (spec: "at
-   * most 100 source identities", "Render at most 25 Notifications cards per page before
-   * requesting their case status" -- one bounded call per render, never per card). */
-  function casesEnabled() { var meta = document.querySelector('meta[name="operational-cases-enabled"]'); return meta && meta.content === 'true'; }
-  async function fetchCaseStatusForRecords(records) {
-    if (!casesEnabled()) return {};
-    var api = window.CoreAPI;
-    if (!api || typeof api.getCaseSourceStatus !== 'function') return {};
-    var ids = [];
-    for (var i = 0; i < records.length && ids.length < 25; i += 1) {
-      var r = records[i];
-      if (r.checkId !== 'untracked_items') continue;
-      var sid = sourceEntityIdFromUntrackedItemKey(r.itemKey);
-      if (sid) ids.push(sid);
-    }
-    ids = safeUnique(ids);
-    if (!ids.length) return {};
-    try {
-      var data = await api.getCaseSourceStatus(ids);
-      return (data && data.cases) || {};
-    } catch (e) {
-      return {};
-    }
-  }
-
-  /** Prepends a Create case / Open case / Review previous case action ahead of each
-   * untracked_items record's existing (reconcile/Sourcemap) actions. */
-  function applyCaseActions(records, caseStatusMap) {
-    if (!casesEnabled()) return;
-    records.forEach(function (r) {
-      if (r.checkId !== 'untracked_items') return;
-      var sid = sourceEntityIdFromUntrackedItemKey(r.itemKey);
-      if (!sid) return;
-      var info = Object.prototype.hasOwnProperty.call(caseStatusMap, sid) ? caseStatusMap[sid] : undefined;
-      var action;
-      if (info === undefined) return;
-      if (!info) {
-        action = {
-          type: 'link',
-          href: '/core/cases/new?source_entity_id=' + encodeURIComponent(sid) + '&item_name=' + encodeURIComponent(r.itemName || ''),
-          label: 'Create case',
-          boost: false
-        };
-      } else if (info.is_terminal) {
-        r.actions.unshift({type: 'link', href: '/core/cases/new?source_entity_id=' + encodeURIComponent(sid), label: 'Create new occurrence', boost: false});
-        action = { type: 'link', href: info.href, label: 'Review previous case', boost: false };
-      } else {
-        action = { type: 'link', href: info.href, label: 'Open case', boost: false };
-      }
-      r.actions = [action].concat(r.actions || []);
-    });
-  }
-
-  async function fetchFindings() {
-    var api = window.CoreAPI;
-    if (!api || typeof api.getSystemFindings !== 'function') return [];
-    try {
-      var data = await api.getSystemFindings();
-      return (data && Array.isArray(data.findings)) ? data.findings : [];
-    } catch (e) {
-      return null; // not "none": the page must not say all is clear when it couldn't ask (GL-U04)
-    }
-  }
-
-  function ensureEmptyState(visibleCount, msg) {
-    var body = document.getElementById('system-findings-banner-body');
-    if (!body) return;
-
-    var emptyEl = document.getElementById('system-findings-notifications-empty');
-
-    if (visibleCount === 0) {
-      if (!emptyEl) {
-        emptyEl = document.createElement('div');
-        emptyEl.id = 'system-findings-notifications-empty';
-        emptyEl.className = 'notification-page__empty';
-        body.appendChild(emptyEl);
-      }
-      emptyEl.textContent = msg || 'No system notifications right now.';
-    } else if (emptyEl) {
-      emptyEl.remove();
-    }
-  }
-
-  function closeAllOverflowMenus() {
-    var menus = document.querySelectorAll('.notifications-list-item__overflow-menu');
-    menus.forEach(function (menu) {
-      menu.hidden = true;
-    });
-    var toggles = document.querySelectorAll('.notifications-list-item__overflow-toggle');
-    toggles.forEach(function (toggle) {
-      toggle.setAttribute('aria-expanded', 'false');
-    });
-
-    var actionMenus = document.querySelectorAll('.notifications-list-item__actions-menu');
-    actionMenus.forEach(function (menu) {
-      menu.hidden = true;
-    });
-    var actionToggles = document.querySelectorAll('.notifications-list-item__actions-toggle');
-    actionToggles.forEach(function (toggle) {
-      toggle.setAttribute('aria-expanded', 'false');
-    });
-  }
-
-  function bindOverflowMenuHandlers() {
-    if (window.__coreNotificationsOverflowHandlersBound) return;
-    window.__coreNotificationsOverflowHandlersBound = true;
-
-    document.addEventListener('click', function (ev) {
-      if (!ev.target || !ev.target.closest('.notifications-list-item__overflow')) {
-        closeAllOverflowMenus();
-      }
-    });
-
-    document.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape') closeAllOverflowMenus();
-    });
-  }
-
-  function createOverflowMenuItem(label, onClick) {
-    var item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'notifications-list-item__overflow-item';
-    item.textContent = label;
-    item.addEventListener('click', onClick);
-    return item;
-  }
-
-  function createActionsRow(inner, record) {
-    if (!record.actions || !record.actions.length) return;
-
-    var field = document.createElement('div');
-    field.className = 'notifications-list-item__field notifications-list-item__field--actions-menu';
-
-    var lab = document.createElement('div');
-    lab.className = 'notifications-list-item__label';
-    lab.textContent = 'Actions:';
-
-    var menuWrap = document.createElement('div');
-    menuWrap.className = 'notifications-list-item__actions-dropdown';
-
-    var toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'notifications-list-item__actions-toggle';
-    toggle.setAttribute('aria-haspopup', 'menu');
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.textContent = 'Actions';
-
-    var menu = document.createElement('div');
-    menu.className = 'notifications-list-item__actions-menu';
-    menu.setAttribute('role', 'menu');
-    menu.hidden = true;
-
-    record.actions.forEach(function (a) {
-      if (a.type === 'link') {
-        var link = document.createElement('a');
-        link.className = 'notifications-list-item__actions-item';
-        link.href = a.href;
-        if (a.boost === false) link.setAttribute('hx-boost', 'false');
-        link.textContent = a.label;
-        link.setAttribute('role', 'menuitem');
-        menu.appendChild(link);
-      } else if (a.type === 'button' && a.action === 'dispose-expired') {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'notifications-list-item__actions-item';
-        btn.textContent = a.label;
-        btn.setAttribute('role', 'menuitem');
-        (function (rid) {
-          btn.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            if (typeof window.openRecordWastageModalForExpired === 'function') {
-              window.openRecordWastageModalForExpired([rid]);
-            }
-            closeAllOverflowMenus();
-          });
-        })(a.rawId);
-        menu.appendChild(btn);
-      } else if (a.type === 'reconcile') {
-        var rlink = document.createElement('a');
-        rlink.className = 'notifications-list-item__actions-item system-findings-untracked-item__reconcile-link';
-        rlink.href = a.href;
-        rlink.setAttribute('hx-boost', 'false');
-        rlink.textContent = a.label;
-        rlink.setAttribute('role', 'menuitem');
-        if (a.processId) {
-          rlink.setAttribute('data-reconcile-process-id', a.processId);
-          rlink.setAttribute('data-reconcile-process-name', a.processName || '');
-          rlink.setAttribute('data-reconcile-step-name', a.stepName || '');
-        }
-        menu.appendChild(rlink);
-      }
-    });
-
-    toggle.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      var willOpen = menu.hidden;
-      closeAllOverflowMenus();
-      menu.hidden = !willOpen;
-      toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    });
-
-    menuWrap.appendChild(toggle);
-    menuWrap.appendChild(menu);
-    field.appendChild(lab);
-    field.appendChild(menuWrap);
-    inner.appendChild(field);
-  }
-
-  function appendOverflowMenu(inner, checkId, itemKey, todayKey, onChange, archiveStatus) {
-    var wrap = document.createElement('div');
-    wrap.className = 'notifications-list-item__overflow';
-
-    var toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'notifications-list-item__overflow-toggle';
-    toggle.setAttribute('aria-label', 'Open notification options');
-    toggle.setAttribute('aria-haspopup', 'menu');
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.innerHTML = '<span aria-hidden="true">&#8942;</span>';
-
-    var menu = document.createElement('div');
-    menu.className = 'notifications-list-item__overflow-menu';
-    menu.setAttribute('role', 'menu');
-    menu.hidden = true;
-
-    if (archiveStatus) {
-      var restoreItem = createOverflowMenuItem('Restore to active', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        sessionStorage.removeItem(ignoreKey(checkId, itemKey));
-        sessionStorage.removeItem(dismissedKey(checkId, itemKey));
-        onChange();
+  function fromExpired(checkId, data) {
+    var impacted = Array.isArray(data.impacted_items) ? data.impacted_items : [];
+    return (Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials : []).map(function (raw) {
+      var id = raw && raw.id != null ? String(raw.id) : '';
+      if (!id) return null;
+      var used = impacted.filter(function (it) { return it && String(it.expired_raw_material_id) === id; })
+        .map(function (it) { return text(it.name, ''); }).filter(Boolean);
+      var names = Array.from(new Set(used));
+      return record({
+        checkId: checkId, itemKey: id, area: CORE_AREAS[checkId], lotId: id,
+        title: text(raw.name, 'A raw material') + (raw.supplier_batch_number ? ' · lot ' + raw.supplier_batch_number : '') + ' has expired',
+        detail: (raw.quantity != null ? amount(raw.quantity) + ' ' + text(raw.unit, '') + ' still in stock.' : 'Still in stock.')
+          + (names.length ? ' Used in ' + names.join(', ') + '.' : ''),
+        due: raw.expiry_date, dueKind: 'expired',
+        primary: { label: 'Dispose', href: disposeHref([id]) },
+        secondary: [
+          { label: 'Open the lot', href: lotHref(id) },
+          names.length ? { label: 'Trace where it went', href: '/core/sourcemap?show=check-needed' } : null
+        ].filter(Boolean)
       });
-      restoreItem.setAttribute('role', 'menuitem');
-      menu.appendChild(restoreItem);
-    } else {
-      // Renamed from "Snooze for today" / "Hide" per the operational_cases spec: these
-      // only affect this browser's presentation, never shared case state -- the copy
-      // says so explicitly so a user doesn't mistake hiding a card for closing the work.
-      var snoozeItem = createOverflowMenuItem('Hide until tomorrow', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        sessionStorage.setItem(ignoreKey(checkId, itemKey), todayKey);
-        onChange();
-      });
-      snoozeItem.setAttribute('role', 'menuitem');
-      snoozeItem.title = 'Hides this card from your view only, until tomorrow. The underlying work remains open.';
-
-      var hideItem = createOverflowMenuItem('Hide for this session', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        sessionStorage.setItem(dismissedKey(checkId, itemKey), '1');
-        onChange();
-      });
-      hideItem.setAttribute('role', 'menuitem');
-      hideItem.title = 'Hides this card from your view only, for this browser session. The underlying work remains open.';
-
-      menu.appendChild(snoozeItem);
-      menu.appendChild(hideItem);
-    }
-
-    toggle.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      var willOpen = menu.hidden;
-      closeAllOverflowMenus();
-      menu.hidden = !willOpen;
-      toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     });
-
-    wrap.appendChild(toggle);
-    wrap.appendChild(menu);
-    inner.appendChild(wrap);
   }
 
-  function appendLabeledField(inner, labelText, valueText, emphasis, fieldClassName) {
-    var field = document.createElement('div');
-    field.className = 'notifications-list-item__field' + (fieldClassName ? (' ' + fieldClassName) : '');
-    var lab = document.createElement('div');
-    lab.className = 'notifications-list-item__label';
-    lab.textContent = labelText;
-    var val = document.createElement('span');
-    val.className = 'notifications-list-item__value' + (emphasis ? ' notifications-list-item__value--emphasis' : '');
-    val.textContent = valueText;
-    field.appendChild(lab);
-    field.appendChild(val);
-    inner.appendChild(field);
+  function fromOutputDate(checkId, data, kind) {
+    var rows = Array.isArray(data[kind === 'expired' ? 'output_expiry_items' : 'output_ready_date_items'])
+      ? data[kind === 'expired' ? 'output_expiry_items' : 'output_ready_date_items'] : [];
+    var seen = {};
+    return rows.map(function (x) {
+      var item = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
+      var date = kind === 'expired' ? (x.expiry_at || x.expiry_date) : x.ready_date;
+      var key = (kind === 'expired' ? 'oe_' : 'ord_') + item + '_' + (x.step_id || '') + '_' + (date || '');
+      if (!item || seen[key]) return null;
+      seen[key] = true;
+      var where = [x.process_name, x.step_name].filter(Boolean).join(' · ');
+      var pid = x.process_id != null ? String(x.process_id) : '';
+      return record({
+        checkId: checkId, itemKey: key, area: CORE_AREAS[checkId],
+        title: text(x.item_name, 'An output') + (kind === 'expired' ? ' reaches its expiry date' : ' is waiting for its ready date'),
+        detail: text(x.message, where ? 'Set by ' + where + '.' : ''),
+        due: date, dueKind: kind,
+        primary: { label: 'Open the lot', href: lotHref(item) },
+        secondary: pid ? [{ label: 'Open the workflow', href: '/core/flows?id=' + encodeURIComponent(pid) }] : []
+      });
+    });
   }
 
-  function appendLabeledPre(inner, labelText, preText) {
-    var field = document.createElement('div');
-    field.className = 'notifications-list-item__field notifications-list-item__field--stacked';
-    var lab = document.createElement('div');
-    lab.className = 'notifications-list-item__label';
-    lab.textContent = labelText;
-    var val = document.createElement('div');
-    val.className = 'notifications-list-item__value';
-    var pre = document.createElement('pre');
-    pre.className = 'notifications-list-item__detail-pre';
-    pre.textContent = preText;
-    val.appendChild(pre);
-    field.appendChild(lab);
-    field.appendChild(val);
-    inner.appendChild(field);
+  function fromUntracked(checkId, data) {
+    return (Array.isArray(data.untracked_items) ? data.untracked_items : []).map(function (u) {
+      var id = u && u.id != null ? String(u.id) : '';
+      if (!id) return null;
+      var pid = u.process_id ? String(u.process_id) : '';
+      var sid = u.producing_step_id ? String(u.producing_step_id) : '';
+      var step = text(u.producing_step_name || u.step_name, '');
+      var primary = pid && sid
+        ? { label: 'Record ' + (step || 'the step'), href: '/core/flows/batches/start?draft=1&id=' + encodeURIComponent(pid) + '&step_id=' + encodeURIComponent(sid) + '&return_to=' + encodeURIComponent('/core/notifications') }
+        : (pid ? { label: 'Open the workflow', href: '/core/flows?id=' + encodeURIComponent(pid) } : { label: 'Open the lot', href: lotHref(id) });
+      var left = u.remaining_balance_to_reconcile != null ? amount(u.remaining_balance_to_reconcile) + ' ' + text(u.unit, '') + ' ' : '';
+      return record({
+        checkId: checkId, itemKey: 'ut_' + id, area: CORE_AREAS[checkId], untrackedId: id, itemName: u.name,
+        title: text(u.name, 'An item') + ' has no step that made it',
+        detail: left + 'in stock without a production record'
+          + (step ? '. Recording "' + step + '"' + (u.process_name ? ' in ' + u.process_name : '') + ' links it.' : '. Record the step that made it to link it.'),
+        due: null,
+        primary: primary,
+        secondary: primary.href.indexOf('/core/inventory/view') === 0 ? [] : [{ label: 'Open the lot', href: lotHref(id) }]
+      });
+    });
   }
 
-  function buildNotificationRecords(findings, todayKey) {
-    var records = [];
+  function fromTasks(checkId, data) {
+    var overdue = Array.isArray(data.overdue_tasks) ? data.overdue_tasks : [];
+    var soon = Array.isArray(data.due_soon_tasks) ? data.due_soon_tasks : [];
+    return overdue.concat(soon).map(function (task) {
+      var id = task && task.id != null ? String(task.id) : '';
+      if (!id) return null;
+      var source = task.source === 'crm' ? 'crm' : 'core';
+      var who = text(task.assigned_to_name, 'No one assigned');
+      return record({
+        checkId: checkId, itemKey: 'task_' + (task.source || 'core') + '_' + id + '_' + (task.due_date || ''), area: CORE_AREAS[checkId],
+        title: text(task.title, 'A task'),
+        detail: (source === 'crm' ? 'Sales' : 'Production') + ' task · ' + who,
+        due: task.due_date,
+        primary: { label: 'Open the task', href: source === 'crm' ? '/crm/tasks' : '/core/tasks' }
+      });
+    });
+  }
 
+  function fromModule(checkId, data) {
+    var finding = data.system_finding && typeof data.system_finding === 'object' ? data.system_finding : {};
+    var area = text(finding.area || finding.category, 'Other');
+    var summary = null;
+    var rows = [];
+    (Array.isArray(data.system_alerts) ? data.system_alerts : []).forEach(function (alert) {
+      if (!alert || alert.id == null) return;
+      var href = safeHref(alert.href);
+      var r = record({
+        checkId: checkId, itemKey: 'module_' + String(alert.id), area: text(alert.area, area),
+        title: text(alert.title, 'Something needs attention'),
+        detail: text(alert.description, ''),
+        due: alert.due_date,
+        primary: href ? { label: text(alert.action_label, 'Open'), href: href } : null
+      });
+      // A summary counts the alerts beside it: it heads their group instead of being one more row.
+      if (alert.summary) summary = r; else rows.push(r);
+    });
+    if (summary && !rows.length) rows.push(summary);
+    return { rows: rows, summary: summary && rows.indexOf(summary) === -1 ? summary : null };
+  }
+
+  function buildAll(findings) {
+    var all = [];
+    var summaries = {};
     findings.forEach(function (f) {
       var checkId = f && f.check_id != null ? String(f.check_id) : '';
       if (!checkId) return;
       var data = f.data && typeof f.data === 'object' ? f.data : {};
-      var moduleAlerts = moduleSystemAlerts(data);
-
-      if (moduleAlerts.length) {
-        moduleAlerts.forEach(function (alert) {
-          var record = moduleAlertRecord(checkId, f, data, alert);
-          if (isIgnoredToday(checkId, record.itemKey, todayKey) || isDismissed(checkId, record.itemKey)) return;
-          records.push(record);
-        });
-        return;
-      }
-
-      if (checkId === 'tasks_due') {
-        var overdueTasks = Array.isArray(data.overdue_tasks) ? data.overdue_tasks : [];
-        var dueSoonTasks = Array.isArray(data.due_soon_tasks) ? data.due_soon_tasks : [];
-        overdueTasks.concat(dueSoonTasks).forEach(function (task) {
-          var id = task && task.id != null ? String(task.id) : '';
-          var source = task && task.source ? String(task.source) : 'core';
-          var due = task && task.due_date ? String(task.due_date) : '';
-          var key = 'task_' + source + '_' + id + '_' + due;
-          if (!id || isIgnoredToday(checkId, key, todayKey) || isDismissed(checkId, key)) return;
-          var overdue = overdueTasks.indexOf(task) !== -1;
-          var assignee = task && task.assigned_to_name ? String(task.assigned_to_name) : 'Unassigned';
-          records.push({
-            checkId: checkId, itemKey: key, sortMs: parseDateMs(due) || 0,
-            triggeredDateText: formatDate(due), systemFinding: categoryLabel(checkId),
-            summaryText: 'Task ' + fallbackText(task.title, 'Untitled task') + (overdue ? ' is overdue.' : ' is due soon.'),
-            detailText: overdue ? 'This task is overdue and remains a system finding until it is completed or cancelled.' : 'This task is within your organisation\'s due-date notification window.',
-            detailDateCaption: 'Due date:', detailDateText: formatDate(due), itemName: task.title || id,
-            extraFields: [{ label: 'Source:', value: task.source_label || source.toUpperCase() }, { label: 'Assigned to:', value: assignee }],
-            actions: [{ type: 'link', href: '/core?tab=tasks&source=' + encodeURIComponent(source), label: 'Open tasks', boost: false }]
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'expired_materials') {
-        var impactedAll = Array.isArray(data.impacted_items) ? data.impacted_items : [];
-        var expired = Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials.slice() : [];
-        expired.sort(function (a, b) {
-          var aMs = parseDateMs(a && (a.created_at || a.purchase_date || a.expiry_date));
-          var bMs = parseDateMs(b && (b.created_at || b.purchase_date || b.expiry_date));
-          return (bMs || 0) - (aMs || 0);
-        });
-
-        expired.forEach(function (raw) {
-          var rawId = raw && raw.id != null ? String(raw.id) : null;
-          if (!rawId) return;
-          if (isIgnoredToday(checkId, rawId, todayKey)) return;
-          if (isDismissed(checkId, rawId)) return;
-
-          var dateStr = raw.created_at || raw.purchase_date || raw.expiry_date;
-          var sortMs = parseDateMs(dateStr) || 0;
-          var impacted = impactedAll.filter(function (it) {
-            if (!it) return false;
-            var tied = it.expired_raw_material_id != null ? String(it.expired_raw_material_id) : null;
-            return tied === rawId;
-          });
-          var impactedNames = safeUnique(
-            impacted.map(function (x) { return (x && (x.name || x.id)) ? String(x.name || x.id) : ''; })
-          );
-          var impactedLine = impactedNames.length ? impactedNames.join(', ') : '';
-
-          records.push({
-            checkId: checkId,
-            itemKey: rawId,
-            sortMs: sortMs,
-            triggeredDateText: resolveTriggeredDateText(raw, f, data),
-            systemFinding: categoryLabel(checkId),
-            summaryText: 'Inventory item ' + fallbackText(raw.name || rawId, 'Unknown item') + ' expired on ' + formatDate(dateStr) + '.',
-            detailText: impactedLine
-              ? 'Select from the actions below to remove this expired item or open Sourcemap to trace usage in: ' + impactedLine + '.'
-              : 'Select from the actions below to remove this expired item from inventory or open Sourcemap to trace usage.',
-            detailDateCaption: null,
-            detailDateText: null,
-            itemName: raw.name || rawId,
-            extraFields: impactedLine
-              ? [{ label: 'Impacted downstream items:', value: impactedLine }]
-              : [],
-            actions: [
-              { type: 'link', href: '/core/sourcemap?show=check-needed', label: 'Review in Sourcemap', boost: false },
-              { type: 'button', label: 'Dispose of inventory item', action: 'dispose-expired', rawId: rawId }
-            ]
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'output_expiry') {
-        var oeItems = Array.isArray(data.output_expiry_items) ? data.output_expiry_items : [];
-        var seenOe = new Set();
-        oeItems.forEach(function (x) {
-          var ik = itemKeyOutputExpiry(x);
-          if (!ik || seenOe.has(ik)) return;
-          seenOe.add(ik);
-          if (isIgnoredToday(checkId, ik, todayKey)) return;
-          if (isDismissed(checkId, ik)) return;
-
-          var expStr = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
-          var sortMs = parseDateMs(expStr) || 0;
-          var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
-          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
-          var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
-
-          var actions = [];
-          if (pid) {
-            actions.push({ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false });
-          }
-
-          records.push({
-            checkId: checkId,
-            itemKey: ik,
-            sortMs: sortMs,
-            triggeredDateText: resolveTriggeredDateText(x, f, data),
-            systemFinding: categoryLabel(checkId),
-            summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' has an output expiry date of ' + formatDate(expStr) + '.',
-            detailText: processStep
-              ? 'This warning was detected for process step: ' + processStep + '. Select an action below to review and update the process.'
-              : 'Select an action below to review this item and update the related process settings.',
-            detailDateCaption: null,
-            detailDateText: null,
-            itemName: name,
-            extraFields: [],
-            actions: actions
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'output_ready_date') {
-        var orItems = Array.isArray(data.output_ready_date_items) ? data.output_ready_date_items : [];
-        var seenOr = new Set();
-        orItems.forEach(function (x) {
-          var ik = itemKeyOutputReady(x);
-          if (!ik || seenOr.has(ik)) return;
-          seenOr.add(ik);
-          if (isIgnoredToday(checkId, ik, todayKey)) return;
-          if (isDismissed(checkId, ik)) return;
-
-          var rd = x && x.ready_date ? String(x.ready_date) : '';
-          var sortMs = parseDateMs(rd) || parseDateMs(x && x.metadata && x.metadata.evaluated_at) || 0;
-          var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
-          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
-          var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
-          var detail = (x && x.message && String(x.message).trim()) ? String(x.message).trim() : '';
-
-          var actions = [];
-          if (pid) {
-            actions.push({ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false });
-          }
-
-          var ordExtra = [];
-          if (processStep) {
-            ordExtra.push({ label: 'Process / step:', value: processStep });
-          }
-          if (detail) {
-            ordExtra.push({ label: 'Details:', value: detail });
-          }
-          records.push({
-            checkId: checkId,
-            itemKey: ik,
-            sortMs: sortMs,
-            triggeredDateText: resolveTriggeredDateText(x, f, data),
-            systemFinding: categoryLabel(checkId),
-            summaryText: fallbackText(name, 'This item') + ' is set to be ready from ' + formatDate(rd) + '.',
-            detailText: detail
-              ? detail + (processStep ? ' (' + processStep + ')' : '')
-              : (processStep
-                ? 'Detected on process step: ' + processStep + '. Select an action below to review the process.'
-                : 'Select an action below to review this ready-date warning.'),
-            detailDateCaption: 'Ready from date:',
-            detailDateText: formatDate(rd),
-            itemName: name,
-            extraFields: ordExtra,
-            actions: actions
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'untracked_items') {
-        var untracked = Array.isArray(data.untracked_items) ? data.untracked_items : [];
-        untracked.forEach(function (u) {
-          var ik = itemKeyUntracked(u);
-          if (!ik) return;
-          if (isIgnoredToday(checkId, ik, todayKey)) return;
-          if (isDismissed(checkId, ik)) return;
-
-          var created = u && u.created_at ? String(u.created_at) : '';
-          var sortMs = parseDateMs(created) || 0;
-          var name = (u && u.name) ? String(u.name) : (u.id || '—');
-          var unreconciled = u.remaining_balance_to_reconcile != null ? String(u.remaining_balance_to_reconcile) : null;
-
-          var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
-          var processName = (u.process_name != null) ? String(u.process_name) : '';
-          var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
-
-          var createdText = formatDate(created);
-          var untrackedActions = [];
-          if (processId) {
-            untrackedActions.push({
-              type: 'reconcile',
-              href: '#',
-              label: 'Go to process step to execute and reconcile',
-              processId: processId,
-              processName: processName,
-              stepName: stepName
-            });
-          }
-          untrackedActions.push({
-            type: 'link',
-            href: '/core/sourcemap?show=check-needed',
-            label: processId
-              ? 'Review in Sourcemap'
-              : 'Find process step in Sourcemap to execute and reconcile',
-            boost: false
-          });
-          records.push({
-            checkId: checkId,
-            itemKey: ik,
-            sortMs: sortMs,
-            triggeredDateText: resolveTriggeredDateText(u, f, data),
-            systemFinding: categoryLabel(checkId),
-            summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' is currently untracked in inventory.',
-            detailText: stepName
-              ? 'Context: ' + (unreconciled !== null ? unreconciled : '0') + ' ' + (u.unit || '') + ' of '
-                + fallbackText(name, 'this item') + ' was recorded as unreconciled on ' + createdText
-                + '. Execute step "' + stepName + '" in process "' + fallbackText(processName, 'the linked process')
-                + '" to create output and reconcile against this inventory item.'
-              : 'Context: ' + (unreconciled !== null ? unreconciled : '0') + ' ' + (u.unit || '') + ' of '
-                + fallbackText(name, 'this item') + ' was recorded as unreconciled on ' + createdText
-                + '. Use the actions below to find the process step, execute it, and reconcile this item.',
-            detailDateCaption: null,
-            detailDateText: null,
-            itemName: name,
-            extraFields: [],
-            actions: untrackedActions
-          });
-        });
-        return;
-      }
-
-      /* Unknown check: single row */
-      var genKey = 'gen_' + checkId;
-      if (isIgnoredToday(checkId, genKey, todayKey)) return;
-      if (isDismissed(checkId, genKey)) return;
-      var msg = (f && f.text != null) ? String(f.text) : checkId;
-      var rawJson = Object.keys(data).length ? JSON.stringify(data, null, 2) : '';
-      var unkExtra = [{ label: 'Message:', value: msg, emphasis: true }];
-      if (rawJson) {
-        unkExtra.push({ label: 'Technical details:', value: rawJson, pre: true });
-      }
-      records.push({
-        checkId: checkId,
-        itemKey: genKey,
-        sortMs: 0,
-        triggeredDateText: resolveTriggeredDateText(null, f, data),
-        systemFinding: categoryLabel(checkId),
-        summaryText: msg,
-        detailText: rawJson ? 'Technical details are included below.' : '',
-        detailDateCaption: null,
-        detailDateText: null,
-        itemName: null,
-        extraFields: unkExtra,
-        actions: []
-      });
+      var rows;
+      if (Array.isArray(data.system_alerts) && data.system_alerts.length) {
+        var built = fromModule(checkId, data);
+        rows = built.rows;
+        if (built.summary) summaries[built.summary.area] = built.summary;
+      } else if (checkId === 'expired_materials') rows = fromExpired(checkId, data);
+      else if (checkId === 'output_expiry') rows = fromOutputDate(checkId, data, 'expired');
+      else if (checkId === 'output_ready_date') rows = fromOutputDate(checkId, data, 'ready');
+      else if (checkId === 'untracked_items') rows = fromUntracked(checkId, data);
+      else if (checkId === 'tasks_due') rows = fromTasks(checkId, data);
+      else rows = f.text ? [record({ checkId: checkId, itemKey: 'gen_' + checkId, area: 'Other', title: String(f.text), primary: null })] : [];
+      rows.forEach(function (r) { if (r) all.push(r); });
     });
-
-    records.sort(function (a, b) { return (b.sortMs || 0) - (a.sortMs || 0); });
-    return records;
+    var order = { late: 0, soon: 1, undated: 2, later: 3 };
+    all.sort(function (a, b) {
+      return (order[a.timing.bucket] - order[b.timing.bucket]) || (a.timing.ms - b.timing.ms) || a.title.localeCompare(b.title);
+    });
+    return { rows: all, summaries: summaries };
   }
 
-  function renderLi(record, todayKey, onChange) {
-    var li = document.createElement('li');
-    li.className = 'system-findings-item notifications-list-item';
-    li.setAttribute('data-check-id', record.checkId);
-    li.setAttribute('data-item-key', record.itemKey);
-
-    var inner = document.createElement('div');
-    inner.className = 'notifications-list-item__inner';
-    appendOverflowMenu(inner, record.checkId, record.itemKey, todayKey, onChange, record.archiveStatus || null);
-
-    if (record.archiveStatus) {
-      var statusEl = document.createElement('span');
-      statusEl.className = 'notif-archive-status notif-archive-status--' + record.archiveStatus;
-      statusEl.textContent = record.archiveStatus === 'snoozed' ? 'Snoozed until tomorrow' : 'Hidden';
-      var dateField = document.createElement('div');
-      dateField.className = 'notifications-list-item__field notifications-list-item__field--date';
-      var dateVal = document.createElement('span');
-      dateVal.className = 'notifications-list-item__value';
-      dateVal.style.display = 'flex';
-      dateVal.style.alignItems = 'center';
-      dateVal.style.gap = '8px';
-      dateVal.style.flexWrap = 'wrap';
-      if (record.triggeredDateText) dateVal.appendChild(document.createTextNode(record.triggeredDateText));
-      dateVal.appendChild(statusEl);
-      dateField.appendChild(dateVal);
-      inner.appendChild(dateField);
-    } else {
-      if (record.triggeredDateText) {
-        appendLabeledField(inner, 'Date triggered:', record.triggeredDateText, false, 'notifications-list-item__field--date');
-      }
-    }
-    appendLabeledField(
-      inner,
-      'System finding:',
-      record.summaryText || record.systemFinding || categoryLabel(record.checkId),
-      true,
-      'notifications-list-item__field--finding'
-    );
-
-    if (record.detailText && String(record.detailText).trim()) {
-      appendLabeledField(inner, 'Details:', String(record.detailText), false, 'notifications-list-item__field--narrative');
-    }
-
-    if (record.detailDateCaption && record.detailDateText && record.detailDateText !== '—') {
-      appendLabeledField(inner, record.detailDateCaption, record.detailDateText, false, 'notifications-list-item__field--supporting');
-    }
-
-    (record.extraFields || []).forEach(function (row) {
-      if (!row || row.value == null || String(row.value).trim() === '') return;
-      if (row.pre) {
-        appendLabeledPre(inner, row.label || 'Technical details:', String(row.value));
-      } else {
-        appendLabeledField(inner, row.label || 'Details:', String(row.value), !!row.emphasis, 'notifications-list-item__field--supporting');
-      }
-    });
-
-    createActionsRow(inner, record);
-
-    li.appendChild(inner);
-    return li;
-  }
-
-  function buildArchivedRecords(findings, todayKey) {
-    var allRecords = [];
-
-    findings.forEach(function (f) {
-      var checkId = f && f.check_id != null ? String(f.check_id) : '';
-      if (!checkId) return;
-      var data = f.data && typeof f.data === 'object' ? f.data : {};
-
-      function tryAdd(itemKey, buildFn) {
-        if (!itemKey) return;
-        var snoozed = isIgnoredToday(checkId, itemKey, todayKey);
-        var hidden = isDismissed(checkId, itemKey);
-        if (!snoozed && !hidden) return;
-        var rec = buildFn();
-        if (!rec) return;
-        rec.archiveStatus = hidden ? 'hidden' : 'snoozed';
-        allRecords.push(rec);
-      }
-
-      var moduleAlerts = moduleSystemAlerts(data);
-      if (moduleAlerts.length) {
-        moduleAlerts.forEach(function (alert) {
-          var itemKey = 'module_' + String(alert.id);
-          tryAdd(itemKey, function () { return moduleAlertRecord(checkId, f, data, alert); });
-        });
-        return;
-      }
-
-      if (checkId === 'expired_materials') {
-        var expired = Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials : [];
-        var impactedAll = Array.isArray(data.impacted_items) ? data.impacted_items : [];
-        expired.forEach(function (raw) {
-          var rawId = raw && raw.id != null ? String(raw.id) : null;
-          tryAdd(rawId, function () {
-            var dateStr = raw.created_at || raw.purchase_date || raw.expiry_date;
-            var impacted = impactedAll.filter(function (it) {
-              return it && String(it.expired_raw_material_id) === rawId;
-            });
-            var impactedLine = safeUnique(impacted.map(function (x) { return String(x.name || x.id || ''); })).join(', ');
-            return {
-              checkId: checkId, itemKey: rawId, sortMs: parseDateMs(dateStr) || 0,
-              triggeredDateText: resolveTriggeredDateText(raw, f, data),
-              systemFinding: categoryLabel(checkId),
-              summaryText: 'Inventory item ' + fallbackText(raw.name || rawId, 'Unknown item') + ' expired on ' + formatDate(dateStr) + '.',
-              detailText: '', detailDateCaption: null, detailDateText: null,
-              itemName: raw.name || rawId,
-              extraFields: impactedLine ? [{ label: 'Impacted downstream items:', value: impactedLine }] : [],
-              actions: [
-                { type: 'link', href: '/core/sourcemap?show=check-needed', label: 'Review in Sourcemap', boost: false },
-                { type: 'button', label: 'Dispose of inventory item', action: 'dispose-expired', rawId: rawId }
-              ]
-            };
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'output_expiry') {
-        var oeItems = Array.isArray(data.output_expiry_items) ? data.output_expiry_items : [];
-        var seenOe = new Set();
-        oeItems.forEach(function (x) {
-          var ik = itemKeyOutputExpiry(x);
-          if (!ik || seenOe.has(ik)) return;
-          seenOe.add(ik);
-          tryAdd(ik, function () {
-            var expStr = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
-            var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
-            var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
-            var actions = pid ? [{ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false }] : [];
-            return {
-              checkId: checkId, itemKey: ik, sortMs: parseDateMs(expStr) || 0,
-              triggeredDateText: resolveTriggeredDateText(x, f, data),
-              systemFinding: categoryLabel(checkId),
-              summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' has an output expiry date of ' + formatDate(expStr) + '.',
-              detailText: '', detailDateCaption: null, detailDateText: null,
-              itemName: name, extraFields: [], actions: actions
-            };
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'output_ready_date') {
-        var orItems = Array.isArray(data.output_ready_date_items) ? data.output_ready_date_items : [];
-        var seenOr = new Set();
-        orItems.forEach(function (x) {
-          var ik = itemKeyOutputReady(x);
-          if (!ik || seenOr.has(ik)) return;
-          seenOr.add(ik);
-          tryAdd(ik, function () {
-            var rd = x && x.ready_date ? String(x.ready_date) : '';
-            var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
-            var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
-            var actions = pid ? [{ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false }] : [];
-            return {
-              checkId: checkId, itemKey: ik, sortMs: parseDateMs(rd) || 0,
-              triggeredDateText: resolveTriggeredDateText(x, f, data),
-              systemFinding: categoryLabel(checkId),
-              summaryText: fallbackText(name, 'This item') + ' is set to be ready from ' + formatDate(rd) + '.',
-              detailText: '', detailDateCaption: null, detailDateText: null,
-              itemName: name, extraFields: [], actions: actions
-            };
-          });
-        });
-        return;
-      }
-
-      if (checkId === 'untracked_items') {
-        var untracked = Array.isArray(data.untracked_items) ? data.untracked_items : [];
-        untracked.forEach(function (u) {
-          var ik = itemKeyUntracked(u);
-          tryAdd(ik, function () {
-            var created = u && u.created_at ? String(u.created_at) : '';
-            var name = (u && u.name) ? String(u.name) : (u.id || '—');
-            var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
-            var processName = u.process_name ? String(u.process_name) : '';
-            var stepName = (u.producing_step_name || u.step_name || '');
-            var untrackedActions = [];
-            if (processId) {
-              untrackedActions.push({ type: 'reconcile', href: '#', label: 'Go to process step to execute and reconcile', processId: processId, processName: processName, stepName: stepName });
-            }
-            untrackedActions.push({ type: 'link', href: '/core/sourcemap?show=check-needed', label: processId ? 'Review in Sourcemap' : 'Find process step in Sourcemap', boost: false });
-            return {
-              checkId: checkId, itemKey: ik, sortMs: parseDateMs(created) || 0,
-              triggeredDateText: resolveTriggeredDateText(u, f, data),
-              systemFinding: categoryLabel(checkId),
-              summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' is currently untracked in inventory.',
-              detailText: '', detailDateCaption: null, detailDateText: null,
-              itemName: name, extraFields: [], actions: untrackedActions
-            };
-          });
-        });
-        return;
-      }
-
-      var genKey = 'gen_' + checkId;
-      tryAdd(genKey, function () {
-        var msg = (f && f.text != null) ? String(f.text) : checkId;
-        return {
-          checkId: checkId, itemKey: genKey, sortMs: 0,
-          triggeredDateText: resolveTriggeredDateText(null, f, data),
-          systemFinding: categoryLabel(checkId),
-          summaryText: msg, detailText: '', detailDateCaption: null, detailDateText: null,
-          itemName: null, extraFields: [], actions: []
-        };
-      });
-    });
-
-    allRecords.sort(function (a, b) { return (b.sortMs || 0) - (a.sortMs || 0); });
-    return allRecords;
-  }
-
-  function updateTabBadges() {}
-
-  function setActiveTab(tab) {
-    currentTab = tab;
-    var tabs = document.querySelectorAll('[data-notif-tab]');
-    tabs.forEach(function (btn) {
-      var isActive = btn.getAttribute('data-notif-tab') === tab;
-      btn.classList.remove('notif-view-btn--active');
-      if (isActive) btn.classList.add('notif-view-btn--active');
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    renderCards();
-  }
-
-  function bindTabHandlers() {
-    var wrap = document.querySelector('.notif-view-toggle');
-    if (!wrap) return;
-    wrap.addEventListener('click', function (ev) {
-      var btn = ev.target && ev.target.closest('[data-notif-tab]');
-      if (!btn) return;
-      var tab = btn.getAttribute('data-notif-tab');
-      if (tab && tab !== currentTab) setActiveTab(tab);
-    });
-  }
-
-  async function renderCards() {
-    var listEl = document.getElementById('system-findings-list');
-    var bannerBody = document.getElementById('system-findings-banner-body');
-    var banner = document.getElementById('system-findings-banner');
-
-    if (!listEl || !bannerBody || !banner) return;
-
-    bannerBody.hidden = false;
-    bannerBody.removeAttribute('hidden');
-    banner.style.display = 'block';
-
-    var todayKey = todayDateKey();
-    var findings = await fetchFindings();
-    if (findings === null) {
-      listEl.innerHTML = '';
-      ensureEmptyState(0, "Couldn't load notifications. Reload the page to try again.");
-      return;
-    }
-
-    var activeRecords = buildNotificationRecords(findings, todayKey);
-    var archiveRecords = buildArchivedRecords(findings, todayKey);
-
-    var records = currentTab === 'archive' ? archiveRecords : activeRecords;
-
-    var categoryFilter = getActiveNotificationCategoryFilter();
-    if (categoryFilter) {
-      records = records.filter(function (rec) {
-        return recordMatchesNotificationCategory(rec, categoryFilter);
-      });
-    }
-    ensureCategoryFilterStrip(categoryFilter);
-
-    var totalRecords = records.length;
-    casePage = Math.min(casePage, Math.max(0, Math.ceil(totalRecords / 25) - 1));
-    records = records.slice(casePage * 25, (casePage + 1) * 25);
-    var pager = document.getElementById('oc-findings-pager');
-    if (!pager) { pager = document.createElement('nav'); pager.id = 'oc-findings-pager'; listEl.after(pager); }
-    pager.replaceChildren();
-    if (totalRecords > 25) ['Previous findings', 'Next findings'].forEach(function (label, i) {
-      var button = document.createElement('button'); button.textContent = label; button.type = 'button'; button.className = 'btn btn-secondary btn-sm';
-      button.disabled = i === 0 ? casePage === 0 : (casePage + 1) * 25 >= totalRecords;
-      button.addEventListener('click', function () { casePage += i === 0 ? -1 : 1; renderCards(); }); pager.appendChild(button);
-    });
-    var caseStatusMap = await fetchCaseStatusForRecords(records);
-    applyCaseActions(records, caseStatusMap);
-
-    listEl.innerHTML = '';
-
-    var onChange = function () {
-      renderCards();
+  // ── The page ───────────────────────────────────────────────────────────────────────────
+  function init(root) {
+    if (!root || root.dataset.bound === '1') return;
+    root.dataset.bound = '1';
+    var $ = function (sel) { return root.querySelector(sel); };
+    var els = {
+      list: $('[data-nt-list]'), detail: $('[data-nt-detail]'), areas: $('[data-nt-areas]'),
+      summary: $('[data-nt-summary]'), heading: $('[data-nt-heading]')
     };
+    var state = { view: 'active', area: '', style: '1', selected: null, all: [], summaries: {}, caseStatus: {} };
 
-    records.forEach(function (rec) {
-      listEl.appendChild(renderLi(rec, todayKey, onChange));
-    });
-
-    var emptyMsg = currentTab === 'archive'
-      ? 'Nothing archived. Snoozed or hidden notifications will appear here.'
-      : 'No system notifications right now.';
-    ensureEmptyState(records.length, emptyMsg);
-
-    if (window.SystemFindingsNotifications && typeof window.SystemFindingsNotifications.refreshBadge === 'function') {
-      window.SystemFindingsNotifications.refreshBadge();
+    function el(tag, className, content) {
+      var node = document.createElement(tag);
+      if (className) node.className = className;
+      if (content != null) node.textContent = content;
+      return node;
     }
+    function link(action, className) {
+      var a = el('a', className, action.label);
+      a.href = action.href;
+      return a;
+    }
+
+    // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
+    function readStyle() {
+      var fromUrl = new URLSearchParams(window.location.search).get('style');
+      var saved = null;
+      try { saved = window.localStorage.getItem(STYLE_KEY); } catch (e) { /* private mode */ }
+      var style = ['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1');
+      setStyle(style, false);
+    }
+    function setStyle(style, remember) {
+      state.style = style;
+      root.setAttribute('data-notifications-style', style);
+      root.querySelectorAll('[data-nt-style]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.ntStyle === style ? 'true' : 'false'); });
+      if (remember) { try { window.localStorage.setItem(STYLE_KEY, style); } catch (e) { /* private mode */ } }
+    }
+    root.querySelectorAll('[data-nt-style]').forEach(function (b) {
+      b.addEventListener('click', function () { setStyle(b.dataset.ntStyle, true); render(); });
+    });
+    // ────────────────────────────────────────────────────────────────────────────────────────
+
+    function categoryFilter() {
+      var c = (new URLSearchParams(window.location.search).get('category') || '').toLowerCase();
+      return Object.prototype.hasOwnProperty.call(CATEGORY_CHECKS, c) ? CATEGORY_CHECKS[c] : null;
+    }
+
+    function visible() {
+      var checks = categoryFilter();
+      return state.all.filter(function (r) {
+        var hidden = hiddenState(r);
+        if (state.view === 'active' ? hidden : !hidden) return false;
+        if (checks && checks.indexOf(r.checkId) === -1) return false;
+        return true;
+      });
+    }
+
+    // Cases, for untracked items: an action beside the fix, when operational cases are on.
+    function casesOn() { var m = document.querySelector('meta[name="operational-cases-enabled"]'); return m && m.content === 'true'; }
+    async function loadCases(rows) {
+      if (!casesOn() || !window.CoreAPI || typeof window.CoreAPI.getCaseSourceStatus !== 'function') return;
+      var ids = rows.filter(function (r) { return r.untrackedId; }).slice(0, 25).map(function (r) { return r.untrackedId; });
+      if (!ids.length) return;
+      try { state.caseStatus = ((await window.CoreAPI.getCaseSourceStatus(ids)) || {}).cases || {}; } catch (e) { state.caseStatus = {}; }
+    }
+    function caseAction(r) {
+      if (!r.untrackedId || !Object.prototype.hasOwnProperty.call(state.caseStatus, r.untrackedId)) return null;
+      var info = state.caseStatus[r.untrackedId];
+      if (!info) return { label: 'Create a case', href: '/core/cases/new?source_entity_id=' + encodeURIComponent(r.untrackedId) + '&item_name=' + encodeURIComponent(r.itemName || '') };
+      return { label: info.is_terminal ? 'Review the last case' : 'Open the case', href: safeHref(info.href) || '/core/cases' };
+    }
+    function secondaries(r) { var c = caseAction(r); return c ? r.secondary.concat([c]) : r.secondary; }
+
+    function hideMenu(r) {
+      var wrap = el('div', 'nt-more');
+      var toggle = el('button', 'nt-more__toggle');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-haspopup', 'menu');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-label', 'More for ' + r.title);
+      toggle.appendChild(el('span', null, '⋯')).setAttribute('aria-hidden', 'true');
+      var menu = el('div', 'nt-more__menu');
+      menu.setAttribute('role', 'menu');
+      menu.hidden = true;
+      function item(label, title, fn) {
+        var b = el('button', 'nt-more__item', label);
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        if (title) b.title = title;
+        b.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); render(); });
+        menu.appendChild(b);
+      }
+      if (state.view === 'archive') {
+        item('Show again', null, function () { store(function (s) { s.removeItem(snoozeKey(r)); s.removeItem(hideKey(r)); }); });
+      } else {
+        item('Hide until tomorrow', 'Only on this browser. The work stays open.', function () { store(function (s) { s.setItem(snoozeKey(r), todayKey()); }); });
+        item('Hide for this session', 'Only on this browser. The work stays open.', function () { store(function (s) { s.setItem(hideKey(r), '1'); }); });
+      }
+      menu.appendChild(el('p', 'nt-more__note', 'Hiding only changes this browser.'));
+      toggle.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var open = menu.hidden;
+        closeMenus();
+        menu.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) { var first = menu.querySelector('button'); if (first) first.focus(); }
+      });
+      wrap.append(toggle, menu);
+      return wrap;
+    }
+    /** Style 2's detail has room to show hiding as plain buttons rather than a ⋯ menu. */
+    function hideButtons(r) {
+      var wrap = el('div', 'nt-detail__hide');
+      function btn(label, fn) {
+        var b = el('button', 'nt-detail__hide-btn', label);
+        b.type = 'button';
+        b.addEventListener('click', function () { fn(); render(); });
+        wrap.appendChild(b);
+      }
+      if (state.view === 'archive') {
+        btn('Show again', function () { store(function (s) { s.removeItem(snoozeKey(r)); s.removeItem(hideKey(r)); }); });
+      } else {
+        btn('Hide until tomorrow', function () { store(function (s) { s.setItem(snoozeKey(r), todayKey()); }); });
+        btn('Hide for this session', function () { store(function (s) { s.setItem(hideKey(r), '1'); }); });
+      }
+      wrap.appendChild(el('span', 'nt-detail__hide-note', 'Only on this browser; the work stays open.'));
+      return wrap;
+    }
+
+    function closeMenus() {
+      root.querySelectorAll('.nt-more__menu').forEach(function (m) { m.hidden = true; });
+      root.querySelectorAll('.nt-more__toggle').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
+    }
+
+    function when(r) {
+      if (!r.timing.words) return null;
+      return el('span', 'nt-when nt-when--' + r.timing.bucket, r.timing.words);
+    }
+
+    /** One notification as a row: what, why, when, and its fix as a button. */
+    function row(r, compact) {
+      var li = el('li', 'nt-row nt-row--' + r.timing.bucket);
+      li.dataset.checkId = r.checkId;
+      li.dataset.itemKey = r.itemKey;
+      var main = el('div', 'nt-row__main');
+      if (!compact) main.appendChild(el('span', 'nt-row__area', r.area));
+      main.appendChild(el('p', 'nt-row__title', r.title));
+      if (r.detail) main.appendChild(el('p', 'nt-row__detail', r.detail));
+      var more = secondaries(r);
+      if (more.length) {
+        var links = el('p', 'nt-row__links');
+        more.forEach(function (a) { links.appendChild(link(a, 'nt-row__link')); });
+        main.appendChild(links);
+      }
+      var side = el('div', 'nt-row__side');
+      var w = when(r);
+      if (w) side.appendChild(w);
+      if (r.primary) side.appendChild(link(r.primary, 'workspace-button workspace-button--primary nt-row__action'));
+      side.appendChild(hideMenu(r));
+      li.append(main, side);
+      return li;
+    }
+
+    var BUCKETS = [
+      ['late', 'Late'], ['soon', 'This week'], ['undated', 'To check'], ['later', 'Coming up']
+    ];
+
+    // Style 1: sections by how late, each row with its action.
+    function renderQueue(rows) {
+      var frag = document.createDocumentFragment();
+      BUCKETS.forEach(function (b) {
+        var inBucket = rows.filter(function (r) { return r.timing.bucket === b[0]; });
+        if (!inBucket.length) return;
+        var section = el('section', 'nt-section nt-section--' + b[0]);
+        var h = el('h3', 'nt-section__title', b[1]);
+        h.appendChild(el('span', 'nt-section__count', String(inBucket.length)));
+        var ul = el('ul', 'nt-rows');
+        inBucket.forEach(function (r) { ul.appendChild(row(r)); });
+        section.append(h, ul);
+        frag.appendChild(section);
+      });
+      return frag;
+    }
+
+    // Style 2: a quiet list; the chosen one is beside it with every action.
+    function renderInbox(rows) {
+      var ul = el('ul', 'nt-inbox');
+      ul.setAttribute('role', 'listbox');
+      ul.setAttribute('aria-label', 'Notifications');
+      if (!rows.some(function (r) { return r.itemKey === state.selected; })) state.selected = rows.length ? rows[0].itemKey : null;
+      rows.forEach(function (r, i) {
+        var li = el('li', 'nt-inbox__item nt-inbox__item--' + r.timing.bucket);
+        li.setAttribute('role', 'option');
+        li.tabIndex = r.itemKey === state.selected ? 0 : -1;
+        li.setAttribute('aria-selected', r.itemKey === state.selected ? 'true' : 'false');
+        li.dataset.itemKey = r.itemKey;
+        li.dataset.checkId = r.checkId;
+        li.appendChild(el('span', 'nt-inbox__title', r.title));
+        var meta = el('span', 'nt-inbox__meta', r.area);
+        var w = when(r);
+        if (w) { meta.appendChild(document.createTextNode(' · ')); meta.appendChild(w); }
+        li.appendChild(meta);
+        li.addEventListener('click', function () { select(r.itemKey, true); });
+        li.addEventListener('keydown', function (ev) {
+          var to = null;
+          if (ev.key === 'ArrowDown' || ev.key === 'j') to = rows[i + 1];
+          if (ev.key === 'ArrowUp' || ev.key === 'k') to = rows[i - 1];
+          if (to) { ev.preventDefault(); select(to.itemKey, true); }
+          if (ev.key === 'Enter' && r.primary) { ev.preventDefault(); window.location.href = r.primary.href; }
+        });
+        ul.appendChild(li);
+      });
+      renderDetail(rows);
+      return ul;
+    }
+    function select(key, focus) {
+      state.selected = key;
+      els.list.querySelectorAll('.nt-inbox__item').forEach(function (li) {
+        var on = li.dataset.itemKey === key;
+        li.setAttribute('aria-selected', on ? 'true' : 'false');
+        li.tabIndex = on ? 0 : -1;
+        if (on && focus) li.focus();
+      });
+      renderDetail(visible().filter(areaMatch));
+    }
+    function renderDetail(rows) {
+      var r = rows.filter(function (x) { return x.itemKey === state.selected; })[0];
+      els.detail.replaceChildren();
+      if (!r) return;
+      els.detail.appendChild(el('p', 'nt-detail__area', r.area));
+      els.detail.appendChild(el('h3', 'nt-detail__title', r.title));
+      var w = when(r);
+      if (w) els.detail.appendChild(w);
+      if (r.detail) els.detail.appendChild(el('p', 'nt-detail__text', r.detail));
+      var actions = el('div', 'nt-detail__actions');
+      if (r.primary) actions.appendChild(link(r.primary, 'workspace-button workspace-button--primary'));
+      secondaries(r).forEach(function (a) { actions.appendChild(link(a, 'workspace-button')); });
+      els.detail.appendChild(actions);
+      els.detail.appendChild(hideButtons(r));
+    }
+
+    // Style 3: one card per area, most late first, with the area's bulk action where there is one.
+    function renderAreas(rows) {
+      var groups = {};
+      rows.forEach(function (r) { (groups[r.area] = groups[r.area] || []).push(r); });
+      var names = Object.keys(groups).sort(function (a, b) {
+        var late = function (n) { return groups[n].filter(function (r) { return r.timing.bucket === 'late'; }).length; };
+        return (late(b) - late(a)) || (groups[b].length - groups[a].length) || a.localeCompare(b);
+      });
+      var frag = document.createDocumentFragment();
+      names.forEach(function (name) {
+        var items = groups[name];
+        var lateCount = items.filter(function (r) { return r.timing.bucket === 'late'; }).length;
+        var card = el('section', 'nt-group');
+        var head = el('div', 'nt-group__head');
+        var titles = el('div', 'nt-group__titles');
+        titles.appendChild(el('h3', 'nt-group__title', name));
+        var counts = el('p', 'nt-group__counts', plural(items.length, 'notification'));
+        if (lateCount) { counts.appendChild(document.createTextNode(' · ')); counts.appendChild(el('span', 'nt-when nt-when--late', lateCount + ' late')); }
+        titles.appendChild(counts);
+        var summary = state.summaries[name];
+        if (summary && summary.detail) titles.appendChild(el('p', 'nt-group__summary', summary.detail));
+        head.appendChild(titles);
+        var bulk = bulkAction(items) || (summary && summary.primary);
+        if (bulk) head.appendChild(link(bulk, 'workspace-button nt-group__bulk'));
+        var ul = el('ul', 'nt-rows');
+        items.forEach(function (r) { ul.appendChild(row(r, true)); });
+        card.append(head, ul);
+        frag.appendChild(card);
+      });
+      return frag;
+    }
+    /** Several expired lots: dispose of them together, on one Record disposal page. */
+    function bulkAction(items) {
+      var lots = items.filter(function (r) { return r.checkId === 'expired_materials' && r.lotId; }).map(function (r) { return r.lotId; });
+      return lots.length > 1 ? { label: 'Dispose all ' + lots.length + ' expired', href: disposeHref(lots) } : null;
+    }
+
+    function areaMatch(r) { return !state.area || r.area === state.area; }
+
+    function renderAreaChips(rows) {
+      var counts = {};
+      rows.forEach(function (r) { counts[r.area] = (counts[r.area] || 0) + 1; });
+      var names = Object.keys(counts).sort();
+      if (state.area && !counts[state.area]) state.area = '';
+      els.areas.replaceChildren();
+      if (names.length < 2) return;
+      [['', 'All', rows.length]].concat(names.map(function (n) { return [n, n, counts[n]]; })).forEach(function (c) {
+        var b = el('button', 'nt-chip', c[1] + ' ');
+        b.type = 'button';
+        b.appendChild(el('span', 'nt-chip__count', String(c[2])));
+        b.setAttribute('aria-pressed', state.area === c[0] ? 'true' : 'false');
+        b.addEventListener('click', function () { state.area = c[0]; render(); });
+        els.areas.appendChild(b);
+      });
+    }
+
+    function empty(message) {
+      var p = el('p', 'nt-empty', message);
+      els.list.replaceChildren(p);
+      els.detail.hidden = true;
+    }
+
+    function render() {
+      closeMenus();
+      var rows = visible();
+      renderAreaChips(rows);
+      var shown = rows.filter(areaMatch);
+      var late = shown.filter(function (r) { return r.timing.bucket === 'late'; }).length;
+      els.heading.textContent = state.view === 'archive' ? 'Hidden on this browser' : 'Needs you';
+      els.summary.textContent = state.view === 'archive'
+        ? (shown.length ? plural(shown.length, 'notification') + ' hidden. They come back tomorrow or when this browser session ends.' : '')
+        : (shown.length ? plural(shown.length, 'notification') + (late ? ', ' + late + ' late' : '') + '.' : '');
+      if (!shown.length) {
+        empty(state.view === 'archive' ? 'Nothing hidden.' : (categoryFilter() ? 'Nothing here needs you.' : 'Nothing needs you right now.'));
+        return;
+      }
+      els.detail.hidden = state.style !== '2';
+      var content = state.style === '2' ? renderInbox(shown) : state.style === '3' ? renderAreas(shown) : renderQueue(shown);
+      els.list.replaceChildren(content);
+    }
+
+    async function load() {
+      var data = null;
+      try {
+        data = window.CoreAPI && typeof window.CoreAPI.getSystemFindings === 'function' ? await window.CoreAPI.getSystemFindings() : null;
+      } catch (e) {
+        data = null;
+      }
+      if (!root.isConnected) return;
+      if (!data || !Array.isArray(data.findings)) {
+        // Not "nothing needs you": the page couldn't ask (GL-U04).
+        els.summary.textContent = '';
+        empty("Couldn't load notifications. Reload the page to try again.");
+        root.setAttribute('aria-busy', 'false');
+        return;
+      }
+      var built = buildAll(data.findings);
+      state.all = built.rows;
+      state.summaries = built.summaries;
+      await loadCases(state.all);
+      if (!root.isConnected) return;
+      render();
+      root.setAttribute('aria-busy', 'false');
+      if (window.SystemFindingsNotifications && typeof window.SystemFindingsNotifications.refreshBadge === 'function') {
+        window.SystemFindingsNotifications.refreshBadge();
+      }
+    }
+
+    root.querySelectorAll('[data-nt-view]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.view = b.dataset.ntView;
+        root.querySelectorAll('[data-nt-view]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        render();
+      });
+    });
+    root.addEventListener('click', function (ev) { if (!ev.target.closest('.nt-more')) closeMenus(); });
+    root.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeMenus(); });
+
+    readStyle();
+    if (window.LiveSync) {
+      window.LiveSync.subscribe({
+        key: 'notifications-cases',
+        match: function (evt) { return evt.entity_type === 'operational_case'; },
+        onChange: function () { if (!document.hidden && root.isConnected) load(); }
+      });
+    }
+    load();
   }
 
-  function init() {
-    bindOverflowMenuHandlers();
-    bindTabHandlers();
-    if (window.LiveSync) window.LiveSync.subscribe({key: 'notifications-cases', match: function (evt) { return evt.entity_type === 'operational_case'; }, onChange: function () { if (!document.hidden && document.getElementById('notifications-page-marker')) renderCards(); }});
-    renderCards();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  function boot() { init(document.querySelector('[data-notifications-page]')); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  document.addEventListener('htmx:afterSettle', boot);
 })();

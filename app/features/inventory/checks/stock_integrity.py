@@ -29,6 +29,12 @@ def _decimal(value) -> Decimal | None:
         return None
 
 
+def _amount(value: Decimal) -> str:
+    """A quantity as a person writes it: 185, 3.5, not 185.0000."""
+    text = format(value.normalize(), "f") if value == value else str(value)
+    return "0" if text in ("-0", "") else text
+
+
 def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tuple[str, str]]:
     """Return stable issue codes and explanations for one lot's stock arithmetic."""
     issues = []
@@ -36,7 +42,9 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     if on_hand is None:
         return [("invalid_quantity", "The on-hand quantity is invalid; correct this lot in Live Inventory.")]
     if is_count_unit(item.unit) and on_hand != on_hand.to_integral_value():
-        issues.append(("fractional_count", f"{on_hand} {item.unit} on hand; counted goods must be whole."))
+        issues.append(
+            ("fractional_count", f"{_amount(on_hand)} {item.unit} on hand; counted goods must be whole numbers.")
+        )
 
     produced = sold = used = adjusted = Decimal(0)
     baseline_found = False
@@ -82,19 +90,27 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     elif not any(code == "invalid_history" for code, _ in issues):
         expected = produced - sold - used - wasted + adjusted
         if expected != on_hand:
+            moves = [
+                (f"started with {_amount(produced)}", True),
+                (f"used {_amount(used)} in production", used),
+                (f"sold {_amount(sold)}", sold),
+                (f"wasted {_amount(wasted)}", wasted),
+                (f"adjusted by {_amount(adjusted)}", adjusted),
+            ]
+            history = ", ".join(text for text, keep in moves if keep)
             issues.append(
                 (
                     "balance_mismatch",
-                    f"Produced/opening {produced} − sold {sold} − used in production {used} − wasted {wasted} "
-                    f"+ adjusted {adjusted} = {expected} {item.unit}; on hand is {on_hand} {item.unit}.",
+                    f"Its history leaves {_amount(expected)} {item.unit} ({history}), but {_amount(on_hand)} "
+                    f"{item.unit} is on hand. Count it and correct the lot.",
                 )
             )
     if sold != allocated:
         issues.append(
             (
                 "sale_allocation_mismatch",
-                f"Stock history records {sold} {item.unit} sold, but active sale allocations total "
-                f"{allocated} {item.unit}.",
+                f"Its history records {_amount(sold)} {item.unit} sold, but sales are matched to "
+                f"{_amount(allocated)} {item.unit} of it.",
             )
         )
     return issues
@@ -164,17 +180,19 @@ def run_stock_integrity_check(org_id: UUID, session: Session) -> CheckResult:
 
     alerts = []
     for item in items:
-        lot = item.supplier_batch_number or (item.extra_data or {}).get("batch_number") or str(item.id)[:8]
+        lot = item.supplier_batch_number or (item.extra_data or {}).get("batch_number")
         for code, description in _lot_balance(
             item, events_by_item[item.id], wasted_by_item[item.id], allocated_by_item[item.id]
         ):
             alerts.append(
                 {
                     "id": f"stock:{item.id}:{code}",
-                    "title": f"{item.name} · lot {lot}: stock needs checking",
+                    # Never an id in place of a lot name; the link opens this lot.
+                    "title": f"{item.name}{f' · lot {lot}' if lot else ''}: stock needs checking",
                     "description": description,
-                    "href": "/core?tab=inventory",
-                    "action_label": "Review stock",
+                    "href": f"/core/inventory/view?item={item.id}",
+                    "action_label": "Check the lot",
+                    "area": "Stock",
                 }
             )
 
@@ -186,10 +204,15 @@ def run_stock_integrity_check(org_id: UUID, session: Session) -> CheckResult:
             alerts.append(
                 {
                     "id": f"sale:{line['invoice_id']}:{line['line_key']}",
-                    "title": f"Sale {line.get('invoice_number') or line['invoice_id']} needs a batch match",
+                    "title": (
+                        f"Sale {line['invoice_number']} needs a batch match"
+                        if line.get("invoice_number")
+                        else "A sale needs a batch match"
+                    ),
                     "description": f"Reason: {reason or 'missing reason'}. Match or correct this sale line.",
                     "href": "/crm/matching",
-                    "action_label": "Review sale",
+                    "action_label": "Match the sale",
+                    "area": "Sales",
                 }
             )
 

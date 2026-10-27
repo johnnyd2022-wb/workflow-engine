@@ -1017,10 +1017,6 @@ def reminder(session: Session, org_id: UUID, profile, today: date | None = None)
         what = f"entry: est. ${Decimal(entry['total']):,.2f} ({current['total_lal']} LAL)"
     else:
         what = f"entry: {current['total_lal']} LAL"
-    from app.utils.config_loader import config
-
-    # Sales -> Excise shows one month and lives in the Sales module; otherwise lodge from Customs.
-    monthly = cfg["frequency"] == "monthly" and bool(getattr(config, "crm_enabled", False))
     return {
         "id": f"excise-lodgement-{current['period_start']}",
         "title": f"Excise {'nil return' if nil else 'entry'} for {current['label']} due {due.strftime('%-d %b %Y')}",
@@ -1029,7 +1025,8 @@ def reminder(session: Session, org_id: UUID, profile, today: date | None = None)
             "as lodged."
         ),
         "due_date": due.isoformat(),
-        "href": f"/crm/excise?month={current['period_start'][:7]}" if monthly else customs_href,
-        "action_label": "See the figures",
+        # Lodging and recording it as lodged both happen on Customs -> Excise entry.
+        "href": customs_href,
+        "action_label": "Prepare the entry",
         "overdue": today > due,
     }
