@@ -75,11 +75,16 @@ status)
     ;;
 backup)
     running || { echo "$CONTAINER is not running." >&2; exit 1; }
+    # Dumps include password hashes and tenant records; only the operator may read them.
+    umask 077
     mkdir -p "$BACKUP_DIR"
-    file="$BACKUP_DIR/workflow-engine-prod-$(date +%Y-%m-%d-%H%M%S).dump"
+    file="$(mktemp "$BACKUP_DIR/workflow-engine-prod-$(date +%Y-%m-%d-%H%M%S)-XXXXXX.dump")"
+    # Do not leave a truncated/unreadable archive looking like a successful backup.
+    trap 'rm -f "$file"' EXIT
     docker exec "$CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB_NAME" >"$file"
     # A dump that cannot be listed is not a backup.
     docker exec -i "$CONTAINER" pg_restore -l <"$file" >/dev/null
+    trap - EXIT
     echo "$file"
     ;;
 psql)

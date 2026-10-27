@@ -29,27 +29,29 @@ and triggers downstream comms only after a confirmed-healthy deploy.
 
 ## 0. This repo's existing deploy mechanism — extend it, don't replace it
 
-`scripts/git_workflow.sh` already does tagging and deploy for this repo:
-`./scripts/git_workflow.sh {test|prod|status|restore-db}`. `deploy_prod()`
-(`scripts/git_workflow.sh:99-144`) already: checks out `main`, runs the pre-deployment
-test suite, tags `prod-<timestamp>`, runs `scripts/run_prod.sh`, waits for a healthcheck
-on port 8000, and only pushes the tag to origin once the healthcheck passes. Production
-is `https://workflow-engine.whistlebird.co.nz`. Use this script as the deploy step below
-— do not hand-roll a parallel deploy path.
+`scripts/run_prod.sh` is the current human-triggered production entrypoint. It loads
+KeePassXC secrets, requires clean freshly fetched main, builds a uniquely tagged image,
+takes a fail-closed database backup, migrates, checks a candidate, and hands over the
+loopback port with automatic app rollback if handover fails. See
+[deployment safeguards](../../../docs/production-deploy.md). The default host port is
+8010 (`PROD_HOST_PORT` overrides it). Keep using this script rather than inventing a
+parallel production deployment path.
 
-**What it doesn't have, and what this skill adds:** a post-deploy smoke test beyond the
-bare healthcheck, and any rollback procedure at all — there is no `rollback` command in
-`git_workflow.sh` today.
+The legacy `scripts/git_workflow.sh prod` wrapper checks retired root-level paths and
+probes port 8000. Do not use it for current production deployment. Release tagging is
+a separate human release step; `run_prod.sh` does not create or push Git tags.
 
-## 1. Tag and deploy
+## 1. Deploy
+
+After the release-manager's stated go, the human operator runs from a clean checkout
+at current main:
 
 ```bash
-./scripts/git_workflow.sh prod
+./scripts/run_prod.sh
 ```
 
-This blocks until the healthcheck passes or fails and exits non-zero on failure (local
-tag is deleted automatically in that case — see `git_workflow.sh:142-143`). Do not
-proceed to step 2 if this step failed; there is nothing live to smoke-test.
+This blocks until the published healthcheck passes or exits nonzero. A failed handover
+attempts to restore the previous app. Do not proceed to step 2 on failure.
 
 For a test-environment deploy ahead of a prod release: `./scripts/git_workflow.sh test`.
 
@@ -82,27 +84,14 @@ and for any ad-hoc smoke check you want to run by hand.
 
 ## 3. Rollback — rehearsed, not just documented
 
-Because `git_workflow.sh` has no rollback command, this is the procedure until one gets
-built into the script itself:
-
-```bash
-# 1. Find the last known-good tag
-git tag -l 'prod-*' --sort=-creatordate | head -5
-
-# 2. Check out that tag and redeploy through the same path (not a manual docker command —
-#    keep using run_prod.sh so config/healthcheck behavior matches a normal deploy)
-git checkout <last-good-tag>
-./scripts/run_prod.sh
-
-# 3. If the failed release included a migration, downgrade first (check
-#    .agents/specs/<slug>.md's Data model section, or `alembic history` since the last
-#    good tag)
-ENVIRONMENT=production uv run alembic downgrade <revision-before-this-release>
-
-# 4. Re-run the healthcheck the same way deploy does
-```
-Return to `main` (`git checkout main`) once the rollback is confirmed healthy — don't
-leave the working tree on a detached tag.
+`scripts/run_prod.sh` now checks a candidate while the previous app stays running,
+then automatically restores the previous container if handover fails. It requires a
+clean checkout at freshly fetched `origin/main`, so **do not check out an old tag and
+call it as a rollback**. After a successful deploy it retains the previous stopped
+container. Follow [the production deployment recovery procedure](../../../docs/production-deploy.md)
+for manual container recovery and the schema-compatibility constraints. App rollback
+does not reverse migrations; destructive migrations need a separately reviewed recovery
+plan. Do not run a database downgrade or restore automatically.
 
 **"Rehearsed" means tested, not just written down.** Run this procedure for real against
 the test environment at least once (`git_workflow.sh test`, break something on purpose,
