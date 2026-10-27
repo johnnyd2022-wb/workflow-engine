@@ -119,6 +119,7 @@ html[data-spa-theme="dark"] .contract-dispatch__chip--open { background: rgba(24
 html[data-spa-theme="dark"] .contract-dispatch__chip--failed { background: rgba(240, 68, 56, .18); color: #f97066; }
 .contract-card .contract-dispatch__receipt { grid-column: 1 / -1; margin: 4px 0 0; }
 .contract-card .contract-dispatch__form { display: grid; gap: 14px; }
+.contract-card .contract-dispatch__form[hidden] { display: none; }
 .contract-dispatch__form fieldset { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .contract-dispatch__form legend { margin-bottom: 6px; font-weight: 600; font-size: 14px; }
 .contract-dispatch__lot { display: grid; grid-template-columns: minmax(0, 1fr) auto 8rem; gap: 10px; align-items: center; }

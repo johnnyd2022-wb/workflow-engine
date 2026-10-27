@@ -28,10 +28,10 @@
   </section>
   {% for line in order.lines %}
   <section class="contract-card">
-    <h2>{{ line.product_name }}</h2><p>{{ line.quantity }} {{ line.unit }} · Materials: {{ line.materials_source }}</p>
+    <h2>{{ line.product_name }}</h2><p>{{ line.quantity_text }} {{ line.unit }} · Materials: {{ line.materials_source }}</p>
     {% if line.spec_reference %}<p>Specification: {{ line.spec_reference }}</p>{% endif %}
     <h3>Linked batches</h3>
-    <ul>{% for batch in line.batches %}<li>{{ batch.execution_id }} · {{ batch.status|replace('_', ' ') }}
+    <ul>{% for batch in line.batches %}<li><a href="{{ batch.href }}">{{ batch.text }}</a> · {{ batch.status|replace('_', ' ') }}
       {% if can('production.record') and order.status not in ['completed','cancelled'] %}
       <button type="button" class="btn" data-contract-delete="/api/core/contract-orders/{{ order.id }}/lines/{{ line.id }}/batches/{{ batch.execution_id }}">Unlink</button>
       {% endif %}</li>{% else %}<li>No batches linked.</li>{% endfor %}</ul>
