@@ -45,7 +45,17 @@ def inventory_dispose():
     """Full-page disposal flow for recording inventory wastage."""
     item_ids_param = (request.args.get("item_ids") or "").strip()
     item_ids = [v.strip() for v in item_ids_param.split(",") if v and v.strip()] if item_ids_param else []
-    return render_template("inventory/dispose.html", active_page="core", initial_item_ids=item_ids)
+    # From a notification about expired lots: dispose of all of each, with the reason filled in,
+    # so the only thing left is to press Dispose.
+    whole = bool(item_ids) and request.args.get("whole") == "1"
+    reason = (request.args.get("reason") or "").strip()[:200]
+    return render_template(
+        "inventory/dispose.html",
+        active_page="core",
+        initial_item_ids=item_ids,
+        prefill_whole=whole,
+        prefill_reason=reason,
+    )
 
 
 @requires_auth

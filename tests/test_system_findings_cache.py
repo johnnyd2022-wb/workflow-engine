@@ -260,6 +260,7 @@ def test_banner_payload_is_slimmed(db, authed):
                             "expiry_date": "2025-01-01",
                             "supplier": "ACME",
                             "quantity": "3.0",
+                            "extra_data": {"big": "x" * 500},
                         }
                     ],
                     "impacted_items": [
@@ -283,7 +284,10 @@ def test_banner_payload_is_slimmed(db, authed):
     data = finding["data"]
     assert "connections" not in data, "the DAG edge list must be dropped"
     assert set(data["expired_raw_materials"][0]) <= set(sfc._EXPIRED_RAW_KEEP)
-    assert "supplier" not in data["expired_raw_materials"][0] and "quantity" not in data["expired_raw_materials"][0]
+    assert "supplier" not in data["expired_raw_materials"][0] and "extra_data" not in data["expired_raw_materials"][0]
+    # Kept on purpose: Notifications names the lot and what is left of it.
+    assert {"quantity", "unit", "supplier_batch_number"} <= set(sfc._EXPIRED_RAW_KEEP)
+    assert data["expired_raw_materials"][0]["quantity"] == "3.0"
     assert set(data["impacted_items"][0]) <= set(sfc._IMPACTED_KEEP)
     assert data["impacted_items"][0]["expired_raw_material_id"] == "r1"  # kept -- Notifications groups on it
     assert "extra_data" not in data["impacted_items"][0]
@@ -342,6 +346,19 @@ def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):
     assert row is not None and row.stale is False
     assert sfc._fresh(row, datetime.now(UTC))
     assert "expired_materials" in {r["check_id"] for r in row.payload["results"]}
+
+
+def test_a_row_from_an_older_version_is_recomputed(db, authed):
+    """A deploy that changes what a cached check says must not serve the old text until midnight."""
+    org, _client = authed
+    assert sfc.prewarm(org.id, db) is True
+    db.expire_all()
+    row = _cache_row(db, org.id)
+    assert sfc._fresh(row, datetime.now(UTC))
+    row.payload = {"results": row.payload["results"]}  # written before versions existed
+    assert not sfc._fresh(row, datetime.now(UTC))
+    row.payload = {"version": sfc.PAYLOAD_VERSION - 1, "results": []}
+    assert not sfc._fresh(row, datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------------------

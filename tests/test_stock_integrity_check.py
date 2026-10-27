@@ -71,3 +71,10 @@ def test_stock_check_emits_actionable_finding_for_drift(db):
     alerts = result.data["system_alerts"]
     assert any(a["id"] == f"stock:{item.id}:balance_mismatch" for a in alerts)
     assert all(a["href"].startswith("/") and a["action_label"] for a in alerts)
+    # The finding opens this lot and names it without its database id.
+    mismatch = next(a for a in alerts if a["id"] == f"stock:{item.id}:balance_mismatch")
+    assert mismatch["href"] == f"/core/inventory/view?item={item.id}" and mismatch["action_label"] == "Check the lot"
+    assert str(item.id)[:8] not in mismatch["title"] and mismatch["title"] == "Audit bottle: stock needs checking"
+    assert (
+        "Its history leaves 2 bottles" in mismatch["description"] and "3 bottles is on hand" in mismatch["description"]
+    )

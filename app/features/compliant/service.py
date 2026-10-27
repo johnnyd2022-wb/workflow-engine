@@ -233,7 +233,7 @@ def build_priority_actions(
             {
                 "kind": "record",
                 "state": "review",
-                "title": f"Review due {record.due_date.isoformat()}: {record.title}",
+                "title": f"Review due {record.due_date.strftime('%-d %b %Y')}: {record.title}",
                 "description": "A scheduled evidence review is coming up. Confirm the proof is still accurate or add a replacement record.",
                 "value": "Open the exact control and review its current proof.",
                 "framework_slug": record.framework_slug,
