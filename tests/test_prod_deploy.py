@@ -1,4 +1,4 @@
-"""Exercise production deploy orchestration with real Git and a fake Docker daemon.
+"""Exercise production and staging deploy orchestration with real Git and a fake Docker daemon.
 
 No production credentials, services, or database connections are used.
 """
@@ -24,9 +24,13 @@ a = sys.argv[1:]
 command = pathlib.Path(sys.argv[0]).name
 s["calls"].append([command, *a])
 scenario = s["scenario"]
+app_name = os.environ["DEPLOY_APP"]
 rc = 0
 out = ""
-if command == "python3":
+if command == "uv":
+    rc = int(scenario == "secrets")
+    out = "fixture-only-session-key-at-least-32-chars"
+elif command == "python3":
     if scenario == "secrets":
         rc = 1
     else:
@@ -34,7 +38,7 @@ if command == "python3":
             "POSTGRES_PASSWORD", "FLASK_SECRET_KEY", "BACKUP_CODE_ENCRYPTION_KEY",
             "XERO_TOKEN_ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"))
 elif command == "curl":
-    app = s["containers"].get("workflow-engine-prod", {})
+    app = s["containers"].get(app_name, {})
     rc = int(not app.get("running") or (scenario == "final_health" and app.get("image") != "old"))
 elif command == "docker":
     op = a[0]
@@ -65,11 +69,13 @@ elif command == "docker":
             if name in s["containers"]:
                 rc = 1
             else:
-                is_final = name == "workflow-engine-prod"
+                is_final = name == app_name
                 # Simulate Docker creating a container, then failing to publish the port.
                 rc = int(is_final and scenario == "final_start")
                 s["containers"][name] = {"running": not rc, "image": a[-1]}
                 if is_final and scenario == "signal": os.kill(os.getppid(), signal.SIGTERM)
+                if is_final and scenario == "launcher_signal":
+                    os.kill(int(os.environ["DEPLOY_SCRIPT_PID"]), signal.SIGTERM)
     elif op == "rename":
         if a[2] in s["containers"] or (scenario == "rename" and "-previous-" in a[2]): rc = 1
         else: s["containers"][a[2]] = s["containers"].pop(a[1])
@@ -89,12 +95,12 @@ def git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-@pytest.fixture
-def deploy(tmp_path):
+@pytest.fixture(params=["prod", "test"])
+def deploy(tmp_path, request):
     repo = tmp_path / "checkout"
     repo.mkdir()
     (repo / "scripts").mkdir()
-    for name in ("run_prod.sh", "prod_db.sh"):
+    for name in ("run_prod.sh", "run_test.sh", "prod_db.sh", "deploy_common.sh"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     (repo / "tracked").write_text("original")
     git(repo, "init", "-b", "main")
@@ -108,24 +114,42 @@ def deploy(tmp_path):
     git(repo, "push", "origin", "main")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name in ("docker", "curl", "python3", "sleep"):
+    for name in ("docker", "curl", "python3", "sleep", "uv"):
         stub = bin_dir / name
         stub.write_text(f"#!{sys.executable}\n" + FAKE)
         stub.chmod(0o755)
     home = tmp_path / "home"
     home.mkdir()
     state = tmp_path / "state.json"
-    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin", "DEPLOY_STATE": str(state)}
+    kind = request.param
+    app_name = f"workflow-engine-{kind}"
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "DEPLOY_STATE": str(state),
+        "DEPLOY_APP": app_name,
+        "GOOGLE_CLIENT_ID": "fixture-client",
+        "GOOGLE_CLIENT_SECRET": "fixture-only",
+        "POSTGRES_PASSWORD_TEST": "fixture-only",
+        "POSTHOG_PROJECT_API_KEY": "fixture-token",
+    }
+    # Exercise secret loading rather than inheriting the developer's session key.
+    env.pop("FLASK_SECRET_KEY", None)
 
     class Deploy:
         def run(self, scenario="ok", existing=True):
-            containers = {"workflow-engine-prod-db": {"running": True, "image": "postgres:16"}}
+            containers = {f"{app_name}-db": {"running": True, "image": "postgres:16"}}
             if existing:
-                containers["workflow-engine-prod"] = {"running": True, "image": "old"}
+                containers[app_name] = {"running": True, "image": "old"}
             state.write_text(json.dumps({"calls": [], "containers": containers, "scenario": scenario}))
-            self.result = subprocess.run(
-                ["bash", str(repo / "scripts/run_prod.sh")], env=env, capture_output=True, text=True, timeout=30
-            )
+            script = str(repo / f"scripts/run_{kind}.sh")
+            argv = ["bash", script]
+            if scenario == "launcher_signal":
+                # The script's parent Bash PID is the process a human/operator signals.
+                # A nested deploy_app subshell would miss this signal and fail this test.
+                argv = ["bash", "-c", 'export DEPLOY_SCRIPT_PID=$BASHPID; exec bash "$1"', "bash", script]
+            self.result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
             self.state = json.loads(state.read_text())
             return self
 
@@ -134,11 +158,11 @@ def deploy(tmp_path):
             return self.state["calls"]
 
         def assert_old_serving(self):
-            assert self.state["containers"]["workflow-engine-prod"] == {"running": True, "image": "old"}
+            assert self.state["containers"][app_name] == {"running": True, "image": "old"}
             assert not any("candidate-" in name for name in self.state["containers"])
 
     d = Deploy()
-    d.repo, d.home = repo, home
+    d.repo, d.home, d.app_name, d.kind = repo, home, app_name, kind
     return d
 
 
@@ -187,10 +211,12 @@ def test_pre_cutover_failures_leave_old_app_untouched(deploy, scenario):
     assert not any(c[:2] == ["docker", "stop"] for c in deploy.calls)
     if scenario in ("backup", "invalid_backup"):
         assert not any(c[:2] == ["docker", "run"] for c in deploy.calls)
-        assert not list((deploy.home / "db-backups/workflow-engine-prod").glob("*.dump"))
+        assert not list((deploy.home / f"db-backups/{deploy.app_name}").glob("*.dump"))
 
 
-@pytest.mark.parametrize("scenario", ["final_start", "final_health", "stop", "signal", "rename_signal"])
+@pytest.mark.parametrize(
+    "scenario", ["final_start", "final_health", "stop", "signal", "rename_signal", "launcher_signal"]
+)
 def test_cutover_failures_restore_old_container_and_fail(deploy, scenario):
     deploy.run(scenario)
     assert deploy.result.returncode != 0
@@ -202,8 +228,8 @@ def test_cutover_failures_restore_old_container_and_fail(deploy, scenario):
 def test_success_backs_up_then_migrates_and_checks_candidate_before_stopping(deploy, existing):
     deploy.run(existing=existing)
     assert deploy.result.returncode == 0, deploy.result.stderr
-    app = deploy.state["containers"]["workflow-engine-prod"]
-    assert app["running"] and app["image"].startswith("workflow-engine:prod-")
+    app = deploy.state["containers"][deploy.app_name]
+    assert app["running"] and app["image"].startswith(f"workflow-engine:{deploy.kind}-")
     previous = {name: c for name, c in deploy.state["containers"].items() if "-previous-" in name}
     assert len(previous) == int(existing)
     if existing:
@@ -220,8 +246,8 @@ def test_success_backs_up_then_migrates_and_checks_candidate_before_stopping(dep
         assert candidate < stop
     runs = [c for c in calls if c[:2] == ["docker", "run"] and "--name" in c]
     assert "-p" not in runs[0]
-    assert "127.0.0.1:8010:8000" in runs[1]
-    backups = list((deploy.home / "db-backups/workflow-engine-prod").glob("*.dump"))
+    assert f"127.0.0.1:{8010 if deploy.kind == 'prod' else 8001}:{8000 if deploy.kind == 'prod' else 8001}" in runs[1]
+    backups = list((deploy.home / f"db-backups/{deploy.app_name}").glob("*.dump"))
     assert len(backups) == 1
     assert backups[0].stat().st_mode & 0o777 == 0o600
 
@@ -229,17 +255,17 @@ def test_success_backs_up_then_migrates_and_checks_candidate_before_stopping(dep
 def test_first_deploy_failure_removes_failed_app(deploy):
     deploy.run("final_start", existing=False)
     assert deploy.result.returncode != 0
-    assert set(deploy.state["containers"]) == {"workflow-engine-prod-db"}
+    assert set(deploy.state["containers"]) == {f"{deploy.app_name}-db"}
 
 
 def test_deploy_lock_is_shared_across_worktrees(deploy):
-    lock = deploy.home / ".cache/workflow-engine/prod-deploy.lock"
+    lock = deploy.home / f".cache/workflow-engine/{deploy.kind}-deploy.lock"
     lock.parent.mkdir(parents=True)
     with lock.open("w") as stream:
         fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
         deploy.run()
     assert deploy.result.returncode != 0
-    assert "Another production deploy" in deploy.result.stderr
+    assert "deploy is running" in deploy.result.stderr
     assert deploy.calls == []
 
 

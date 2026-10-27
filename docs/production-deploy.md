@@ -95,3 +95,48 @@ It exercises source guards, backup failures, migration/candidate failures, succe
 first/replacement deploys, interrupted/failed handover, and restoration of the old
 container. It uses no production secrets, Docker daemon, or database. This verifies
 orchestration; it is not a live production deployment or a real container rehearsal.
+
+## Manual staging deployment
+
+`scripts/run_test.sh` now uses the same shared checkout, backup, candidate, and app
+rollback helpers (`scripts/deploy_common.sh`). It requires clean current main, checks
+again after building, and holds a separate `test-deploy.lock` for the same operator.
+Staging and production have separate container names, images, backup directories,
+ports, credentials, and locks; neither can replace the other's app.
+
+The manual staging path:
+
+1. Resolves the test session/Google/database credentials before changing Docker.
+   `POSTGRES_PASSWORD_TEST` takes priority over `POSTGRES_PASSWORD`; absent both,
+   the test config loader resolves the password as before. Optional Xero credentials
+   default to empty and telemetry lookup is best-effort.
+2. Builds `workflow-engine:test-<release>` while the old app remains running.
+3. Requires the existing `workflow-engine-test-db` container to be running and creates
+   a private, validated dump under `~/db-backups/workflow-engine-test/` (override with
+   `TEST_DB_BACKUP_DIR`). It never recreates or restores the shared development/test DB.
+4. Ensures the `workflow-observability` network exists and runs migrations with the new
+   image. An unknown branch-only migration aborts; the deploy never automatically
+   downgrades the shared database. The host-gateway alias lets the image reach the
+   configured test database port 8401 on Linux Docker.
+5. Checks an internal candidate on 8001, then hands over `127.0.0.1:8001` (override the
+   host port with `TEST_HOST_PORT`) with the same app rollback and retention behavior
+   described above. Point the staging tunnel at this loopback endpoint.
+
+Run from a clean current-main checkout:
+
+```bash
+scripts/run_test.sh
+# Optional: TEST_HOST_PORT=8011 scripts/run_test.sh
+```
+
+For manual recovery, use the previous staging container name printed by this script,
+replace `workflow-engine-prod` with `workflow-engine-test` in the recovery commands
+above, and check the configured staging port. The same migration/host-failure caveats
+apply. Staging's existing container-local upload storage remains unchanged; the backup
+here is PostgreSQL only, not uploaded files.
+
+This change covers **human-triggered `run_test.sh`**. Registry-based CI still calls
+`scripts/deploy_test_simple.sh` with a tested image ref and has its own `:test-stable`
+rollback pipeline. That path does not use these new helpers or this lock. Do not run a
+manual staging deployment concurrently with CI deployment. This change does not deploy
+staging or migrate the shared database during development/testing of the scripts.
