@@ -1,19 +1,24 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Sites{% endblock %}
+{% block title %}Sites · Settings{% endblock %}
 {% block body_class %}sites-page{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('sites.static', filename='sites.css') }}">
-<div class="max-content workspace-overview st-page" data-sites-root aria-busy="true">
+<div class="max-content workspace-overview st-page" data-sites-root data-sites-style="1" aria-busy="true">
   <header class="workspace-header">
     <div>
       <h1>Sites</h1>
-      <p class="workspace-caption">The places you make, store and sell product. With one site, nothing here needs changing.</p>
+      <p class="workspace-caption">Where you make, store and sell. Stock and batches are recorded at a site; anything without one goes to the default.</p>
     </div>
     <div class="workspace-header__actions">
+      {# CONCEPT ONLY: the style switch goes when one style is chosen. #}
+      <div class="st-style-pick" role="group" aria-label="Layout (concept)">
+        <button type="button" data-st-style="1" aria-pressed="true">Style 1</button>
+        <button type="button" data-st-style="2" aria-pressed="false">Style 2</button>
+        <button type="button" data-st-style="3" aria-pressed="false">Style 3</button>
+      </div>
       <button type="button" class="workspace-button workspace-button--primary" data-sites-add hidden>Add a site</button>
     </div>
   </header>
-
 
   <div class="st-message" role="status" aria-live="polite" data-sites-message hidden></div>
   <div class="st-message st-message--error st-load-error" role="alert" data-sites-load-error hidden>
@@ -21,32 +26,59 @@
     <button type="button" class="workspace-button" data-sites-retry>Try again</button>
   </div>
 
-  <section class="st-card st-switch" data-sites-switch aria-labelledby="st-switch-title" hidden>
+  {# Not part of the plan, or switched off: one card that says so and what turning it on does. #}
+  <section class="st-card st-intro" data-sites-intro aria-labelledby="st-intro-title" hidden>
     <div>
-      <h2 id="st-switch-title">Multiple sites</h2>
-      <p data-sites-state></p>
+      <h2 id="st-intro-title" data-sites-intro-title>Multiple sites</h2>
+      <p data-sites-intro-text></p>
+      <ul class="st-intro-points" data-sites-intro-points></ul>
     </div>
-    <button type="button" class="workspace-button" data-sites-toggle disabled>Switch on</button>
+    <button type="button" class="workspace-button workspace-button--primary" data-sites-toggle hidden>Switch on</button>
   </section>
 
-  <section class="st-card st-sites" data-sites-register aria-labelledby="st-sites-title" hidden>
+  {# Setting up: what is left, in order. Hidden once every step is done. #}
+  <section class="st-card st-setup" data-sites-setup aria-labelledby="st-setup-title" hidden>
     <div class="st-card__head">
-      <h2 id="st-sites-title">Your sites</h2>
-      <p data-sites-summary></p>
+      <h2 id="st-setup-title">Setting up</h2>
+      <p data-sites-setup-summary></p>
     </div>
-    <ul class="st-list" data-sites-list></ul>
+    <ol class="st-steps" data-sites-steps></ol>
   </section>
+
+  <section class="st-body" data-sites-body hidden>
+    <div class="st-register" data-sites-register aria-label="Your sites"></div>
+    {# Style 2: the chosen site, beside the register. #}
+    <aside class="st-panel" data-sites-panel aria-live="polite" hidden></aside>
+  </section>
+
+  <footer class="st-foot" data-sites-foot hidden>
+    <p data-sites-summary></p>
+    <button type="button" class="st-link st-link--quiet" data-sites-toggle-off>Switch multiple sites off</button>
+  </footer>
 
   <dialog class="st-dialog" data-site-dialog aria-labelledby="st-dialog-title">
     <form data-sites-create hx-boost="false" novalidate>
       <h2 id="st-dialog-title" data-site-dialog-title>Add a site</h2>
-      <label class="st-field">Name<input name="name" id="st-site-name" required maxlength="120" autocomplete="off"></label>
-      <label class="st-field">Kind<select name="kind" id="st-site-kind" data-sites-kinds></select></label>
-      <label class="st-field">Address<input name="address" id="st-site-address" maxlength="500" autocomplete="street-address"><span class="st-hint">Optional. Shown on transfers and reports.</span></label>
+      <label class="st-field">Name<input name="name" id="st-site-name" required maxlength="120" autocomplete="off" placeholder="e.g. Bond store"></label>
+      <label class="st-field">What happens there<select name="kind" id="st-site-kind" data-sites-kinds></select></label>
+      <label class="st-field">Address<input name="address" id="st-site-address" maxlength="500" autocomplete="street-address"><span class="st-hint">Optional. Shown on transfer dockets.</span></label>
       <p class="st-message st-message--error" data-site-error hidden></p>
       <div class="st-dialog-actions">
         <button type="button" class="workspace-button" data-site-cancel>Cancel</button>
         <button type="submit" class="workspace-button workspace-button--primary" data-site-submit>Add site</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="st-dialog" data-area-dialog aria-labelledby="st-area-title">
+    <form data-area-create hx-boost="false" novalidate>
+      <h2 id="st-area-title" data-area-dialog-title>Add a stock area</h2>
+      <p class="st-hint" data-area-dialog-hint></p>
+      <label class="st-field">Name<input name="name" id="st-area-name" required maxlength="120" autocomplete="off" placeholder="e.g. Tank bay, Dry store, Cool room"></label>
+      <p class="st-message st-message--error" data-area-error hidden></p>
+      <div class="st-dialog-actions">
+        <button type="button" class="workspace-button" data-area-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary">Add area</button>
       </div>
     </form>
   </dialog>
