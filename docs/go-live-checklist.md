@@ -26,6 +26,12 @@ completing an item.
 
   Setup reference: [Google sign-in](google-sign-in.md).
 
+  Status (2026-10-27): the production client is in KeePassXC (`GOOGLE_CLIENT_ID_PROD`,
+  `GOOGLE_CLIENT_SECRET_PROD`, and the admin site's `ADMIN_GOOGLE_CLIENT_*`), and
+  `scripts/run_prod.sh` passes them to the container. `python3 scripts/prod_secrets.py check`
+  now also checks each looks like a Google client id or secret, and the deploy stops if one does
+  not. Left: deploy (`scripts/run_prod.sh`) and the sign-in test above.
+
   Completed: —. Evidence: —.
 
 ## From the go-live assessment (!570)
@@ -46,8 +52,8 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-A01 | One server-side password policy (min and max) across signup, invite and change; long input gives a 400, not a 500 | Fix | !571 |
 | ☑ | GL-A02 | A password change signs out every other session | Fix | !571 |
 | ☑ | GL-A03 | `password_reset: true` on login must not clear an account lock | Fix | !571 |
-| ◐ | GL-A04 | Forgotten-password recovery | Founder (blocked) | Interim help line on the sign-in form in !572. **Go-live blocker, on hold (founder, 2026-10-26):** self-service reset waits for email sending, via SES once the AWS production infrastructure is built (or a Google Workspace domain for biz-e as the fallback). Future assessments not about go-live should leave it out |
-| ◐ | GL-A06 | Founder reviews pricing, terms and privacy before launch | Founder (review) | **Go-live blocker.** The placeholder pricing, terms and privacy pages (!579, GL-C01/GL-C02) need the founder's review, and the terms a lawyer's. Founder (2026-10-26): assessments assume the wording is good until then |
+| ◐ | GL-A04 | Forgotten-password recovery | Founder (blocked) | Interim help line on the sign-in form in !572. **Non-blocking for the 2026-10-27 check (founder):** email is left out of this go-live check and still has to be done. Earlier (founder, 2026-10-26): self-service reset waits for email sending, via SES once the AWS production infrastructure is built (or a Google Workspace domain for biz-e as the fallback). Future assessments not about go-live should leave it out |
+| ◐ | GL-A06 | Founder reviews pricing, terms and privacy before launch | Founder (review) | **Accepted for the 2026-10-27 check, non-blocking (founder):** the wording stands as it is for this check; the founder's review and a lawyer's look at the terms are still to come. The placeholder pricing, terms and privacy pages (!579, GL-C01/GL-C02) need the founder's review, and the terms a lawyer's. Founder (2026-10-26): assessments assume the wording is good until then |
 | ☐ | GL-A05 | One observed independent pilot per sector | Founder (after go-live) | Can only happen after launch. Whistlebird (an NZ distillery the founder owns and runs) is the pilot business for distilleries. Out of scope for go-live assessments |
 
 ### Product and operations (P1)
@@ -64,7 +70,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free. Part 1 (sales to another CCA, the movement register, Customs → Transfers) in !580; part 2 (dispatching contract orders: a removal when the producer is liable, a transfer to the customer's CCA otherwise) in !582 |
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
-| ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. Go-live blocker; leave it out of assessments not about go-live |
+| ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. **Non-blocking for the 2026-10-27 check (founder):** left out of this check, still to do |
 | ☐ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | |
 
 ### UX and accessibility

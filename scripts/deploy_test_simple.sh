@@ -60,6 +60,29 @@ else
     RUN_IMAGE="workflow-engine:test"
 fi
 
+# The test database password comes from the job or host environment and is never committed here. Without
+# it the app cannot connect to its database and never starts serving.
+DB_PASSWORD="${POSTGRES_PASSWORD:-${POSTGRES_PASSWORD_TEST:-}}"
+if [ -z "$DB_PASSWORD" ]; then
+    echo "⚠️  No POSTGRES_PASSWORD or POSTGRES_PASSWORD_TEST in this environment: the app will not reach its database."
+fi
+
+# Migrate the test database with the new image before replacing the app, as production does
+# (scripts/run_prod.sh). Nothing else migrates it: without this a merged migration's tables are
+# missing and the deployed app answers 500 (main, 2026-10-27, tastings). A failure here leaves the
+# running app untouched.
+if [ -n "$DB_PASSWORD" ]; then
+    echo "Migrating the test database..."
+    if ! docker run --rm --network workflow-observability -e ENVIRONMENT=test -e FLASK_SECRET_KEY \
+        -e POSTGRES_PASSWORD="$DB_PASSWORD" "$RUN_IMAGE" uv run alembic upgrade head; then
+        echo "❌ Migrating the test database failed; the running app was left as it was."
+        echo "   The database is shared with local development. If it is on a migration only a branch has"
+        echo "   (applied while working on that branch), step it back from that branch's checkout with"
+        echo "   'uv run alembic downgrade <main's head>' and deploy again."
+        exit 1
+    fi
+fi
+
 # Only now replace the running app: a failed pull or build above (for example a rollback to a
 # :test-stable tag that has not been promoted yet) must leave the existing container serving.
 docker stop $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
@@ -95,13 +118,8 @@ DOCKER_RUN_ARGS=(
 if [ -n "$POSTHOG_PROJECT_API_KEY" ]; then
     DOCKER_RUN_ARGS+=(-e POSTHOG_PROJECT_API_KEY="$POSTHOG_PROJECT_API_KEY")
 fi
-# The test database password comes from the job or host environment and is never committed here. Without
-# it the app cannot connect to its database and never starts serving.
-DB_PASSWORD="${POSTGRES_PASSWORD:-${POSTGRES_PASSWORD_TEST:-}}"
 if [ -n "$DB_PASSWORD" ]; then
     DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
-else
-    echo "⚠️  No POSTGRES_PASSWORD or POSTGRES_PASSWORD_TEST in this environment: the app will not reach its database."
 fi
 
 docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"

@@ -49,6 +49,21 @@ class Secret:
     note: str
     username: str = ""
     scopes: tuple[str, ...] = ("app",)  # which container needs it: the customer app, the admin site
+    # What a value must look like, so a pasted-wrong secret stops the deploy instead of failing at sign-in.
+    shape: tuple[str, object] | None = None  # (what it should be, check(value) -> bool)
+
+
+_GOOGLE_CLIENT_ID = (
+    "a Google client id ending in .apps.googleusercontent.com",
+    lambda v: v.endswith(".apps.googleusercontent.com"),
+)
+_GOOGLE_SECRET = ("a Google client secret (24 or more characters)", lambda v: len(v) >= 24 and " " not in v)
+
+
+def _shape_problem(secret: Secret, value: str) -> str | None:
+    if secret.shape is None or secret.shape[1](value):
+        return None
+    return f"does not look like {secret.shape[0]}"
 
 
 SECRETS = (
@@ -89,12 +104,14 @@ SECRETS = (
         None,
         "Production's own Google OAuth client for customer sign-in, with the authorised redirect URI "
         "https://biz-e.app/auth/google/callback.",
+        shape=_GOOGLE_CLIENT_ID,
     ),
     Secret(
         f"{GROUP}/GOOGLE_CLIENT_SECRET_PROD",
         "GOOGLE_CLIENT_SECRET",
         None,
         "Secret of the production Google OAuth client.",
+        shape=_GOOGLE_SECRET,
     ),
     Secret(
         f"{GROUP}/ADMIN_FLASK_SECRET_KEY_PROD",
@@ -109,6 +126,7 @@ SECRETS = (
         None,
         "Google OAuth client for admin.biz-e.app (redirect URI https://admin.biz-e.app/auth/google/callback).",
         scopes=("admin",),
+        shape=_GOOGLE_CLIENT_ID,
     ),
     Secret(
         f"{GROUP}/ADMIN_GOOGLE_CLIENT_SECRET",
@@ -116,6 +134,7 @@ SECRETS = (
         None,
         "Client secret of the admin-site Google OAuth client.",
         scopes=("admin",),
+        shape=_GOOGLE_SECRET,
     ),
 )
 
@@ -155,7 +174,7 @@ def _export(database_password: str, scope: str = "app") -> int:
     """Print `export NAME='value'` lines for `eval` in scripts/run_prod.sh. Never run this bare
     in a terminal: its whole output is secret."""
     os.environ["KEEPASS_PASSWORD"] = database_password
-    missing = []
+    missing, wrong = [], []
     for secret in SECRETS:
         if scope not in secret.scopes:
             continue
@@ -163,9 +182,16 @@ def _export(database_password: str, scope: str = "app") -> int:
         if not value or value == "PROTECTED":
             missing.append(secret.entry)
             continue
+        problem = _shape_problem(secret, value.strip())
+        if problem:
+            wrong.append(f"{secret.entry} {problem}")
+            continue
         print(f"export {secret.env}={shlex.quote(value)}")
     if missing:
         print(f"echo 'Missing production secrets in KeePassXC: {' '.join(missing)}' >&2; false")
+        return 1
+    if wrong:
+        print(f"echo {shlex.quote('Production secrets in KeePassXC look wrong: ' + '; '.join(wrong))} >&2; false")
         return 1
     return 0
 
@@ -181,7 +207,15 @@ def main(argv: list[str] | None = None) -> int:
     missing_manual = 0
     for secret in SECRETS:
         present = exists(secret.entry, database_password)
-        if present:
+        problem = None
+        if present and secret.shape is not None:
+            os.environ["KEEPASS_PASSWORD"] = database_password
+            value = local_secrets.get_keepass_entry(entry_name=secret.entry).get("Password", "").strip()
+            problem = _shape_problem(secret, value)
+        if problem:
+            status = f"WRONG - {problem}"
+            missing_manual += 1
+        elif present:
             status = "present"
         elif secret.generate is None:
             status = "MISSING - add it in KeePassXC yourself"
