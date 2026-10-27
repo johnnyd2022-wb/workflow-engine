@@ -1,0 +1,23 @@
+# Tastings CI gate verification
+
+Verify mode found and closed a browser-selection gap; CI adds a scoped blocking job. Existing config maps app/Alembic to `ENVIRONMENT=test` INI database parts; `ci/setup_database.sh` patches host/port to its disposable PostgreSQL16 service. Local verification used an isolated scratch suffix, never the shared DB's incompatible revision.
+
+- GATE lint: pass — `ruff check app/`, `ruff format --check app/`;385 files formatted. Both changed JS syntax checks pass.
+- GATE unit/integration: pass —146 related real-PostgreSQL tests, including29 dedicated Tastings cases.
+- GATE feature browser: pass —20 cases ×3 consecutive UTC runs. Subscribed performance ceilings pass; page advisory query budget remains visible.
+- GATE security rules: pass —31 repository rules,641 files,0 findings. Fresh `semgrep --config=auto` reports227 repository findings; changed paths match prior reviewed screenshot-CLI/test-only audit warnings, no new shipping feature finding. Frozen dependency audit94 packages,0 vulnerabilities.
+- GATE migrations: pass locally — additive `tastings_001`, one head, scratch up/down/up, immutable-basis behavior exercised. Blocking CI `migration_reversibility` includes head and full base/head cycles.
+- GATE secrets: pass — gitleaks scanned3 feature commits/~264KB, zero findings; full final range rechecked before push.
+- GATE CI configuration: pass — GitLab `glab ci lint` accepted the YAML; the exact in-process CI command passed all20 cases locally (34.90s).
+- GATE routing: pass — `scripts/agent_launch.py --check`.
+
+Blocking CI jobs for Ruff, custom Semgrep/observability/learned rules, gitleaks, uv audit, migration reversibility and relevant test selection already exist. The existing selector falls back to full backend tests for shared/migration changes and explicitly sets needs_e2e=false. A separate tastings_e2e job therefore extends the established mr_e2e setup and always runs the subscribed feature module when Tastings or its integration paths change. It is blocking and preserves the existing backend fallback. Selector output and terminal GitLab pipeline are recorded in the MR.
+
+Page-design intentionally remains draft awaiting layout choice, per its explicit ship-three-then-one workflow. It is not a waiver of functional gates. Shared browser baseline comparison is in `e2e.md`; no blanket all-suite-green claim is made.
+
+
+Final shared navigation:68 passed on the feature branch; full unchanged-main comparison92 passed. First combined run's transient failures remain documented in `e2e.md`. Draft MR !586 presents the three layouts; exact-head pipeline is monitored there. No Slack announcement for a draft MR, per the merge-request skill.
+
+CI self-heal: head88d8670e pipeline2991069137 passed17 jobs, including20 Tastings browser/performance cases (39.53s), smoke, migration reversibility and every security/static gate. `relevant_tests` failed at xdist collection because two new parameter values called uuid4() during module import, producing different node IDs per worker. Replaced those two missing-reference UUID inputs with fixed valid, nonexistent UUIDs; rejection assertions unchanged. Independent evaluator confirmed the correction is faithful. Dedicated29-case backend rerun and two fresh-process identical29-node collections pass. The follow-up commit is pushed normally; no force push or test weakening.
+
+Second CI self-heal: e09871c3 pipeline2991085848 passed17 jobs; broad relevant_tests completed3503 passed/1018 skipped with5 integration failures. Four enforce the existing four-primary-destination navigation limit; one enforces standalone model imports. Fixed production navigation grouping and model registration, with no change to those assertions. The single browser tab-to-link selector reflects the deliberate secondary navigation action and retains its complete journey. Local targeted backend/import/navigation verification:71 passed. Independent read-only review: ci-integration-review.md, clean. Updated feature browser suite:20 passed in three consecutive UTC runs (35.64s,34.77s,37.69s).

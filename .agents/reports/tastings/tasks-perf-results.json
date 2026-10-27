@@ -1,0 +1,59 @@
+{
+  "generated": "2026-10-27T02:58:47+00:00",
+  "budgets_file": ".agents/perf/budgets.json",
+  "results": [
+    {
+      "route": "/api/crm/tastings",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 14.1,
+        "queries": 7
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/tastings/choices",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 15.9,
+        "queries": 8
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/tastings/pool",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 11.7,
+        "queries": 6
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/tastings/{event_id}",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 23.8,
+        "queries": 10
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/crm/tasks",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 22.7,
+        "queries": 9,
+        "lcp_ms": 80
+      },
+      "over_budget": [
+        "queries=9 > budget 5"
+      ],
+      "over_ceiling": []
+    }
+  ]
+}

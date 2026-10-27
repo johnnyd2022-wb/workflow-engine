@@ -43,6 +43,17 @@ class CRMNoteRepository:
         self.db.delete(note)
 
 
+def visible_task_filter(db, org_id):
+    """Apply before limits to every generic task reader, including contact and Core views."""
+    from sqlalchemy import and_, true
+
+    from app.features.compliant.service import nz_alcohol_active
+
+    if nz_alcohol_active(db, org_id):
+        return true()
+    return and_(CRMTask.task_type != "tasting", ~CRMTask.tasting.any())
+
+
 class CRMTaskRepository:
     def __init__(self, db: Session):
         self.db = db
@@ -55,6 +66,7 @@ class CRMTaskRepository:
         description: str | None = None,
         due_date=None,
         priority: str = "medium",
+        task_type: str = "general",
         assigned_to_user_id: UUID | None = None,
         created_by_user_id: UUID | None = None,
     ) -> CRMTask:
@@ -65,6 +77,7 @@ class CRMTaskRepository:
             description=description,
             due_date=due_date,
             priority=priority,
+            task_type=task_type,
             status="pending",
             assigned_to_user_id=assigned_to_user_id,
             created_by_user_id=created_by_user_id,
@@ -82,7 +95,7 @@ class CRMTaskRepository:
         status: str | None = None,
         assigned_to_user_id: UUID | None = None,
     ) -> list[CRMTask]:
-        q = self.db.query(CRMTask).filter(CRMTask.org_id == org_id)
+        q = self.db.query(CRMTask).filter(CRMTask.org_id == org_id, visible_task_filter(self.db, org_id))
         if contact_id:
             q = q.filter(CRMTask.contact_id == contact_id)
         if status:
@@ -103,15 +116,27 @@ class CRMTaskRepository:
                 CRMTask.priority,
                 CRMTask.status,
                 XeroContact.name.label("contact_name"),
+                ((CRMTask.task_type == "tasting") | CRMTask.tasting.any()).label("is_tasting"),
             )
             .outerjoin(
                 XeroContact,
                 (XeroContact.id == CRMTask.contact_id) & (XeroContact.org_id == org_id),
             )
-            .filter(CRMTask.org_id == org_id, CRMTask.status.in_(("pending", "in_progress")))
+            .filter(
+                CRMTask.org_id == org_id,
+                CRMTask.status.in_(("pending", "in_progress")),
+            )
             .order_by(CRMTask.due_date.asc().nulls_last(), CRMTask.created_at.desc())
             .all()  # Counts and date series require every open task, never archived task history.
         )
+        # Keep ordinary Home requests at their four-query projection. The scalar
+        # relationship check is part of the task query, with no ORM hydration/N+1.
+        # There is no pagination/limit here: filter before the caller counts tasks.
+        if any(row.is_tasting for row in rows):
+            from app.features.compliant.service import nz_alcohol_active
+
+            if not nz_alcohol_active(self.db, org_id):
+                rows = [row for row in rows if not row.is_tasting]
         return [
             {
                 "id": str(row.id),
@@ -125,6 +150,8 @@ class CRMTaskRepository:
         ]
 
     def update(self, task: CRMTask, **fields) -> CRMTask:
+        if task.tasting:
+            raise ValueError("Edit this tasting at /crm/tasks?task_id=" + str(task.id))
         for k, v in fields.items():
             setattr(task, k, v)
         if fields.get("status") == "completed" and not task.completed_at:
@@ -133,4 +160,6 @@ class CRMTaskRepository:
         return task
 
     def delete(self, task: CRMTask) -> None:
+        if task.tasting:
+            raise ValueError("Cancel this tasting at /crm/tasks?task_id=" + str(task.id))
         self.db.delete(task)

@@ -360,6 +360,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("crm.crm_api.*contact_sync_settings", None, "sales.manage"),
     ("crm.crm_api.*traceability_config", _READ, "sales.view"),
     ("crm.crm_api.*traceability_config", None, "sales.manage"),
+    ("tastings.*", _READ, "sales.view"),
+    ("tastings.*", None, "sales.record"),
     ("crm.*", _READ, "sales.view"),
     ("crm.*", None, "sales.record"),
     # --- compliance

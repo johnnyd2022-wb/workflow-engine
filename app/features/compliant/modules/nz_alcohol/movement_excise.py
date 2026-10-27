@@ -358,6 +358,9 @@ def cca_movement_register(session, org_id, start, end):
             unresolved.append(
                 {"transfer_id": str(transfer.id), "reason": "Removal accounting adapter is not yet integrated"}
             )
+    from app.features.tastings.services.excise_adapter import add_cca_rows
+
+    add_cca_rows(session, org_id, start, end, groups, unresolved)
     return {
         "period_start": start.isoformat(),
         "period_end_exclusive": end.isoformat(),

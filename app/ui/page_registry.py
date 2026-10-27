@@ -153,6 +153,7 @@ PAGES: tuple[Page, ...] = (
     ),
     Page("/crm", "sales", "overview", "Sales overview", None, "crm"),
     Page("/crm/customers", "sales", "customers", "Customers", None, "crm"),
+    Page("/crm/tastings", "sales", "tastings", "Tastings", None, "crm"),
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
@@ -263,5 +264,10 @@ WORKSPACE_TAB_GROUPS = {
         ("customs",),
         ("licensing",),
     ),
-    "sales": (("overview", "configuration", "excise"), ("customers",), ("tasks",), ("analytics", "matching")),
+    "sales": (
+        ("overview", "configuration", "excise"),
+        ("customers",),
+        ("tasks",),
+        ("analytics", "matching"),
+    ),
 }

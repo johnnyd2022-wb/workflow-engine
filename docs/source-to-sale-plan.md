@@ -406,6 +406,12 @@ records, not from people typing figures in.
       event, samples). A later sale from a rep's stock links to the original removal and
       isn't counted twice. This needs stock locations in inventory; check what Core has
       today.
+      - [x] **Tastings workflow** (!586): Subscription-gated Tasting task type in
+        Sales Tasks, using its Board/List/Week views, projects one task into the shared
+        Sales/Production calendars. Confirmed physical
+        removal records frozen excise evidence; measured partial-bottle outcomes and
+        reusable leftovers stay in a separate tasting-stock ledger. Library stock is
+        excluded from this workflow. No automatic Customs filing or return-to-bond.
     - [x] c. **Lines calculated automatically for each period**, grouped by product and
       tariff item: units × volume × ABV = LAL, then LAL × rate = duty. Each line drills
       down to its batches and invoices or movements. The rate table is editable and

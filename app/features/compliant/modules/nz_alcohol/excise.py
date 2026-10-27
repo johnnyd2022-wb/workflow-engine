@@ -118,6 +118,7 @@ class Removal:
     reference: str
     customer: str | None = None
     transfer: dict | None = None  # for "cca_transfer": destination and register status
+    frozen_basis: dict | None = None  # immutable tasting removal facts
 
 
 def _licensed(item: InventoryItem, locations: dict) -> bool:
@@ -204,6 +205,9 @@ def removals_between(session: Session, org_id: UUID, start: date, end: date) -> 
                 reference=f"Moved to {dest.name}" if dest else "Moved to the licensed area",
             )
         )
+    from app.features.tastings.services.excise_adapter import legacy_removals
+
+    out.extend(legacy_removals(session, org_id, start, end))
     return out
 
 
@@ -286,6 +290,8 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
     returns = []
     transfers = []
     for r in removals:
+        if r.frozen_basis is not None:
+            continue
         product = _base_name(r.item.name)
         profile = profiles.get(product.casefold())
         if r.kind == "returned":
@@ -379,7 +385,7 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
         )
     for line in out_lines:
         line.pop("levy_cents", None)
-    return {
+    result = {
         "lines": out_lines,
         "entry": entry_lines(lines, rates, rate_date),
         "total_lal": _s(total_lal),
@@ -393,6 +399,9 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
         "returns": returns,
         "cca_transfers": transfers,
     }
+    from app.features.tastings.services.excise_adapter import add_frozen_lines
+
+    return add_frozen_lines(result, removals)
 
 
 def _transfer_problems(transfers: list[dict]) -> list[dict]:
@@ -573,6 +582,15 @@ def draft(session: Session, org_id: UUID, start: date, frequency: str, today: da
     # Rates are taken at the period's start; a lodged snapshot above keeps the rates it was filed with.
     base["rates_guide"] = excise_tariff.guide_status(start)
     adjustments = _late_adjustments(session, org_id, start)
+    from app.features.tastings.services.excise_adapter import add_frozen_adjustments
+
+    add_frozen_adjustments(current, adjustments)
+    for adjustment in adjustments:
+        if adjustment.get("unresolved"):
+            current["problems"].append(
+                {"product": adjustment["product"], "reason": adjustment["reason"], "removals": 1}
+            )
+            current["entry"]["complete"] = False
     if _legacy_draft_unavailable(session, org_id):
         current["problems"].append(
             {
@@ -621,6 +639,33 @@ def _late_adjustments(session: Session, org_id: UUID, before: date) -> list[dict
         if not removals:
             continue
         computed = compute_lines(session, org_id, removals, lodgement.period_start)
+        frozen_by_reference = {r.reference: r.frozen_basis for r in removals if r.frozen_basis}
+        for removal in removals:
+            if removal.frozen_basis and removal.frozen_basis.get("problems"):
+                key = (
+                    lodgement.period_start.isoformat(),
+                    removal.reference,
+                    removal.occurred_on.isoformat(),
+                    _s(removal.quantity),
+                )
+                if key not in carried:
+                    out.append(
+                        {
+                            "belongs_to": key[0],
+                            "belongs_to_label": period_label(
+                                lodgement.period_start, lodgement.period_end + timedelta(days=1)
+                            ),
+                            "product": removal.frozen_basis["product"],
+                            "tariff_item": removal.frozen_basis.get("tariff_item"),
+                            "reference": key[1],
+                            "date": key[2],
+                            "quantity": key[3],
+                            "lal": None,
+                            "kind": "tasting",
+                            "unresolved": True,
+                            "reason": "; ".join(removal.frozen_basis["problems"]),
+                        }
+                    )
         for line in computed["lines"]:
             for removal in line["removals"]:
                 key = (lodgement.period_start.isoformat(), removal["reference"], removal["date"], removal["quantity"])
@@ -635,6 +680,15 @@ def _late_adjustments(session: Session, org_id: UUID, before: date) -> list[dict
                         "product": line["product"],
                         "tariff_item": line["tariff_item"],
                         **{k: removal[k] for k in ("reference", "date", "quantity", "lal", "kind")},
+                        **(
+                            {
+                                "frozen_basis": frozen_by_reference[removal["reference"]],
+                                "duty": frozen_by_reference[removal["reference"]]["duty"],
+                                "rate_date": frozen_by_reference[removal["reference"]]["rate_date"],
+                            }
+                            if removal["reference"] in frozen_by_reference
+                            else {}
+                        ),
                     }
                 )
     return out
@@ -657,6 +711,8 @@ def lodge(
         raise ValueError(f"{current['label']} is already recorded as lodged.")
     if current["open"]:
         raise ValueError(f"{current['label']} hasn't finished yet.")
+    if current["problems"] or not (current.get("entry") or {}).get("complete"):
+        raise ValueError("Resolve excise capture problems before recording a complete or nil return")
     snapshot = {
         k: current[k]
         for k in ("lines", "entry", "total_lal", "total_duty", "problems", "returns", "adjustments", "cca_transfers")
@@ -875,7 +931,7 @@ def reminder(session: Session, org_id: UUID, profile, today: date | None = None)
             "action_label": "Review CCA movements",
             "overdue": today > due,
         }
-    nil = not current["lines"] and not current["adjustments"]
+    nil = not current["lines"] and not current["adjustments"] and not current["problems"]
     entry = current.get("entry") or {}
     if nil:
         what = "nil return"

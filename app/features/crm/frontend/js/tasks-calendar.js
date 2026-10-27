@@ -56,6 +56,9 @@ function crmTasks() {
     operators: [],
     me: '',
     operatorFilter: '',
+    typeFilter: '',
+    tastingsEnabled: false,
+    tastingDraftFresh: true,
     lanes: defaultLanes(),
     loading: true,
     error: null,
@@ -71,6 +74,7 @@ function crmTasks() {
     showDrawer: false,
     editingTask: null,
     drawerForm: {
+      task_type: 'general',
       title: '',
       description: '',
       due_date: '',
@@ -87,14 +91,17 @@ function crmTasks() {
     // request went out twice).
     async init() {
       this.me = this.$el.dataset.me || '';
+      this.tastingsEnabled = this.$el.dataset.tastingsEnabled === 'true';
       // A direct view link takes priority over the remembered choice; Board is the default.
       const params = new URLSearchParams(window.location.search || '');
+      const requestedType = params.get('type') || '';
+      this.typeFilter = this.validTypes.includes(requestedType) ? requestedType : '';
       const asked = ({ board: '1', list: '2', week: '3' })[params.get('view')] || params.get('style');
       let kept = null;
       try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
       this.style = ['1', '2', '3'].includes(asked) ? asked : (['1', '2', '3'].includes(kept) ? kept : '1');
       await Promise.all([this.loadLanes(), this.loadOperators(), this.loadTasks(), this.loadCustomers(), this.loadTraceabilityConfig()]);
-      this.openTaskFromQueryString();
+      await this.openTaskFromQueryString();
     },
 
     // Switching views keeps the current filters, tasks and unsaved drawer fields.
@@ -148,7 +155,7 @@ function crmTasks() {
       }
     },
 
-    openTaskFromQueryString() {
+    async openTaskFromQueryString() {
       const params = new URLSearchParams(window.location.search || '');
       const taskId = params.get('task_id');
       // "New task" on the Sales overview lands here with the form already open.
@@ -156,24 +163,34 @@ function crmTasks() {
       if (!taskId) return;
       const task = this.tasks.find((t) => t.id === taskId);
       if (task) this.openEdit(task);
+      else {
+        try {
+          const result = await fetch('/api/crm/tasks/' + encodeURIComponent(taskId), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+          if (!result.ok) throw new Error('Task unavailable');
+          const response = await result.json();
+          if (response.task) this.openEdit(response.task);
+        } catch (_) { this.error = 'That task is unavailable. It may require an active subscription or different access.'; }
+      }
     },
 
     // ── What is shown ──
 
     get filtersOn() {
-      return !!(this.searchQuery || this.operatorFilter);
+      return !!(this.searchQuery || this.operatorFilter || this.typeFilter);
     },
 
     clearFilters() {
       this.searchQuery = '';
       this.operatorFilter = '';
+      this.typeFilter = ''; this.rememberType();
     },
 
     get filteredTasks() {
       let t = this.tasks;
+      if (this.typeFilter) t = t.filter((task) => (task.task_type || 'general') === this.typeFilter);
       if (this.searchQuery) {
         const q = this.searchQuery.toLowerCase();
-        t = t.filter((x) => x.title.toLowerCase().includes(q) || (x.contact_id && this.customerName(x.contact_id).toLowerCase().includes(q)));
+        t = t.filter((x) => [x.title, x.tasting_venue].filter(Boolean).join(' ').toLowerCase().includes(q) || (x.contact_id && this.customerName(x.contact_id).toLowerCase().includes(q)));
       }
       if (this.operatorFilter === '__mine') t = t.filter((x) => x.assigned_to_user_id === this.me);
       else if (this.operatorFilter === '__none') t = t.filter((x) => !x.assigned_to_user_id);
@@ -286,6 +303,51 @@ function crmTasks() {
       if (this.weekOffset === 1) return `Next week · ${range}`;
       if (this.weekOffset === -1) return `Last week · ${range}`;
       return range;
+    },
+
+    get validTypes() { return ['general', 'call', 'email'].concat(this.tastingsEnabled ? ['tasting'] : []); },
+
+    rememberType() {
+      const url = new URL(window.location.href);
+      if (this.typeFilter) url.searchParams.set('type', this.typeFilter); else url.searchParams.delete('type');
+      window.history.replaceState(window.history.state, '', url);
+    },
+
+    typeWords(task) {
+      if (task.tasting_id) {
+        const state = { planned: 'Planned', dispatched: 'Stock out', completed: 'Completed', cancelled: 'Cancelled' }[task.tasting_status] || 'Tasting';
+        const time = task.tasting_starts_at ? new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit' }).format(new Date(task.tasting_starts_at)) : '';
+        return ['Tasting', state, time, task.tasting_venue].filter(Boolean).join(' · ');
+      }
+      return ({ call: 'Call', email: 'Email' })[task.task_type] || '';
+    },
+
+    tastingWorkspace() {
+      if (!this.tastingsEnabled) return null;
+      if (window.__tastingsInit) window.__tastingsInit();
+      const workspace = document.querySelector('[data-tastings-root]');
+      return workspace?._tastings || null;
+    },
+
+    openTastingStock() { this.tastingWorkspace()?.stock(); },
+
+    changeTaskType() {
+      if (this.drawerForm.task_type !== 'tasting' || this.editingTask) return;
+      const workspace = this.tastingWorkspace();
+      if (!workspace) { this.error = 'Tasting details are still loading. Please try again.'; this.drawerForm.task_type = 'general'; return; }
+      this.showDrawer = false;
+      workspace.create({ ...this.drawerForm }, this.tastingDraftFresh);
+      this.tastingDraftFresh = false;
+    },
+
+    restoreTastingDraft(draft) {
+      this.ensureCustomerOptionForTask(draft);
+      if (draft.assigned_to_user_id && !this.operators.some((user) => user.id === draft.assigned_to_user_id)) {
+        this.operators.push({ id: draft.assigned_to_user_id, display_name: draft.assigned_to_name || 'Selected rep' });
+      }
+      const { contact_name, contact_email, contact_phone, assigned_to_name, ...fields } = draft;
+      this.drawerForm = { ...this.drawerForm, ...fields };
+      this.showDrawer = true;
     },
 
     // ── Words on a card or row ──
@@ -496,6 +558,7 @@ function crmTasks() {
     },
 
     startDragTask(task) {
+      if (task.tasting_id) return;
       this.draggingTaskId = task?.id || null;
       this.dragSuppressUntil = Date.now() + 200;
     },
@@ -542,6 +605,7 @@ function crmTasks() {
     },
 
     async toggleDone(task) {
+      if (task.tasting_id) { this.tastingWorkspace()?.detail(task.tasting_id); return; }
       await this.moveTask(task, this.isFinished(task) ? 'pending' : 'completed');
     },
 
@@ -563,7 +627,9 @@ function crmTasks() {
 
     openCreate(dueIso = '') {
       this.editingTask = null;
+      this.tastingDraftFresh = true;
       this.drawerForm = {
+        task_type: this.typeFilter || 'general',
         title: '',
         description: '',
         due_date: dueIso || '',
@@ -573,12 +639,15 @@ function crmTasks() {
         assigned_to_user_id: '',
       };
       this.showDrawer = true;
+      if (this.drawerForm.task_type === 'tasting') this.changeTaskType();
     },
 
     openEdit(task) {
+      if (task.tasting_id) { this.tastingWorkspace()?.detail(task.tasting_id); return; }
       this.ensureCustomerOptionForTask(task);
       this.editingTask = task;
       this.drawerForm = {
+        task_type: task.task_type || 'general',
         title: task.title,
         description: task.description || '',
         due_date: task.due_date || '',
@@ -626,6 +695,7 @@ function crmTasks() {
     },
 
     async deleteTask(task) {
+      if (task.tasting_id) { this.tastingWorkspace()?.detail(task.tasting_id); return; }
       if (!confirm(`Delete task "${task.title}"?`)) return;
       try {
         await CRMAPI.deleteTask(task.id);

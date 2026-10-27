@@ -1,0 +1,52 @@
+{# Specialized task details; the shared Tasks workspace owns every scheduling view. #}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='tastings.css') }}">
+<div class="tasting-workspace" data-tastings-root
+     data-can-record="{{ 'true' if can('sales.record') else 'false' }}"
+     data-can-dispatch="{{ 'true' if can('sales.record') and can('inventory.adjust') else 'false' }}">
+  <p class="tasting-status" data-tasting-status role="status" aria-live="polite" hidden></p>
+  <dialog hx-boost="false" class="tasting-dialog" id="tasting-stock" aria-labelledby="tasting-pool-title">
+    <div class="tasting-dialog-head"><div><span class="tasting-eyebrow">Sales · Tasks</span><h2 id="tasting-pool-title">Tasting stock</h2></div><button type="button" class="tasting-close" data-tasting-close aria-label="Close tasting stock">×</button></div>
+    <p class="workspace-caption">Stock already taken out for tastings, separate from Library. Reuse what is left without a second removal.</p>
+    <p data-tasting-pool-loading hidden>Loading tasting stock…</p>
+    <p class="tasting-dialog-error" data-tasting-pool-error role="alert" hidden></p>
+    <button type="button" class="workspace-button" data-tasting-pool-retry hidden>Try again</button>
+    <div data-tasting-pool></div>
+    <p class="workspace-caption" data-tasting-pool-empty hidden>No tasting stock yet. It appears here when stock physically leaves for a tasting.</p>
+    <button type="button" class="workspace-button" data-tasting-pool-more hidden>More batches</button>
+    <a class="workspace-link tasting-excise-link" href="/crm/excise">Review excise</a>
+  </dialog>
+  <dialog hx-boost="false" class="tasting-dialog tasting-detail" id="tasting-detail" aria-labelledby="tasting-detail-title">
+    <div class="tasting-dialog-head"><div><span class="tasting-eyebrow">Tasting details</span><h2 id="tasting-detail-title"></h2></div><button type="button" class="tasting-close" data-tasting-close aria-label="Close tasting details">×</button></div>
+    <div data-tasting-detail-body></div>
+    <p class="tasting-dialog-error" data-tasting-detail-error role="alert" hidden></p>
+  </dialog>
+  <dialog hx-boost="false" class="tasting-dialog tasting-editor" id="tasting-editor" aria-labelledby="tasting-editor-title">
+    <div class="tasting-dialog-head"><div><span class="tasting-eyebrow">Sales · Tastings</span><h2 id="tasting-editor-title">Schedule a tasting</h2></div><button type="button" class="tasting-close" data-tasting-close aria-label="Close tasting form">×</button></div>
+    <form id="tasting-form">
+      <label class="tasting-note-field">Task type<select id="tasting-task-type" aria-label="Task type"><option value="general">General</option><option value="call">Call</option><option value="email">Email</option><option value="tasting" selected>Tasting</option></select></label>
+      <div class="tasting-fields">
+        <label class="tasting-wide">Tasting name<input name="title" required maxlength="160" placeholder="Saturday tasting at Glengarry"></label>
+        <label>Starts · NZ time<input name="starts" type="datetime-local" required></label>
+        <label>Ends · NZ time<input name="ends" type="datetime-local" required></label>
+        <div class="tasting-wide tasting-stock-search"><label>Find a rep or customer<input type="search" id="tasting-people-search" maxlength="100" placeholder="Name or email"></label><button class="workspace-button" type="button" data-tasting-find-people>Find people</button></div>
+        <label>Rep<select name="rep_id" aria-label="Rep" required><option value="">Choose a rep</option></select></label>
+        <label>Customer · optional<select name="contact_id" aria-label="Customer"><option value="">No linked customer</option></select></label>
+        <button class="tasting-text-button tasting-wide" type="button" data-tasting-people-more hidden>More people and customers</button>
+        <label>Venue type<select name="venue_type" aria-label="Venue type"><option value="external">External licensed venue</option><option value="own">Our own venue</option></select></label>
+        <label>Venue name<input name="venue_name" required maxlength="160" placeholder="Glengarry Wellington"></label>
+        <label class="tasting-wide">Venue address<input name="venue_address" required maxlength="500" autocomplete="off"></label>
+        <label class="tasting-wide">Venue licence reference<input name="licence_reference" maxlength="160" placeholder="Licence number or internal reference"><small>Record the venue's reference; this does not verify its licence.</small></label>
+      </div>
+      <section class="tasting-stock-editor" aria-labelledby="tasting-stock-title"><h3 id="tasting-stock-title">Stock to take</h3><p class="workspace-caption">This is a plan. Stock and excise change only when you confirm the physical dispatch.</p>
+        <div class="tasting-stock-search"><label><span class="tasting-sr">Find stock</span><input type="search" id="tasting-stock-search" placeholder="Find a product or batch"></label><button class="workspace-button" type="button" data-tasting-find-stock>Find stock</button></div>
+        <div data-tasting-lines></div>
+        <button class="workspace-button" type="button" data-tasting-add-line>Add stock line</button>
+        <button class="tasting-text-button" type="button" data-tasting-stock-more hidden>More stock choices</button>
+      </section>
+      <label class="tasting-note-field">Notes · optional<textarea name="notes" maxlength="4000" rows="3" placeholder="What the rep or venue needs to know"></textarea></label>
+      <p class="tasting-dialog-error" data-tasting-form-error role="alert" hidden></p>
+      <footer class="tasting-dialog-actions"><button class="workspace-button" type="button" data-tasting-close>Cancel</button><button class="workspace-button workspace-button--primary" type="submit" data-tasting-save>Save tasting</button></footer>
+    </form>
+  </dialog>
+  <script src="{{ url_for('crm.serve_crm_js', filename='tastings.js') }}" defer></script>
+</div>
