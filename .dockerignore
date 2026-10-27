@@ -1,2 +1,10 @@
 # Infrastructure and its local credentials/state never enter application images.
 terraform/
+
+# Not the app: the founder's operating workspace, agent reports and specs, tests and docs. Images
+# are built from a `git archive` of a clean commit (scripts/deploy_common.sh), so untracked files
+# never reach them; these are tracked files the app never reads at runtime.
+.agents/
+.claude/
+tests/
+docs/

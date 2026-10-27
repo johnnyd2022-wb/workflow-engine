@@ -1,12 +1,15 @@
 # Production deployment safeguards
 
-Run `scripts/run_prod.sh` from a clean checkout whose HEAD equals `origin/main`.
-The script fetches main itself and refuses staged, unstaged, or untracked files,
-unavailable origin, or a different commit. Detached HEAD at current main is allowed.
-It neither checks out, resets, nor stashes the operator's work. It checks again after
-building, before starting the database or taking a backup, and rejects a changed commit
-even if that commit is now current main. Treat the checkout as
-read-only during a deployment; Git checking cannot prevent a concurrent editor.
+Run `scripts/run_prod.sh` from current `origin/main` with clean tracked files. The
+script fetches main itself and refuses staged or unstaged tracked changes, unavailable
+origin, or a different commit. Detached HEAD at current main is allowed. Untracked and
+ignored local files may remain in the checkout: the image is built from `git archive`
+of the approved commit in a private temporary directory, so those files cannot enter
+the image. The temporary directory is removed after the build. The script neither
+checks out, resets, nor stashes the operator's work. It checks tracked files again
+after building, before starting the database or taking a backup, and rejects a changed
+commit even if that commit is now current main. Treat tracked files as read-only during
+a deployment; Git checking cannot prevent a concurrent editor.
 
 The deployment is still a **human action**. Nothing in this change deploys production.
 For an isolated checkout, a human can use:
@@ -19,7 +22,7 @@ scripts/run_prod.sh
 ```
 
 Use `PROD_HOST_PORT` to override the default loopback-only port, 8010. The tunnel
-must point to that same port. Docker, Git, Python 3, curl, and `flock` are required.
+must point to that same port. Docker, Git, tar, Python 3, curl, and `flock` are required.
 One lock under `$HOME/.cache/workflow-engine/` serializes deployments across worktrees
 for the same operator. Use a single deployment account: this is not a cross-user or
 cross-host deployment lock. Do not run other deployment tooling concurrently.
@@ -99,7 +102,7 @@ orchestration; it is not a live production deployment or a real container rehear
 ## Manual staging deployment
 
 `scripts/run_test.sh` now uses the same shared checkout, backup, candidate, and app
-rollback helpers (`scripts/deploy_common.sh`). It requires clean current main, checks
+rollback helpers (`scripts/deploy_common.sh`). It requires clean tracked files at current main, checks
 again after building, and holds a separate `test-deploy.lock` for the same operator.
 Staging and production have separate container names, images, backup directories,
 ports, credentials, and locks; neither can replace the other's app.
@@ -122,7 +125,7 @@ The manual staging path:
    host port with `TEST_HOST_PORT`) with the same app rollback and retention behavior
    described above. Point the staging tunnel at this loopback endpoint.
 
-Run from a clean current-main checkout:
+Run from a current-main checkout with clean tracked files; untracked reports can stay:
 
 ```bash
 scripts/run_test.sh

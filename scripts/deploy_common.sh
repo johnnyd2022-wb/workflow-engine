@@ -13,9 +13,11 @@ acquire_deploy_lock() {
 
 check_checkout() {
     local checkout_status head_sha remote_sha
-    checkout_status="$(git status --porcelain --untracked-files=all)"
+    # The build uses git archive below, so untracked/ignored workspace files cannot
+    # enter the image. Tracked edits still invalidate the reviewed source commit.
+    checkout_status="$(git status --porcelain --untracked-files=no)"
     [ -z "$checkout_status" ] || {
-        echo "${DEPLOY_NAME} requires a clean checkout (including untracked files)." >&2; exit 1;
+        echo "${DEPLOY_NAME} requires clean tracked files (including the index)." >&2; exit 1;
     }
     git fetch origin '+refs/heads/main:refs/remotes/origin/main'
     head_sha="$(git rev-parse HEAD)"
@@ -27,6 +29,20 @@ check_checkout() {
         echo "Checkout commit changed during the build. Run the deployment again." >&2; exit 1;
     fi
 }
+
+build_image_from_head() (
+    set -euo pipefail
+    local target=$1 release_image=$2 source_sha=$3 snapshot
+    umask 077
+    snapshot="$(mktemp -d "$HOME/.cache/workflow-engine/${DEPLOY_ENV}-build-XXXXXXXX")"
+    trap 'rm -rf -- "$snapshot"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # Docker receives exactly the approved commit. Local reports, secrets, and other
+    # untracked files stay outside the build context and are never deleted.
+    git archive --format=tar "$source_sha" | tar -xf - -C "$snapshot"
+    docker build --target "$target" -f "$snapshot/Dockerfile.multi" -t "$release_image" "$snapshot"
+)
 
 # Full logical backup, including databases that have no Alembic metadata yet.
 backup_database() (
@@ -47,6 +63,7 @@ backup_database() (
 
 deploy_app() {
     set -euo pipefail
+    : "${IMAGE:?}" "${CONTAINER:?}" "${NETWORK:?}" "${APP_PORT:?}" "${PUBLISH_ADDRESS:?}"
     candidate_created=0
     old_moved=0
     new_attempted=0

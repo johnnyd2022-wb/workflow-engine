@@ -19,7 +19,10 @@ RUN pip install uv
 # Sync dependencies exactly as in lockfile
 RUN uv sync --frozen
 
-# Copy the rest of your application code
+# Copy the rest of your application code.
+# Deploy scripts extract the build context with umask 077 (scripts/deploy_common.sh), so files
+# arrive owner-only. That is fine while the app runs as root; a non-root USER would need a
+# `--chmod` here (or a chown) to read its own code.
 COPY . .
 
 # Test environment stage

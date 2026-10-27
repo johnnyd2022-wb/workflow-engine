@@ -43,7 +43,14 @@ elif command == "curl":
 elif command == "docker":
     op = a[0]
     if op == "build":
+        context = pathlib.Path(a[-1])
+        s["build_context"] = str(context)
+        if not (context / "Dockerfile.multi").is_file(): rc = 1
+        if not (context / "tracked").read_text() == "original": rc = 1
+        if (context / "untracked").exists(): rc = 1
+        s["build_snapshot_clean"] = not rc
         if scenario == "build": rc = 1
+        if scenario == "build_signal": os.kill(os.getppid(), signal.SIGTERM)
         if scenario == "edit_during_build": pathlib.Path("tracked").write_text("changed")
         if scenario == "commit_during_build":
             subprocess.run(["git", "commit", "--allow-empty", "-m", "new"], check=True, capture_output=True)
@@ -103,6 +110,7 @@ def deploy(tmp_path, request):
     for name in ("run_prod.sh", "run_test.sh", "prod_db.sh", "deploy_common.sh"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     (repo / "tracked").write_text("original")
+    (repo / "Dockerfile.multi").write_text("FROM scratch\n")
     git(repo, "init", "-b", "main")
     git(repo, "config", "user.email", "test@example.invalid")
     git(repo, "config", "user.name", "Deploy test")
@@ -166,12 +174,10 @@ def deploy(tmp_path, request):
     return d
 
 
-@pytest.mark.parametrize("dirty", ["tracked", "untracked", "staged", "ahead", "behind", "fetch", "index"])
+@pytest.mark.parametrize("dirty", ["tracked", "staged", "ahead", "behind", "fetch", "index"])
 def test_checkout_guard_precedes_secrets_and_docker(deploy, dirty):
     if dirty == "tracked":
         (deploy.repo / "tracked").write_text("dirty")
-    elif dirty == "untracked":
-        (deploy.repo / "untracked").touch()
     elif dirty == "staged":
         (deploy.repo / "tracked").write_text("dirty")
         git(deploy.repo, "add", "tracked")
@@ -190,11 +196,22 @@ def test_checkout_guard_precedes_secrets_and_docker(deploy, dirty):
     deploy.assert_old_serving()
 
 
+def test_untracked_files_are_left_in_place_and_excluded_from_build(deploy):
+    local_file = deploy.repo / "untracked"
+    local_file.write_text("local report or secret must not enter Docker")
+    deploy.run()
+    assert deploy.result.returncode == 0, deploy.result.stderr
+    assert deploy.state["build_snapshot_clean"]
+    assert local_file.read_text() == "local report or secret must not enter Docker"
+    assert not Path(deploy.state["build_context"]).exists()
+
+
 @pytest.mark.parametrize(
     "scenario",
     [
         "secrets",
         "build",
+        "build_signal",
         "edit_during_build",
         "commit_during_build",
         "backup",
@@ -212,6 +229,8 @@ def test_pre_cutover_failures_leave_old_app_untouched(deploy, scenario):
     if scenario in ("backup", "invalid_backup"):
         assert not any(c[:2] == ["docker", "run"] for c in deploy.calls)
         assert not list((deploy.home / f"db-backups/{deploy.app_name}").glob("*.dump"))
+    if scenario == "build_signal":
+        assert not Path(deploy.state["build_context"]).exists()
 
 
 @pytest.mark.parametrize(
@@ -273,3 +292,66 @@ def test_detached_current_main_is_an_allowed_deploy_checkout(deploy):
     git(deploy.repo, "checkout", "--detach", "HEAD")
     deploy.run()
     assert deploy.result.returncode == 0, deploy.result.stderr
+
+
+@pytest.fixture
+def admin(tmp_path):
+    """run_admin.sh (the test admin site) in a disposable repo with the same fake Docker."""
+    repo = tmp_path / "checkout"
+    (repo / "scripts").mkdir(parents=True)
+    for name in ("run_admin.sh", "deploy_common.sh", "prod_db.sh"):
+        shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
+    (repo / "tracked").write_text("original")
+    (repo / "Dockerfile.multi").write_text("FROM scratch\n")
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "config", "user.name", "Deploy test")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "fixture")
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", str(origin)], check=True, capture_output=True)
+    git(repo, "remote", "add", "origin", str(origin))
+    git(repo, "push", "origin", "main")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name in ("docker", "curl", "python3", "sleep"):
+        stub = bin_dir / name
+        stub.write_text(f"#!{sys.executable}\n" + FAKE)
+        stub.chmod(0o755)
+    (tmp_path / "home").mkdir()
+    state = tmp_path / "state.json"
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path / "home"),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "DEPLOY_STATE": str(state),
+        "DEPLOY_APP": "workflow-engine-admin-test",
+        "POSTGRES_PASSWORD_TEST": "fixture-only",
+    }
+
+    def run():
+        state.write_text(json.dumps({"calls": [], "containers": {}, "scenario": "ok"}))
+        result = subprocess.run(
+            ["bash", str(repo / "scripts/run_admin.sh"), "test"], env=env, capture_output=True, text=True, timeout=30
+        )
+        return result, json.loads(state.read_text())
+
+    return repo, run
+
+
+def test_admin_site_refuses_a_dirty_checkout_before_secrets_or_docker(admin):
+    repo, run = admin
+    (repo / "tracked").write_text("dirty")
+    result, state = run()
+    assert result.returncode != 0 and "clean tracked files" in result.stderr
+    assert state["calls"] == []
+
+
+def test_admin_site_builds_from_the_commit_without_untracked_files(admin):
+    repo, run = admin
+    (repo / "untracked").write_text("a founder's local document must not enter the admin image")
+    result, state = run()
+    assert result.returncode == 0, result.stderr
+    assert state["build_snapshot_clean"]
+    assert not Path(state["build_context"]).exists()
+    assert (repo / "untracked").exists()
