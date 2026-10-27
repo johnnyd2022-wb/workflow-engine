@@ -757,6 +757,11 @@
       return div.innerHTML;
     }
 
+    // data-action-args for markup built as a string: JSON, escaped for a double-quoted attribute.
+    function actionArgs(...values) {
+      return JSON.stringify(values).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     // Render inventory for V2 Modern design
     function countInventoryByType(items) {
       const grouped = { raw: 0, intermediate: 0, final: 0 };
@@ -2236,23 +2241,23 @@
         : '';
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}">
             <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
+            <button class="btn-icon-small" data-action-stop data-action="openEditInventoryModal" data-action-args="${actionArgs(item.id)}" title="Edit inventory item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
-            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteInventoryConfirmation('${item.id}', '${escapeHtml(item.name)}')" title="Delete inventory item">
+            <button class="btn-icon-small" data-action-stop data-action="showDeleteInventoryConfirmation" data-action-args="${actionArgs(item.id, item.name)}" title="Delete inventory item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
             </button>
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetails('${item.id}')" id="arrow-${item.id}">
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}" id="arrow-${item.id}">
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
@@ -2261,7 +2266,7 @@
         ${item.source_execution_id ? `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
           <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
+          <button class="btn btn-primary btn-sm" data-action-stop data-action="executeNextStepFromInventory" data-action-args="${actionArgs(item.source_execution_id, item.producing_step_id || '')}" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
@@ -3482,7 +3487,7 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return updateProcess(this)">
+      <form data-submit-action="updateProcess">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
@@ -3512,8 +3517,8 @@
   </div>
   
   <!-- Reset DB Confirmation Modal -->
-  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" onclick="closeResetDbModal()">
-    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" data-action="closeResetDbModal">
+    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" data-action-stop>
       <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
         <div style="flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px; background: var(--bg-hover, rgba(0,0,0,0.05)); display: flex; align-items: center; justify-content: center;">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-secondary);">
@@ -3525,7 +3530,7 @@
           <h2 style="font-size: 18px; font-weight: 600; color: var(--color-text-primary, #111827); margin: 0 0 8px 0;">Reset Demo Database</h2>
           <p style="color: #111827; font-size: 14px; line-height: 1.5; margin: 0;">This will replace all processes, executions, and inventory for the demo user with fresh distillery sample data. This cannot be undone.</p>
         </div>
-        <button type="button" onclick="closeResetDbModal()" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
+        <button type="button" data-action="closeResetDbModal" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -3533,8 +3538,8 @@
         </button>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
+        <button type="button" class="btn btn-secondary" data-action="closeResetDbModal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" data-action="confirmResetDb">Reset Database</button>
       </div>
     </div>
   </div>
@@ -3551,7 +3556,7 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return updateInventoryItem(this)">
+      <form data-submit-action="updateInventoryItem">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
@@ -3614,7 +3619,7 @@
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Inventory Item</h2>
-        <button onclick="cancelDeleteInventory()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <button data-action="cancelDeleteInventory" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -3625,8 +3630,8 @@
         <p id="delete-inventory-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="cancelDeleteInventory()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmDeleteInventory()" style="background: var(--danger, #ef4444);">Delete</button>
+        <button type="button" class="btn btn-secondary" data-action="cancelDeleteInventory">Cancel</button>
+        <button type="button" class="btn btn-primary" data-action="confirmDeleteInventory" style="background: var(--danger, #ef4444);">Delete</button>
       </div>
     </div>
   </div>
@@ -3642,7 +3647,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+        <button data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>

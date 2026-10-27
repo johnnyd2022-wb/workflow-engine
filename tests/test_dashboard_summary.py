@@ -392,7 +392,7 @@ def test_dashboard_summary_crm_failure_is_caught_and_logged_not_propagated(db, f
     def _raise(self, org_id):
         raise RuntimeError("simulated CRM outage")
 
-    monkeypatch.setattr(CRMService, "get_overview", _raise)
+    monkeypatch.setattr(CRMService, "get_dashboard_overview", _raise)
 
     try:
         with caplog.at_level(logging.ERROR):
@@ -444,7 +444,7 @@ def test_dashboard_summary_baseline_target_value_error_falls_back_to_null(db, fl
     def _fake_daily_sales(self, org_id, start, end):
         return []
 
-    monkeypatch.setattr(CRMService, "get_overview", _fake_overview)
+    monkeypatch.setattr(CRMService, "get_dashboard_overview", _fake_overview)
     monkeypatch.setattr(CRMService, "get_traceability_config", _fake_traceability_config)
     monkeypatch.setattr(CRMService, "daily_sales_for_period", _fake_daily_sales)
 
@@ -487,7 +487,7 @@ def test_dashboard_summary_baseline_target_variance_and_attainment_computed(db, 
     def _fake_daily_sales(self, org_id, start, end):
         return []
 
-    monkeypatch.setattr(CRMService, "get_overview", _fake_overview)
+    monkeypatch.setattr(CRMService, "get_dashboard_overview", _fake_overview)
     monkeypatch.setattr(CRMService, "get_traceability_config", _fake_traceability_config)
     monkeypatch.setattr(CRMService, "daily_sales_for_period", _fake_daily_sales)
 
@@ -542,7 +542,7 @@ def test_dashboard_summary_route_skips_non_dict_task_and_revenue_rows(db, flask_
             {"day": today.isoformat(), "total": 50},
         ]
 
-    monkeypatch.setattr(CRMService, "get_overview", _fake_overview)
+    monkeypatch.setattr(CRMService, "get_dashboard_overview", _fake_overview)
     monkeypatch.setattr(CRMService, "get_traceability_config", _fake_traceability_config)
     monkeypatch.setattr(CRMService, "daily_sales_for_period", _fake_daily_sales)
 
@@ -579,7 +579,7 @@ def test_dashboard_carve_does_not_read_sales_without_permission(db, flask_app, m
         return {"current_month_revenue": 999.0}
 
     monkeypatch.setattr(dashboard_routes, "config", SimpleNamespace(crm_enabled=True, compliant_enabled=True))
-    monkeypatch.setattr(CRMService, "get_overview", forbidden_overview)
+    monkeypatch.setattr(CRMService, "get_dashboard_overview", forbidden_overview)
     try:
         response = client.get("/api/core/dashboard/summary")
         assert response.status_code == 200

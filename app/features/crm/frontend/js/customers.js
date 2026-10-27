@@ -56,6 +56,16 @@ function crmCustomers() {
       return `Synced ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${this.xeroStatus.tenant_name || 'Xero'}`;
     },
 
+    filtersChanged() {
+      this.page = 1;
+      return this.loadCustomers();
+    },
+
+    toggleMissingContact() {
+      this.missingContactOnly = !this.missingContactOnly;
+      return this.filtersChanged();
+    },
+
     async loadCustomers() {
       this.loading = true;
       this.error = null;

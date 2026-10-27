@@ -87,6 +87,9 @@
   hx-push-url="true"
   x-data
 >
+  {# Load the small API client before page scripts: Home can request data as soon as
+     its root exists, while the rest of the shared shell scripts are downloading. #}
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
   <div class="app-layout">
     {% include 'shared/sidebar-v2.html' %}
 
@@ -328,7 +331,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button type="button" onclick="window.closeNotification && window.closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
+        <button type="button" data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -338,7 +341,6 @@
     </div>
   </div>
   {# Core JS and shared behaviour #}
-  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-stock-summary.js') }}"></script>
   {# Near-real-time backbone: polls /api/core/changes, dispatches to LiveSync.subscribe() #}
   <script src="{{ url_for('core.serve_core_js', filename='live-sync.js') }}"></script>
@@ -375,6 +377,8 @@
   {% endif %}
   <script src="/ui/shared/observability-rum.js"></script>
   {% endif %}
+  {# GL-S03: data-action in place of inline on*="" handlers; loaded on every page, RUM or not. #}
+  <script src="/ui/shared/actions.js"></script>
 
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
@@ -391,7 +395,32 @@
   <script src="{{ url_for('crm.serve_crm_js', filename='matching.js') }}" defer></script>
   <script src="{{ url_for('crm.serve_crm_js', filename='excise.js') }}" defer></script>
   {% endif %}
-  <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
+  {# GL-S03 step 3: Alpine's CSP build (no eval). Components are named in x-data and registered
+     with Alpine.data() below; the page scripts above define them. #}
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      // Every global function an x-data names. The CSP build can't call window functions from
+      // markup, so each one is registered under its own name, now and again after a boosted
+      // swap (a page's inline script may define its component only then).
+      var COMPONENTS = [
+        'coreTasksBoard', 'coreTaskConfiguration', 'crmAnalytics', 'crmConfiguration', 'crmCustomerDetail',
+        'crmCustomers', 'crmExcise', 'crmMatching', 'crmOverview', 'crmTasks', 'xeroIntegration',
+      ];
+      var done = {};
+      window.spaRegisterAlpineData = function () {
+        var alpine = window.Alpine;
+        if (!alpine || typeof alpine.data !== 'function') return;
+        COMPONENTS.forEach(function (name) {
+          if (!done[name] && typeof window[name] === 'function') {
+            alpine.data(name, window[name]);
+            done[name] = true;
+          }
+        });
+      };
+      document.addEventListener('alpine:init', window.spaRegisterAlpineData);
+    })();
+  </script>
+  <script src="{{ url_for('core.serve_core_js', filename='alpinejs-csp.min.js') }}" defer></script>
 
   <script nonce="{{ csp_nonce() }}">
     (function () {
@@ -755,6 +784,7 @@
       spaAlpinePaused = null;
       var alpine = window.Alpine;
       if (!alpine || typeof alpine.startObservingMutations !== 'function') return;
+      if (window.spaRegisterAlpineData) window.spaRegisterAlpineData();
       alpine.startObservingMutations();
       if (initTarget && typeof alpine.initTree === 'function') {
         try { alpine.initTree(initTarget); } catch (e) {}

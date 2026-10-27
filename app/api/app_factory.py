@@ -32,7 +32,8 @@ from app.utils.config_loader import config
 # form with no live password guidance at all. Add here only for assets a logged-out page
 # genuinely loads, and only when the asset is not org-specific: these bytes are
 # world-readable.
-PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js"})
+# actions.js: the landing page and the public print pages need it before anyone signs in (GL-S03).
+PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js", "actions.js"})
 
 
 def create_app():

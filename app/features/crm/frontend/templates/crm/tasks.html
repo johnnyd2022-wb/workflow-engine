@@ -79,8 +79,8 @@
   <template x-if="!loading && tasks.length && style === '1'">
     <div class="tasks-board-wrap">
       <div class="tasks-lane-picker" role="tablist" aria-label="Task lanes">
-        <template x-for="lane in boardLanes" :key="`${lane.id}-pick`">
-          <button type="button" role="tab" :aria-selected="activeLaneId === lane.id ? 'true' : 'false'" @click="activeLaneId = lane.id; if (lane.id === 'finished') showFinished = true">
+        <template x-for="lane in boardLanes" :key="('' + (lane.id) + '-pick')">
+          <button type="button" role="tab" :aria-selected="activeLaneId === lane.id ? 'true' : 'false'" @click="pickLane(lane)">
             <span x-text="lane.title"></span> <small x-text="tasksForLane(lane).length"></small>
           </button>
         </template>
@@ -138,7 +138,7 @@
                 <button type="button" class="tasks-row__main" @click="openEdit(task)">
                   <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-row__title" x-text="task.title"></span>
-                  <span class="tasks-row__who" x-text="[whoLine(task), stageWords(task)].filter(Boolean).join(' · ')"></span>
+                  <span class="tasks-row__who" x-text="taskMeta(task)"></span>
                 </button>
                 <span class="tasks-high" x-show="task.priority === 'high' && !isFinished(task)">High</span>
                 <span class="tasks-due" :class="dueClass(task)" x-text="dueWords(task)"></span>
@@ -154,15 +154,15 @@
   <template x-if="!loading && tasks.length && style === '3'">
     <div class="tasks-week-wrap">
       <div class="tasks-week-nav">
-        <button type="button" class="workspace-button" @click="weekOffset -= 1" aria-label="Previous week">&larr;</button>
+        <button type="button" class="workspace-button" @click="weekOffset = weekOffset - 1" aria-label="Previous week">&larr;</button>
         <h2 x-text="weekLabel"></h2>
-        <button type="button" class="workspace-button" @click="weekOffset += 1" aria-label="Next week">&rarr;</button>
+        <button type="button" class="workspace-button" @click="weekOffset = weekOffset + 1" aria-label="Next week">&rarr;</button>
         <button type="button" class="tasks-text-action" x-show="weekOffset !== 0" @click="weekOffset = 0">This week</button>
       </div>
       <section class="tasks-tray tasks-tray--overdue" x-show="weekOffset === 0 && overdueBeforeWeek.length" aria-label="Overdue from before this week">
         <h3><span>Overdue from before this week</span> <small x-text="overdueBeforeWeek.length"></small></h3>
         <div class="tasks-tray__cards">
-          <template x-for="task in overdueBeforeWeek" :key="`od-${task.id}`">
+          <template x-for="task in overdueBeforeWeek" :key="('od-' + (task.id))">
             <button type="button" class="tasks-card" @click="openEdit(task)">
               <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-card__title" x-text="task.title"></span>
@@ -176,7 +176,7 @@
         <template x-for="day in weekDays" :key="day.iso">
           <section class="tasks-day" :class="{ 'tasks-day--today': day.isToday, 'tasks-day--past': day.isPast, 'tasks-day--empty': !day.tasks.length }" :aria-label="day.long">
             <header><span x-text="day.dow"></span> <strong x-text="day.dom"></strong> <em x-show="day.isToday">Today</em></header>
-            <template x-for="task in day.tasks" :key="`${day.iso}-${task.id}`">
+            <template x-for="task in day.tasks" :key="('' + (day.iso) + '-' + (task.id))">
               <button type="button" class="tasks-card" :class="{ 'tasks-card--done': isFinished(task) }" @click="openEdit(task)">
                 <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-card__title" x-text="task.title"></span>
@@ -194,7 +194,7 @@
       <section class="tasks-tray" x-show="undatedTasks.length" aria-label="No date">
         <h3><span>No date</span> <small x-text="undatedTasks.length"></small></h3>
         <div class="tasks-tray__cards">
-          <template x-for="task in undatedTasks" :key="`nd-${task.id}`">
+          <template x-for="task in undatedTasks" :key="('nd-' + (task.id))">
             <button type="button" class="tasks-card" @click="openEdit(task)">
               <span class="tasks-type-cue" x-text="typeWords(task)"></span>
                   <span class="tasks-card__title" x-text="task.title"></span>
@@ -251,7 +251,7 @@
             <label class="crm-form-label" for="task-who">Assigned to</label>
             <select id="task-who" class="crm-form-select" x-model="drawerForm.assigned_to_user_id">
               <option value="">Unassigned</option>
-              <template x-for="u in operators" :key="`drawer-${u.id}`">
+              <template x-for="u in operators" :key="('drawer-' + (u.id))">
                 <option :value="u.id" x-text="u.display_name || u.email"></option>
               </template>
             </select>
@@ -261,7 +261,7 @@
           <label class="crm-form-label" for="task-customer">Customer</label>
           <select id="task-customer" class="crm-form-select" x-model="drawerForm.contact_id">
             <option value="">No customer</option>
-            <template x-for="c in customers" :key="`customer-${c.id}`">
+            <template x-for="c in customers" :key="('customer-' + (c.id))">
               <option :value="c.id" x-text="c.name"></option>
             </template>
           </select>

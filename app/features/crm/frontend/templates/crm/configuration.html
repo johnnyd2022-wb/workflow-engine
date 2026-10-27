@@ -45,7 +45,7 @@
           </div>
         </dl>
         <p class="ss-note" x-show="syncSummary" x-cloak>
-          Sales matched: <span x-text="syncSummary?.allocated"></span><template x-if="syncSummary?.unmapped"><span>; <span x-text="syncSummary.unmapped"></span> need a mapping</span></template><template x-if="syncSummary?.insufficientStock"><span>; <span x-text="syncSummary.insufficientStock"></span> waiting for stock</span></template>
+          Sales matched: <span x-text="(syncSummary ? syncSummary.allocated : null)"></span><template x-if="(syncSummary ? syncSummary.unmapped : null)"><span>; <span x-text="syncSummary.unmapped"></span> need a mapping</span></template><template x-if="(syncSummary ? syncSummary.insufficientStock : null)"><span>; <span x-text="syncSummary.insufficientStock"></span> waiting for stock</span></template>
         </p>
         <div class="ss-actions">
           <a class="workspace-button" href="/core/integrations" x-text="xero.connected ? 'Manage connection' : 'Connect Xero'">Connect Xero</a>
@@ -72,10 +72,10 @@
             <li class="ss-mapping">
               <div class="ss-mapping__what">
                 <strong x-text="m.biz_e_product_name"></strong>
-                <span class="ss-muted"><span x-text="(m.match_type || 'exact') === 'contains' ? 'Xero line contains' : 'Xero line is'"></span> “<span x-text="m.xero_description_pattern"></span>”<span x-show="(m.units_per_line || 1) > 1" x-text="` · ${m.units_per_line} per line`"></span></span>
+                <span class="ss-muted"><span x-text="(m.match_type || 'exact') === 'contains' ? 'Xero line contains' : 'Xero line is'"></span> “<span x-text="m.xero_description_pattern"></span>”<span x-show="(m.units_per_line || 1) > 1" x-text="(' · ' + (m.units_per_line) + ' per line')"></span></span>
               </div>
               <span class="ss-state" :class="m.mapping_status === 'stale' ? 'ss-state--warn' : 'ss-state--good'" x-text="m.mapping_status === 'stale' ? 'Not seen lately' : 'In use'"></span>
-              <button type="button" class="ss-link ss-link--danger" @click="openDeleteMappingModal(m)" :aria-label="`Delete the mapping for ${m.biz_e_product_name}`">Delete</button>
+              <button type="button" class="ss-link ss-link--danger" @click="openDeleteMappingModal(m)" :aria-label="('Delete the mapping for ' + (m.biz_e_product_name))">Delete</button>
             </li>
           </template>
         </ul>
@@ -214,8 +214,8 @@
           <span>Your product</span>
           <select id="ss-mapping-product" x-model="mappingDraft.product_key">
             <option value="">Choose a final product</option>
-            <template x-for="p in finalProducts" :key="`${p.source_output_id || 'none'}-${p.name}`">
-              <option :value="`${p.source_output_id || ''}||${p.name}`" x-text="productOptionLabel(p)"></option>
+            <template x-for="p in finalProducts" :key="('' + (p.source_output_id || 'none') + '-' + (p.name))">
+              <option :value="('' + (p.source_output_id || '') + '||' + (p.name))" x-text="productOptionLabel(p)"></option>
             </template>
           </select>
         </label>
@@ -258,7 +258,7 @@
         <div class="ss-queue" x-show="pendingMappings.length > 0" x-cloak>
           <p class="ss-queue__title">To save (<span x-text="pendingMappings.length"></span>)</p>
           <ul>
-            <template x-for="(mapping, index) in pendingMappings" :key="`${mapping.biz_e_product_name}-${mapping.xero_description_pattern}`">
+            <template x-for="(mapping, index) in pendingMappings" :key="('' + (mapping.biz_e_product_name) + '-' + (mapping.xero_description_pattern))">
               <li>
                 <span><strong x-text="mapping.biz_e_product_name"></strong> ← “<span x-text="mapping.xero_description_pattern"></span>”</span>
                 <button type="button" class="ss-link ss-link--danger" @click="removePendingMapping(index)">Remove</button>
@@ -270,7 +270,7 @@
       </div>
       <footer class="ss-dialog__foot">
         <button type="button" class="workspace-button" @click="queueMapping()" :disabled="!draftIsComplete">Add another</button>
-        <button type="button" class="workspace-button workspace-button--primary" @click="saveMappings()" :disabled="savingMapping || !canSaveMappings" x-text="savingMapping ? 'Saving…' : (pendingMappings.length > 0 && !draftIsComplete ? `Save ${pendingMappings.length} mapping${pendingMappings.length === 1 ? '' : 's'}` : 'Save mapping')">Save mapping</button>
+        <button type="button" class="workspace-button workspace-button--primary" @click="saveMappings()" :disabled="savingMapping || !canSaveMappings" x-text="savingMapping ? 'Saving…' : (pendingMappings.length > 0 && !draftIsComplete ? ('Save ' + (pendingMappings.length) + ' mapping' + (pendingMappings.length === 1 ? '' : 's')) : 'Save mapping')">Save mapping</button>
       </footer>
     </div>
   </div>
@@ -283,7 +283,7 @@
         <button type="button" class="ss-dialog__close" @click="closeDeleteMappingModal()" :disabled="deletingMapping" aria-label="Close delete confirmation">&times;</button>
       </header>
       <div class="ss-dialog__body">
-        <p><strong x-text="mappingToDelete?.biz_e_product_name || 'Final product'"></strong> ← “<span x-text="mappingToDelete?.xero_description_pattern || 'Xero line'"></span>”</p>
+        <p><strong x-text="(mappingToDelete ? mappingToDelete.biz_e_product_name : null) || 'Final product'"></strong> ← “<span x-text="(mappingToDelete ? mappingToDelete.xero_description_pattern : null) || 'Xero line'"></span>”</p>
         <p class="ss-muted">Future Xero syncs stop using it. Invoices and stock are not changed.</p>
       </div>
       <footer class="ss-dialog__foot">

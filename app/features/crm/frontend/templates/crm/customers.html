@@ -30,9 +30,9 @@
         <input id="customers-search" type="search" placeholder="Search name or email" x-model="search" @input="onSearchInput()" autocomplete="off">
       </label>
       <label class="customers-status" for="customers-status"><span class="customers-sr">Customer status</span>
-        <select id="customers-status" aria-label="Customer status" x-model="statusFilter" @change="page=1; loadCustomers()"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="ARCHIVED">Archived</option></select>
+        <select id="customers-status" aria-label="Customer status" x-model="statusFilter" @change="filtersChanged()"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="ARCHIVED">Archived</option></select>
       </label>
-      <button type="button" class="workspace-button" :aria-pressed="missingContactOnly" @click="missingContactOnly=!missingContactOnly; page=1; loadCustomers()">Missing contact details</button>
+      <button type="button" class="workspace-button" :aria-pressed="missingContactOnly" @click="toggleMissingContact()">Missing contact details</button>
       <button type="button" class="customers-text-action" :aria-expanded="filtersOpen" @click="filtersOpen=!filtersOpen">Sort</button>
     </div>
     <div class="customers-sort" x-show="filtersOpen" x-cloak>
@@ -64,7 +64,7 @@
             <td><a class="customers-name" :href="customerUrl(c.id)" x-text="c.name"></a><span class="customers-meta" x-text="c.contact_status || 'Status not set'"></span><span class="customers-flag" x-show="!c.in_xero || c.xero_push_status === 'failed'" x-text="c.xero_push_status === 'failed' ? 'Not sent to Xero' : 'Biz-E only'"></span></td>
             <td class="customers-contact"><span x-text="c.email_address || 'No email'"></span><span class="customers-meta" x-text="c.phone_number || 'No phone'"></span></td>
             <td class="customers-activity"><span x-text="c.last_contact_date ? formatDate(c.last_contact_date) : 'None recorded'"></span><span class="customers-meta" x-text="c.last_contact_source || ''"></span></td>
-            <td class="customers-preview-cell"><button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)" :aria-expanded="selected?.id === c.id">Preview</button></td>
+            <td class="customers-preview-cell"><button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)" :aria-expanded="(selected ? selected.id : null) === c.id">Preview</button></td>
           </tr></template></tbody>
         </table>
       </div>
@@ -86,7 +86,7 @@
       </aside>
     </div>
     <footer class="customers-pagination" x-show="!loading && customers.length > 0 && !error" x-cloak>
-      <span x-text="`${paginationStart}–${paginationEnd} of ${total}`"></span>
+      <span x-text="('' + (paginationStart) + '–' + (paginationEnd) + ' of ' + (total))"></span>
       <div><button type="button" class="workspace-button" @click="prevPage()" :disabled="page <= 1">← Prev</button><button type="button" class="workspace-button" @click="nextPage()" :disabled="page >= totalPages">Next →</button></div>
     </footer>
   </section>

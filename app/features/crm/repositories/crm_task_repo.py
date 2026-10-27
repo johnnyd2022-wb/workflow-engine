@@ -104,6 +104,39 @@ class CRMTaskRepository:
             q = q.filter(CRMTask.assigned_to_user_id == assigned_to_user_id)
         return q.order_by(CRMTask.due_date.asc().nulls_last(), CRMTask.created_at.desc()).all()
 
+    def dashboard_open_tasks(self, org_id: UUID) -> list[dict]:
+        """Only the open-task fields Home uses, with customer names in one query."""
+        from app.features.crm.models.xero_contact import XeroContact
+
+        rows = (
+            self.db.query(
+                CRMTask.id,
+                CRMTask.title,
+                CRMTask.due_date,
+                CRMTask.priority,
+                CRMTask.status,
+                XeroContact.name.label("contact_name"),
+            )
+            .outerjoin(
+                XeroContact,
+                (XeroContact.id == CRMTask.contact_id) & (XeroContact.org_id == org_id),
+            )
+            .filter(CRMTask.org_id == org_id, CRMTask.status.in_(("pending", "in_progress")))
+            .order_by(CRMTask.due_date.asc().nulls_last(), CRMTask.created_at.desc())
+            .all()  # Counts and date series require every open task, never archived task history.
+        )
+        return [
+            {
+                "id": str(row.id),
+                "title": row.title,
+                "due_date": row.due_date.isoformat() if row.due_date else None,
+                "priority": row.priority,
+                "status": row.status,
+                "contact_name": row.contact_name,
+            }
+            for row in rows
+        ]
+
     def update(self, task: CRMTask, **fields) -> CRMTask:
         if task.tasting:
             raise ValueError("Edit this tasting at /crm/tasks?task_id=" + str(task.id))

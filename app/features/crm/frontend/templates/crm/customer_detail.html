@@ -40,8 +40,8 @@
           <h1 x-text="customer.name">Customer</h1>
           <p class="workspace-caption crm-customer-meta">
             <template x-if="contactPerson"><span x-text="contactPerson"></span></template>
-            <template x-if="customer.email_address"><a :href="`mailto:${customer.email_address}`" x-text="customer.email_address"></a></template>
-            <template x-if="customer.phone_number"><a :href="`tel:${customer.phone_number}`" x-text="customer.phone_number"></a></template>
+            <template x-if="customer.email_address"><a :href="('mailto:' + (customer.email_address))" x-text="customer.email_address"></a></template>
+            <template x-if="customer.phone_number"><a :href="('tel:' + (customer.phone_number))" x-text="customer.phone_number"></a></template>
             <template x-if="customer.contact_status === 'ARCHIVED'"><span class="cd-status cd-status--archived">Archived in Xero</span></template>
           </p>
         </div>
@@ -54,10 +54,10 @@
       </header>
 
       <div class="cd-facts" aria-label="Where this customer stands">
-        <div class="cd-fact"><span class="cd-fact__label">Sales in the period</span><strong class="cd-fact__value" x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="`${customerAnalytics.total_invoices || 0} invoices · ${rangeWords}`"></span></div>
-        <div class="cd-fact"><span class="cd-fact__label">Last order</span><strong class="cd-fact__value" x-text="lastOrder ? agoWords(lastOrder.date) : 'None yet'"></strong><span class="cd-fact__note" x-text="lastOrder ? `${lastOrder.invoice_number || 'Invoice'} · ${formatCurrency(lastOrder.total, lastOrder.currency_code)}` : 'No invoices in Biz-E'"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Sales in the period</span><strong class="cd-fact__value" x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="('' + (customerAnalytics.total_invoices || 0) + ' invoices · ' + (rangeWords))"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Last order</span><strong class="cd-fact__value" x-text="lastOrder ? agoWords(lastOrder.date) : 'None yet'"></strong><span class="cd-fact__note" x-text="lastOrder ? ('' + (lastOrder.invoice_number || 'Invoice') + ' · ' + (formatCurrency(lastOrder.total, lastOrder.currency_code))) : 'No invoices in Biz-E'"></span></div>
         <div class="cd-fact" :class="overdueTasks ? 'cd-fact--bad' : ''"><span class="cd-fact__label">Open tasks</span><strong class="cd-fact__value" x-text="openTasks.length"></strong><span class="cd-fact__note" x-text="nextTaskWords"></span></div>
-        <div class="cd-fact"><span class="cd-fact__label">Last contact</span><strong class="cd-fact__value" x-text="customer.last_contact_date ? agoWords(customer.last_contact_date) : 'None recorded'"></strong><span class="cd-fact__note" x-text="customer.last_contact_date ? `${formatDate(customer.last_contact_date)} · ${customer.last_contact_source === 'sale' ? 'a sale' : 'a task'}` : 'No sale or task yet'"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Last contact</span><strong class="cd-fact__value" x-text="customer.last_contact_date ? agoWords(customer.last_contact_date) : 'None recorded'"></strong><span class="cd-fact__note" x-text="customer.last_contact_date ? ('' + (formatDate(customer.last_contact_date)) + ' · ' + (customer.last_contact_source === 'sale' ? 'a sale' : 'a task')) : 'No sale or task yet'"></span></div>
       </div>
 
       <nav class="cd-tabs" role="tablist" aria-label="Customer sections">
@@ -95,12 +95,12 @@
               <fieldset data-edit-address :data-address-type="kind" style="border:0; margin:8px 0 0; padding:10px 0 0; border-top:1px solid var(--border-default,#e5e7eb); display:grid; gap:8px;">
                 <legend class="crm-form-label" style="padding:0 0 6px; font-size:.84rem; color:var(--text-primary,#111827);" x-text="addressLabel(kind)"></legend>
                 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;">
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-line1`">Address line 1</label><input class="crm-form-input" :id="`edit-${kind}-line1`" x-model="editForm.addresses[kind].line1" maxlength="500"></div>
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-line2`">Address line 2</label><input class="crm-form-input" :id="`edit-${kind}-line2`" x-model="editForm.addresses[kind].line2" maxlength="500"></div>
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-city`">Town or city</label><input class="crm-form-input" :id="`edit-${kind}-city`" x-model="editForm.addresses[kind].city" maxlength="255"></div>
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-region`">Region</label><input class="crm-form-input" :id="`edit-${kind}-region`" x-model="editForm.addresses[kind].region" maxlength="255"></div>
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-postal`">Postcode</label><input class="crm-form-input" :id="`edit-${kind}-postal`" x-model="editForm.addresses[kind].postal_code" maxlength="50"></div>
-                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-country`">Country</label><input class="crm-form-input" :id="`edit-${kind}-country`" x-model="editForm.addresses[kind].country" maxlength="50"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-line1')">Address line 1</label><input class="crm-form-input" :id="('edit-' + (kind) + '-line1')" x-model="editForm.addresses[kind].line1" maxlength="500"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-line2')">Address line 2</label><input class="crm-form-input" :id="('edit-' + (kind) + '-line2')" x-model="editForm.addresses[kind].line2" maxlength="500"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-city')">Town or city</label><input class="crm-form-input" :id="('edit-' + (kind) + '-city')" x-model="editForm.addresses[kind].city" maxlength="255"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-region')">Region</label><input class="crm-form-input" :id="('edit-' + (kind) + '-region')" x-model="editForm.addresses[kind].region" maxlength="255"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-postal')">Postcode</label><input class="crm-form-input" :id="('edit-' + (kind) + '-postal')" x-model="editForm.addresses[kind].postal_code" maxlength="50"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="('edit-' + (kind) + '-country')">Country</label><input class="crm-form-input" :id="('edit-' + (kind) + '-country')" x-model="editForm.addresses[kind].country" maxlength="50"></div>
                 </div>
               </fieldset>
             </template>
@@ -115,7 +115,7 @@
 
           {# The warning before an edit leaves for Xero: what changes, where. #}
           <section x-show="confirming" x-cloak data-xero-warning role="alertdialog" aria-labelledby="xero-warning-title" style="border:1px solid #f59e0b; background:rgba(245,158,11,.08); border-radius:10px; padding:14px; margin-bottom:16px; display:grid; gap:10px;">
-            <strong id="xero-warning-title" x-text="xeroSync.in_xero ? `This also updates ${customer.name} in ${xeroConnection.tenant_name || 'Xero'}` : `This also creates ${customer.name} in ${xeroConnection.tenant_name || 'Xero'}`"></strong>
+            <strong id="xero-warning-title" x-text="xeroSync.in_xero ? ('This also updates ' + (customer.name) + ' in ' + (xeroConnection.tenant_name || 'Xero')) : ('This also creates ' + (customer.name) + ' in ' + (xeroConnection.tenant_name || 'Xero'))"></strong>
             <ul style="margin:0; padding-left:18px; font-size:.86rem;">
               <template x-for="change in pendingChanges" :key="change.field">
                 <li><span x-text="change.label"></span>: <span x-text="change.before || 'blank'" style="text-decoration:line-through; opacity:.7;"></span> → <strong x-text="change.after || 'blank'"></strong></li>
@@ -179,7 +179,7 @@
                 <label class="crm-form-label" for="xero-sync-choice">Created in Biz-E. Keep in step with Xero?</label>
                 {% if can('sales.record') %}
                 <select class="crm-form-select" id="xero-sync-choice" data-xero-sync-choice style="max-width:360px;" :value="syncChoice" @change="setXeroSync($event.target.value)" :disabled="syncSaving">
-                  <option value="default" x-text="`Use the Sales setting (${xeroSync.default ? 'send to Xero' : 'Biz-E only'})`"></option>
+                  <option value="default" x-text="('Use the Sales setting (' + (xeroSync.default ? 'send to Xero' : 'Biz-E only') + ')')"></option>
                   <option value="on">Send to Xero and keep in step</option>
                   <option value="off">Keep in Biz-E only</option>
                 </select>
@@ -193,7 +193,7 @@
                 <span style="color:#b45309;">Not sent to Xero: <span x-text="xeroSync.push_error"></span></span>
               </template>
               <template x-if="xeroSync.push_status !== 'failed' && xeroSync.in_xero">
-                <span style="color:var(--text-secondary,#6b7280);" x-text="xeroSync.pushed_at ? `In Xero · last sent ${formatDate(xeroSync.pushed_at)}` : 'In Xero'"></span>
+                <span style="color:var(--text-secondary,#6b7280);" x-text="xeroSync.pushed_at ? ('In Xero · last sent ' + (formatDate(xeroSync.pushed_at))) : 'In Xero'"></span>
               </template>
               <template x-if="xeroSync.push_status !== 'failed' && !xeroSync.in_xero">
                 <span style="color:var(--text-secondary,#6b7280);">Only in Biz-E</span>
@@ -247,7 +247,7 @@
             <div class="crm-invoice-row">
               <div class="crm-invoice-header" @click="toggleInvoice(inv.id)">
                 <div class="crm-invoice-meta">
-                  <span class="crm-invoice-number" x-text="inv.invoice_number || inv.xero_invoice_id?.slice(0,8)">—</span>
+                  <span class="crm-invoice-number" x-text="inv.invoice_number || (inv.xero_invoice_id ? inv.xero_invoice_id.slice(0,8) : null)">—</span>
                   <span class="crm-badge" :class="invoiceBadgeClass(inv.status)" x-text="inv.status">—</span>
                   <span class="crm-invoice-date" x-text="formatDate(inv.date)">—</span>
                   <template x-if="inv.due_date">
@@ -413,7 +413,7 @@
               <div class="crm-task-card" @click="openTaskEdit(t)">
                 <div class="crm-task-card-title" x-text="t.title"></div>
                 <div class="crm-task-card-meta">
-                  <span class="crm-badge" :class="taskStatusClass(t.status)" x-text="t.status?.replace('_',' ')"></span>
+                  <span class="crm-badge" :class="taskStatusClass(t.status)" x-text="(t.status ? t.status.replace('_',' ') : null)"></span>
                   <span class="crm-badge" :class="priorityClass(t.priority)" x-text="t.priority"></span>
                   <span class="crm-task-card-due" x-show="t.assigned_to_user_id" x-cloak>
                     <span x-text="assigneeName(t.assigned_to_user_id)"></span>
@@ -442,10 +442,10 @@
         <div class="crm-card" style="padding:10px;">
           <div style="font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Customer Details</div>
           <div class="crm-detail-grid">
-            <div class="crm-detail-field"><label>Name</label><span x-text="customer?.name || '—'"></span></div>
-            <div class="crm-detail-field"><label>Contact</label><span x-text="((customer?.first_name || '') + ' ' + (customer?.last_name || '')).trim() || customer?.name || '—'"></span></div>
-            <div class="crm-detail-field"><label>Email</label><span x-text="customer?.email_address || '—'"></span></div>
-            <div class="crm-detail-field"><label>Phone</label><span x-text="customer?.phone_number || '—'"></span></div>
+            <div class="crm-detail-field"><label>Name</label><span x-text="(customer ? customer.name : null) || '—'"></span></div>
+            <div class="crm-detail-field"><label>Contact</label><span x-text="(((customer ? customer.first_name : null) || '') + ' ' + ((customer ? customer.last_name : null) || '')).trim() || (customer ? customer.name : null) || '—'"></span></div>
+            <div class="crm-detail-field"><label>Email</label><span x-text="(customer ? customer.email_address : null) || '—'"></span></div>
+            <div class="crm-detail-field"><label>Phone</label><span x-text="(customer ? customer.phone_number : null) || '—'"></span></div>
           </div>
         </div>
         <div class="crm-form-group">
@@ -473,7 +473,7 @@
             <label class="crm-form-label">Assigned To</label>
             <select class="crm-form-select" x-model="customerTaskForm.assigned_to_user_id">
               <option value="">Unassigned</option>
-              <template x-for="u in operators" :key="`cust-task-op-${u.id}`">
+              <template x-for="u in operators" :key="('cust-task-op-' + (u.id))">
                 <option :value="u.id" x-text="u.display_name || u.email"></option>
               </template>
             </select>
@@ -530,13 +530,13 @@
               <select class="crm-form-select" x-model="row.option_key" @change="applyLineItemOption(idx)">
                 <option value="">Select a line item (optional)</option>
                 <optgroup label="Repeat purchase items" x-show="repeatLineItemOptions.length > 0">
-                  <template x-for="opt in repeatLineItemOptions" :key="`repeat-${opt.description || ''}-${opt.item_code || ''}`">
-                    <option :value="`${opt.description || ''}||${opt.item_code || ''}`" x-text="opt.display_label"></option>
+                  <template x-for="opt in repeatLineItemOptions" :key="('repeat-' + (opt.description || '') + '-' + (opt.item_code || ''))">
+                    <option :value="('' + (opt.description || '') + '||' + (opt.item_code || ''))" x-text="opt.display_label"></option>
                   </template>
                 </optgroup>
                 <optgroup label="All items">
-                  <template x-for="opt in allLineItemOptions" :key="`all-${opt.description || ''}-${opt.item_code || ''}`">
-                    <option :value="`${opt.description || ''}||${opt.item_code || ''}`" x-text="opt.display_label"></option>
+                  <template x-for="opt in allLineItemOptions" :key="('all-' + (opt.description || '') + '-' + (opt.item_code || ''))">
+                    <option :value="('' + (opt.description || '') + '||' + (opt.item_code || ''))" x-text="opt.display_label"></option>
                   </template>
                 </optgroup>
               </select>
@@ -575,7 +575,7 @@
           <table class="crm-table crm-table--compact" style="width:100%;">
             <thead><tr><th>Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit</th><th style="text-align:right;">GST</th><th style="text-align:right;">Line Total</th></tr></thead>
             <tbody>
-              <template x-for="(row, idx) in previewInvoiceRows" :key="`preview-${idx}`">
+              <template x-for="(row, idx) in previewInvoiceRows" :key="('preview-' + (idx))">
                 <tr>
                   <td x-text="row.description || '—'"></td>
                   <td style="text-align:right;" x-text="row.quantity || '—'"></td>
@@ -643,7 +643,7 @@
             <label class="crm-form-label">Assigned To</label>
             <select class="crm-form-select" x-model="taskEditForm.assigned_to_user_id">
               <option value="">Unassigned</option>
-              <template x-for="u in operators" :key="`task-edit-op-${u.id}`">
+              <template x-for="u in operators" :key="('task-edit-op-' + (u.id))">
                 <option :value="u.id" x-text="u.display_name || u.email"></option>
               </template>
             </select>

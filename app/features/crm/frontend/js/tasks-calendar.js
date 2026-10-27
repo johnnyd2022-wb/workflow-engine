@@ -383,6 +383,15 @@ function crmTasks() {
         .filter(Boolean).join(' · ');
     },
 
+    pickLane(lane) {
+      this.activeLaneId = lane.id;
+      if (lane.id === 'finished') this.showFinished = true;
+    },
+
+    taskMeta(task) {
+      return [this.whoLine(task), this.stageWords(task)].filter(Boolean).join(' · ');
+    },
+
     stageWords(task) {
       if (this.isFinished(task)) return '';
       const lane = task.board_lane_id && this.lanes.find((l) => l.id === task.board_lane_id && l.status_mode === 'custom');

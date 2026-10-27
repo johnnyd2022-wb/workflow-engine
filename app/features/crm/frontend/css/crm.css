@@ -254,6 +254,12 @@
 .crm-badge--high     { background: var(--crm-red-dim);    color: var(--crm-red); }
 .crm-badge--medium   { background: var(--crm-amber-dim);  color: var(--crm-amber); }
 .crm-badge--low      { background: var(--crm-green-dim);  color: var(--crm-green); }
+/* GL-U04: the bright green and amber read on dark, but at 2.2:1 on a light page. */
+html:not([data-spa-theme="dark"]) .crm-badge--active,
+html:not([data-spa-theme="dark"]) .crm-badge--paid,
+html:not([data-spa-theme="dark"]) .crm-badge--low,
+html:not([data-spa-theme="dark"]) .crm-badge--completed { color: #15803d; }
+html:not([data-spa-theme="dark"]) .crm-badge--medium { color: #b45309; }
 .crm-badge--pending  { background: var(--crm-gray-dim);   color: #9ca3af; }
 .crm-badge--in_progress { background: var(--crm-blue-dim); color: var(--crm-blue); }
 .crm-badge--completed  { background: var(--crm-green-dim); color: var(--crm-green); }
@@ -323,8 +329,8 @@
 .crm-btn--primary:hover { filter: brightness(1.08); }
 
 .crm-btn--secondary {
-  background: var(--bg-primary, #f3f4f6);
-  color: var(--text-primary, #374151);
+  background: var(--ui-surface-subtle, #f3f4f6);
+  color: var(--ui-text, #374151);
   border: 1px solid var(--border-default, #e5e7eb);
 }
 .crm-btn--secondary:hover { background: var(--crm-teal-dim); border-color: var(--crm-teal); color: var(--crm-teal); }
