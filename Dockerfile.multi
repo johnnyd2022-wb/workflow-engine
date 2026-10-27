@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for test and production
-FROM python:3.14-bookworm as base
+FROM python:3.14-bookworm AS base
 
 LABEL maintainer="johnny@whistlebird.co.nz"
 
@@ -26,7 +26,7 @@ RUN uv sync --frozen
 COPY . .
 
 # Test environment stage
-FROM base as test
+FROM base AS test
 ENV ENVIRONMENT=test
 EXPOSE 8001
 
@@ -37,7 +37,7 @@ CMD ["uv", "run", "gunicorn", "--config", "gunicorn.conf.py", "app.app:app"]
 
 # Admin site stage (admin.biz-e.app): the same code and dependencies, a different app.
 # Internal to biz-e staff; see app/admin_site and scripts/run_admin.sh.
-FROM base as admin
+FROM base AS admin
 ENV ENVIRONMENT=prod
 EXPOSE 8020
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -45,7 +45,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 CMD ["uv", "run", "gunicorn", "--config", "gunicorn.admin.conf.py", "app.admin_site.wsgi:app"]
 
 # Production environment stage
-FROM base as production
+FROM base AS production
 # `prod` selects app/config/prod.ini, the same name scripts/run_prod.sh uses.
 ENV ENVIRONMENT=prod
 EXPOSE 8000
