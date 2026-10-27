@@ -331,7 +331,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button type="button" onclick="window.closeNotification && window.closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
+        <button type="button" data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -377,6 +377,8 @@
   {% endif %}
   <script src="/ui/shared/observability-rum.js"></script>
   {% endif %}
+  {# GL-S03: data-action in place of inline on*="" handlers; loaded on every page, RUM or not. #}
+  <script src="/ui/shared/actions.js"></script>
 
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>

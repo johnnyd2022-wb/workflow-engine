@@ -63,8 +63,17 @@ def _shared(framable: bool) -> list[str]:
 
 
 def enforced_policy(*, framable: bool = False) -> str:
-    """What the browser enforces today: inline and eval still allowed, everything else tight."""
-    return "; ".join([*_shared(framable), f"script-src 'self' 'unsafe-inline' 'unsafe-eval' {_CF_SCRIPT}"])
+    """What the browser enforces today: inline blocks and eval still allowed, everything else tight.
+
+    No handler attributes (onclick="..."): step 2 moved every one to app/ui/shared/actions.js.
+    """
+    return "; ".join(
+        [
+            *_shared(framable),
+            f"script-src 'self' 'unsafe-inline' 'unsafe-eval' {_CF_SCRIPT}",
+            "script-src-attr 'none'",
+        ]
+    )
 
 
 def report_only_policy(nonce: str, *, framable: bool = False) -> str:

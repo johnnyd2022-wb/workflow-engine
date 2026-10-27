@@ -42,7 +42,7 @@
             </div>
             <div class="card-content">
           <div id="settings-load-status" role="status" class="settings-load-status">Loading your account…</div>
-          <button type="button" id="settings-load-retry" class="workspace-button" onclick="loadSettings()" hidden>Retry account load</button>
+          <button type="button" id="settings-load-retry" class="workspace-button" data-action="loadSettings" hidden>Retry account load</button>
           <div id="settings-message" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem;"></div>
           <div class="settings-section-list">
           <div class="form-group">
@@ -104,7 +104,7 @@
           </div>
           </div>
 
-          <button id="settings-save-btn" class="workspace-button workspace-button--primary" onclick="saveSettings()">Save changes</button>
+          <button id="settings-save-btn" class="workspace-button workspace-button--primary" data-action="saveSettings">Save changes</button>
             </div>
           </section>
           </div>

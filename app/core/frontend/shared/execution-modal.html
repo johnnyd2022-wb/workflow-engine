@@ -3,7 +3,7 @@
   <div class="card exec-modal__panel">
     <div class="exec-modal__header">
       <h2>Execute Step: <span id="execute-step-name">Unknown</span></h2>
-      <button type="button" class="exec-modal__close" onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';" aria-label="Close">
+      <button type="button" class="exec-modal__close" data-dismiss="execute-step-modal" aria-label="Close">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -71,8 +71,8 @@
     </div>
     
     <div class="exec-modal__footer">
-      <button type="button" class="btn btn-secondary" onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';">Cancel</button>
-      <button type="button" id="execute-step-submit-btn" class="btn btn-primary" onclick="submitExecution()">Complete Step</button>
+      <button type="button" class="btn btn-secondary" data-dismiss="execute-step-modal">Cancel</button>
+      <button type="button" id="execute-step-submit-btn" class="btn btn-primary" data-action="submitExecution">Complete Step</button>
     </div>
   </div>
 </div>
@@ -82,11 +82,11 @@
   <div class="card" style="max-width: 440px; width: 90%; padding: 24px;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
       <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Add untracked output</h2>
-      <button type="button" onclick="document.getElementById('add-untracked-output-modal').style.display='none'; document.body.style.overflow='auto';" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+      <button type="button" data-dismiss="add-untracked-output-modal" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
-    <form id="add-untracked-output-form" onsubmit="return false;">
+    <form id="add-untracked-output-form" data-submit-action="none">
       <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px;">
         <div>
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Name</label>
@@ -126,7 +126,7 @@
         </div>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="document.getElementById('add-untracked-output-modal').style.display='none'; document.body.style.overflow='auto';">Cancel</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="add-untracked-output-modal">Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>

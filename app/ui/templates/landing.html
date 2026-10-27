@@ -70,8 +70,8 @@
       
       <div class="navbar-menu" id="navbar-menu" style="display: flex; align-items: center;">
         <a href="/pricing" class="btn btn-ghost navbar-pricing" style="margin-right: 0.25rem;">Pricing</a>
-        <button class="btn btn-glass" onclick="openModal('loginModal')">Sign In</button>
-        <button class="btn btn-hero" onclick="openModal('signupModal')" style="margin-left: 0.5rem;">Sign Up</button>
+        <button class="btn btn-glass" data-action="openModal" data-action-args='["loginModal"]'>Sign In</button>
+        <button class="btn btn-hero" data-action="openModal" data-action-args='["signupModal"]' style="margin-left: 0.5rem;">Sign Up</button>
       </div>
       <div class="navbar-menu" id="navbar-menu-authenticated" style="display: none;">
         <!-- Account info moved to shared component below -->
@@ -95,8 +95,8 @@
 
         <div id="hero-buttons">
           <div class="hero-buttons-row" style="display: flex; gap: 1rem;">
-            <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">Sign Up</button>
-            <button class="btn btn-glass btn-lg" onclick="openModal('loginModal')">Sign In</button>
+            <button class="btn btn-hero btn-lg" data-action="openModal" data-action-args='["signupModal"]'>Sign Up</button>
+            <button class="btn btn-glass btn-lg" data-action="openModal" data-action-args='["loginModal"]'>Sign In</button>
           </div>
         </div>
         <div style="display: none;" id="hero-buttons-authenticated">
@@ -205,7 +205,7 @@
         <p class="text-xl text-muted mb-8">
           Set up your organisation, record your opening stock and connect your production to sales.
         </p>
-        <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">
+        <button class="btn btn-hero btn-lg" data-action="openModal" data-action-args='["signupModal"]'>
           Sign Up
         </button>
       </div>
@@ -229,7 +229,7 @@
     <div class="modal-content glass-card" style="max-width: 28rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 class="text-2xl font-bold">Create Account</h2>
-        <button onclick="closeModal('signupModal')" class="btn btn-ghost" style="padding: 0.5rem;">
+        <button data-action="closeModal" data-action-args='["signupModal"]' class="btn btn-ghost" style="padding: 0.5rem;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -237,7 +237,7 @@
         </button>
       </div>
       
-      <form id="signupForm" onsubmit="handleSignup(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+      <form id="signupForm" data-submit-action="handleSignup" data-submit-pass="event" style="display: flex; flex-direction: column; gap: 1rem;">
         <div>
           <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Organization Name</label>
           <input
@@ -332,7 +332,7 @@
     <div class="modal-content glass-card" style="max-width: 28rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 class="text-2xl font-bold">Sign In</h2>
-        <button onclick="closeModal('loginModal')" class="btn btn-ghost" style="padding: 0.5rem;">
+        <button data-action="closeModal" data-action-args='["loginModal"]' class="btn btn-ghost" style="padding: 0.5rem;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1667,5 +1667,6 @@
   </script>
 
   <script src="/ui/shared/password-policy.js"></script>
+  <script src="/ui/shared/actions.js"></script>
 </body>
 </html>
