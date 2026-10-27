@@ -66,7 +66,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
-| ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
+| ◐ | GL-P07 | Multi-site and planning: build both | Fix | Founder (2026-10-27): build both now (plan: multi-site A1–A5, then planning B1–B5, each page through page-design). A1: three gates for multiple sites, all off by default (deployment flag, `multi_site` subscription, the business's own switch) and a default site that can change once on |
 | ☑ | GL-P08 | Contract producer: every departure is a CCA transfer or an excise removal | Fix | Founder (2026-10-26): goods leaving a CCA are either transferred to another CCA (date and time of movement, the receiving CCA code, ideally proof of receipt) or entered for excise. Contract manufacturing follows the same rule as sales to duty free. Part 1 (sales to another CCA, the movement register, Customs → Transfers) in !580; part 2 (dispatching contract orders: a removal when the producer is liable, a transfer to the customer's CCA otherwise) in !582 |
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☐ | GL-P10 | One readable export of all the business's records | Decide | |
@@ -109,7 +109,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 ### To go over together
 
-- **GL-P07: advertising multi-site and planning.** This is a rule about what to claim, not a code change; the Sites page already says which flows are on. I'd keep it in the sales playbook rather than here.
+- **GL-P07: multi-site and planning.** Founder (2026-10-27): build both rather than limit what is advertised.
 - **GL-P12: commercial depth.** I agree with the report and would build these only when a named buyer is missing one; listing them here invites building ahead of demand.
 - **The "ten times better" targets.** Founder (2026-10-26): present options once the other items are addressed.
 - **GL-S03: tightening the CSP.** Agreed 2026-10-26: a planned migration over several MRs, starting now.

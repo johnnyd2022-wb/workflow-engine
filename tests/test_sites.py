@@ -12,13 +12,14 @@ from app.core.db.models.organisation import Organisation
 from app.core.db.models.stock_location import StockLocation, StockTransfer
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.site_guard import SiteScopeError
 from app.core.security.auth_service import auth_stamp
 from app.core.security.tenant_scope import unscoped
 from app.features.sites import service
 from tests.dag_traversal_helpers import clear_org_synthetic_data
-from tests.factories import InventoryItemFactory, ProcessFactory, UserFactory
+from tests.factories import InventoryItemFactory, ProcessFactory, UserFactory, grant_multi_site
 from tests.test_compliant_routes import _admin_client, flask_app  # noqa: F401 -- fixture re-export
 
 
@@ -26,6 +27,8 @@ from tests.test_compliant_routes import _admin_client, flask_app  # noqa: F401 -
 def world(db, flask_app):  # noqa: F811
     org, admin = _admin_client(db, flask_app)
     other, neighbour = _admin_client(db, flask_app)
+    for entitled_org in (org, other):
+        grant_multi_site(db, entitled_org.id)
     yield org, admin, other, neighbour
     db.rollback()
     with unscoped():
@@ -90,7 +93,8 @@ def test_register_validates_fields_defaults_and_archiving(world):
     _, admin, _, _ = world
     default = _enable(admin)
     made = _add(admin, "  Bond store  ", address="18 Store Road")
-    assert made["name"] == "Bond store" and made["operations_available"] is False
+    # Switched on with the plan's multi_site entitlement: work can happen there straight away.
+    assert made["name"] == "Bond store" and made["operations_available"] is True
     for body in (
         {"name": "bond STORE"},
         {"name": ""},
@@ -114,13 +118,17 @@ def test_register_validates_fields_defaults_and_archiving(world):
     assert admin.post("/api/core/sites", json={"name": "_"}).status_code == 201
 
 
-def test_default_cannot_change_after_any_operational_data(world, db):
+def test_default_cannot_change_after_any_operational_data_without_the_plan(world, db):
+    # With every gate on the default may move (tests/test_multi_site_gates.py). Without the
+    # plan, records left on the old default would be stranded at a site nobody can work at.
     org, admin, _, _ = world
     default = _enable(admin)
     another = _add(admin)
     with unscoped():
         item = InventoryItemFactory(org_id=org.id)
         assert str(item.site_id) == default["id"]
+        FeatureSubscriptionRepository(db).revoke(org.id, "multi_site")
+        db.commit()
     response = admin.patch(f"/api/core/sites/{another['id']}", json={"is_default": True})
     assert response.status_code == 400 and "cannot change" in response.get_json()["error"]
     assert admin.get("/api/core/sites").get_json()["sites"][0]["id"] == default["id"]
@@ -138,12 +146,15 @@ def test_site_register_and_position_are_tenant_scoped(world):
     assert admin.put("/api/core/sites/settings", json={"enabled": True, "org_id": str(uuid4())}).status_code == 400
 
 
-def test_first_stock_and_default_switch_serialize(world):
+def test_first_stock_and_default_switch_serialize(world, db):
     from app.core.db import SessionLocal
 
     org, admin, _, _ = world
     default = _enable(admin)
     another = _add(admin)
+    with unscoped():  # without the plan, so the default may not move once stock exists
+        FeatureSubscriptionRepository(db).revoke(org.id, "multi_site")
+        db.commit()
     with SessionLocal() as stock, SessionLocal() as settings, unscoped():
         location = StockLocation(org_id=org.id, name="First tank")
         stock.add(location)
@@ -169,16 +180,20 @@ def test_unsupported_site_hints_are_rejected_instead_of_ignored(world, db):
     assert admin.post("/api/core/inventory", json={"site_id": theirs["id"]}).status_code == 400
     default = _enable(admin)
     another = _add(admin)
-    for site_id in (theirs["id"], another["id"], "bad", None):
+    # Another of this organisation's own active sites is a supported hint once every gate is on.
+    for site_id in (theirs["id"], "bad", None):
         for path in ("/api/core/inventory", "/api/core/executions", "/api/core/stock-locations"):
             response = admin.post(path, json={"site_id": site_id})
             assert response.status_code == 400 and response.get_json()["code"] == "invalid_site_scope"
+    accepted = admin.post("/api/core/stock-locations", json={"name": "Bond racks", "site_id": another["id"]})
+    assert accepted.status_code == 201, accepted.get_json()
     location = admin.post(
         "/api/core/stock-locations", json={"name": "Tank bay", "site_id": default["id"], "inside_licensed_area": True}
     )
     assert location.status_code == 201
     with unscoped():
         assert str(db.get(StockLocation, location.get_json()["id"]).site_id) == default["id"]
+        assert str(db.get(StockLocation, accepted.get_json()["id"]).site_id) == another["id"]
         assert db.query(InventoryItem).filter(InventoryItem.org_id == org.id).count() == 0
 
 
@@ -194,6 +209,9 @@ def test_repository_and_flush_tags_cannot_bypass_staging_or_tenant(world, db):
         assert str(item.site_id) == str(execution.site_id) == default["id"]
         assert InventoryRepository(db).list_inventory_items(org.id, site_id=service.parse_id(additional["id"])) == []
         assert ExecutionRepository(db).list_executions(org.id, site_id=service.parse_id(additional["id"])) == []
+        # Another organisation's site never; this organisation's additional site not without the plan.
+        FeatureSubscriptionRepository(db).revoke(org.id, "multi_site")
+        db.commit()
         for site_id in (service.parse_id(additional["id"]), service.parse_id(theirs["id"])):
             with pytest.raises(SiteScopeError):
                 InventoryItemFactory(org_id=org.id, site_id=site_id)

@@ -9,14 +9,13 @@ from uuid import UUID
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.site import Site
+from app.core.db.site_entitlement import sites_on
 from app.core.db.site_guard import SiteScopeError
 
 
 def resolve_site(session, org_id, site_id=None):
     org = (
-        session.query(
-            Organisation.id, Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled
-        )
+        session.query(Organisation.id, Organisation.multiple_sites_enabled)
         .filter(Organisation.id == org_id)
         .with_for_update(read=True)
         .one_or_none()
@@ -39,8 +38,8 @@ def resolve_site(session, org_id, site_id=None):
     site = query.with_for_update(read=True).populate_existing().one_or_none()
     if site is None:
         raise SiteScopeError("Site must be active and belong to this organisation")
-    if not site.is_default and not org.multiple_site_operations_enabled:
-        raise SiteScopeError("Operations at additional sites are not available yet")
+    if not site.is_default and not sites_on(session, org_id, org.multiple_sites_enabled):
+        raise SiteScopeError("Working at additional sites is not part of this organisation's plan")
     return site.id
 
 

@@ -11,9 +11,9 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from app.core.db import SessionLocal
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement
-from app.core.db.models.organisation import Organisation
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.models.user import User, UserRole
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.site_guard import SiteScopeError
 from app.core.db.site_operations import resolve_site
@@ -227,7 +227,7 @@ def test_tenant_tags_gate_and_unknown_fields(transfers, db):
     assert neighbour.get(f"/api/core/site-transfers/{transfer['id']}").status_code == 404
     assert post(neighbour, f"/api/core/site-transfers/{transfer['id']}/receipts", {"quantity": "1"}).status_code == 404
     with unscoped():
-        db.get(Organisation, org.id).multiple_site_operations_enabled = False
+        FeatureSubscriptionRepository(db).revoke(org.id, "multi_site")
         db.commit()
     assert post(admin, "/api/core/site-transfers", payload(transfers)).status_code == 400
     assert admin.get("/api/core/site-transfers").get_json()["operations_available"] is False
@@ -491,7 +491,7 @@ def test_legacy_incompatible_identity_is_rejected_before_debit(transfers, db):
 
     org, _, _, _, default, _, stock_id, _ = transfers
     with unscoped():
-        db.get(Organisation, org.id).multiple_site_operations_enabled = False
+        FeatureSubscriptionRepository(db).revoke(org.id, "multi_site")
         location = StockLocation(org_id=org.id, name="Default tank", site_id=UUID(default["id"]))
         db.add(location)
         db.commit()

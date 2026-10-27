@@ -419,6 +419,15 @@ class Config:
         return self.getboolean("features", "operational_cases_enabled", False)
 
     @property
+    def multi_site_enabled(self) -> bool:
+        """Deployment gate for working at more than one site (GL-P07); off unless the ini says so.
+
+        Each organisation also needs the ``multi_site`` subscription and its own switch
+        (Settings, Sites): see app/core/db/site_entitlement.py.
+        """
+        return self.getboolean("features", "multi_site_enabled", False)
+
+    @property
     def log_level(self) -> str:
         return self.get("observability", "log_level", "INFO")
 

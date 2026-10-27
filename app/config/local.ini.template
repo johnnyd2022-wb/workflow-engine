@@ -31,6 +31,8 @@ receiver_email = your-email@example.com
 support_email = support@biz-e.app
 
 [features]
+# Multiple sites (GL-P07); also needs the multi_site subscription and the org's own switch.
+multi_site_enabled = true
 invoice_button_enabled = true
 schedule_enabled = true
 crm_enabled = true

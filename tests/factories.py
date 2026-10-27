@@ -253,3 +253,10 @@ class OperationalCaseFactory(factory.Factory):
             created_by=created_by,
             **kwargs,
         )
+
+
+def grant_multi_site(db, org_id):
+    """The organisation's plan includes multiple sites (GL-P07). The deployment flag is on in
+    local.ini and test.ini; the organisation still switches it on itself in Settings, Sites."""
+    FeatureSubscriptionRepository(db).grant(org_id, "multi_site")
+    db.commit()

@@ -1719,7 +1719,11 @@ def _seed_premises(db, org_id, inv) -> None:
 
     today = date.today()
     org = db.get(Organisation, org_id)
-    org.multiple_sites_enabled = org.multiple_site_operations_enabled = True  # the bond store is a second site
+    # The bond store is a second site: the plan includes multiple sites and the org switched it on.
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    FeatureSubscriptionRepository(db).grant(org_id, "multi_site")
+    org.multiple_sites_enabled = True
     db.flush()
     distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
     if distillery is None:
