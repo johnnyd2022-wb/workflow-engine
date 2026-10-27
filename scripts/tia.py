@@ -372,6 +372,14 @@ def plan(cur, base: str, head: str) -> dict:
         selected |= hit
     if not selected:
         return {"decision": "none", "tests": [], "reasons": reasons, "paths": paths, "run": run_id}
+    # Recorded node IDs may refer to tests renamed on the MR's parent branch. Run the
+    # whole changed module so pytest never receives a stale function name.
+    changed_tests = {p for p in changed_paths(run_sha, head) if TEST_MODULE.match(p)}
+    if changed_tests:
+        selected = {t.split("::", 1)[0] if t.split("::", 1)[0] in changed_tests else t for t in selected}
+        if any(not exists_at(head, p) for p in selected if p in changed_tests):
+            reasons["full"].append("a selected test module was deleted or moved")
+            return {"decision": "full", "tests": FULL, "reasons": reasons, "paths": paths, "run": run_id}
     return {"decision": "select", "tests": sorted(selected), "reasons": reasons, "paths": paths, "run": run_id}
 
 
