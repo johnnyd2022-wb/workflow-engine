@@ -246,6 +246,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # --- people, organisation and maintenance
     ("sites.list_sites", _READ, ("inventory.view", "production.view", "settings.manage")),
     ("sites.site_position", _READ, "inventory.view"),
+    ("sites.site_choices", _READ, ("inventory.view", "inventory.adjust", "production.view")),
     ("sites.*", None, "settings.manage"),
     ("site_transfers.*", _READ, "inventory.view"),
     ("site_transfers.*", None, "inventory.adjust"),

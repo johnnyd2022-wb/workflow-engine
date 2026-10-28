@@ -27,7 +27,10 @@ from app.core.utils.time import utc_now
 class StockLocation(TenantScoped, Base):
     __tablename__ = "stock_locations"
     __table_args__ = (
-        UniqueConstraint("org_id", "name", name="uq_stock_locations_org_name"),
+        # An area's name is unique within its site (GL-P07 A3); areas with no site share one namespace.
+        UniqueConstraint(
+            "org_id", "site_id", "name", name="uq_stock_locations_org_site_name", postgresql_nulls_not_distinct=True
+        ),
         UniqueConstraint("org_id", "id", name="uq_stock_locations_org_id"),
         UniqueConstraint("org_id", "site_id", "id", name="uq_stock_locations_org_site_id"),
         ForeignKeyConstraint(

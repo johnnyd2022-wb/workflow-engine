@@ -327,6 +327,8 @@
       html += '</div></div>';
     }
 
+    // Where this batch is made: shown only with multiple sites on, set to where you last worked.
+    html += '<div class="exec-spa-section" data-site-pick hidden></div>';
     html += '<div class="exec-spa-section"><label class="spa-field-label" for="exec-spa-occurred-at">When did this step happen?</label>' +
       '<input id="exec-spa-occurred-at" class="spa-inp" type="datetime-local" style="max-width:320px;" aria-describedby="exec-spa-occurred-help">' +
       '<p id="exec-spa-occurred-help" style="font-size:13px;color:var(--text-secondary);">Leave blank to record it as happening now. Backdated entries are marked in the record.</p></div>';
@@ -388,6 +390,7 @@
     '</div>';
 
     root.innerHTML = html;
+    var sitePick = window.BizeSite ? window.BizeSite.mount(root.querySelector('[data-site-pick]'), { label: 'Made at' }) : null;
 
     // ── Cancel ────────────────────────────────────────────────────────────────
     root.querySelector('#exec-spa-cancel').addEventListener('click', function() {
@@ -510,7 +513,9 @@
       }
       setBusy(submitBtn, true, 'Completing…');
       try {
-        var createResult = await CoreAPI.createExecution(ctx.processId);
+        var siteId = sitePick ? sitePick.value() : null;
+        if (siteId && window.BizeSite) window.BizeSite.remember(siteId);
+        var createResult = await CoreAPI.createExecution(ctx.processId, siteId);
         var executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
         if (!executionId) throw new Error('Could not create batch.');
 

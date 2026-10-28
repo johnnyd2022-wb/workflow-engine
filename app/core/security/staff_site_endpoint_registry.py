@@ -386,6 +386,7 @@ ENDPOINT_COVERAGE = {
     ("sites.create_site", "POST"): "blocked",
     ("sites.list_sites", "GET"): "blocked",
     ("sites.site_position", "GET"): "blocked",
+    ("sites.site_choices", "GET"): "blocked",
     ("sites.sites_page", "GET"): "blocked",
     ("sites.static", "GET"): "blocked",
     ("sites.update_site", "PATCH"): "blocked",

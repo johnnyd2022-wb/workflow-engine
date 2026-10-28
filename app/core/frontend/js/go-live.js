@@ -170,13 +170,16 @@
       } catch (err) { say(err.message, false); }
     });
 
+    var sitePick = window.BizeSite ? window.BizeSite.mount($('[data-gl-step="count"] [data-site-pick]'), { label: 'Counting at' }) : null;
     $('[data-gl-save-count]').addEventListener('click', async function () {
       var error = $('[data-gl-count-error]');
       error.hidden = true;
       var rows = collectRows();
       if (!rows.length) { error.textContent = 'Enter at least one quantity.'; error.hidden = false; return; }
       try {
-        var result = await api('POST', '/api/core/opening-stock', { items: rows });
+        var body = { items: rows };
+        if (window.BizeSite) window.BizeSite.into(body, sitePick);
+        var result = await api('POST', '/api/core/opening-stock', body);
         $('[data-gl-wip-rows]').replaceChildren();
         render(result);
         say('Recorded ' + result.created + (result.created === 1 ? ' line' : ' lines') + ' of opening stock.', true);

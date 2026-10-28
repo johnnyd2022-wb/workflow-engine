@@ -128,8 +128,10 @@ def test_inventory_compact_view_returns_core_fields_only(db, client_org):
         "supplier",
         "supplier_batch_number",
         "expiry_date",
+        "site_id",
     }
     assert all(set(i) == expected for i in compact), compact[0].keys()
+    assert {i["id"]: i["site_id"] for i in compact} == {i["id"]: i["site_id"] for i in full}
     assert "system_findings" not in compact[0]
 
     paged = client.get("/api/core/inventory?view=compact&limit=3").get_json()

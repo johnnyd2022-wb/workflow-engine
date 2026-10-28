@@ -61,6 +61,13 @@ def list_sites():
     return jsonify(service.overview(db_session, _org()))
 
 
+@sites_bp.route("/api/core/sites/choices", methods=["GET"])
+@requires_auth
+def site_choices():
+    """For site pickers and the site lens: any member who records or reads stock or batches."""
+    return jsonify(service.choices(db_session, _org()))
+
+
 @sites_bp.route("/api/core/sites/<site_id>/position", methods=["GET"])
 @requires_auth
 def site_position(site_id):
@@ -143,6 +150,8 @@ def install_site_request_validation(app):
             "core.create_execution",
             "stock_locations.create_location",
             "core.consume_final_product_fifo",
+            "core.csv_commit",
+            "go_live.create_opening_stock",
         }
     )
 

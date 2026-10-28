@@ -1807,6 +1807,29 @@ def _seed_premises(db, org_id, inv) -> None:
             },
         )
         db.flush()
+    # Stock at more than one place: cases under bond at Seaview, bottles at the cellar door.
+    for site, place, name, qty, unit, kind, batch, days in (
+        (bond, "Bay 1", "Navy Strength Gin 700ml", "180", "units", "final_product", "NSG-2609", 700),
+        (bond, "Bay 1", "London Dry Gin 700ml", "240", "units", "final_product", "LDG-2610", 700),
+        (bond, "Bay 2", "Gin base spirit", "420", "L", "work_in_progress", "GBS-2611", None),
+        (bond, "Bay 2", "Barrel-aged Gin 500ml", "60", "units", "final_product", "BAG-2604", 20),
+        (bond, None, "Shipping cartons (6 x 700ml)", "300", "units", "raw_material", "CT-1102", None),
+        (distillery, "Cellar door shop", "London Dry Gin 700ml", "36", "units", "final_product", "LDG-2610", 700),
+        (distillery, "Cellar door shop", "Gift boxes", "48", "units", "raw_material", "GB-0907", None),
+    ):
+        inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity=qty,
+            unit=unit,
+            inventory_type=kind,
+            supplier_batch_number=batch,
+            purchase_date=today - timedelta(days=20),
+            expiry_date=today + timedelta(days=days) if days else None,
+            location_id=places[place].id if place else None,
+            site_id=site.id,
+            commit=False,
+        )
     db.commit()
 
 

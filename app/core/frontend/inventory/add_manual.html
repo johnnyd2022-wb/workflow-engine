@@ -46,6 +46,8 @@
               <option value="pcs">Pieces</option>
             </select>
           </div>
+          {# Where it is going: shown only with multiple sites on, already set to where you last worked. #}
+          <div data-site-pick hidden></div>
         </section>
 
         <section id="add-inventory-source-section" class="spa-form-section" aria-labelledby="add-inv-section-source">
@@ -134,6 +136,7 @@
       const form = document.getElementById('add-inventory-form');
       if (!form || form.getAttribute('data-add-manual-spa-init') === '1') return;
       form.setAttribute('data-add-manual-spa-init', '1');
+      var sitePick = window.BizeSite ? window.BizeSite.mount(form.querySelector('[data-site-pick]')) : null;
 
       (function applyQueryPrefill() {
         try {
@@ -300,6 +303,7 @@
           // GL-U03: one key per thing being received. If this save reached the server but the reply
           // was lost, pressing Save again replays it rather than adding the stock twice.
           if (!saveKey) saveKey = window.CoreAPI._newIdempotencyKey();
+          if (window.BizeSite) window.BizeSite.into(payload, sitePick);
           await window.CoreAPI.createInventoryItem(payload, { idempotencyKey: saveKey });
           saveKey = null;
 

@@ -220,10 +220,13 @@ window.CoreAPI = window.CoreAPI || {
         return this.request(`/executions/${encodeURIComponent(executionId)}/with-process?minimal=1`);
     },
     
-    async createExecution(processId) {
+    async createExecution(processId, siteId) {
+        // siteId only with multiple sites on (site-picker.js); without it the batch is at the default site.
+        const body = { process_id: processId };
+        if (siteId) body.site_id = siteId;
         return this.request('/executions', {
             method: 'POST',
-            body: { process_id: processId },
+            body,
         });
     },
     

@@ -144,12 +144,20 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         except ValueError:
             return jsonify({"error": "Invalid limit or cursor parameter"}), 400
 
+        site_id = None
+        if request.args.get("site_id"):
+            try:
+                site_id = UUID(request.args["site_id"])
+            except ValueError:
+                return jsonify({"error": "Invalid site_id parameter"}), 400
+
         compact = request.args.get("view") == "compact"
         repo = InventoryRepository(db_session)
         items = repo.list_inventory_items(
             org_id=org_id,
             inventory_type=inventory_type,
             process_id=process_id,
+            site_id=site_id,
             limit=(page_limit + 1 if page_limit is not None else None),
             cursor=cursor,
             # The enriched list hides sold-out lines. On a page, hide them in the query so
@@ -179,6 +187,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                             "supplier": i.supplier,
                             "supplier_batch_number": i.supplier_batch_number,
                             "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
+                            "site_id": str(i.site_id) if i.site_id else None,
                         }
                         for i in items
                     ],
@@ -189,6 +198,20 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         # System findings per item (all checks) for UI: red border + reasons in dropdown
         findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
+
+        # Where each line is: its site, and the stock area inside it (one query for the names).
+        from app.core.db.models.stock_location import StockLocation
+
+        location_ids = {i.location_id for i in items if i.location_id}
+        location_names = (
+            dict(
+                db_session.query(StockLocation.id, StockLocation.name).filter(
+                    StockLocation.org_id == org_id, StockLocation.id.in_(location_ids)
+                )
+            )
+            if location_ids
+            else {}
+        )
 
         from app.core.db.models.inventory_item import InventoryItem
         from app.features.compliance_checks.checks.output_ready_date_check import get_operator_ready_instant_for_item
@@ -592,6 +615,9 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     "system_findings": findings_by_id.get(str(item.id), []),
                     "ready_date_display": ready_date_display,
                     "event_summary": event_summary_by_id.get(str(item.id)),
+                    "site_id": str(item.site_id) if item.site_id else None,
+                    "location_id": str(item.location_id) if item.location_id else None,
+                    "location_name": location_names.get(item.location_id),
                 }
             )
 

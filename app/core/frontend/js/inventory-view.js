@@ -62,9 +62,12 @@
   var state = {
     q: '', type: '', supplier: '', process: '', status: '',
     expFrom: '', expTo: '', purFrom: '', purTo: '', metaKey: '', metaText: '',
-    sort: 'name', dir: 'asc', group: false, item: '',
+    sort: 'name', dir: 'asc', group: false, item: '', site: '',
   };
-  var URL_KEYS = ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText', 'item'];
+  var URL_KEYS = ['q', 'type', 'supplier', 'process', 'status', 'expFrom', 'expTo', 'purFrom', 'purTo', 'metaKey', 'metaText', 'item', 'site'];
+  // Sites (GL-P07 A3): only with multiple sites on and more than one active site; otherwise the
+  // page is exactly as it was, with no site column or control.
+  var sites = [];
 
   function $(selector) { return root.querySelector(selector); }
   var els = {
@@ -95,6 +98,7 @@
     drawerTitle: $('#inv-drawer-title'),
     drawerEyebrow: $('[data-inv-drawer-eyebrow]'),
     backdrop: $('[data-inv-backdrop]'),
+    siteTabs: $('[data-inv-sites]'),
   };
   var lastFocus = null;
 
@@ -326,6 +330,10 @@
     itemTd.appendChild(el('span', 'inv-row__sub', sub || (item.inventory_type === 'raw_material' ? 'No supplier recorded' : 'No process recorded')));
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(item.inventory_type)));
+    if (sitesShown()) {
+      var where = whereText(item);
+      tr.appendChild(cell('inv-cell-where', el('span', where ? '' : 'inv-muted', where || (state.site ? 'At the site' : '—'))));
+    }
     tr.appendChild(qtyCell(row.qty, item.unit));
     tr.appendChild(cell('inv-cell-trend', sparkline(item, 84, 28)));
     tr.appendChild(cell('inv-cell-expiry', expiryNode(row.expiry)));
@@ -345,6 +353,7 @@
     itemTd.appendChild(el('span', 'inv-row__sub', plural(row.members.length, 'lot')));
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(row.members[0].item.inventory_type)));
+    if (sitesShown()) tr.appendChild(cell('inv-cell-where', groupWhere(row)));
     tr.appendChild(qtyCell(row.qty, row.unit));
     tr.appendChild(cell('inv-cell-trend'));
     tr.appendChild(cell('inv-cell-expiry', expiryNode(row.expiry)));
@@ -359,15 +368,47 @@
     tr.dataset.groupKey = row.key;
     return tr;
   }
+  /** A product's lots across places, one line each with its quantity, or the one place they all are. */
+  function groupWhere(row) {
+    var bySite = {}, order = [];
+    row.members.forEach(function (m) {
+      var key = state.site ? (m.item.location_name || 'At the site') : ((siteById(m.item.site_id) || {}).name || '—');
+      if (!(key in bySite)) { bySite[key] = 0; order.push(key); }
+      bySite[key] += m.qty;
+    });
+    if (order.length === 1) return el('span', 'inv-muted', order[0]);
+    // One line per place: "Seaview bond store  240".
+    var list = el('span', 'inv-where-split');
+    order.forEach(function (k) {
+      var line = el('span', 'inv-where-split__line');
+      line.appendChild(el('span', '', k));
+      line.appendChild(el('span', 'inv-where-split__qty', fmtQty(bySite[k])));
+      list.appendChild(line);
+    });
+    return list;
+  }
   function cssEscape(value) {
     return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────
   function stock() { return items.filter(onHand); }
+  function sitesShown() { return sites.length > 1; }
+  function siteById(id) { return sites.filter(function (x) { return x.id === id; })[0] || null; }
+  function atSite(item) { return !state.site || item.site_id === state.site; }
+  /** Stock on hand at the chosen site (all sites when none is chosen). */
+  function scoped() { return stock().filter(atSite); }
+  /** "Gracefield distillery · Bottling room"; just the area once one site is chosen. */
+  function whereText(item) {
+    var site = siteById(item.site_id);
+    var parts = [];
+    if (site && !state.site) parts.push(site.name);
+    if (item.location_name) parts.push(item.location_name);
+    return parts.join(' · ');
+  }
 
   function renderGlance() {
-    var all = stock();
+    var all = scoped();
     els.glance.replaceChildren();
     Object.keys(STATUSES).forEach(function (key) {
       var def = STATUSES[key];
@@ -387,10 +428,10 @@
   }
 
   function renderSegments() {
-    var scoped = stock().filter(function (item) { return passes(item, { type: true }); });
+    var inScope = scoped().filter(function (item) { return passes(item, { type: true }); });
     els.segments.replaceChildren();
     [['', 'All']].concat(Object.keys(TYPES).map(function (k) { return [k, TYPES[k].label]; })).forEach(function (pair) {
-      var n = pair[0] ? scoped.filter(function (i) { return i.inventory_type === pair[0]; }).length : scoped.length;
+      var n = pair[0] ? inScope.filter(function (i) { return i.inventory_type === pair[0]; }).length : inScope.length;
       var btn = el('button', 'inv-segment');
       btn.type = 'button';
       btn.setAttribute('aria-pressed', state.type === pair[0] ? 'true' : 'false');
@@ -460,9 +501,15 @@
     els.search.focus();
   }
 
+  function columns() {
+    if (!sitesShown()) return COLUMNS;
+    var out = COLUMNS.slice();
+    out.splice(2, 0, { key: 'where', label: state.site ? 'Area' : 'Where' });
+    return out;
+  }
   function renderHead() {
     var tr = el('tr');
-    COLUMNS.forEach(function (col) {
+    columns().forEach(function (col) {
       var th = el('th', 'inv-th inv-th--' + col.key + (col.numeric ? ' inv-th--num' : ''));
       th.scope = 'col';
       if (!col.sortable) {
@@ -489,20 +536,21 @@
   }
 
   function renderTable() {
-    var all = stock();
+    var all = scoped();
     var filtered = all.filter(function (item) { return passes(item); });
     var rows = buildRows(filtered);
 
     els.loading.hidden = true;
-    if (filtered.length === all.length) els.count.textContent = plural(all.length, 'line') + ' on hand';
-    else els.count.textContent = filtered.length + ' of ' + plural(all.length, 'line');
+    var here = state.site && siteById(state.site) ? ' at ' + siteById(state.site).name : '';
+    if (filtered.length === all.length) els.count.textContent = plural(all.length, 'line') + ' on hand' + here;
+    else els.count.textContent = filtered.length + ' of ' + plural(all.length, 'line') + here;
 
     els.empty.replaceChildren();
     els.empty.hidden = !!filtered.length;
     els.tableWrap.hidden = !filtered.length;
     if (!filtered.length) {
       els.tbody.replaceChildren();
-      els.empty.appendChild(el('strong', '', all.length ? 'No stock matches these filters' : 'No inventory on hand yet'));
+      els.empty.appendChild(el('strong', '', all.length ? 'No stock matches these filters' : (here ? 'Nothing on hand' + here : 'No inventory on hand yet')));
       els.empty.appendChild(el('span', '', all.length
         ? 'Try a different search, or clear the filters to see everything on hand.'
         : 'Stock appears here as you add it or as batches produce it.'));
@@ -524,7 +572,36 @@
     els.tbody.replaceChildren(fragment);
   }
 
+  // ── Sites: the lens over everything above (GL-P07 A3) ───────────────────────────────
+  function setSite(id) {
+    state.site = siteById(id) ? id : '';
+    syncControls();
+    renderHead();
+    render();
+  }
+  function siteLines(siteId) {
+    return stock().filter(function (i) { return !siteId || i.site_id === siteId; }).length;
+  }
+  function renderSites() {
+    els.siteTabs.hidden = !sitesShown();
+    if (!sitesShown()) return;
+    // A tab per site above the list, each with its line count. The site is a scope, not a
+    // filter: "Clear filters" keeps it.
+    els.siteTabs.replaceChildren();
+    [{ id: '', name: 'All sites' }].concat(sites).forEach(function (site) {
+      var btn = el('button', 'inv-site-tab');
+      btn.type = 'button';
+      btn.setAttribute('aria-pressed', state.site === site.id ? 'true' : 'false');
+      btn.appendChild(document.createTextNode(site.name));
+      btn.appendChild(el('span', 'inv-site-tab__count', String(siteLines(site.id))));
+      btn.addEventListener('click', function () { setSite(site.id); });
+      els.siteTabs.appendChild(btn);
+    });
+  }
+
   function render() {
+    renderSites();
+    renderHead();
     renderGlance();
     renderSegments();
     renderActive();
@@ -691,6 +768,10 @@
 
     var details = section('Details');
     var list = el('dl', 'inv-facts');
+    if (sitesShown()) {
+      var site = siteById(item.site_id);
+      fact(list, 'Where', [site ? site.name : '', item.location_name || ''].filter(Boolean).join(' · '));
+    }
     fact(list, 'Supplier', item.supplier);
     fact(list, 'Batch number', item.supplier_batch_number);
     fact(list, 'Process', item.process_name);
@@ -910,6 +991,18 @@
     });
   }
 
+  function loadSites() {
+    if (!window.BizeSite) return;
+    window.BizeSite.choices().then(function (data) {
+      if (!root.isConnected) return;
+      sites = data.on ? data.sites : [];
+      if (state.site && !siteById(state.site)) state.site = '';
+      syncControls();
+      renderHead();
+      if (items.length) render();
+    });
+  }
+
   function start() {
     readUrl();
     syncControls();
@@ -925,6 +1018,7 @@
         onChange: function () { if (root.isConnected) load(); else off(); },
       });
     }
+    loadSites();
     load();
   }
 
