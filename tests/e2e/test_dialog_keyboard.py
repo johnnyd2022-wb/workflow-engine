@@ -134,7 +134,9 @@ def test_the_signed_out_notice_stays_usable_over_an_open_sheet(xero, sales_page)
     link = notice.get_by_role("link", name="Sign in again")
     for _ in range(30):
         sales_page.keyboard.press("Tab")
-        if sales_page.evaluate("document.activeElement && document.activeElement.textContent.trim() === 'Sign in again'"):
+        if sales_page.evaluate(
+            "document.activeElement && document.activeElement.textContent.trim() === 'Sign in again'"
+        ):
             break
     else:
         raise AssertionError("Tab never reached the Sign in again link")

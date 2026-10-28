@@ -72,6 +72,7 @@ SEED_KINDS = (
     "np3",
     "licensing",
     "premises",
+    "moves",
     "tasks",
     "customer",
     "people",
@@ -1833,6 +1834,85 @@ def _seed_premises(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_moves(db, org_id, inv) -> None:
+    """Stock moving between the premises seed's two sites (GL-P07 A4), through the real
+    compliance policy: one delivery on the road, one part received and two received in full. Everything goes into a licensed area under the same legal
+    entity's licences, as a bond-to-bond move would."""
+    from uuid import uuid4
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.core.db.models.user import User
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.platform.stock_movements import evaluate_stock_movement, prepare_stock_movement
+    from app.features.site_transfers import service
+
+    sites = {s.name: s for s in db.query(Site).filter(Site.org_id == org_id)}
+    if "Seaview bond store" not in sites:
+        raise ValueError("moves requires the premises seed")
+    # The gins have a Customs classification, so moving them asks the real questions.
+    for gin, abv in (
+        ("Navy Strength Gin 700ml", "57"),
+        ("London Dry Gin 700ml", "42"),
+        ("Barrel-aged Gin 500ml", "45"),
+        ("Gin base spirit", "80"),
+    ):
+        db.add(AlcoholProductProfile(org_id=org_id, inventory_name=gin, product_type="spirits", abv_percent=abv))
+    db.flush()
+    places = {p.name: p for p in db.query(StockLocation).filter(StockLocation.org_id == org_id)}
+    actor = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+    approval = {
+        "destination_activity": "storage",
+        "authority": "same_legal_entity",
+        "evidence_reference": "Both sites under our CCA licences",
+    }
+
+    def lot(name, site):
+        return (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.name == name, InventoryItem.site_id == sites[site].id)
+            .filter(InventoryItem.quantity > 0)
+            .order_by(InventoryItem.created_at)
+            .first()
+        )
+
+    for name, to_place, qty, carrier, ref, days_ago, receipt in (
+        ("Navy Strength Gin 700ml", "Bottling room", "60", "Own van", "MV-0412", 1, None),
+        ("London Dry Gin 700ml", "Bottling room", "48", "Mainfreight", "MF-88213", 4, {"quantity": "40"}),
+        ("Gin base spirit", "Still house", "200", "Own van", "MV-0398", 9, {"quantity": "200"}),
+        ("Barrel-aged Gin 500ml", "Bottling room", "24", "Own van", "MV-0401", 6, {"quantity": "24"}),
+    ):
+        source = lot(name, "Seaview bond store")
+        if source is None:
+            continue
+        transfer, _ = service.dispatch(
+            db,
+            org_id,
+            actor.id,
+            str(uuid4()),
+            {
+                "source_item_id": str(source.id),
+                "destination_site_id": str(sites["Gracefield distillery"].id),
+                "destination_location_id": str(places[to_place].id),
+                "quantity": qty,
+                "carrier": carrier,
+                "consignment_reference": ref,
+                "occurred_on": (today - timedelta(days=days_ago)).isoformat(),
+                "approval": approval,
+            },
+            evaluate_stock_movement,
+            prepare_stock_movement,
+        )
+        db.flush()
+        if receipt:
+            body = {"occurred_on": (today - timedelta(days=max(days_ago - 1, 0))).isoformat(), **receipt}
+            service.receive(db, org_id, actor.id, transfer.id, str(uuid4()), body, evaluate_stock_movement)
+            db.flush()
+    db.commit()
+
+
 def _seed_tasks(db, org_id, inv) -> None:
     """A sales team's task list on an ordinary week: two people, a dozen open follow-ups
     (two overdue, three due today, some next week, some with no date), a custom lane for
@@ -2217,6 +2297,7 @@ def cmd_seed(args) -> int:
             "customer": _seed_customer,
             "tasks": _seed_tasks,
             "premises": _seed_premises,
+            "moves": _seed_moves,
             "licensing": _seed_licensing,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
@@ -2268,6 +2349,16 @@ def purge_seeded_org(db, org_id, user_id) -> None:
     # A stocktake's breakage is a wastage record plus its movement: clear those first too.
     db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
     db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
+    # Transfers between sites reference places and lots, and receipt proof is immutable outside
+    # migration mode (the same teardown tests/test_site_transfers.py uses).
+    from sqlalchemy import text
+
+    from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
+
+    db.execute(text("SELECT set_config('app.migration_mode','1',true)"))
+    db.execute(text("UPDATE inventory_items SET transfer_receipt_id = NULL WHERE org_id = :org"), {"org": org_id})
+    db.query(SiteStockReceipt).filter(SiteStockReceipt.org_id == org_id).delete(synchronize_session=False)
+    db.query(SiteStockTransfer).filter(SiteStockTransfer.org_id == org_id).delete(synchronize_session=False)
     db.commit()
     # Synthetic users may hold a seeded custom role; release it before purging.
     db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)

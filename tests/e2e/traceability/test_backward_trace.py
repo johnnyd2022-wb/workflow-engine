@@ -44,9 +44,9 @@ def test_ac7_backward_trace_connections_are_non_empty(traced_chain):
     body = resp.json()
 
     assert body["connections"], "backward trace from W1 must report at least one connection"
-    assert any(
-        c["from_id"] == str(dag["r1_id"]) and c["to_id"] == str(dag["w1_id"]) for c in body["connections"]
-    ), f"expected an R1->W1 connection, got: {body['connections']}"
+    assert any(c["from_id"] == str(dag["r1_id"]) and c["to_id"] == str(dag["w1_id"]) for c in body["connections"]), (
+        f"expected an R1->W1 connection, got: {body['connections']}"
+    )
 
 
 def test_ac7_backward_trace_from_wip_card_shows_traced_item_in_table(traced_chain):

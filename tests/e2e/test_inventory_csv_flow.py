@@ -66,13 +66,7 @@ def test_csv_validate_row_level_errors(logged_in_page):
     """AC21: blank name, non-numeric/non-positive quantity, and disallowed unit each error
     with a specific per-row message, independent of the other rows in the batch."""
     page = logged_in_page
-    csv_text = (
-        "Item Name,Quantity,Unit\n"
-        ",5,kg\n"
-        "Bad Qty,not-a-number,kg\n"
-        "Zero Qty,0,kg\n"
-        "Bad Unit,5,furlongs\n"
-    )
+    csv_text = "Item Name,Quantity,Unit\n,5,kg\nBad Qty,not-a-number,kg\nZero Qty,0,kg\nBad Unit,5,furlongs\n"
     resp = _validate(page, text=csv_text)
     assert resp.status == 200, f"validate failed: {resp.status} {resp.text()}"
     validation = resp.json()["validation"]

@@ -1,0 +1,15 @@
+/* The shared Move dialog (app/ui/shared/move-stock.js). */
+#page-content .mv-dialog { width: min(34rem, 94vw); margin: auto; padding: 0; border: 0; border-radius: 14px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); box-shadow: 0 24px 60px rgb(15 23 42 / 25%); }
+#page-content .mv-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+#page-content .mv-form { display: flex; flex-direction: column; gap: 14px; padding: 24px; }
+#page-content .mv-form h2 { margin: 0; font-size: 18px; font-weight: 600; }
+#page-content .mv-form [hidden] { display: none !important; }
+#page-content .mv-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+#page-content .mv-hint { margin: 0; font-size: 13px; font-weight: 400; color: var(--ui-text-muted, #64748b); }
+#page-content .mv-form > .mv-hint { margin-top: -8px; }
+#page-content .mv-trip { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 10px; background: var(--ui-surface-subtle, #f8fafc); border: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .mv-note { margin: 0; font-size: 13px; color: var(--ui-text, #172033); }
+#page-content .mv-compliance { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .mv-error { margin: 0; padding: 10px 14px; border-radius: 10px; border: 1px solid #fecdca; background: #fef3f2; color: #b42318; font-size: 14px; }
+#page-content .mv-actions { display: flex; justify-content: flex-end; gap: 10px; }
+html[data-spa-theme="dark"] #page-content .mv-error { border-color: rgba(240, 68, 56, .4); background: rgba(240, 68, 56, .12); color: #f97066; }

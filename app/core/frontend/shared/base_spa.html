@@ -27,6 +27,7 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='design-system.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='section-tabs.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='site-picker.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='move-stock.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
@@ -94,6 +95,7 @@
   <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
   {# Before any page script: add forms ask it where stock goes (GL-P07 A3). #}
   <script src="/ui/shared/site-picker.js"></script>
+  <script src="/ui/shared/move-stock.js"></script>
   <div class="app-layout">
     {% include 'shared/sidebar-v2.html' %}
 

@@ -3,34 +3,41 @@
 {% block body_class %}site-transfers-page{% endblock %}
 {% block head_extras %}{% endblock %}
 {% block content %}
-<div class="transfers-shell workspace-overview workspace-page" data-transfers-root>
+{# Inside the content block: a boosted navigation swaps only #page-content. #}
+<link rel="stylesheet" href="{{ url_for('site_transfers.static', filename='transfers.css') }}">
+<div class="transfers-shell workspace-overview workspace-page" data-transfers-root
+     data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" aria-busy="true">
   <header class="workspace-header">
-    <div><h1>Stock transfers</h1><p>Dispatch stock, track it in transit and record what arrived.</p></div>
-    <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Inventory</a></div>
+    <div><h1>Stock transfers</h1><p>Stock moving between your sites: what is on its way, and what has arrived.</p></div>
+    <div class="workspace-header__actions">
+      <a class="workspace-button" href="/core/inventory/view">Inventory</a>
+      {% if can('inventory.adjust') %}<button type="button" class="workspace-button workspace-button--primary" data-transfers-move hidden>Move stock</button>{% endif %}
+    </div>
   </header>
   <div class="workspace-notice" role="alert" data-transfers-message hidden></div>
+  <div class="tr-done" role="status" aria-live="polite" data-transfers-done hidden></div>
   <div class="workspace-stack">
-    {% if can('inventory.adjust') %}
-    <section class="transfers-card workspace-card" data-transfer-create hidden aria-labelledby="transfers-dispatch-title">
-      <h2 id="transfers-dispatch-title">Dispatch stock</h2>
-      <form class="workspace-form" data-transfer-dispatch hx-boost="false">
-        <label>Stock<select name="source_item_id" required></select></label>
-        <label>Quantity<input name="quantity" type="number" min="0.0001" step="0.0001" required></label>
-        <label>Destination site<select name="destination_site_id" required></select></label>
-        <label>Destination place<select name="destination_location_id"></select></label>
-        <label>Carrier<input name="carrier" maxlength="120" required></label>
-        <label>Consignment reference<input name="consignment_reference" maxlength="160" required></label>
-        <label>Dispatch date<input name="occurred_on" type="date" required></label>
-        <button class="workspace-button workspace-button--primary" type="submit">Dispatch</button>
-      </form>
+    {# What has to be received, before anything else. #}
+    <section class="workspace-card tr-arriving" aria-labelledby="tr-arriving-title" data-transfers-arriving hidden>
+      <h2 id="tr-arriving-title">To receive</h2>
+      <p class="workspace-caption" data-transfers-arriving-caption></p>
+      <div class="tr-list" data-transfers-arriving-list></div>
     </section>
-    {% endif %}
     <section class="workspace-card" aria-labelledby="transfers-list-title">
       <h2 id="transfers-list-title">Transfers</h2>
       <p class="workspace-caption" data-transfers-state>Loading…</p>
-      <section data-transfers-list class="transfers-list" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"></section>
+      <section data-transfers-list class="transfers-list tr-list"></section>
     </section>
   </div>
+
+  <dialog class="tr-dialog" data-transfers-pick aria-labelledby="tr-pick-title">
+    <form class="tr-pick" hx-boost="false" method="dialog">
+      <h2 id="tr-pick-title">What are you moving?</h2>
+      <input type="search" id="tr-pick-search" placeholder="Search name or batch" autocomplete="off" aria-label="Search stock">
+      <div class="tr-pick__list" data-transfers-pick-list></div>
+      <div class="tr-pick__actions"><button type="submit" class="workspace-button">Cancel</button></div>
+    </form>
+  </dialog>
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('site_transfers.static', filename='transfers.js') }}"></script>{% endblock %}

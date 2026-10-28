@@ -257,7 +257,11 @@ def choices(session, org_id):
                 "name": site.name,
                 "kind": site.kind,
                 "is_default": bool(site.is_default),
-                "areas": [{"id": str(a.id), "name": a.name} for a in areas if a.site_id == site.id],
+                "areas": [
+                    {"id": str(a.id), "name": a.name, "inside_licensed_area": bool(a.inside_licensed_area)}
+                    for a in areas
+                    if a.site_id == site.id
+                ],
             }
             for site in sites
         ],
