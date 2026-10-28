@@ -19,6 +19,7 @@ def _before_flush(session, _flush_context, _instances):
     from app.core.db.models.organisation import Organisation
     from app.core.db.models.site import Site
     from app.core.db.models.stock_location import StockLocation
+    from app.core.db.site_entitlement import sites_on
     from app.core.db.transfer_proof import PROVENANCE_FIELDS, receipt_proofs, validate_receipt_fragment
 
     scoped = (StockLocation, Execution, InventoryItem)
@@ -43,9 +44,7 @@ def _before_flush(session, _flush_context, _instances):
     # the settings transaction's NO KEY UPDATE lock.
     organisations = {
         row.id: row
-        for row in session.query(
-            Organisation.id, Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled
-        )
+        for row in session.query(Organisation.id, Organisation.multiple_sites_enabled)
         .filter(Organisation.id.in_(org_ids))
         .order_by(Organisation.id)
         .with_for_update(read=True)
@@ -116,8 +115,8 @@ def _before_flush(session, _flush_context, _instances):
             site = sites.get((org_id, obj.site_id))
             if site is None or not site.is_active:
                 raise SiteScopeError("Site must be active and belong to this organisation")
-            if not site.is_default and not (org.multiple_sites_enabled and org.multiple_site_operations_enabled):
-                raise SiteScopeError("Operations at additional sites are not available yet")
+            if not site.is_default and not sites_on(session, org_id, org.multiple_sites_enabled):
+                raise SiteScopeError("Working at additional sites is not part of this organisation's plan")
         if isinstance(obj, InventoryItem) and obj.location_id is not None:
             location = locations.get((org_id, obj.location_id))
             if location is None:

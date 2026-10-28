@@ -22,6 +22,7 @@ from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.models.stock_location import StockLocation
 from app.core.db.models.user import User
 from app.core.db.repositories.inventory_repo import InventoryRepository, _item_snapshot
+from app.core.db.site_entitlement import sites_on
 from app.core.db.site_operations import resolve_site
 from app.core.db.transfer_guard import allow_transfer_accounting
 from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
@@ -98,13 +99,13 @@ def _key_lock(session, org_id, key, operation):
 
 def _actor_and_release(session, org_id, actor_id):
     org = (
-        session.query(Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled)
+        session.query(Organisation.multiple_sites_enabled)
         .filter(Organisation.id == org_id)
         .with_for_update(read=True)
         .one_or_none()
     )
-    if not org or not org.multiple_sites_enabled or not org.multiple_site_operations_enabled:
-        raise TransferError("Site transfer operations are not released yet")
+    if not org or not sites_on(session, org_id, org.multiple_sites_enabled):
+        raise TransferError("Moving stock between sites is not switched on for this organisation")
     actor = session.query(User).filter(User.org_id == org_id, User.id == actor_id).one_or_none()
     if not actor or not has_permission(actor, "inventory.adjust"):
         raise TransferError("Receiving, dispatching and confirming losses require inventory.adjust")

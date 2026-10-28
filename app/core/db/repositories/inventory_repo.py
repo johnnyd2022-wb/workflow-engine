@@ -607,16 +607,12 @@ class InventoryRepository:
         """
         from app.core.db.models.organisation import Organisation
         from app.core.db.models.stock_location import StockLocation, StockTransfer
+        from app.core.db.site_entitlement import sites_on
         from app.core.db.site_operations import resolve_site
 
         resolve_site(self.db, org_id)  # Hold organisation settings before stock locks.
-        mode = (
-            self.db.query(Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled)
-            .filter(Organisation.id == org_id)
-            .one()
-        )
-        if mode.multiple_sites_enabled and mode.multiple_site_operations_enabled:
-            raise ValueError("Moving between sites or places requires a recorded dispatch and receipt")
+        mode = self.db.query(Organisation.multiple_sites_enabled).filter(Organisation.id == org_id).one()
+        multi_site = sites_on(self.db, org_id, mode.multiple_sites_enabled)
 
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
@@ -653,6 +649,11 @@ class InventoryRepository:
 
         was_in, now_in = licensed(item.location_id), licensed(to_location_id)
         direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
+        # Moving between places at one site is a single step. With sites on, crossing the
+        # licensed-area boundary is a movement the compliance module rules on: it goes through
+        # a recorded dispatch and receipt instead.
+        if multi_site and direction != "internal":
+            raise ValueError("Moving into or out of the licensed area requires a recorded dispatch and receipt")
 
         quantity_before = str(current)
         # Same batch already at the destination (e.g. moving stock back): add to it.

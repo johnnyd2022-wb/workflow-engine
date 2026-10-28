@@ -22,9 +22,6 @@ def released(world, db):  # noqa: F811 -- pytest fixture injection
     org, admin, other, neighbour = world
     default = _enable(admin)
     additional = _add(admin)
-    with unscoped():
-        db.get(Organisation, org.id).multiple_site_operations_enabled = True
-        db.commit()
     return org, admin, other, neighbour, default, additional
 
 
@@ -245,6 +242,6 @@ def test_stale_organisation_cannot_bypass_opt_out(released):
         assert admin.put("/api/core/sites/settings", json={"enabled": False}).status_code == 200
         assert cached.multiple_sites_enabled  # deliberately stale identity map
         stale.add(StockLocation(org_id=org.id, name="Stale write", site_id=UUID(additional["id"])))
-        with pytest.raises(SiteScopeError, match="not available"):
+        with pytest.raises(SiteScopeError, match="not part of"):
             stale.flush()
         stale.rollback()

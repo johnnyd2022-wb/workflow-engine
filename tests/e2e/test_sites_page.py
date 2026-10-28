@@ -11,6 +11,7 @@ from playwright.sync_api import expect
 
 from app.core.db.models.user import UserRole
 from tests.e2e.test_crm_contact_sync_ui import client, sales_page  # noqa: F401 -- fixture re-export
+from tests.factories import grant_multi_site
 from tests.test_crm import db, org  # noqa: F401 -- fixture re-export
 from tests.test_crm import user as _member  # noqa: F401 -- fixture re-export
 
@@ -24,6 +25,7 @@ READY = "[data-sites-root][aria-busy='false']"
 def user(_member, db):  # noqa: F811
     _member.role = UserRole.ADMIN
     db.commit()
+    grant_multi_site(db, _member.org_id)
     return _member
 
 
@@ -62,15 +64,9 @@ def test_a_refused_site_keeps_its_reason_in_the_dialog(sales_page, client):  # n
 
 def test_the_page_says_whether_other_sites_can_record_work(sales_page, client, org, db):  # noqa: F811
     # It always said recording at other sites "will become available", even once it was on.
+    # Switching on now needs the plan's multi_site entitlement, and with it work can be recorded
+    # at every active site straight away.
     _on(client)
-    _open(sales_page)
-    expect(sales_page.locator("[data-sites-state]")).to_contain_text("stay at the default site")
-    from app.core.db.models.organisation import Organisation
-
-    db.query(Organisation).filter(Organisation.id == org.id).update(
-        {Organisation.multiple_site_operations_enabled: True}
-    )
-    db.commit()
     _open(sales_page)
     expect(sales_page.locator("[data-sites-state]")).to_contain_text("can be recorded at any active site")
 

@@ -11,6 +11,7 @@ from app.core.db.models.organisation import Organisation
 from app.core.db.models.site import Site
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.models.stock_location import StockLocation
+from app.core.db.site_entitlement import sites_on
 from app.core.security.access_policy import has_permission
 from app.core.security.permissions import requires_auth
 from app.features.site_transfers import service
@@ -88,7 +89,7 @@ def list_transfers():
     org = db_session.query(Organisation).filter(Organisation.id == _org()).one()
     return jsonify(
         {
-            "operations_available": bool(org.multiple_sites_enabled and org.multiple_site_operations_enabled),
+            "operations_available": sites_on(db_session, org.id, org.multiple_sites_enabled),
             "transfers": [service.serialise_transfer(row) for row in rows],
         }
     )

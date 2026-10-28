@@ -9,6 +9,7 @@ from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.site import Site
 from app.core.db.models.stock_location import StockLocation
+from app.core.db.site_entitlement import entitled, sites_on
 from app.core.db.site_guard import SiteScopeError
 
 KINDS = {
@@ -52,7 +53,9 @@ def configure(session, org_id, enabled):
     if not isinstance(enabled, bool):
         raise SiteScopeError("enabled must be true or false")
     org = locked_org(session, org_id)
-    if not enabled and org.multiple_site_operations_enabled:
+    if enabled and not entitled(session, org_id):
+        raise SiteScopeError("Multiple sites are not part of this organisation's plan")
+    if not enabled:
         session.query(Site).filter(Site.org_id == org_id).order_by(Site.id).with_for_update().populate_existing().all()
         additional = select(Site.id).where(Site.org_id == org_id, Site.is_default.is_(False))
 
@@ -138,7 +141,10 @@ def save_site(session, org_id, data, site=None):
             session.query(model.id).filter(model.org_id == org_id).first() is not None
             for model in (StockLocation, Execution, InventoryItem)
         )
-        if occupied:
+        # With every gate open, existing records simply stay where they are and only new
+        # records without a site follow the new default. Without them, records left on the
+        # old default would be stranded at a site nobody can work at.
+        if occupied and not sites_on(session, org_id, org.multiple_sites_enabled):
             raise SiteScopeError("The default cannot change after stock, locations or batches exist")
         default.is_default = False
         session.flush()
@@ -153,7 +159,7 @@ def save_site(session, org_id, data, site=None):
     return site
 
 
-def serialise(site):
+def serialise(site, operations=False):
     return {
         "id": str(site.id),
         "name": site.name,
@@ -161,16 +167,18 @@ def serialise(site):
         "kind": site.kind,
         "is_active": bool(site.is_active),
         "is_default": bool(site.is_default),
-        "operations_available": bool(site.is_default),
+        "operations_available": bool(site.is_default or operations),
     }
 
 
 def overview(session, org_id):
     org = session.query(Organisation).filter(Organisation.id == org_id).one()
     sites = session.query(Site).filter(Site.org_id == org_id).order_by(Site.is_default.desc(), Site.name).all()
+    operations = sites_on(session, org_id, org.multiple_sites_enabled)
     return {
+        "entitled": entitled(session, org_id),
         "enabled": bool(org.multiple_sites_enabled),
-        "sites": [serialise(site) for site in sites] if org.multiple_sites_enabled else [],
+        "sites": [serialise(site, operations) for site in sites] if org.multiple_sites_enabled else [],
         "kinds": KINDS,
-        "additional_site_operations_available": bool(org.multiple_site_operations_enabled),
+        "additional_site_operations_available": operations,
     }

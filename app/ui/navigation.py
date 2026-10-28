@@ -132,7 +132,7 @@ def _primary_tab(section: str, tab: Tab | None) -> Tab | None:
 
 
 def _conditions() -> dict[str, bool]:
-    """Setup-dependent tabs, read once per request (compliance and sales pages only)."""
+    """Setup-dependent tabs, read once per request (compliance, sales and settings pages only)."""
     # Cached on the request's own environ: `g` can outlive a request when an app context is reused.
     cached = request.environ.get("bize.nav_conditions")
     if cached is not None:
@@ -140,6 +140,7 @@ def _conditions() -> dict[str, bool]:
     from uuid import UUID
 
     from app.core.db import db_session
+    from app.core.db.site_entitlement import entitled
     from app.features.compliant.routes.page_routes import _food_safety_programme
     from app.features.compliant.service import ComplianceService, nz_alcohol_active
 
@@ -154,6 +155,8 @@ def _conditions() -> dict[str, bool]:
         "licensing": bool(settings.get("liquor_licence_types")),
         "programme": programme,
         "nz_alcohol": nz_alcohol_active(db_session(), org_id) if org_id else False,
+        # Settings, Sites: only where the deployment and the organisation's plan allow it.
+        "multi_site": entitled(db_session(), UUID(str(org_id))) if org_id else False,
     }
     request.environ["bize.nav_conditions"] = conditions
     return conditions
@@ -246,7 +249,7 @@ def nav_context() -> dict:
     if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows"}:
         tab_key = request.args["tab"]
     tabs = section_tabs(section, user) if user is not None else []
-    conditions = _conditions() if section in ("compliance", "sales") and user is not None else {}
+    conditions = _conditions() if section in ("compliance", "sales", "settings") and user is not None else {}
     primary_key = _primary_key(section, tab_key, tabs)
     items = []
     for tab in tabs:

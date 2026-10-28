@@ -242,7 +242,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     "settings": (
         Tab("account", "Account", "/core/settings"),
         Tab("people", "People", "/core/people", ("users.manage",)),
-        Tab("sites", "Sites", "/core/sites", ("settings.manage",)),
+        # Only where the deployment and the organisation's plan allow multiple sites (GL-P07).
+        Tab("sites", "Sites", "/core/sites", ("settings.manage",), when="multi_site"),
         Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
         Tab("section-settings", "Tasks", "/core/tasks/configuration", ("production.view",)),
     ),
