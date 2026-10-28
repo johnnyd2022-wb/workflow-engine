@@ -19,29 +19,20 @@
 A short summary of what happens in this step, in plain language.
             </p>
           </div>
-          <div class="flow-spa-stack__item step-timing" data-step-timing data-step-timing-style="1" role="group" aria-labelledby="step-timing-title">
+          <div class="flow-spa-stack__item step-timing" data-step-timing role="group" aria-labelledby="step-timing-title">
             <div class="step-timing__head">
               <p class="step-timing__title" id="step-timing-title">Timing <span>· optional</span></p>
-              {# CONCEPT ONLY: three layouts to choose from; removed when one is picked. #}
-              <div class="step-timing__styles" role="group" aria-label="Timing layout">
-                <button type="button" data-timing-style-pick="1">Fields</button><button type="button" data-timing-style-pick="2">Sentence</button><button type="button" data-timing-style-pick="3">Timeline</button>
-              </div>
             </div>
             <div class="step-timing__bar" aria-hidden="true"><div data-timing-bar="duration"><span>Work</span></div><div data-timing-bar="wait"><span>Wait</span></div></div>
             <div class="step-timing__fields">
-              <span class="step-timing__words">This step takes</span>
               <div class="step-timing__field">
                 <label class="step-timing__label" for="guided-step-duration-value">Takes</label>
                 <span class="step-timing__pair"><input type="number" id="guided-step-duration-value" data-timing-value="duration" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-duration-unit" data-timing-unit="duration" aria-label="Takes: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
-                <small>Working time for one batch.</small>
               </div>
-              <span class="step-timing__words">then waits</span>
               <div class="step-timing__field">
                 <label class="step-timing__label" for="guided-step-wait-value">Then waits</label>
                 <span class="step-timing__pair"><input type="number" id="guided-step-wait-value" data-timing-value="wait" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-wait-unit" data-timing-unit="wait" aria-label="Then waits: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
-                <small>Resting, settling or ageing before the next step.</small>
               </div>
-              <span class="step-timing__words">before the next step can start.</span>
             </div>
             <p class="step-timing__total" data-timing-total aria-live="polite"></p>
           </div>

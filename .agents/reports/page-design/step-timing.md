@@ -2,11 +2,11 @@
 
 plan: docs/step-timing-redesign-plan.md
 research: 3 comparable products, 2 craft references, 1 pattern source
-directions: 3 (Fields, Sentence, Timeline); chosen: awaiting the pick
-passes: 3; defects fixed: 1 (planner form did not prefill from workflow timing)
-screenshots: /tmp/step-timing-shots-01, /tmp/step-timing-shots-02, /tmp/step-timing-shots-03
-tests: process-design and planning tests changed/added for the new timing and expiry behavior
-follow-ups: select one style, remove the concept switch, re-shoot, and merge; later planning stages cover capacity and production calendars
-verdict: findings-open
+directions: 3 (Fields, Sentence, Timeline); chosen: Timeline (Style 3, founder choice)
+passes: 5; defects fixed: 2 (planner prefill; invalid timing no longer shows a zero-duration bar)
+screenshots: /tmp/step-timing-shots-01, /tmp/step-timing-shots-02, /tmp/step-timing-shots-03, /tmp/step-timing-final-shots, /tmp/step-timing-final-shots-02
+tests: process-design and planning tests for timing and expiry; workflow-editor browser coverage of the chosen layout at phone and desktop widths
+follow-ups: later planning stages cover capacity and production calendars
+verdict: patched
 
-The first two screenshot passes showed only the top of the timing section because the wizard uses an internal scroll area. The third pass scrolled the section into view and visually checked all three concepts at desktop and phone widths and in dark mode. No horizontal overflow or browser console errors occurred. The screenshots are for review of the concept options; the final chosen style must be shot once more after the other styles are removed.
+The first two concept passes showed only the top of the timing section because the wizard scroll position was too high. The third concept pass showed the control at desktop and phone widths and in dark mode. After the founder chose Style 3, the other layouts and switch were removed. The first single-style pass revealed that invalid timing still showed a zero-duration graphic; the second fixed this. Its empty, entered, invalid, phone, dark, and return-visit screenshots were all read and showed no clipping, horizontal overflow, or console errors.

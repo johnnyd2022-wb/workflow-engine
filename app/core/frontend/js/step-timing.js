@@ -90,6 +90,7 @@
     }
     var work = root.querySelector('[data-timing-bar="duration"]'), rest = root.querySelector('[data-timing-bar="wait"]');
     if (work && rest) {
+      work.parentElement.hidden = bad;
       var sum = d + w;
       // Square roots keep a 2-hour step visible beside a 3-week wait.
       var a = sum ? Math.sqrt(d) : 1, b = sum ? Math.sqrt(w) : 1;
@@ -100,27 +101,9 @@
     }
   }
 
-  /* CONCEPT ONLY: three layouts to choose from; the switch goes when one is picked. */
-  var STYLE_KEY = 'step-timing-style';
-  function applyStyle(root, style) {
-    root.dataset.stepTimingStyle = style;
-    root.querySelectorAll('[data-timing-style-pick]').forEach(function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.timingStylePick === style));
-    });
-  }
   function bind(root) {
     if (!root || root.dataset.stepTimingBound) return;
     root.dataset.stepTimingBound = '1';
-    var fromUrl = new URLSearchParams(window.location.search).get('timing_style');
-    var saved = null;
-    try { saved = window.localStorage.getItem(STYLE_KEY); } catch (e) { saved = null; }
-    applyStyle(root, ['1', '2', '3'].indexOf(fromUrl) >= 0 ? fromUrl : ['1', '2', '3'].indexOf(saved) >= 0 ? saved : '1');
-    root.querySelectorAll('[data-timing-style-pick]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        applyStyle(root, b.dataset.timingStylePick);
-        try { window.localStorage.setItem(STYLE_KEY, b.dataset.timingStylePick); } catch (e) { /* per-viewer only */ }
-      });
-    });
     root.addEventListener('input', function () { render(root); });
     root.addEventListener('change', function () { render(root); });
     render(root);

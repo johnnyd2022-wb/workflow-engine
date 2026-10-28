@@ -26,7 +26,9 @@ No comparable product documentation found a compelling reason to require timing 
 | Best at | Quick, precise entry | Explaining the sequence to first-time users | Seeing work and idle time at a glance |
 | Gives up | Less visual storytelling | Less compact on narrow screens | Relative widths are illustrative, not a schedule |
 
-All three store the same whole-minute values, support minutes through weeks, distinguish blank from zero, display a total, and inherit the app's colour tokens. The concept switch exists only for review.
+All three concepts stored the same whole-minute values, supported minutes through weeks, distinguished blank from zero, displayed a total, and inherited the app's colour tokens.
+
+**Chosen: Style 3, Timeline.** The work/wait bar makes the active and passive parts of a step legible at a glance while keeping the two labelled values editable beneath it. Style 1 was more compact but gave no visual sense of the split. Style 2 explained the sequence in words but wrapped across several lines on phones. The concept switch and the two unchosen layouts have been removed.
 
 ## Behavior and follow-ups
 
@@ -36,4 +38,4 @@ This change does not alter actual execution durations, equipment capacity, or pr
 
 ## Checks
 
-Validate API writes and clears, snapshots and stale detection, planning defaults, shelf-life allocation, browser save/revisit, and the three concepts at desktop, phone and dark theme widths.
+Validate API writes and clears, snapshots and stale detection, planning defaults, shelf-life allocation, and the final layout at desktop and phone widths and in dark mode. The final screenshot pass should also cover blank, entered, and invalid timing states, plus a return visit.
