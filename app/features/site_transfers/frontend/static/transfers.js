@@ -2,12 +2,10 @@
 
    Receiving is one click when everything turned up ("Received in full"); "Something's different"
    opens the receipt form for shortages and damage. Moving stock opens the shared Move dialog
-   (app/ui/shared/move-stock.js) after a stock picker. Three layouts behind a CONCEPT ONLY switch:
-   1 to receive first, 2 a board by status, 3 grouped by site. */
+   (app/ui/shared/move-stock.js) after a stock picker. What is still to be received leads; finished
+   transfers are listed underneath. */
 (function () {
   'use strict';
-
-  var STYLE_KEY = 'tr-style';
 
   function init(root) {
     if (!root || root.dataset.bound) return;
@@ -22,7 +20,6 @@
     var moveButton = $('[data-transfers-move]');
     var pick = $('[data-transfers-pick]');
     var canAdjust = root.dataset.canAdjust === 'true';
-    var style = '1';
     var data = null;
 
     function el(tag, cls, text) {
@@ -52,24 +49,6 @@
     }
     function say(text) { done.textContent = text; done.hidden = !text; message.hidden = true; }
     function fail(error) { message.textContent = error.message; message.hidden = false; }
-
-    // CONCEPT ONLY ─────────────────────────────────────────────────────────────────────────
-    function readStyle() {
-      var fromUrl = new URLSearchParams(window.location.search).get('style');
-      var saved = null;
-      try { saved = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
-      setStyle(['1', '2', '3'].indexOf(fromUrl) !== -1 ? fromUrl : (['1', '2', '3'].indexOf(saved) !== -1 ? saved : '1'), false);
-    }
-    function setStyle(next, remember) {
-      style = next;
-      root.setAttribute('data-transfers-style', next);
-      root.querySelectorAll('[data-tr-style]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.trStyle === next ? 'true' : 'false'); });
-      if (remember) { try { window.localStorage.setItem(STYLE_KEY, next); } catch (_) { /* private mode */ } }
-    }
-    root.querySelectorAll('[data-tr-style]').forEach(function (b) {
-      b.addEventListener('click', function () { setStyle(b.dataset.trStyle, true); if (data) render(); });
-    });
-    // ────────────────────────────────────────────────────────────────────────────────────────
 
     function siteName(id) { var s = data.sites.get(id); return s || 'another site'; }
     function placeName(transfer, side) {
@@ -133,7 +112,7 @@
       } catch (error) { fail(error); button.disabled = false; }
     }
 
-    function card(t, outgoing) {
+    function card(t) {
       var article = el('article', 'tr-card tr-card--' + t.status);
       article.dataset.transferId = t.id;
       var head = el('div', 'tr-card__head');
@@ -149,7 +128,7 @@
       if (Number(t.confirmed_loss_quantity) > 0) article.append(el('p', 'tr-card__loss', fmt(t.confirmed_loss_quantity) + ' ' + t.unit + ' confirmed lost'));
       var actions = el('div', 'tr-actions tr-card__actions');
       var transit = Number(t.transit_quantity);
-      if (transit > 0 && canAdjust && data.available && !outgoing) {
+      if (transit > 0 && canAdjust && data.available) {
         var full = el('button', 'workspace-button workspace-button--primary', transit === Number(t.quantity) ? 'Received in full' : 'Received the rest (' + fmt(transit) + ')');
         full.type = 'button';
         full.dataset.trFull = '';
@@ -174,14 +153,6 @@
       return article;
     }
 
-    function section(title, rows, empty, outgoing) {
-      var wrap = el('section', 'tr-group');
-      wrap.append(el('h3', 'tr-group__title', title + (rows.length ? ' · ' + rows.length : '')));
-      if (!rows.length && empty) wrap.append(el('p', 'tr-empty', empty));
-      rows.forEach(function (t) { wrap.append(card(t, outgoing)); });
-      return wrap;
-    }
-
     function render() {
       var all = data.transfers;
       var open = all.filter(function (t) { return Number(t.transit_quantity) > 0; });
@@ -193,37 +164,11 @@
       else if (!all.length) state.textContent = 'Nothing has moved between sites yet. Use Move stock, or Move… on a line in Inventory.';
       else state.textContent = '';
       state.hidden = !state.textContent;
-      if (style === '1') {
-        // Style 1: what to receive leads; everything else is history underneath.
-        arriving.hidden = !open.length;
-        $('[data-transfers-arriving-caption]').textContent = open.length === 1 ? 'One delivery is on its way.' : open.length + ' deliveries are on their way.';
-        open.forEach(function (t) { arrivingList.append(card(t)); });
-        closed.forEach(function (t) { list.append(card(t)); });
-      } else if (style === '2') {
-        // Style 2: a column per status.
-        var board = el('div', 'tr-board');
-        board.append(
-          section('In transit', open.filter(function (t) { return t.status === 'in_transit'; }), 'Nothing on the road.'),
-          section('Part received', open.filter(function (t) { return t.status === 'part_received'; }), 'Nothing part received.'),
-          section('Received', closed, 'Nothing received yet.'));
-        if (all.length) list.append(board);
-      } else {
-        // Style 3: by site, as someone at that site sees it.
-        data.siteList.forEach(function (site) {
-          var coming = open.filter(function (t) { return t.destination_site_id === site.id; });
-          var leaving = open.filter(function (t) { return t.source_site_id === site.id; });
-          // Finished transfers are listed once, where they arrived.
-          var past = closed.filter(function (t) { return t.destination_site_id === site.id; });
-          if (!coming.length && !leaving.length && !past.length) return;
-          var block = el('section', 'tr-site');
-          block.append(el('h3', 'tr-site__title', site.name));
-          var cols = el('div', 'tr-site__cols');
-          cols.append(section('Coming in', coming, 'Nothing on its way here.'), section('Going out', leaving, 'Nothing on its way out.', true));
-          block.append(cols);
-          if (past.length) block.append(section('Arrived', past.slice(0, 5), ''));
-          list.append(block);
-        });
-      }
+      // What to receive leads; everything else is history underneath.
+      arriving.hidden = !open.length;
+      $('[data-transfers-arriving-caption]').textContent = open.length === 1 ? 'One delivery is on its way.' : open.length + ' deliveries are on their way.';
+      open.forEach(function (t) { arrivingList.append(card(t)); });
+      closed.forEach(function (t) { list.append(card(t)); });
       if (moveButton) moveButton.hidden = !(data.available && canAdjust && data.canAuthorise && data.stock.length);
     }
 
@@ -236,7 +181,6 @@
           available: position.operations_available,
           transfers: position.transfers,
           sites: new Map(options.sites.map(function (s) { return [s.id, s.name]; })),
-          siteList: options.sites,
           locations: new Map(options.locations.map(function (l) { return [l.id, l.name]; })),
           stock: options.stock,
           canAuthorise: options.requirements.can_authorise !== false,
@@ -285,7 +229,6 @@
     }
     if (moveButton) moveButton.addEventListener('click', openPicker);
 
-    readStyle();
     load();
   }
   // Runs at first load and after every boosted swap that brings the page in (page-init.js).

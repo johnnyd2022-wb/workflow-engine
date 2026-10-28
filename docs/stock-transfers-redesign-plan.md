@@ -21,7 +21,12 @@
 
 **Looked for, not found:** a product whose move dialog decides for you between a one-step internal move and a dispatch based on the licensed area. That is the 10x: you say *where*, the dialog works out *how* (one step, dispatch, or dispatch across the licensed boundary) and asks only what that needs.
 
-## Three directions for Stock transfers
+## Chosen: Style 1, to receive first (founder, 2026-10-28)
+
+- **Style 2 (status board)** lost because narrow columns stacked the actions and made a phone scroll further, for a pipeline view few businesses need.
+- **Style 3 (by site)** lost because it showed each transfer under two sites and offered nothing a person receiving deliveries needs first.
+
+## Three directions for Stock transfers (as presented)
 
 | | Style 1: To receive first | Style 2: Status board | Style 3: By site |
 |---|---|---|---|
@@ -62,4 +67,4 @@
   - no Move for a single-site business;
   - NZ dispatch with approval, then a partial receipt and the docket (rewritten for the dialog);
   - home-consumption removal across the boundary at one site;
-  - CONCEPT ONLY fit-and-receive tests for each layout at phone, laptop and wall.
+  - the page fits and receives at phone, laptop and wall.

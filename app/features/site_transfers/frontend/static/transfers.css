@@ -1,4 +1,4 @@
-/* Stock transfers (docs/stock-transfers-redesign-plan.md). Style 1 is the base; Styles 2 and 3 are CONCEPT ONLY blocks. */
+/* Stock transfers (docs/stock-transfers-redesign-plan.md): what to receive first, history underneath. */
 #page-content .transfers-shell [hidden] { display: none !important; }
 #page-content .transfers-shell .tr-done { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #abefc6; border-radius: 10px; background: #ecfdf3; color: #067647; font-size: 14px; }
 #page-content .transfers-shell .tr-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
@@ -24,8 +24,6 @@
 #page-content .transfers-shell .tr-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; }
 #page-content .transfers-shell .tr-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 #page-content .transfers-shell .tr-hint, #page-content .transfers-shell .tr-empty { margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); }
-#page-content .transfers-shell .tr-group { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-#page-content .transfers-shell .tr-group__title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--ui-text-muted, #64748b); }
 
 /* Picker for Move stock */
 #page-content .tr-dialog { width: min(32rem, 94vw); margin: auto; padding: 0; border: 0; border-radius: 14px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); box-shadow: 0 24px 60px rgb(15 23 42 / 25%); }
@@ -43,18 +41,3 @@ html[data-spa-theme="dark"] #page-content .transfers-shell .tr-pill--transit { b
 html[data-spa-theme="dark"] #page-content .transfers-shell .tr-pill--warn { background: rgb(252 211 77 / 12%); color: #fcd34d; }
 html[data-spa-theme="dark"] #page-content .transfers-shell .tr-card__loss { color: #f97066; }
 
-/* CONCEPT ONLY: the style switch. */
-#page-content .transfers-shell .tr-style-pick { display: inline-flex; border: 1px solid var(--ui-border); border-radius: 999px; overflow: hidden; }
-#page-content .transfers-shell .tr-style-pick button { padding: 6px 12px; border: 0; background: var(--ui-surface); color: var(--ui-text-muted); font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content .transfers-shell .tr-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
-
-/* CONCEPT ONLY: Style 2, a column per status. */
-#page-content [data-transfers-style="2"] .tr-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
-@media (max-width: 1023px) { #page-content [data-transfers-style="2"] .tr-board { grid-template-columns: minmax(0, 1fr); } }
-
-/* CONCEPT ONLY: Style 3, by site. */
-#page-content [data-transfers-style="3"] .tr-site { display: flex; flex-direction: column; gap: 12px; padding: 16px 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
-#page-content [data-transfers-style="3"] .tr-site:first-child { border-top: 0; padding-top: 0; }
-#page-content [data-transfers-style="3"] .tr-site__title { margin: 0; font-size: 16px; font-weight: 700; }
-#page-content [data-transfers-style="3"] .tr-site__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-@media (max-width: 767px) { #page-content [data-transfers-style="3"] .tr-site__cols { grid-template-columns: minmax(0, 1fr); } }

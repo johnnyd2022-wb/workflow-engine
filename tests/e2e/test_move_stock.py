@@ -132,10 +132,8 @@ def test_a_single_site_business_is_not_offered_a_move(sales_page, client):  # no
     expect(sales_page.locator("[data-inv-move]")).to_have_count(0)
 
 
-# CONCEPT ONLY: deleted with the two transfers layouts not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_transfers_layout_fits_and_receives(sales_page, client, style, width):  # noqa: F811
+def test_stock_transfers_fits_and_receives(sales_page, client, width):  # noqa: F811
     _, bond, _ = _setup(client)
     juniper = client.get("/api/core/inventory").get_json()["inventory_items"][0]
     made = client.post(
@@ -149,11 +147,11 @@ def test_each_transfers_layout_fits_and_receives(sales_page, client, style, widt
             "occurred_on": juniper["created_at"][:10],
             "approval": {},
         },
-        headers={"Idempotency-Key": f"fit-{style}-{width}"},
+        headers={"Idempotency-Key": f"fit-{width}"},
     )
     assert made.status_code == 201, made.get_json()
     sales_page.set_viewport_size({"width": width, "height": 900})
-    sales_page.goto(f"{BASE}/core/site-transfers?style={style}")
+    sales_page.goto(f"{BASE}/core/site-transfers")
     sales_page.locator("[data-transfers-root][aria-busy='false']").wait_for()
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     receive = sales_page.locator("[data-tr-full]")
