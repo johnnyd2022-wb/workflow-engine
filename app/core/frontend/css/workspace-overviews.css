@@ -280,6 +280,19 @@ html[data-spa-theme="dark"] #page-content .compliance-overview .compliant-framew
 #page-content .sales-analytics .workspace-columns { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
 #page-content .sales-analytics .workspace-columns > .workspace-card { align-self: stretch; }
 #page-content .sales-analytics__body { margin-top: 18px; min-width: 0; overflow-x: auto; }
+#page-content .sales-analytics__product-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 18px; }
+#page-content .sales-analytics__product-filters .crm-form-group { margin: 0; min-width: 0; }
+#page-content .sales-analytics__product-filters .crm-form-label { display: block; margin-bottom: 6px; }
+#page-content .sales-analytics__product-filters .workspace-button { flex: 0 0 auto; }
+#page-content .sales-analytics__product-search { flex: 1 1 220px; }
+#page-content .sales-analytics__product-search input { width: 100%; box-sizing: border-box; }
+#page-content .sales-analytics__product-section + .sales-analytics__product-section { margin-top: 16px; }
+#page-content .sales-analytics__product-section { padding: 18px; }
+#page-content .sales-analytics__product-heading { align-items: start; }
+#page-content .sales-analytics__product-heading .crm-btn { flex: 0 0 auto; }
+#page-content .sales-analytics__product-table-wrap { max-width: 100%; overflow-x: auto; }
+#page-content .sales-analytics__product-section .workspace-caption { font-size: 12px; }
+#page-content .sales-analytics__product-section details ul { margin: 8px 0; padding-left: 18px; }
 #page-content .sales-analytics__empty { margin: 0; padding: 24px 0; text-align: center; font-size: 14px; color: var(--ui-text-muted, #64748b); }
 #page-content .sales-analytics__table { width: 100%; table-layout: auto; }
 #page-content .sales-analytics__table th,
@@ -303,6 +316,9 @@ html[data-spa-theme="dark"] #page-content .compliance-overview .compliant-framew
 #page-content .sales-analytics__groups .crm-kpi-value { display: block; margin: 6px 0 2px; }
 html[data-spa-theme="dark"] #page-content .sales-analytics .crm-kpi-value { color: var(--ui-text); }
 @media (max-width: 767px) {
+  #page-content .sales-analytics__product-filters .crm-form-group { flex: 1 1 calc(50% - 6px); }
+  #page-content .sales-analytics__product-filters .workspace-button { flex: 1 1 100%; }
+  #page-content .sales-analytics__product-section { padding: 14px; }
   #page-content .sales-analytics__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   #page-content .sales-analytics__table th,
   #page-content .sales-analytics__table td { padding: 10px 6px; font-size: 13px; }

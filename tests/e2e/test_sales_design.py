@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.test_workspace_overviews import _page
+from tests.e2e.test_workspace_overviews import _capture, _page
 from tests.e2e.test_workspace_overviews import workspace_user as _workspace_user
 
 workspace_user = _workspace_user
@@ -42,6 +42,48 @@ def _data(page):
 def _ready(page):
     page.goto("/crm")
     expect(page.get_by_role("heading", name="Sales Trend", exact=True)).to_be_visible()
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_analytics_product_card_uses_shared_sections_and_custom_top_filter(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    customers = [
+        {
+            "contact_id": str(index),
+            "contact_name": f"Store {index:02d}",
+            "total_units": 20 - index,
+            "line_revenue": (20 - index) * 40,
+            "products": [{"product_name": "Gin", "units": 20 - index, "line_revenue": (20 - index) * 40}],
+        }
+        for index in range(14)
+    ]
+    product_sales = {"customers": customers, "products": [], "unmapped_xero_items": 0, "unmapped_line_revenue": 0}
+    try:
+        page.route("**/api/crm/analytics/product-sales-by-store*", lambda route: route.fulfill(json=product_sales))
+        page.goto("/crm/analytics")
+        card = page.get_by_role("region", name="Products by customer and store")
+        rows = card.get_by_role("region", name="Top customers by units")
+        expect(card.locator(".sales-analytics__product-filters")).to_be_visible()
+        expect(card.locator(".sales-analytics__product-section")).to_have_count(2)
+        expect(rows.locator("tbody tr")).to_have_count(10)
+        rows.get_by_role("button", name="Top 10").click()
+        dialog = page.get_by_role("dialog", name="Select Top N")
+        dialog.get_by_label("Number of customers / stores to display").fill("3")
+        dialog.get_by_role("button", name="Apply").click()
+        expect(rows.locator("tbody tr")).to_have_count(3)
+        rows.get_by_role("button", name="Top 3").click()
+        dialog.get_by_role("button", name="Show all").click()
+        expect(rows.locator("tbody tr")).to_have_count(14)
+        expect(rows.get_by_role("button", name="Top All")).to_be_visible()
+        card.get_by_role("searchbox", name="Find customer / store").fill("Store 13")
+        expect(rows.locator("tbody tr")).to_have_count(1)
+        page.reload()
+        expect(rows.locator("tbody tr")).to_have_count(14)
+        expect(rows.get_by_role("button", name="Top All")).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "sales-analytics-product-card", width)
+    finally:
+        context.close()
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
