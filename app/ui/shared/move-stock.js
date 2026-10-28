@@ -176,10 +176,10 @@
         var parts = (to.value || '|').split('|');
         return { site: parts[0], location: parts[1] || null };
       }
-      // Unplaced stock is in the main licensed area; an area says whether it is inside it.
+      // Inside the licensed area or not, as the server says (the compliance register when there is one).
       function licensed(siteId, locationId) {
-        if (!locationId) return true;
         var site = ((options.choices && options.choices.sites) || []).filter(function (s) { return s.id === siteId; })[0];
+        if (!locationId) return site ? site.main_area_licensed !== false : true;
         var area = site ? site.areas.filter(function (a) { return a.id === locationId; })[0] : null;
         return area ? !!area.inside_licensed_area : true;
       }

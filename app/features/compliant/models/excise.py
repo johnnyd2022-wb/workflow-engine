@@ -2,7 +2,17 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    Column,
+    Date,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
@@ -30,10 +40,28 @@ class ExciseLodgement(Base):
     """A period confirmed as lodged with Customs; its figures are locked in ``snapshot``."""
 
     __tablename__ = "excise_lodgements"
-    __table_args__ = (UniqueConstraint("org_id", "period_start", name="uq_excise_lodgements_org_period"),)
+    __table_args__ = (
+        # One entry per CCA licence per period; a single-site business has no licence here
+        # and one entry per period (NULLS NOT DISTINCT).
+        UniqueConstraint(
+            "org_id",
+            "licence_id",
+            "period_start",
+            name="uq_excise_lodgements_org_licence_period",
+            postgresql_nulls_not_distinct=True,
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "licence_id"],
+            ["customs_licences.org_id", "customs_licences.id"],
+            name="fk_excise_lodgements_org_licence",
+            ondelete="RESTRICT",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    # The CCA licence this entry was lodged for (GL-P07 A5); None for a single-site business.
+    licence_id = Column(UUID(as_uuid=True), nullable=True)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
     lodged_on = Column(Date, nullable=False)

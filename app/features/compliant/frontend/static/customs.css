@@ -368,3 +368,17 @@ html[data-spa-theme="dark"] #page-content .customs-bucket__list em { color: #fdb
   #page-content .tr-place-row { grid-template-columns: minmax(0, 1fr) auto; }
   #page-content .tr-place-row > span:empty { display: none; }
 }
+
+/* One entry per CCA licence with several sites (GL-P07 A5): a tab per licence above the periods. */
+#page-content .customs-page .excise-ccas { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--ui-border, #e2e8f0); overflow-x: auto; }
+#page-content .customs-page .excise-ccas[hidden] { display: none; }
+#page-content .customs-page .excise-cca { display: inline-flex; align-items: baseline; gap: 8px; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; box-shadow: none; color: var(--ui-text-muted, #64748b); font-size: 14px; white-space: nowrap; cursor: pointer; }
+#page-content .customs-page .excise-cca strong { color: var(--ui-text, #172033); font-weight: 600; }
+#page-content .customs-page .excise-cca__name { font-size: 13px; }
+#page-content .customs-page .excise-cca__state { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+#page-content .customs-page .excise-cca__state--lodged { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+#page-content .customs-page .excise-cca__state--todo { background: #fffaeb; color: #9a5b00; }
+#page-content .customs-page .excise-cca--active { border-bottom-color: var(--ui-accent, #0f766e); color: var(--ui-text, #172033); }
+#page-content .customs-page .excise-cca:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: -2px; }
+html[data-spa-theme="dark"] #page-content .customs-page .excise-cca__state--todo { background: rgb(252 211 77 / 12%); color: #fcd34d; }
+@media (max-width: 767px) { #page-content .customs-page .excise-cca__name { display: none; } }

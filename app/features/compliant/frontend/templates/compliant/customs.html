@@ -10,6 +10,8 @@
   <div class="customs-layout">
     <section class="workspace-card customs-excise excise-panel" data-excise-root aria-labelledby="excise-title">
       <h2 id="excise-title" class="customs-visually-hidden">Excise entries</h2>
+      {# With several sites: one entry per CCA licence. #}
+      <div class="excise-ccas" data-excise-ccas role="group" aria-label="CCA licence" hidden></div>
       <div class="excise-periods" data-excise-periods role="list" aria-label="Lodgement periods"></div>
       <div class="excise-draft" data-excise-draft aria-live="polite"><p class="workspace-caption" data-loading>Loading excise…</p></div>
     </section>
