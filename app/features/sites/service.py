@@ -1,10 +1,10 @@
-"""Site registration without exposing incomplete multi-site operations."""
+"""Sites: the register, the default, and what is at each place (GL-P07)."""
 
 from uuid import UUID
 
 from sqlalchemy import func, select
 
-from app.core.db.models.execution import Execution
+from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.site import Site
@@ -175,19 +175,62 @@ def overview(session, org_id):
     org = session.query(Organisation).filter(Organisation.id == org_id).one()
     sites = session.query(Site).filter(Site.org_id == org_id).order_by(Site.is_default.desc(), Site.name).all()
     operations = sites_on(session, org_id, org.multiple_sites_enabled)
+    shown = [serialise(site, operations) for site in sites] if org.multiple_sites_enabled else []
+    compliance = _add_whereabouts(session, org_id, sites, shown) if shown else None
     return {
+        "compliance": compliance,
         "entitled": entitled(session, org_id),
         "enabled": bool(org.multiple_sites_enabled),
-        "sites": [serialise(site, operations) for site in sites] if org.multiple_sites_enabled else [],
+        "sites": shown,
         "kinds": KINDS,
         "additional_site_operations_available": operations,
     }
 
 
+def _add_whereabouts(session, org_id, sites, shown):
+    """What is at each site, for its card: stock lines, batches under way, its stock areas and
+    whatever the compliance module wants said about it (licensed or not). Returns the module's
+    column label and setup step, or None when it has nothing to say."""
+    from app.features.compliant.platform.site_notes import site_notes
+
+    stock = dict(
+        session.query(InventoryItem.site_id, func.count())
+        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity > 0)
+        .group_by(InventoryItem.site_id)
+        .all()
+    )
+    batches = dict(
+        session.query(Execution.site_id, func.count())
+        .filter(
+            Execution.org_id == org_id,
+            Execution.status.in_((ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS)),
+        )
+        .group_by(Execution.site_id)
+        .all()
+    )
+    areas = (
+        session.query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    notes = site_notes(session, org_id, sites, areas)
+    for site, row in zip(sites, shown, strict=True):
+        row["stock_lines"] = int(stock.get(site.id, 0))
+        row["batches_under_way"] = int(batches.get(site.id, 0))
+        row["notes"] = notes["sites"].get(str(site.id), [])
+        row["areas"] = [
+            {"id": str(area.id), "name": area.name, "note": notes["areas"].get(str(area.id))}
+            for area in areas
+            if area.site_id == site.id
+        ]
+    if notes["label"] is None:
+        return None
+    return {"label": notes["label"], "step": notes["step"]}
+
+
 def choices(session, org_id):
-    """What a site picker or site lens offers: active sites with their stock areas, the default,
-    and whether more than one can be chosen. With any gate closed there is nothing to choose and
-    pages show no site control at all."""
+    """Active sites and stock areas offered by a site picker or site lens."""
     org = session.query(Organisation).filter(Organisation.id == org_id).one()
     on = sites_on(session, org_id, org.multiple_sites_enabled)
     if not on:
