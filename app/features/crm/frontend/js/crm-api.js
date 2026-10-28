@@ -157,6 +157,10 @@ window.CRMAPI = (function () {
   // ── Analytics ─────────────────────────────────────────────────
   async function getMonthlySales(months = 12) { return request(`/analytics/monthly-sales?months=${months}`); }
   async function getCustomerBreakdown(topN = 20) { return request(`/analytics/customer-breakdown?top_n=${topN}`); }
+  async function getProductSalesByStore(startDate, endDate) {
+    const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
+    return request(`/analytics/product-sales-by-store?${qs}`);
+  }
   async function getRankings(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return request(`/analytics/rankings${qs ? '?' + qs : ''}`);
@@ -182,7 +186,7 @@ window.CRMAPI = (function () {
     getCustomers, getCustomer, createCustomer, updateCustomer, setCustomerXeroSync, retryCustomerXeroSync, getContactSyncSettings, updateContactSyncSettings, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
-    getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
+    getMonthlySales, getCustomerBreakdown, getProductSalesByStore, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
     getProductMappings, getFinalProducts, createProductMapping, createProductMappings, updateProductMapping, deleteProductMapping,
   };
 })();

@@ -14,8 +14,13 @@ function crmCustomerDetail(contactId) {
     activeTab: 'overview',
     customer: null,
     invoices: [],
+    recentInvoices: [],
     invoicePage: 1,
+    invoicePageSize: 25,
     invoiceTotal: 0,
+    invoicesLoaded: false,
+    invoicesLoading: false,
+    invoiceError: '',
     openInvoiceId: null,
     notes: [],
     tasks: [],
@@ -105,7 +110,7 @@ function crmCustomerDetail(contactId) {
         this.customer = data.customer;
         this.xeroSync = data.xero_sync || {};
         this.xeroConnection = data.xero_connection || {};
-        this.invoices = data.recent_invoices || [];
+        this.recentInvoices = data.recent_invoices || [];
         this.notes    = data.notes || [];
         this.tasks    = data.tasks || [];
         this.allMappings = data.product_mappings || [];
@@ -130,7 +135,7 @@ function crmCustomerDetail(contactId) {
     },
 
     get lastOrder() {
-      return this.invoices.find((inv) => inv.date && inv.status !== 'VOIDED' && inv.status !== 'DELETED') || null;
+      return this.recentInvoices.find((inv) => inv.date && inv.status !== 'VOIDED' && inv.status !== 'DELETED') || null;
     },
 
     get openTasks() {
@@ -186,18 +191,26 @@ function crmCustomerDetail(contactId) {
       this.activeTab = tab;
       if (tab === 'overview') {
         this.$nextTick(() => this.drawCustomerAnalyticsCharts());
+      } else if (tab === 'invoices' && !this.invoicesLoaded && !this.invoicesLoading) {
+        this.loadInvoices();
       }
     },
 
     // ── Invoices ────────────────────────────────────────────────
     async loadInvoices(page = 1) {
+      this.invoicesLoading = true;
+      this.invoiceError = '';
       try {
-        const data = await CRMAPI.getCustomerInvoices(this.contactId, { page, page_size: 25 });
+        const data = await CRMAPI.getCustomerInvoices(this.contactId, { page, page_size: this.invoicePageSize });
         this.invoices = data.invoices || [];
         this.invoicePage = data.page || 1;
         this.invoiceTotal = data.total || 0;
+        this.invoicesLoaded = true;
+        this.openInvoiceId = null;
       } catch (e) {
-        this.error = e.message;
+        this.invoiceError = e.message || 'Failed to load invoices.';
+      } finally {
+        this.invoicesLoading = false;
       }
     },
 

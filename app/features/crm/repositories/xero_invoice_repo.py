@@ -110,7 +110,7 @@ class XeroInvoiceRepository:
         q = (
             self.db.query(XeroInvoice)
             .filter(XeroInvoice.contact_id == contact_id, XeroInvoice.org_id == org_id)
-            .order_by(XeroInvoice.date.desc())
+            .order_by(XeroInvoice.date.desc().nulls_last(), XeroInvoice.id.desc())
         )
         total = q.count()
         return q.offset((page - 1) * page_size).limit(page_size).all(), total
@@ -639,7 +639,7 @@ class XeroInvoiceRepository:
     def customer_product_breakdown(
         self,
         org_id: UUID,
-        limit: int = 20,
+        limit: int | None = 20,
         start_date: date | None = None,
         end_date: date | None = None,
         descending: bool = True,
@@ -671,17 +671,15 @@ class XeroInvoiceRepository:
         if end_date:
             q = q.filter(XeroInvoice.date < end_date)
         order_expr = revenue_expr.desc().nulls_last() if descending else revenue_expr.asc().nulls_last()
-        rows = (
-            q.group_by(
-                XeroInvoice.contact_id,
-                XeroContact.name,
-                XeroInvoiceLineItem.item_code,
-                XeroInvoiceLineItem.description,
-            )
-            .order_by(order_expr)
-            .limit(limit)
-            .all()
-        )
+        q = q.group_by(
+            XeroInvoice.contact_id,
+            XeroContact.name,
+            XeroInvoiceLineItem.item_code,
+            XeroInvoiceLineItem.description,
+        ).order_by(order_expr)
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
         return [
             {
                 "contact_id": str(row.contact_id) if row.contact_id else None,

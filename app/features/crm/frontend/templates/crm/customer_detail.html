@@ -62,7 +62,7 @@
 
       <nav class="cd-tabs" role="tablist" aria-label="Customer sections">
         <button type="button" role="tab" id="cd-tab-overview" aria-controls="cd-panel-overview" :aria-selected="activeTab==='overview' ? 'true' : 'false'" @click="setTab('overview')">Overview</button>
-        <button type="button" role="tab" id="cd-tab-invoices" aria-controls="cd-panel-invoices" :aria-selected="activeTab==='invoices' ? 'true' : 'false'" @click="setTab('invoices')">Invoices <small x-text="invoices.length || ''"></small></button>
+        <button type="button" role="tab" id="cd-tab-invoices" aria-controls="cd-panel-invoices" :aria-selected="activeTab==='invoices' ? 'true' : 'false'" @click="setTab('invoices')">Invoices <small x-text="invoicesLoaded ? invoiceTotal : ''"></small></button>
         <button type="button" role="tab" id="cd-tab-notes" aria-controls="cd-panel-notes" :aria-selected="activeTab==='notes' ? 'true' : 'false'" @click="setTab('notes')">Notes <small x-text="notes.length || ''"></small></button>
         <button type="button" role="tab" id="cd-tab-tasks" aria-controls="cd-panel-tasks" :aria-selected="activeTab==='tasks' ? 'true' : 'false'" @click="setTab('tasks')">Tasks <small x-text="openTasks.length || ''"></small></button>
       </nav>
@@ -233,7 +233,9 @@
          ══════════════════════════════════════════════ #}
       <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" id="cd-panel-invoices" role="tabpanel" aria-labelledby="cd-tab-invoices" x-show="activeTab === 'invoices'" x-cloak>
         <div class="crm-card">
-          <template x-if="invoices.length === 0">
+          <p class="crm-empty" role="status" x-show="invoicesLoading">Loading invoices…</p>
+          <div class="crm-error-banner" role="alert" x-show="invoiceError" x-cloak><span x-text="invoiceError"></span> <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage)">Retry</button></div>
+          <template x-if="invoicesLoaded && !invoicesLoading && invoices.length === 0">
             <div class="crm-empty">
               <div class="crm-empty-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -314,6 +316,14 @@
               </div>
             </div>
           </template>
+          <div class="sales-analytics__pagination" x-show="invoicesLoaded && invoiceTotal > 0" x-cloak style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;flex-wrap:wrap;">
+            <span role="status" x-text="`Showing ${(invoicePage - 1) * invoicePageSize + 1}–${Math.min(invoicePage * invoicePageSize, invoiceTotal)} of ${invoiceTotal} invoices`"></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage - 1)" :disabled="invoicesLoading || invoicePage <= 1">Previous</button>
+              <span x-text="`Page ${invoicePage} of ${Math.ceil(invoiceTotal / invoicePageSize)}`"></span>
+              <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage + 1)" :disabled="invoicesLoading || invoicePage * invoicePageSize >= invoiceTotal">Next</button>
+            </div>
+          </div>
         </div>
       </div>
 
