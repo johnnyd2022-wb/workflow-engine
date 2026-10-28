@@ -119,6 +119,23 @@ def test_a_changed_test_module_runs_itself(repo):
     assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_board_js.py"]
 
 
+def test_recorded_node_id_uses_module_when_test_was_renamed_on_parent_branch(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    commit(repo, "tests/test_board_js.py", "def test_new_name():\n    assert True\n")
+    head = commit(repo, "app/board.js", "export const x = 2;\n")
+    rows = {("tests/test_board_js.py::test_old_name", "app/board.js"): None}
+    assert tia.plan(Cursor(base, rows), base, head)["tests"] == ["tests/test_board_js.py"]
+
+
+def test_deleted_selected_test_module_falls_back_to_full_suite(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    git(repo, "rm", "tests/test_board_js.py")
+    git(repo, "commit", "-q", "-m", "move test module")
+    head = commit(repo, "app/board.js", "export const x = 2;\n")
+    rows = {("tests/test_board_js.py::test_old_name", "app/board.js"): None}
+    assert tia.plan(Cursor(base, rows), base, head)["tests"] == ["tests/"]
+
+
 def test_without_a_recorded_ancestor_run_everything_runs(repo):
     base = git(repo, "rev-parse", "HEAD")
     head = commit(repo, "app/stock.py", "changed = 1\n")
