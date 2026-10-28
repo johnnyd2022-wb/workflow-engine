@@ -16,7 +16,7 @@
     <a class="workspace-link tasting-excise-link" href="/crm/excise">Review excise</a>
   </dialog>
   <dialog hx-boost="false" class="tasting-dialog tasting-detail" id="tasting-detail" aria-labelledby="tasting-detail-title">
-    <div class="tasting-dialog-head"><div><span class="tasting-eyebrow">Tasting details</span><h2 id="tasting-detail-title"></h2></div><button type="button" class="tasting-close" data-tasting-close aria-label="Close tasting details">×</button></div>
+    <div class="tasting-dialog-head"><div><span class="tasting-eyebrow" data-tasting-detail-kind>Tasting details</span><h2 id="tasting-detail-title"></h2></div><button type="button" class="tasting-close" data-tasting-close aria-label="Close tasting details">×</button></div>
     <div data-tasting-detail-body></div>
     <p class="tasting-dialog-error" data-tasting-detail-error role="alert" hidden></p>
   </dialog>
@@ -25,7 +25,8 @@
     <form id="tasting-form">
       <label class="tasting-note-field">Task type<select id="tasting-task-type" aria-label="Task type"><option value="general">General</option><option value="call">Call</option><option value="email">Email</option><option value="tasting" selected>Tasting</option></select></label>
       <div class="tasting-fields">
-        <label class="tasting-wide">Tasting name<input name="title" required maxlength="160" placeholder="Saturday tasting at Glengarry"></label>
+        <label class="tasting-wide">What it is<select name="kind" aria-label="Tasting or event"><option value="tasting">Tasting · pour samples</option><option value="event">Event or market · pour and sell bottles</option></select></label>
+        <label class="tasting-wide">Name<input name="title" required maxlength="160" placeholder="Saturday tasting at Glengarry"></label>
         <label>Starts · NZ time<input name="starts" type="datetime-local" required></label>
         <label>Ends · NZ time<input name="ends" type="datetime-local" required></label>
         <div class="tasting-wide tasting-stock-search"><label>Find a rep or customer<input type="search" id="tasting-people-search" maxlength="100" placeholder="Name or email"></label><button class="workspace-button" type="button" data-tasting-find-people>Find people</button></div>

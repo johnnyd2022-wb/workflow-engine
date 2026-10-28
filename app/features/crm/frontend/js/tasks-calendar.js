@@ -317,7 +317,7 @@ function crmTasks() {
       if (task.tasting_id) {
         const state = { planned: 'Planned', dispatched: 'Stock out', completed: 'Completed', cancelled: 'Cancelled' }[task.tasting_status] || 'Tasting';
         const time = task.tasting_starts_at ? new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit' }).format(new Date(task.tasting_starts_at)) : '';
-        return ['Tasting', state, time, task.tasting_venue].filter(Boolean).join(' · ');
+        return [task.tasting_kind === 'event' ? 'Event' : 'Tasting', state, time, task.tasting_venue].filter(Boolean).join(' · ');
       }
       return ({ call: 'Call', email: 'Email' })[task.task_type] || '';
     },
