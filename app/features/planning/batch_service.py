@@ -14,6 +14,7 @@ from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.site import Site
 from app.core.db.models.step import Step
 from app.core.db.repositories.process_repo import _process_snapshot
+from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration
 from app.core.domain.ready_date_rules import VALID_READY_DATE_UNITS, duration_to_timedelta
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
@@ -167,6 +168,13 @@ def _workflow(db, org_id, process_id, output_id, *, cache=None):
             else str(step.position),
             "inputs": step.inputs,
             "outputs": step.outputs,
+            # Only when set: a timing change on the workflow makes a saved setting stale, and
+            # settings saved before step timing existed keep their fingerprints.
+            **{
+                field: getattr(step, field)
+                for field in ("duration_minutes", "wait_minutes")
+                if getattr(step, field) is not None
+            },
         }
         for step in steps
     ]
@@ -183,7 +191,45 @@ def _workflow(db, org_id, process_id, output_id, *, cache=None):
     return process, steps, output, unit.strip(), fingerprint
 
 
+def workflow_timings(steps):
+    """Each step's timing from the workflow itself, or None if any step has none yet."""
+    if any(step.duration_minutes is None or step.wait_minutes is None for step in steps):
+        return None
+    return [
+        {"step_id": str(step.id), "duration_minutes": step.duration_minutes, "waiting_minutes": step.wait_minutes}
+        for step in steps
+    ]
+
+
+def _shelf_life(output):
+    """(ready wait, shelf life) for a planned output: its use-by counts from when it is made, the
+    ready date from the same moment. None for a shelf life not known until production."""
+    extra = output.get("extra_data") if isinstance(output.get("extra_data"), dict) else {}
+    expiry = extra.get("custom_expiry") if isinstance(extra.get("custom_expiry"), dict) else {}
+    value, unit = expiry.get("duration_value"), expiry.get("duration_unit")
+    if (
+        expiry.get("enabled") is not True
+        or expiry.get("mode") != "fixed_duration"
+        or isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 0 < value <= 36_500
+    ):
+        return None
+    ready = extra.get("ready_date") if isinstance(extra.get("ready_date"), dict) else {}
+    wait = timedelta()
+    if ready.get("enabled") is True and ready.get("mode") == "fixed_duration":
+        try:
+            wait = duration_to_timedelta(int(ready.get("duration_value")), ready.get("duration_unit"))
+        except (TypeError, ValueError):
+            wait = timedelta()
+    return int(wait.total_seconds()), int(expiry_duration(value, unit).total_seconds())
+
+
 def _timing_snapshot(steps, data):
+    if data is None:
+        data = workflow_timings(steps)
+        if data is None:
+            raise ValueError("Set how long each step takes in the workflow, or enter the timings here")
     if not isinstance(data, list) or len(data) != len(steps):
         raise ValueError("Enter duration and waiting time for every workflow step")
     timings = {}
@@ -314,6 +360,8 @@ def save_setting(db, org_id, process_id, data):
     quantity = _quantity(data.get("batch_quantity"), unit)
     snapshot = _timing_snapshot(steps, data.get("steps"))
     snapshot.update({"process_name": process.name, "output_name": str(output.get("name") or "Unnamed output")})
+    shelf = _shelf_life(output)
+    snapshot["use_by"] = {"ready_wait_seconds": shelf[0], "shelf_life_seconds": shelf[1]} if shelf else None
     row = (
         db.query(PlanningWorkflowSetting)
         .filter(
@@ -370,12 +418,32 @@ def workflow_catalog(db, org_id):
             {
                 **output,
                 "process_name": process.name,
-                "steps": [{"step_id": str(step.id), "name": step.name, "inputs": step.inputs} for step in steps],
+                "steps": [
+                    {
+                        "step_id": str(step.id),
+                        "name": step.name,
+                        "inputs": step.inputs,
+                        "duration_minutes": step.duration_minutes,
+                        "wait_minutes": step.wait_minutes,
+                    }
+                    for step in steps
+                ],
+                "timed_in_workflow": workflow_timings(steps) is not None,
                 "setting": setting_dict(setting) if setting else None,
                 "stale": bool(setting and setting.workflow_fingerprint != fingerprint),
             }
         )
     return rows
+
+
+def _use_by_rule(snapshot):
+    use_by = snapshot.get("use_by")
+    if not use_by:
+        return {}
+    return {
+        "made_offset": timedelta(seconds=use_by["ready_wait_seconds"]),
+        "shelf_life": timedelta(seconds=use_by["shelf_life_seconds"]),
+    }
 
 
 def plan_demand(db, org_id, demand_id, data, *, today):
@@ -426,7 +494,11 @@ def plan_demand(db, org_id, demand_id, data, *, today):
             (),
             (
                 BatchRule(
-                    key, str(process.id), setting.batch_quantity, timedelta(seconds=setting.snapshot["elapsed_seconds"])
+                    key,
+                    str(process.id),
+                    setting.batch_quantity,
+                    timedelta(seconds=setting.snapshot["elapsed_seconds"]),
+                    **_use_by_rule(setting.snapshot),
                 ),
             ),
             today=today,
@@ -480,6 +552,7 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         "site_name": site.name if site else "Main site",
         "timing_reason": group.reason,
         "elapsed_days": (group.ready_date - group.start_date).days,
+        "use_by_date": group.use_by_date.isoformat() if group.use_by_date else None,
     }
     rows = []
     for number in range(1, group.batch_count + 1):

@@ -183,6 +183,8 @@
         if (step.execution_prompts && step.execution_prompts.length > 0) {
           details.push(`${step.execution_prompts.length} prompt${step.execution_prompts.length > 1 ? 's' : ''}`);
         }
+        const timing = window.StepTiming ? window.StepTiming.summary(step.duration_minutes, step.wait_minutes) : '';
+        if (timing) details.push(timing);
 
         if (details.length > 0) {
           collapsedSummary.textContent = details.join(' • ');

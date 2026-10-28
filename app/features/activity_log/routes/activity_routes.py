@@ -75,6 +75,8 @@ _FIELD_LABELS = {
     "inputs": "Inputs",
     "outputs": "Outputs",
     "execution_prompts": "Prompts",
+    "duration_minutes": "Takes",
+    "wait_minutes": "Then waits",
     "category": "Category",
     "is_draft": "Draft",
 }

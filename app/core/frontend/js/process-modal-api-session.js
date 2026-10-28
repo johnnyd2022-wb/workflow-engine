@@ -21,6 +21,8 @@
       v: 1,
       stepName: step.name || '',
       stepDescription: step.description || '',
+      durationMinutes: step.duration_minutes != null ? step.duration_minutes : null,
+      waitMinutes: step.wait_minutes != null ? step.wait_minutes : null,
       workflowProcessName,
       inputs,
       outputs,

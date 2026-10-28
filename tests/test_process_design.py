@@ -285,9 +285,9 @@ def test_ac4_delete_process_rejected_for_non_admin_member(authed_client):
     resp = authed_client.delete(f"/api/core/processes/{pid}")
     assert resp.status_code == 403
 
-    assert (
-        authed_client.get(f"/api/core/processes/{pid}").status_code == 200
-    ), "process should still exist after a rejected non-admin delete"
+    assert authed_client.get(f"/api/core/processes/{pid}").status_code == 200, (
+        "process should still exist after a rejected non-admin delete"
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -1134,3 +1134,34 @@ def test_a_step_recorded_after_the_check_still_stops_its_delete(admin_client, db
     db.expire_all()
     assert db.query(ExecutionStep).filter(ExecutionStep.execution_id == late["batch"].id).count() == 1
     _remove_batch(db, late["batch"])
+
+
+def test_step_timing_round_trips_and_clears_with_a_new_version_each_time(authed_client, db):
+    """GL-P07 B1: how long a step takes, and then waits, is set on the workflow."""
+    pid = _create_process(authed_client)["id"]
+    step = _add_step(authed_client, pid, 1, "Macerate", duration_minutes=90, wait_minutes=2880).get_json()
+    assert (step["duration_minutes"], step["wait_minutes"]) == (90, 2880)
+    listed = _get_process(authed_client, pid)["steps"][0]
+    assert (listed["duration_minutes"], listed["wait_minutes"]) == (90, 2880)
+
+    versions = db.query(ProcessVersion).filter(ProcessVersion.process_id == pid).count()
+    resp = authed_client.put(f"/api/core/processes/{pid}/steps/{step['id']}", json={"wait_minutes": 4320})
+    assert resp.status_code == 200 and resp.get_json()["duration_minutes"] == 90  # only what was sent changes
+    resp = authed_client.put(f"/api/core/processes/{pid}/steps/{step['id']}", json={"wait_minutes": None})
+    assert resp.status_code == 200 and resp.get_json()["wait_minutes"] is None
+    latest = (
+        db.query(ProcessVersion).filter(ProcessVersion.process_id == pid).order_by(ProcessVersion.version_number.desc())
+    ).all()
+    assert len(latest) == versions + 2
+    # The version before the clear recorded the timing; the newest doesn't carry a cleared one.
+    assert latest[1].snapshot["steps"][0]["wait_minutes"] == 4320
+    assert "wait_minutes" not in latest[0].snapshot["steps"][0]
+
+
+@pytest.mark.parametrize("value", [-1, 525_601, 1.5, "60", True])
+def test_step_timing_must_be_whole_minutes_up_to_a_year(authed_client, value):
+    pid = _create_process(authed_client)["id"]
+    assert _add_step(authed_client, pid, 1, "Mix", duration_minutes=value).status_code == 400
+    step = _add_step(authed_client, pid, 1, "Mix").get_json()
+    resp = authed_client.put(f"/api/core/processes/{pid}/steps/{step['id']}", json={"wait_minutes": value})
+    assert resp.status_code == 400 and "whole minutes" in resp.get_json()["error"]

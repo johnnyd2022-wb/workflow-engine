@@ -213,6 +213,13 @@
       metaOut.textContent = `${outputs.length} output${outputs.length !== 1 ? 's' : ''}`;
       meta.appendChild(metaIn);
       meta.appendChild(metaOut);
+      const timingText = window.StepTiming ? window.StepTiming.summary(step.duration_minutes, step.wait_minutes) : '';
+      if (timingText) {
+        const metaTime = document.createElement('span');
+        metaTime.className = 'flows2-step__timing';
+        metaTime.textContent = timingText;
+        meta.appendChild(metaTime);
+      }
 
       const expandBtn = document.createElement('button');
       expandBtn.type = 'button';
