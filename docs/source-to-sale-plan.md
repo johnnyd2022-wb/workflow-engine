@@ -412,6 +412,10 @@ records, not from people typing figures in.
         removal records frozen excise evidence; measured partial-bottle outcomes and
         reusable leftovers stay in a separate tasting-stock ledger. Library stock is
         excluded from this workflow. No automatic Customs filing or return-to-bond.
+      - [x] **Take stock out to tastings and events** (!604): an outing closes with mL
+        poured, bottles sold (counted, or the day's Xero lines ticked so they come off event
+        stock, not the warehouse) and unopened bottles brought back as a duty-paid lot of the
+        same batch, listed as a possible credit. See `docs/take-stock-out-plan.md`.
     - [x] c. **Lines calculated automatically for each period**, grouped by product and
       tariff item: units × volume × ABV = LAL, then LAL × rate = duty. Each line drills
       down to its batches and invoices or movements. The rate table is editable and

@@ -105,6 +105,11 @@ class SalesTraceabilityService:
             line_key = (line.xero_line_item_id or f"position:{index + 1}").strip()
             match = self._find_mapping(line, mappings, strict)
             existing = self._line_allocations(org_id, invoice.xero_invoice_id, line_key)
+            if any(a.tasting_allocation_id for a in existing):
+                # Sold at a tasting or event: recorded against that outing's stock, which left
+                # the warehouse when it was taken out. Never re-matched to warehouse stock.
+                summary["sold_at_outing"] += 1
+                continue
             if match is None:
                 # An existing allocation remains a historical fact even if somebody
                 # later removes/edits its mapping. Do not silently put stock back.
@@ -273,6 +278,8 @@ class SalesTraceabilityService:
             raise ValueError(f"The batches must add up to {needed.normalize():f}; they add up to {total.normalize():f}")
 
         existing = self._line_allocations(org_id, invoice_id, line_key)
+        if any(a.tasting_allocation_id for a in existing):
+            raise ValueError("This line was sold at a tasting or event; its bottles came from that outing's stock")
         if existing:
             self._reverse_allocations(existing)
         reference = _line_reference(invoice_id, line_key)
@@ -650,6 +657,9 @@ class SalesTraceabilityService:
         contact: XeroContact | None = None,
         sync_job_id: UUID | None = None,
     ) -> int:
+        # A sale made at a tasting or event took nothing from the warehouse; there is nothing
+        # to put back, and its record stays.
+        allocations = [a for a in allocations if a.tasting_allocation_id is None]
         if allocations and invoice is None:
             invoice = (
                 self.db.query(XeroInvoice)

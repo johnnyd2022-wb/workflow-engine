@@ -178,7 +178,15 @@ def test_moving_stock_out_is_the_removal_and_its_later_sale_isnt_counted_again(w
     assert back.direction == "in" and merged.id == vat44.id  # merged back into the same batch
     d = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))
     assert d["lines"][0]["units"] == "8"
-    assert d["returns"] == [{"product": GIN, "quantity": "3", "unit": "bottles", "date": "2026-09-20"}]
+    assert d["returns"] == [
+        {
+            "product": GIN,
+            "quantity": "3",
+            "unit": "bottles",
+            "date": "2026-09-20",
+            "reference": "Moved to the licensed area",
+        }
+    ]
 
 
 def test_missing_setup_is_listed_not_silently_dropped(world):

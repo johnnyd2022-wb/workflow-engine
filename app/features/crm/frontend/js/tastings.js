@@ -167,6 +167,7 @@
             $('#tasting-editor-title').textContent = event ? 'Edit tasting task' : 'New tasting task';
             $('#tasting-task-type').value = 'tasting'; $('#tasting-task-type').disabled = !!event;
             ['title', 'venue_name', 'venue_address', 'venue_type', 'licence_reference', 'notes'].forEach(function (key) { form.elements[key].value = event && event[key] || (key === 'venue_type' ? 'external' : ''); });
+            form.elements.kind.value = event && event.kind || 'tasting';
             var day = nzDay(Date.now()); form.elements.starts.value = event ? wall(event.starts_at) : day + 'T17:00'; form.elements.ends.value = event ? wall(event.ends_at) : day + 'T19:00';
             selectedChoices(form.elements.rep_id, state.choices.reps, event && event.rep_id, 'Choose a rep'); selectedChoices(form.elements.contact_id, state.choices.contacts, event && event.contact_id, 'No linked customer');
             if (!event && !pool && state.draft) {
@@ -197,9 +198,64 @@
             catch (err) { if (err.name !== 'AbortError') error(target, err.message); return null; }
             finally { state.busy = false; root.querySelectorAll('dialog button').forEach(function (b) { b.disabled = false; }); }
         }
+        function noun(event, capital) { var word = event.kind === 'event' ? 'event' : 'tasting'; return capital ? word[0].toUpperCase() + word.slice(1) : word; }
+        function outcomeLabel(line) {
+            var parts = [amount(line.used_volume_ml) + ' mL poured'];
+            if (Number(line.sold_units)) parts.push(amount(line.sold_units) + ' sold');
+            if (Number(line.returned_units)) parts.push(amount(line.returned_units) + ' brought back');
+            return parts.join(' · ');
+        }
+        function numberField(text, max, step, aria) {
+            var label = el('label', '', text); var input = el('input'); input.type = 'number'; input.min = '0'; input.step = step; input.value = '0'; input.required = true;
+            if (max != null) input.max = max; input.setAttribute('aria-label', aria); label.append(input); return { label: label, input: input };
+        }
+        function closeInputs(line, row) {
+            var name = line.product || 'stock';
+            var used = numberField('Poured · mL', line.reserved_volume_ml, '0.0001', 'Poured mL · ' + name);
+            var item = { id: line.id, used: used.input, linked: 0 };
+            var fields = el('div', 'tasting-close-fields'); fields.append(used.label);
+            if (line.source_item_id && line.unit_volume_ml) {
+                var sold = numberField('Sold · bottles', line.quantity, '1', 'Bottles sold · ' + name);
+                var back = numberField('Brought back', line.quantity, '1', 'Bottles brought back · ' + name);
+                fields.append(sold.label, back.label); item.sold = sold.input; item.back = back.input;
+                item.tally = el('p', 'tasting-close-tally'); item.taken = Number(line.quantity); item.unit = Number(line.unit_volume_ml);
+                [used.input, sold.input, back.input].forEach(function (input) { input.addEventListener('input', function () { tally(item); }); });
+            }
+            row.append(fields); if (item.tally) { row.append(item.tally); tally(item); }
+            return item;
+        }
+        function tally(item) {
+            // Words for the arithmetic the server checks: every bottle taken is sold, back, poured or left over.
+            var sold = Number(item.sold.value || 0) + item.linked; var back = Number(item.back.value || 0);
+            var left = item.taken * item.unit - (sold + back) * item.unit - Number(item.used.value || 0);
+            var text = 'Took ' + amount(item.taken) + ' · ' + amount(sold) + ' sold' + (item.linked ? ' (' + amount(item.linked) + ' on Xero invoices)' : '') + ' · ' + amount(back) + ' back';
+            item.tally.textContent = left < -0.0001 ? text + ' · that is more than was taken' : text + (left > 0.0001 ? ' · ' + amount(left) + ' mL stays in tasting stock' : '');
+            item.tally.classList.toggle('is-over', left < -0.0001);
+        }
+        async function loadInvoiceLines(event, host, items) {
+            if (!items.some(function (item) { return item.sold; })) return;
+            var result;
+            try { result = await api('/' + event.id + '/invoice-lines'); } catch (err) { return; }
+            var lines = result.lines || []; if (!lines.length || !host.isConnected) return;
+            host.append(el('legend', '', 'Sold on a Xero invoice'), el('p', 'workspace-caption', 'Tick the invoices raised at this ' + noun(event) + '. Their bottles come from the stock you took, not the warehouse. Count only the other sales above.'));
+            lines.forEach(function (line) {
+                var label = el('label', 'tasting-invoice'); var box = el('input'); box.type = 'checkbox'; box.value = line.line_key; box.dataset.invoiceId = line.xero_invoice_id; box.dataset.allocationId = line.allocation_id; box.checked = !!line.suggested;
+                var text = el('span'); text.append(el('strong', '', (line.invoice_number || 'Invoice') + ' · ' + amount(line.quantity) + ' × ' + line.product), el('small', '', [line.customer, dateLabel(line.date)].filter(Boolean).join(' · ')));
+                label.append(box, text); host.append(label);
+                box.addEventListener('change', function () { linked(); });
+            });
+            function linked() {
+                items.forEach(function (item) {
+                    if (!item.sold) return;
+                    item.linked = Array.from(host.querySelectorAll('input:checked')).filter(function (box) { return box.dataset.allocationId === item.id; }).reduce(function (sum, box) { return sum + Number(lines.find(function (l) { return l.line_key === box.value && l.xero_invoice_id === box.dataset.invoiceId; }).quantity); }, 0);
+                    tally(item);
+                });
+            }
+            host.hidden = false; linked();
+        }
         function showDetail(event) {
             if (!root.isConnected) return;
-            state.detail = event; var body = $('[data-tasting-detail-body]'); body.replaceChildren(); error($('[data-tasting-detail-error]'), ''); $('#tasting-detail-title').textContent = event.title;
+            state.detail = event; var body = $('[data-tasting-detail-body]'); body.replaceChildren(); error($('[data-tasting-detail-error]'), ''); $('#tasting-detail-title').textContent = event.title; $('[data-tasting-detail-kind]').textContent = noun(event, true) + ' details';
             var facts = el('div', 'tasting-detail-facts');
             facts.append(fact('When · NZ time', dateLabel(nzDay(event.starts_at), { weekday: 'long', year: 'numeric' }) + ' · ' + timeLabel(event.starts_at) + ' – ' + (nzDay(event.starts_at) !== nzDay(event.ends_at) ? dateLabel(nzDay(event.ends_at), { weekday: 'short' }) + ' · ' : '') + timeLabel(event.ends_at)), fact('Rep', event.rep_name), fact(event.venue_type === 'own' ? 'Our venue' : 'External venue', event.venue_name), fact('Address', event.venue_address), fact('Venue licence reference', event.licence_reference), fact('Status', STATES[statusOf(event)])); body.append(facts);
             if (event.notes) body.append(el('p', 'tasting-detail-note', event.notes));
@@ -212,9 +268,9 @@
                 var row = el('div', 'tasting-detail-line'); row.append(el('strong', '', line.product || 'Selected stock'));
                 row.append(el('p', '', [line.batch ? 'Batch ' + line.batch : null, amount(line.quantity) + ' ' + (line.source_pool_id ? 'mL from tasting stock' : line.unit || 'units')].filter(Boolean).join(' · ')));
                 if (statusOf(event) === 'dispatched' && canRecord) {
-                    var label = el('label', '', 'Sampled · mL (of ' + amount(line.reserved_volume_ml) + ')'); var used = el('input'); used.type = 'number'; used.min = '0'; used.max = line.reserved_volume_ml; used.step = '0.0001'; used.value = '0'; used.required = true; used.setAttribute('aria-label', 'Sampled mL · ' + (line.product || 'stock')); label.append(used); row.append(label); usageInputs.push({ id: line.id, input: used });
+                    usageInputs.push(closeInputs(line, row));
                 } else if (statusOf(event) === 'dispatched') row.append(el('p', '', amount(line.reserved_volume_ml) + ' mL assigned'));
-                else if (line.used_volume_ml != null && statusOf(event) === 'completed') row.append(el('p', '', amount(line.used_volume_ml) + ' mL sampled'));
+                else if (line.used_volume_ml != null && statusOf(event) === 'completed') row.append(el('p', '', outcomeLabel(line)));
                 var poolLot = line.basis ? {basis: line.basis, duty_status: line.duty_status} : state.pool.find(function (lot) { return lot.id === line.stock_lot_id; });
                 if (poolLot) {
                     row.append(el('p', '', dutyLabel(poolLot)));
@@ -236,17 +292,19 @@
                 var date = el('input'); date.type = 'date'; date.required = true; date.value = nzDay(Date.now()); date.max = nzDay(Date.now()); var label = el('label', '', 'Actual removal date'); label.append(date); dispatchForm.append(label);
                 var send = el('button', 'workspace-button workspace-button--primary', 'Confirm stock removal'); send.type = 'submit'; var sendActions = el('div', 'tasting-dialog-actions'); sendActions.append(send); dispatchForm.append(sendActions);
                 var dispatchKey = crypto.randomUUID();
-                dispatchForm.addEventListener('submit', async function (e) { e.preventDefault(); var result = await mutate('/' + event.id + '/dispatch', { actual_date: date.value }, $('[data-tasting-detail-error]'), { 'Idempotency-Key': dispatchKey }); if (result) { await load(true); showDetail(result.tasting); notice('Stock removal recorded. Add the tasting outcome when the rep returns.'); } }); body.append(dispatchForm);
+                dispatchForm.addEventListener('submit', async function (e) { e.preventDefault(); var result = await mutate('/' + event.id + '/dispatch', { actual_date: date.value }, $('[data-tasting-detail-error]'), { 'Idempotency-Key': dispatchKey }); if (result) { await load(true); showDetail(result.tasting); notice('Stock removal recorded. Record what happened when the rep is back.'); } }); body.append(dispatchForm);
             } else if (statusOf(event) === 'planned' && !canDispatch && canRecord && lines.length) body.append(el('p', 'workspace-caption', 'A stock manager can confirm the physical stock removal.'));
             if (statusOf(event) === 'dispatched' && canRecord) {
-                var outcome = el('form', 'tasting-detail-section'); outcome.append(el('h3', '', 'Record the outcome'), el('p', 'workspace-caption', 'Enter measured mL sampled against each batch above. Unsampled stock stays in tasting stock for the next visit.'));
+                var outcome = el('form', 'tasting-detail-section'); outcome.append(el('h3', '', 'Record the outcome'), el('p', 'workspace-caption', 'For each batch above: what was poured, bottles sold, and unopened bottles brought back. Anything else stays in tasting stock for next time.'));
+                var invoices = el('fieldset', 'tasting-invoices'); invoices.hidden = true; outcome.append(invoices);
+                loadInvoiceLines(event, invoices, usageInputs);
                 var fields = el('div', 'tasting-fields'); var sampleLabel = el('label', '', 'Samples served · optional'); var samples = el('input'); samples.type = 'number'; samples.min = '0'; samples.max = '1000000'; samples.step = '1'; sampleLabel.append(samples); fields.append(sampleLabel); outcome.append(fields);
                 var noteLabel = el('label', '', 'Outcome notes · optional'); var notes = el('textarea'); notes.rows = 3; notes.maxLength = 4000; noteLabel.append(notes); outcome.append(noteLabel);
-                var finish = el('button', 'workspace-button workspace-button--primary', 'Complete tasting'); finish.type = 'submit'; var endActions = el('div', 'tasting-dialog-actions'); endActions.append(finish); outcome.append(endActions);
-                outcome.addEventListener('submit', async function (e) { e.preventDefault(); var usage = []; for (var item of usageInputs) { if (!item.input.reportValidity()) return; usage.push({ allocation_id: item.id, used_volume_ml: item.input.value }); } var result = await mutate('/' + event.id + '/finalise', { usage: usage, samples_count: samples.value === '' ? null : Number(samples.value), notes: notes.value }, $('[data-tasting-detail-error]')); if (result) { await load(true); showDetail(result.tasting); notice('Tasting completed. Unsampled stock is available for the next tasting.'); } }); body.append(outcome);
+                var finish = el('button', 'workspace-button workspace-button--primary', 'Complete ' + noun(event)); finish.type = 'submit'; var endActions = el('div', 'tasting-dialog-actions'); endActions.append(finish); outcome.append(endActions);
+                outcome.addEventListener('submit', async function (e) { e.preventDefault(); var usage = []; for (var item of usageInputs) { if (![item.used, item.sold, item.back].every(function (input) { return !input || input.reportValidity(); })) return; var entry = { allocation_id: item.id, used_volume_ml: item.used.value || '0' }; if (item.sold) { entry.sold_units = item.sold.value || '0'; entry.returned_units = item.back.value || '0'; } usage.push(entry); } var links = Array.from(invoices.querySelectorAll('input:checked')).map(function (box) { return { allocation_id: box.dataset.allocationId, xero_invoice_id: box.dataset.invoiceId, line_key: box.value }; }); var result = await mutate('/' + event.id + '/finalise', { usage: usage, invoice_lines: links, samples_count: samples.value === '' ? null : Number(samples.value), notes: notes.value }, $('[data-tasting-detail-error]')); if (result) { await load(true); showDetail(result.tasting); notice(noun(event, true) + ' completed. Bottles brought back are in stock again; anything left over is in tasting stock.'); } }); body.append(outcome);
             }
             if (canRecord && ['planned', 'dispatched'].includes(statusOf(event))) {
-                var cancel = el('button', 'tasting-text-button', 'Cancel tasting'); cancel.type = 'button'; cancel.addEventListener('click', async function () { if (!window.confirm(statusOf(event) === 'dispatched' ? 'Cancel this tasting? Dispatched stock stays in tasting stock and its removal for excise remains recorded.' : 'Cancel this tasting? No stock will be removed.')) return; var result = await mutate('/' + event.id + '/cancel', {}, $('[data-tasting-detail-error]')); if (result) { await load(true); showDetail(result.tasting); notice('Tasting cancelled. Its history has been retained.'); } }); actions.append(cancel);
+                var cancel = el('button', 'tasting-text-button', 'Cancel ' + noun(event)); cancel.type = 'button'; cancel.addEventListener('click', async function () { if (!window.confirm(statusOf(event) === 'dispatched' ? 'Cancel this tasting? Dispatched stock stays in tasting stock and its removal for excise remains recorded.' : 'Cancel this tasting? No stock will be removed.')) return; var result = await mutate('/' + event.id + '/cancel', {}, $('[data-tasting-detail-error]')); if (result) { await load(true); showDetail(result.tasting); notice('Tasting cancelled. Its history has been retained.'); } }); actions.append(cancel);
             }
             if (actions.childElementCount) body.append(actions); if (!detail.open) detail.showModal();
         }
@@ -256,7 +314,7 @@
             var target = $('[data-tasting-form-error]'); error(target, '');
             if (form.elements.title.value.length > 160 || form.elements.notes.value.length > 4000) { error(target, 'Keep the tasting name within 160 characters and notes within 4,000 characters. Your draft has been retained.'); return; }
             try {
-                var data = {}; ['title', 'venue_name', 'venue_address', 'venue_type', 'licence_reference', 'notes', 'rep_id'].forEach(function (key) { data[key] = form.elements[key].value; });
+                var data = {}; ['kind', 'title', 'venue_name', 'venue_address', 'venue_type', 'licence_reference', 'notes', 'rep_id'].forEach(function (key) { data[key] = form.elements[key].value; });
                 data.contact_id = form.elements.contact_id.value || null; data.starts_at = nzISO(form.elements.starts.value); data.ends_at = nzISO(form.elements.ends.value);
                 data.allocations = state.lines.map(function (line) { var result = { quantity: line.quantity }; if (line.source_pool_id) result.source_pool_id = line.source_pool_id; else result.source_item_id = line.source_item_id; return result; });
                 state.busy = true; $('[data-tasting-save]').disabled = true;

@@ -110,7 +110,7 @@ def test_rep_can_schedule_dispatch_sample_part_of_bottle_and_reuse_remainder(log
     title = "Saturday brand visit " + uuid4().hex[:6]
     page.get_by_role("button", name="New task", exact=True).first.click()
     form = page.locator("#tasting-form")
-    form.get_by_label("Tasting name").fill(title)
+    form.get_by_label("Name", exact=True).fill(title)
     form.get_by_label("Venue name", exact=True).fill("Regional Wines")
     form.get_by_label("Venue address").fill("50 Example Street, Wellington")
     form.get_by_label("Venue licence reference").fill("Venue reference")
@@ -131,12 +131,12 @@ def test_rep_can_schedule_dispatch_sample_part_of_bottle_and_reuse_remainder(log
         page.get_by_role("button", name="Confirm stock removal", exact=True).click()
     lot_id = dispatch_response.value.json()["tasting"]["allocations"][0]["stock_lot_id"]
     expect(detail).to_contain_text("Record the outcome")
-    detail.get_by_label("Sampled mL · Wildflower tasting gin", exact=True).fill("150")
+    detail.get_by_label("Poured mL · Wildflower tasting gin", exact=True).fill("150")
     detail.get_by_label("Samples served · optional").fill("15")
     detail.get_by_label("Outcome notes · optional").fill("Good response; keep the remaining 550 mL for the next visit.")
     detail.get_by_role("button", name="Complete tasting", exact=True).click()
     expect(detail).to_contain_text("Completed")
-    expect(detail).to_contain_text("150 mL sampled")
+    expect(detail).to_contain_text("150 mL poured")
     page.get_by_role("button", name="Close tasting details").click()
     page.get_by_role("button", name="Tasting stock", exact=True).click()
     pool = page.locator('[data-tasting-lot-id="' + lot_id + '"]')
@@ -149,12 +149,66 @@ def test_rep_can_schedule_dispatch_sample_part_of_bottle_and_reuse_remainder(log
     assert_clean_page(page)
 
 
+@pytest.mark.parametrize("phone", [False, True])
+def test_an_event_closes_with_bottles_sold_and_brought_back(logged_in_page, tasting_world, phone):
+    from app.core.db import db_session
+    from app.core.db.models.inventory_item import InventoryItem
+
+    page = logged_in_page
+    _open(page)
+    if phone:
+        page.set_viewport_size({"width": 390, "height": 844})
+    title = "Night market " + uuid4().hex[:6]
+    page.get_by_role("button", name="New task", exact=True).first.click()
+    form = page.locator("#tasting-form")
+    form.get_by_label("Tasting or event").select_option("event")
+    form.get_by_label("Name", exact=True).fill(title)
+    form.get_by_label("Venue name", exact=True).fill("Harbourside Market")
+    form.get_by_label("Venue address").fill("1 Jervois Quay, Wellington")
+    form.get_by_role("searchbox", name="Find stock", exact=True).fill("Wildflower")
+    with page.expect_response(lambda r: "/api/crm/tastings/choices?q=Wildflower" in r.url):
+        page.get_by_role("button", name="Find stock", exact=True).click()
+    form.get_by_label("Rep", exact=True).select_option(tasting_world["rep_id"])
+    page.get_by_role("button", name="Add stock line").click()
+    page.get_by_label("Product and batch 1", exact=True).select_option("stock:" + tasting_world["item_id"])
+    page.get_by_label("Quantity 1", exact=True).fill("3")
+    page.get_by_role("button", name="Save tasting", exact=True).click()
+    detail = page.locator("#tasting-detail")
+    page.get_by_role("button", name="Confirm stock removal", exact=True).click()
+    expect(detail).to_contain_text("Record the outcome")
+    detail.get_by_label("Bottles sold · Wildflower tasting gin", exact=True).fill("2")
+    detail.get_by_label("Bottles brought back · Wildflower tasting gin", exact=True).fill("1")
+    expect(detail.locator(".tasting-close-tally")).to_have_text("Took 3 · 2 sold · 1 back")
+    detail.get_by_label("Bottles sold · Wildflower tasting gin", exact=True).fill("3")
+    expect(detail.locator(".tasting-close-tally")).to_contain_text("more than was taken")
+    detail.get_by_label("Bottles sold · Wildflower tasting gin", exact=True).fill("2")
+    detail.get_by_role("button", name="Complete event", exact=True).click()
+    expect(detail).to_contain_text("0 mL poured · 2 sold · 1 brought back")
+    assert_clean_page(page)
+
+    db = db_session()
+    back = (
+        db.query(InventoryItem)
+        .filter(
+            InventoryItem.org_id == UUID(tasting_world["org_id"]),
+            InventoryItem.extra_data["duty_paid_return"].isnot(None),
+        )
+        .all()
+    )
+    assert [
+        (b.quantity, b.extra_data["duty_paid_return"]["tasting_title"])
+        for b in back
+        if b.extra_data["duty_paid_return"]["tasting_title"] == title
+    ] == [(1, title)]
+    db_session.remove()
+
+
 def test_fractional_litre_line_keeps_unit_and_identity_after_second_stock_search(logged_in_page, tasting_world):
     page = logged_in_page
     _open(page)
     page.get_by_role("button", name="New task", exact=True).first.click()
     form = page.locator("#tasting-form")
-    form.get_by_label("Tasting name").fill("Bulk and bottled tasting")
+    form.get_by_label("Name", exact=True).fill("Bulk and bottled tasting")
     form.get_by_label("Venue name", exact=True).fill("Regional Wines")
     form.get_by_label("Venue address").fill("50 Example Street")
     form.get_by_label("Rep", exact=True).select_option(tasting_world["rep_id"])
@@ -238,7 +292,7 @@ def test_invalid_end_time_keeps_the_form_open_and_explains_the_problem(logged_in
     before = page.locator(".tasks-card").count()
     page.get_by_role("button", name="New task", exact=True).first.click()
     form = page.locator("#tasting-form")
-    form.get_by_label("Tasting name").fill("A visit with an invalid time")
+    form.get_by_label("Name", exact=True).fill("A visit with an invalid time")
     form.get_by_label("Venue name", exact=True).fill("Bottle store")
     form.get_by_label("Venue address").fill("10 Test Street")
     form.get_by_label("Rep", exact=True).select_option(tasting_world["rep_id"])
@@ -310,7 +364,7 @@ def test_task_type_switch_preserves_common_and_specialized_unsaved_fields(logged
     page.get_by_label("Notes", exact=True).fill("Bring a display")
     page.get_by_label("Type", exact=True).select_option("tasting")
     form = page.locator("#tasting-form")
-    expect(form.get_by_label("Tasting name")).to_have_value("Carry my draft to a tasting")
+    expect(form.get_by_label("Name", exact=True)).to_have_value("Carry my draft to a tasting")
     expect(form.get_by_label("Starts · NZ time")).to_have_value("2026-11-06T17:00")
     expect(form.get_by_label("Rep", exact=True)).to_have_value(tasting_world["rep_id"])
     expect(form.get_by_label("Notes · optional")).to_have_value("Bring a display")
@@ -321,7 +375,7 @@ def test_task_type_switch_preserves_common_and_specialized_unsaved_fields(logged
     expect(page.locator("#task-type")).to_have_value("call")
     page.locator("#task-title").fill("Changed common field")
     page.get_by_label("Type", exact=True).select_option("tasting")
-    expect(form.get_by_label("Tasting name")).to_have_value("Changed common field")
+    expect(form.get_by_label("Name", exact=True)).to_have_value("Changed common field")
     expect(form.get_by_label("Venue name", exact=True)).to_have_value("Retain venue without saving")
     expect(form.get_by_label("Starts · NZ time")).to_have_value("2026-11-06T18:30")
     assert_clean_page(page)
@@ -451,7 +505,7 @@ def test_type_switch_keeps_people_missing_from_ordinary_options(logged_in_page, 
     _open(page)
     page.get_by_role("button", name="New task", exact=True).first.click()
     form = page.locator("#tasting-form")
-    form.get_by_label("Tasting name").fill("Preserve selected people")
+    form.get_by_label("Name", exact=True).fill("Preserve selected people")
     form.get_by_label("Customer", exact=True).select_option(contact_id)
     form.get_by_label("Rep", exact=True).select_option(rep_id)
     form.get_by_label("Task type", exact=True).select_option("call")
