@@ -57,15 +57,55 @@ def test_analytics_product_card_uses_shared_sections_and_custom_top_filter(brows
         }
         for index in range(14)
     ]
-    product_sales = {"customers": customers, "products": [], "unmapped_xero_items": 0, "unmapped_line_revenue": 0}
+    product_sales = {
+        "customers": customers,
+        "products": [
+            {
+                "product_name": "Gin",
+                "total_units": 20,
+                "line_revenue": 800,
+                "customers": [{"contact_id": "0", "contact_name": "Store 00", "units": 20, "line_revenue": 800}],
+            }
+        ],
+        "unmapped_xero_items": 1,
+        "unmapped_line_revenue": 15,
+        "unmapped": [
+            {"contact_name": "Unknown store", "description": "Unknown item", "xero_quantity": 1, "line_revenue": 15}
+        ],
+    }
     try:
         page.route("**/api/crm/analytics/product-sales-by-store*", lambda route: route.fulfill(json=product_sales))
         page.goto("/crm/analytics")
+        page.wait_for_function(
+            "() => { if (!window.Alpine || !document.querySelector('.sales-analytics')) return false; "
+            "const data = Alpine.$data(document.querySelector('.sales-analytics')); "
+            "return !data.loadingSales && !data.loadingBreakdown && !data.loadingChurn && "
+            "!data.loadingContact && !data.loadingProductSales; }"
+        )
         card = page.get_by_role("region", name="Products by customer and store")
         rows = card.get_by_role("region", name="Top customers by units")
         expect(card.locator(".sales-analytics__product-filters")).to_be_visible()
         expect(card.locator(".sales-analytics__product-section")).to_have_count(2)
+        expect(card.locator(".sales-analytics__mapping-notice")).to_contain_text("1 Xero item groups need mapping")
+        expect(card.locator("#analytics-unmapped-sales")).to_be_hidden()
+        card.get_by_role("button", name="View details").click()
+        expect(card.locator("#analytics-unmapped-sales")).to_contain_text("Unknown item")
+        card.get_by_role("button", name="Hide details").click()
+        expect(card.locator("#analytics-unmapped-sales")).to_be_hidden()
+        assert card.locator("tbody a").count() == 0
+        assert rows.locator("tbody tr").first.evaluate(
+            "row => getComputedStyle(row).backgroundColor === getComputedStyle(row.closest('.workspace-card')).backgroundColor"
+        )
+        if width == 390:
+            assert all(
+                fits
+                for fits in card.locator(
+                    ".sales-analytics__product-section .sales-analytics__product-table-wrap"
+                ).evaluate_all("wraps => wraps.map(wrap => wrap.scrollWidth <= wrap.clientWidth + 1)")
+            )
         expect(rows.locator("tbody tr")).to_have_count(10)
+        expect(rows.locator("summary").first).to_have_text("1 product")
+        expect(rows.locator("summary").first).to_be_visible()
         rows.get_by_role("button", name="Top 10").click()
         dialog = page.get_by_role("dialog", name="Select Top N")
         dialog.get_by_label("Number of customers / stores to display").fill("3")
@@ -73,9 +113,16 @@ def test_analytics_product_card_uses_shared_sections_and_custom_top_filter(brows
         expect(rows.locator("tbody tr")).to_have_count(3)
         rows.get_by_role("button", name="Top 3").click()
         dialog.get_by_role("button", name="Show all").click()
+        expect(dialog).to_be_hidden()
         expect(rows.locator("tbody tr")).to_have_count(14)
         expect(rows.get_by_role("button", name="Top All")).to_be_visible()
-        card.get_by_role("searchbox", name="Find customer / store").fill("Store 13")
+        search = card.get_by_role("searchbox", name="Search customers / stores")
+        search.fill("Store 13")
+        expect(search).to_have_value("Store 13")
+        assert (
+            page.evaluate("Alpine.$data(document.querySelector('.sales-analytics')).productCustomerSearch")
+            == "Store 13"
+        )
         expect(rows.locator("tbody tr")).to_have_count(1)
         page.reload()
         expect(rows.locator("tbody tr")).to_have_count(14)

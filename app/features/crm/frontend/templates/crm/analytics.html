@@ -49,30 +49,35 @@
 
     <section class="workspace-card" aria-labelledby="analytics-product-sales-title">
       <div class="workspace-card__header">
-        <div><h2 id="analytics-product-sales-title">Products by customer and store</h2><p class="workspace-caption">Ranked by mapped stock units sold on paid and authorised Xero invoices. Each Xero customer contact represents a store; branches sharing one contact appear together. Expand a row for the breakdown.</p></div>
+        <div><h2 id="analytics-product-sales-title">Products by customer and store</h2><p class="workspace-caption">Mapped stock units on paid and authorised Xero invoices. Each Xero contact is one customer or store; shared contacts combine branches.</p></div>
       </div>
       <div class="sales-analytics__body">
         <div class="sales-analytics__product-filters">
-          <label class="crm-form-group"><span class="crm-form-label">From</span><input class="crm-form-input" type="date" x-model="productStartDate"></label>
-          <label class="crm-form-group"><span class="crm-form-label">To</span><input class="crm-form-input" type="date" x-model="productEndDate"></label>
-          <button type="button" class="workspace-button" @click="loadProductSales()" :disabled="loadingProductSales">Apply dates</button>
-          <label class="crm-form-group sales-analytics__product-search"><span class="crm-form-label">Find customer / store</span><input class="crm-form-input" type="search" x-model="productCustomerSearch" placeholder="Name"></label>
+          <label class="sales-analytics__product-search"><span class="crm-form-label">Search customers / stores</span><input class="crm-form-input" type="search" x-model="productCustomerSearch" placeholder="Search by name" autocomplete="off"></label>
+          <div class="sales-analytics__product-dates" role="group" aria-label="Invoice date range">
+            <label><span class="crm-form-label">From</span><input class="crm-form-input" type="date" x-model="productStartDate"></label>
+            <label><span class="crm-form-label">To</span><input class="crm-form-input" type="date" x-model="productEndDate"></label>
+            <button type="button" class="workspace-button" @click="loadProductSales()" :disabled="loadingProductSales">Apply</button>
+          </div>
         </div>
         <p class="sales-analytics__empty" role="status" x-show="loadingProductSales">Loading product sales…</p>
         <p class="crm-error-banner" role="alert" x-show="productSalesError" x-text="productSalesError" x-cloak></p>
         <template x-if="productSales && !loadingProductSales">
           <div>
-            <p class="workspace-caption" x-show="productSales.unmapped_xero_items > 0">
-              <span x-text="productSales.unmapped_xero_items"></span> Xero item groups (<span x-text="formatCurrency(productSales.unmapped_line_revenue)"></span> before tax) have no unambiguous product mapping and are excluded from unit rankings. <a href="/crm/matching">Review mappings</a>.
-            </p>
-            <details x-show="productSales.unmapped_xero_items > 0" style="margin-bottom:16px;">
-              <summary>View unmapped Xero sales by customer / store</summary>
-              <div style="overflow-x:auto"><table class="crm-table crm-table--compact sales-analytics__table">
+            <div class="sales-analytics__mapping-notice" x-show="productSales.unmapped_xero_items > 0" x-cloak>
+              <div><strong><span x-text="productSales.unmapped_xero_items"></span> Xero item groups need mapping</strong><p>Excluded from unit rankings · <span x-text="formatCurrency(productSales.unmapped_line_revenue)"></span> before tax</p></div>
+              <div class="sales-analytics__mapping-actions">
+                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :aria-expanded="showUnmappedProductSales" aria-controls="analytics-unmapped-sales" @click="showUnmappedProductSales = !showUnmappedProductSales" x-text="showUnmappedProductSales ? 'Hide details' : 'View details'"></button>
+                <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/matching">Review mappings</a>
+              </div>
+            </div>
+            <div id="analytics-unmapped-sales" class="sales-analytics__unmapped-table sales-analytics__product-table-wrap" x-show="productSales.unmapped_xero_items > 0 && showUnmappedProductSales" x-cloak>
+              <table class="crm-table crm-table--compact sales-analytics__table">
                 <thead><tr><th>Customer / store</th><th>Xero item</th><th class="sales-analytics__num">Xero line quantity</th><th class="sales-analytics__num">Line revenue</th></tr></thead>
                 <tbody><template x-for="(row, index) in productSales.unmapped" :key="index"><tr><td x-text="row.contact_name"></td><td x-text="row.description || row.item_code || 'Unnamed item'"></td><td class="sales-analytics__num" x-text="formatUnits(row.xero_quantity)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td></tr></template></tbody>
-              </table></div>
-            </details>
-            <section class="workspace-tile sales-analytics__product-section" aria-labelledby="analytics-top-products-customers-title">
+              </table>
+            </div>
+            <section class="sales-analytics__product-section" aria-labelledby="analytics-top-products-customers-title">
               <div class="workspace-subheading sales-analytics__product-heading">
                 <div><h3 id="analytics-top-products-customers-title">Top customers by units</h3><p class="workspace-caption" x-show="filteredProductCustomerRows.length > 0" x-text="`Showing ${filteredProductCustomers.length} of ${filteredProductCustomerRows.length} customers / stores`"></p></div>
                 <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openProductTopNModal()">Top <span x-text="productTopLabel"></span></button>
@@ -83,13 +88,13 @@
                 <thead><tr><th>Customer / store</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Products</th></tr></thead>
                 <tbody>
                   <template x-for="row in filteredProductCustomers" :key="row.contact_id">
-                    <tr><td><a :href="'/crm/customers/' + row.contact_id" x-text="row.contact_name"></a></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details><summary x-text="`${row.products.length} products`"></summary><ul><template x-for="item in row.products" :key="item.product_name"><li x-text="`${item.product_name}: ${formatUnits(item.units)} units · ${formatCurrency(item.line_revenue)}`"></li></template></ul></details></td></tr>
+                    <tr><td class="sales-analytics__product-name" x-text="row.contact_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.products.length + (row.products.length === 1 ? ' product' : ' products')"></summary><ul><template x-for="item in row.products" :key="item.product_name"><li x-text="`${item.product_name}: ${formatUnits(item.units)} units · ${formatCurrency(item.line_revenue)}`"></li></template></ul></details></td></tr>
                   </template>
                 </tbody>
               </table>
               </div>
             </section>
-            <section class="workspace-tile sales-analytics__product-section" aria-labelledby="analytics-products-by-store-title">
+            <section class="sales-analytics__product-section" aria-labelledby="analytics-products-by-store-title">
               <div class="workspace-subheading"><h3 id="analytics-products-by-store-title">Products by customer / store</h3></div>
               <p class="sales-analytics__empty" x-show="productSales.products.length === 0">No mapped product sales in this period.</p>
               <div class="sales-analytics__product-table-wrap" x-show="productSales.products.length > 0">
@@ -97,7 +102,7 @@
                 <thead><tr><th>Product</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Stores</th></tr></thead>
                 <tbody>
                   <template x-for="row in productSales.products" :key="row.product_name">
-                    <tr><td x-text="row.product_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details><summary x-text="`${row.customers.length} customers / stores`"></summary><ul><template x-for="store in row.customers" :key="store.contact_id"><li><a :href="'/crm/customers/' + store.contact_id" x-text="store.contact_name"></a>: <span x-text="`${formatUnits(store.units)} units · ${formatCurrency(store.line_revenue)}`"></span></li></template></ul></details></td></tr>
+                    <tr><td class="sales-analytics__product-name" x-text="row.product_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.customers.length + (row.customers.length === 1 ? ' customer / store' : ' customers / stores')"></summary><ul><template x-for="store in row.customers" :key="store.contact_id"><li><span x-text="store.contact_name"></span>: <span x-text="`${formatUnits(store.units)} units · ${formatCurrency(store.line_revenue)}`"></span></li></template></ul></details></td></tr>
                   </template>
                 </tbody>
               </table>
@@ -260,6 +265,7 @@ function crmAnalytics() {
     showProductTopNModal: false,
     productCustomerSearch: '',
     productSales: null,
+    showUnmappedProductSales: false,
     loadingProductSales: true,
     productSalesError: '',
     loadingSales: true,
