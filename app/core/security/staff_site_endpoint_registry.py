@@ -313,6 +313,7 @@ ENDPOINT_COVERAGE = {
     ("tastings.dispatch_tasting", "POST"): "blocked",
     ("tastings.finalise_tasting", "POST"): "blocked",
     ("tastings.cancel_tasting", "POST"): "blocked",
+    ("tastings.tasting_invoice_lines", "GET"): "blocked",
     ("crm.crm_pages.crm_tasks", "GET"): "blocked",
     ("crm.serve_crm_css", "GET"): "blocked",
     ("crm.serve_crm_js", "GET"): "blocked",

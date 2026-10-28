@@ -35,12 +35,15 @@ class Tasting(TenantScoped, Base):
         UniqueConstraint("org_id", "dispatch_key", name="uq_tastings_dispatch_key"),
         CheckConstraint("status IN ('planned','dispatched','completed','cancelled')", name="ck_tasting_status"),
         CheckConstraint("venue_type IN ('own','external')", name="ck_tasting_venue"),
+        CheckConstraint("kind IN ('tasting','event')", name="ck_tasting_kind"),
         CheckConstraint("ends_at > starts_at", name="ck_tasting_times"),
         Index("ix_tastings_org_start", "org_id", "starts_at"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     task_id = Column(UUID(as_uuid=True), ForeignKey("crm_tasks.id", ondelete="RESTRICT"), nullable=False)
     title = Column(String(160), nullable=False)
+    # 'tasting' pours samples; 'event' also sells bottles (stock_outings_001).
+    kind = Column(String(20), nullable=False, default="tasting", server_default="tasting")
     venue_name = Column(String(160), nullable=False)
     venue_address = Column(String(500), nullable=False)
     venue_type = Column(String(20), nullable=False)
@@ -127,6 +130,13 @@ class TastingAllocation(TenantScoped, Base):
             "quantity > 0 AND reserved_volume_ml >= 0 AND used_volume_ml >= 0 AND used_volume_ml <= reserved_volume_ml",
             name="ck_tasting_allocation_amount",
         ),
+        CheckConstraint("sold_units >= 0 AND returned_units >= 0", name="ck_tasting_allocation_bottles"),
+        ForeignKeyConstraint(
+            ["org_id", "return_item_id"],
+            ["inventory_items.org_id", "inventory_items.id"],
+            name="fk_tasting_allocation_return_item",
+            ondelete="RESTRICT",
+        ),
         Index("ix_tasting_allocation_org_event", "org_id", "tasting_id"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -137,4 +147,9 @@ class TastingAllocation(TenantScoped, Base):
     quantity = Column(Numeric(18, 4), nullable=False)
     reserved_volume_ml = Column(Numeric(18, 4), nullable=False, default=0)
     used_volume_ml = Column(Numeric(18, 4), nullable=False, default=0)
+    # Whole bottles sold at the outing (counted at close plus linked Xero lines) and brought
+    # back unopened; returned bottles went back into stock as return_item_id, duty paid.
+    sold_units = Column(Numeric(18, 4), nullable=False, default=0, server_default="0")
+    returned_units = Column(Numeric(18, 4), nullable=False, default=0, server_default="0")
+    return_item_id = Column(UUID(as_uuid=True), nullable=True)
     state = Column(String(20), nullable=False, default="planned")
