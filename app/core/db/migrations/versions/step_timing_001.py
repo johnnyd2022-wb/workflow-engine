@@ -9,7 +9,7 @@ ready date on an output still adds its own wait, as before.
 Downgrade drops them only when no step has a timing.
 
 Revision ID: step_timing_001
-Revises: excise_cca_001
+Revises: stock_outings_001
 """
 
 import sqlalchemy as sa
@@ -17,7 +17,7 @@ from alembic import op
 from sqlalchemy import text
 
 revision = "step_timing_001"
-down_revision = "excise_cca_001"
+down_revision = "stock_outings_001"
 branch_labels = None
 depends_on = None
 
