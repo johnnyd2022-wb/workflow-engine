@@ -87,6 +87,9 @@ class BatchRule:
     workflow_id: str
     batch_quantity: Decimal
     duration: timedelta
+    # Use-by: the shelf life counts from when the batch is made, `made_offset` before it is ready.
+    shelf_life: timedelta | None = None
+    made_offset: timedelta = timedelta()
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,7 @@ class PlannedBatch:
     ready_date: date
     late: bool
     reason: str
+    use_by_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -183,6 +187,8 @@ def build_plan(
             start = max(today, demand.due_date - elapsed)
             ready = start + elapsed
             late = ready > demand.due_date
+            # Whole days, rounded down: a batch is not counted on past the day it goes out of date.
+            use_by = ready + (rule.shelf_life - rule.made_offset) // day * day if rule.shelf_life is not None else None
             batches.append(
                 PlannedBatch(
                     demand.demand_id,
@@ -194,12 +200,14 @@ def build_plan(
                     ready,
                     late,
                     "Insufficient lead time; earliest start is today" if late else "Net demand exceeds eligible supply",
+                    use_by,
                 )
             )
-            # Only surplus is available to another order, and only after its ready date.
+            # Only surplus is available to another order, only after its ready date, and only
+            # until its use-by date: a later order is never planned against stock that has expired.
             surplus = planned - needed
             if surplus:
-                available.append((Supply(f"planned:{demand.demand_id}", demand.key, surplus, ready), surplus))
+                available.append((Supply(f"planned:{demand.demand_id}", demand.key, surplus, ready, use_by), surplus))
         positions.append(
             DemandPosition(demand.demand_id, supplied, needed, planned, needed if rule is None else Decimal(0))
         )

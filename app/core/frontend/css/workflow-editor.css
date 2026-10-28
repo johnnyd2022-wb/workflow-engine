@@ -86,3 +86,26 @@
 /* Dark theme: the action rail uses the accent like every other page, not the legacy yellow. */
 html[data-spa-theme="dark"] #page-content .flow-wizard-sticky-bar .btn-primary { background:var(--ui-accent); border-color:var(--ui-accent); color:#042f2e; }
 html[data-spa-theme="dark"] #page-content .flow-wizard-sticky-bar .btn-secondary { background:transparent; border:1px solid var(--ui-border); color:var(--ui-text); }
+
+/* Step timing (GL-P07 B1): show work then wait above the two editable values. */
+#workflow-editor .step-timing__head { margin-bottom:12px; }
+#workflow-editor .step-timing__title { margin:0; font-size:14px; font-weight:500; color:var(--ui-text); }
+#workflow-editor .step-timing__title span { color:var(--ui-text-muted); font-weight:400; }
+#workflow-editor .step-timing__fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+#workflow-editor .step-timing__bar { display:flex; gap:4px; height:34px; margin-bottom:14px; }
+#workflow-editor .step-timing__bar[hidden] { display:none; }
+#workflow-editor .step-timing__bar > div { flex:1 1 0; min-width:max-content; display:flex; align-items:center; padding:0 10px; border-radius:6px; font-size:12px; font-weight:500; overflow:hidden; white-space:nowrap; }
+#workflow-editor .step-timing__bar > [hidden] { display:none; }
+#workflow-editor [data-timing-bar="duration"] { background:var(--ui-accent); color:var(--ui-surface); }
+#workflow-editor [data-timing-bar="wait"] { background:repeating-linear-gradient(135deg, var(--ui-accent-soft) 0 8px, transparent 8px 14px); border:1px solid var(--ui-accent-soft); color:var(--ui-accent-strong); }
+#workflow-editor .step-timing__field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+#workflow-editor .step-timing__label { font-size:13px; font-weight:500; color:var(--ui-text); }
+#workflow-editor .step-timing__pair { display:flex; gap:8px; min-width:0; }
+#page-content #workflow-editor .step-timing__pair input { flex:1 1 0; min-width:0; width:auto; padding:9px 12px; font-size:14px; border:1px solid var(--ui-border); background:var(--ui-surface); color:var(--ui-text); }
+#page-content #workflow-editor .step-timing__pair select { flex:0 0 112px; width:112px; padding:9px 10px; font-size:14px; border:1px solid var(--ui-border); background:var(--ui-surface); color:var(--ui-text); }
+#workflow-editor .step-timing__total { margin:12px 0 0; font-size:13px; color:var(--ui-text-muted); }
+#workflow-editor .step-timing__total.is-invalid { color:var(--error); }
+
+@media(max-width:700px) {
+ #workflow-editor .step-timing__fields { grid-template-columns:minmax(0,1fr); }
+}

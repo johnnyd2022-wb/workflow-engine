@@ -18,7 +18,7 @@ from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
-from app.core.db.repositories.process_repo import STALE_WRITE, ProcessRepository
+from app.core.db.repositories.process_repo import STALE_WRITE, STEP_TIMING_FIELDS, ProcessRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_duration
 from app.core.security.permissions import requires_auth, requires_role
 from app.observability import get_logger
@@ -254,6 +254,24 @@ def _iso(dt):
     return dt.isoformat() if dt else None
 
 
+_STEP_TIMING_LIMIT = 525_600  # a year in minutes; the planner's limit for a step
+
+
+def _step_timing(data) -> tuple[dict, str | None]:
+    """The step-timing keys present in ``data``: whole minutes up to a year, or null to clear."""
+    timing = {}
+    for field in STEP_TIMING_FIELDS:
+        if field not in data:
+            continue
+        value = data[field]
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _STEP_TIMING_LIMIT
+        ):
+            return {}, "Step timings are whole minutes, from 0 up to a year"
+        timing[field] = value
+    return timing, None
+
+
 def _serialize_step(step) -> dict:
     return {
         "id": str(step.id),
@@ -264,6 +282,8 @@ def _serialize_step(step) -> dict:
         "inputs": step.inputs or [],
         "outputs": step.outputs or [],
         "execution_prompts": step.execution_prompts or [],
+        "duration_minutes": step.duration_minutes,
+        "wait_minutes": step.wait_minutes,
         "updated_at": _iso(getattr(step, "updated_at", None)),
     }
 
@@ -614,6 +634,8 @@ def register_routes(bp):
                         "inputs": step.inputs or [],
                         "outputs": step.outputs or [],
                         "execution_prompts": step.execution_prompts or [],
+                        "duration_minutes": step.duration_minutes,
+                        "wait_minutes": step.wait_minutes,
                     }
                     for step in step_list
                 ]
@@ -821,6 +843,9 @@ def register_routes(bp):
         expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
         if expiry_ready_errors:
             return jsonify({"error": expiry_ready_errors[0]}), 400
+        timing, timing_error = _step_timing(data)
+        if timing_error:
+            return jsonify({"error": timing_error}), 400
 
         repo = ProcessRepository(db_session)
         try:
@@ -834,6 +859,7 @@ def register_routes(bp):
                 inputs=data.get("inputs", []),
                 outputs=data.get("outputs", []),
                 execution_prompts=data.get("execution_prompts", []),
+                timing=timing,
             )
         except IntegrityError:
             db_session.rollback()
@@ -853,6 +879,8 @@ def register_routes(bp):
                     "inputs": step.inputs or [],
                     "outputs": step.outputs or [],
                     "execution_prompts": step.execution_prompts or [],
+                    "duration_minutes": step.duration_minutes,
+                    "wait_minutes": step.wait_minutes,
                 }
             ),
             201,
@@ -878,6 +906,9 @@ def register_routes(bp):
             expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
             if expiry_ready_errors:
                 return jsonify({"error": expiry_ready_errors[0]}), 400
+        timing, timing_error = _step_timing(data or {})
+        if timing_error:
+            return jsonify({"error": timing_error}), 400
 
         repo = ProcessRepository(db_session)
 
@@ -893,6 +924,7 @@ def register_routes(bp):
                 inputs=data.get("inputs"),
                 outputs=data.get("outputs"),
                 execution_prompts=data.get("execution_prompts"),
+                timing=timing,
                 if_match=_if_match_token(),
             )
         except IntegrityError:

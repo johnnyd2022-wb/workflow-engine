@@ -19,6 +19,23 @@
 A short summary of what happens in this step, in plain language.
             </p>
           </div>
+          <div class="flow-spa-stack__item step-timing" data-step-timing role="group" aria-labelledby="step-timing-title">
+            <div class="step-timing__head">
+              <p class="step-timing__title" id="step-timing-title">Timing <span>· optional</span></p>
+            </div>
+            <div class="step-timing__bar" aria-hidden="true"><div data-timing-bar="duration"><span>Work</span></div><div data-timing-bar="wait"><span>Wait</span></div></div>
+            <div class="step-timing__fields">
+              <div class="step-timing__field">
+                <label class="step-timing__label" for="guided-step-duration-value">Takes</label>
+                <span class="step-timing__pair"><input type="number" id="guided-step-duration-value" data-timing-value="duration" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-duration-unit" data-timing-unit="duration" aria-label="Takes: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
+              </div>
+              <div class="step-timing__field">
+                <label class="step-timing__label" for="guided-step-wait-value">Then waits</label>
+                <span class="step-timing__pair"><input type="number" id="guided-step-wait-value" data-timing-value="wait" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-wait-unit" data-timing-unit="wait" aria-label="Then waits: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
+              </div>
+            </div>
+            <p class="step-timing__total" data-timing-total aria-live="polite"></p>
+          </div>
         </div>
       </div>
       {% set flow_wizard_sticky_variant = 'step_name' %}

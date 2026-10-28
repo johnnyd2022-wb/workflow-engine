@@ -198,6 +198,8 @@
     const stepDescInput = document.getElementById('guided-step-description');
     if (stepNameInput) stepNameInput.value = data.stepName || '';
     if (stepDescInput) stepDescInput.value = data.stepDescription || '';
+    const timingEl = document.querySelector('[data-step-timing]');
+    if (timingEl && window.StepTiming) window.StepTiming.fill(timingEl, data.durationMinutes, data.waitMinutes);
     const workflowNameInput = document.getElementById('guided-process-workflow-name');
     if (workflowNameInput && Object.prototype.hasOwnProperty.call(data, 'workflowProcessName')) {
       workflowNameInput.value = data.workflowProcessName != null ? data.workflowProcessName : '';
@@ -680,6 +682,8 @@
           inputs: step.inputs || [],
           outputs: step.outputs || [],
           execution_prompts: step.execution_prompts || [],
+          duration_minutes: step.duration_minutes,
+          wait_minutes: step.wait_minutes,
           updated_at: step.updated_at
         }));
         
@@ -807,6 +811,8 @@
                 inputs: step.inputs || [],
                 outputs: step.outputs || [],
                 execution_prompts: step.execution_prompts || [],
+                duration_minutes: step.duration_minutes,
+                wait_minutes: step.wait_minutes,
                 updated_at: step.updated_at
               }));
               isEditingExistingProcess = true;
@@ -906,6 +912,8 @@
     if (gsn) gsn.value = '';
     const gsd = document.getElementById('guided-step-description');
     if (gsd) gsd.value = '';
+    const gst = document.querySelector('[data-step-timing]');
+    if (gst && window.StepTiming) window.StepTiming.fill(gst, null, null);
     const unifiedList = document.getElementById('guided-inputs-list-unified');
     if (unifiedList) unifiedList.innerHTML = '';
     const gOut = document.getElementById('guided-outputs-list');
@@ -2688,6 +2696,8 @@
     const stepName = (session.stepName || '').trim();
     const stepDescription = (session.stepDescription || '').trim();
     if (!stepName) throw new Error('Step name required');
+    const durationMinutes = session.durationMinutes != null ? session.durationMinutes : null;
+    const waitMinutes = session.waitMinutes != null ? session.waitMinutes : null;
 
     const inputs = mapSessionInputsToApiPayloadFromRows(session.inputs || []);
     const outputs = JSON.parse(JSON.stringify(session.outputs || []));
@@ -2756,7 +2766,9 @@
       description: stepDescription,
       inputs: inputs,
       outputs: outputs,
-      execution_prompts: executionPrompts
+      execution_prompts: executionPrompts,
+      duration_minutes: durationMinutes,
+      wait_minutes: waitMinutes
     };
 
     const wasEditingStepId = eid;
@@ -2810,6 +2822,8 @@
       inputs: inputs,
       outputs: outputs,
       execution_prompts: executionPrompts,
+      duration_minutes: durationMinutes,
+      wait_minutes: waitMinutes,
       documentation_summary: documentation_summary,
       batch_number_mode: batchNumberMode,
       evidence_mode: evidenceMode
@@ -2844,6 +2858,8 @@
             inputs: s.inputs || [],
             outputs: s.outputs || [],
             execution_prompts: s.execution_prompts || [],
+            duration_minutes: s.duration_minutes,
+            wait_minutes: s.wait_minutes,
             updated_at: s.updated_at
           }));
         }

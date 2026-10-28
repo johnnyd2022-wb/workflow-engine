@@ -371,9 +371,17 @@
       workflow.steps.forEach(step => {
         const row = node('div', undefined, 'board-step'); row.dataset.stepId = step.step_id; row.append(node('p', step.name));
         const saved = workflow.setting?.snapshot.steps.find(item => item.step_id === step.step_id);
-        const duration = field(row, 'Duration (minutes)', 'duration_minutes', 'number', saved?.duration_minutes ?? '');
-        const waiting = field(row, 'Waiting (minutes)', 'waiting_minutes', 'number', saved?.waiting_minutes ?? '');
-        [duration, waiting].forEach(input => { input.min = '0'; input.max = '525600'; input.step = '1'; }); fieldset.append(row);
+        // A newly timed workflow supplies the defaults. When its timing changes, show the
+        // new workflow value instead of silently resaving an older planning snapshot.
+        const workflowTimingChanged = workflow.stale && saved && (
+          (step.duration_minutes != null && step.duration_minutes !== saved.duration_minutes) ||
+          (step.wait_minutes != null && step.wait_minutes !== saved.waiting_minutes)
+        );
+        const durationValue = workflowTimingChanged ? step.duration_minutes : saved?.duration_minutes ?? step.duration_minutes;
+        const waitingValue = workflowTimingChanged ? step.wait_minutes : saved?.waiting_minutes ?? step.wait_minutes;
+        const duration = field(row, 'Duration (minutes)', 'duration_minutes', 'number', durationValue ?? '');
+        const waiting = field(row, 'Waiting (minutes)', 'waiting_minutes', 'number', waitingValue ?? '');
+        [duration, waiting].forEach(input => { input.min = '0'; input.max = '525600'; input.step = '1'; input.required = true; }); fieldset.append(row);
         (step.inputs || []).forEach((input, index) => {
           if (!input || input.source_output_id != null) return;
           const label = node('label', 'Exact raw lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');

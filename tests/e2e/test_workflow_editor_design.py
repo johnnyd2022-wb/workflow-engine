@@ -166,3 +166,35 @@ def test_phone_shows_one_line_of_progress(logged_in_page):
     assert journey.locator("ol").evaluate("node => getComputedStyle(node, '::before').content") == '"Stage 2 of 7"'
     assert journey.bounding_box()["height"] < 80
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_step_timing_uses_the_chosen_timeline_without_a_preview_switch(logged_in_page, width):
+    page = logged_in_page
+    page.set_viewport_size({"width": width, "height": 844})
+    _start_step(page)
+    timing = page.locator("[data-step-timing]")
+    expect(timing.locator(".step-timing__bar")).to_be_visible()
+    expect(timing.locator("[data-timing-style-pick]")).to_have_count(0)
+    expect(timing).not_to_have_attribute("data-step-timing-style", re.compile(".*"))
+
+    timing.locator('[data-timing-value="duration"]').fill("2")
+    timing.locator('[data-timing-unit="duration"]').select_option("hours")
+    timing.locator('[data-timing-value="wait"]').fill("3")
+    timing.locator('[data-timing-unit="wait"]').select_option("days")
+    expect(timing.locator('[data-timing-bar="duration"]')).to_contain_text("Work · 2 h")
+    expect(timing.locator('[data-timing-bar="wait"]')).to_contain_text("Wait · 3 d")
+    expect(timing.locator("[data-timing-total]")).to_contain_text("3 days 2 hours")
+    assert timing.evaluate("node => window.StepTiming.read(node)") == {
+        "duration_minutes": 120,
+        "wait_minutes": 4320,
+    }
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+
+    timing.locator('[data-timing-value="duration"]').fill("999")
+    timing.locator('[data-timing-unit="duration"]').select_option("weeks")
+    expect(timing.locator("[data-timing-total]")).to_contain_text("Enter a time from 0 up to a year")
+    expect(timing.locator(".step-timing__bar")).to_be_hidden()
+    timing.locator('[data-timing-value="duration"]').fill("2")
+    timing.locator('[data-timing-unit="duration"]').select_option("hours")
+    expect(timing.locator(".step-timing__bar")).to_be_visible()
