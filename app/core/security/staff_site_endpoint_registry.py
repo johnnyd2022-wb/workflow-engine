@@ -256,6 +256,7 @@ ENDPOINT_COVERAGE = {
     ("crm.crm_api.get_contact_sync_settings", "GET"): "blocked",
     ("crm.crm_api.get_customer", "GET"): "blocked",
     ("crm.crm_api.get_customer_analytics", "GET"): "blocked",
+    ("crm.crm_api.product_sales_by_store", "GET"): "blocked",
     ("crm.crm_api.excise_months", "GET"): "blocked",
     ("crm.crm_api.excise_month", "GET"): "blocked",
     ("crm.crm_api.get_customer_invoice_defaults", "GET"): "blocked",
