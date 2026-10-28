@@ -2206,7 +2206,7 @@ def _seed_tastings(db, org_id, inv) -> None:
         )
     db.commit()
 
-    def event(title, venue, offset, product, count="1", own=False, hour=16):
+    def event(title, venue, offset, product, count="1", own=False, hour=16, kind="tasting", contact=None):
         start = datetime.combine(
             today + timedelta(days=offset), datetime.min.time(), ZoneInfo("Pacific/Auckland")
         ).replace(hour=hour)
@@ -2225,6 +2225,8 @@ def _seed_tastings(db, org_id, inv) -> None:
                 "rep_id": str(rep.id),
                 "notes": "Bring the bottle display and tasting notes. Confirm the setup with the venue manager.",
                 "allocations": [{"source_item_id": str(product.id), "quantity": count}],
+                "kind": kind,
+                "contact_id": str(contact.id) if contact else None,
             },
         )
         db.commit()
@@ -2259,6 +2261,76 @@ def _seed_tastings(db, org_id, inv) -> None:
     db.commit()
     cancelled = event("Venue rescheduled", "Bottle shop on Cuba", 2, products[2])
     tasting_service.cancel(db, org_id, rep.id, cancelled.id)
+    db.commit()
+    _seed_event_sales(db, org_id, rep, today, products, event)
+
+
+def _seed_event_sales(db, org_id, rep, today, products, event) -> None:
+    """Events that sell bottles: one out at a market today with a Xero sale raised on the stall,
+    and one closed with bottles sold and brought back."""
+    import uuid
+
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.tastings.services import tasting_service
+
+    stall = XeroContact(
+        org_id=org_id, xero_contact_id=str(uuid.uuid4()), xero_tenant_id="ui-shots", name="Harbourside Market Trust"
+    )
+    db.add(stall)
+    db.add(
+        ProductMapping(org_id=org_id, biz_e_product_name=products[0].name, xero_description_pattern=products[0].name)
+    )
+    db.flush()
+    for number, contact, quantity in [("INV-2201", stall, 3), ("INV-2202", None, 1)]:
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=contact.id if contact else None,
+            invoice_number=number,
+            invoice_type="ACCREC",
+            status="AUTHORISED",
+            date=today,
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            XeroInvoiceLineItem(
+                org_id=org_id,
+                invoice_id=invoice.id,
+                xero_line_item_id=number + "-1",
+                description=products[0].name,
+                quantity=Decimal(quantity),
+            )
+        )
+    db.commit()
+    market = event(
+        "Harbourside night market", "Harbourside Market", 0, products[0], "10", hour=15, kind="event", contact=stall
+    )
+    tasting_service.dispatch(
+        db, org_id, rep.id, market.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(market.id)
+    )
+    db.commit()
+    fair = event("Craft spirits fair", "Shed 6", 0, products[1], "6", hour=1, kind="event")
+    tasting_service.dispatch(
+        db, org_id, rep.id, fair.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(fair.id)
+    )
+    db.commit()
+    line = tasting_service.event_dict(db, fair)["allocations"][0]
+    tasting_service.finalise(
+        db,
+        org_id,
+        rep.id,
+        fair.id,
+        {
+            "usage": [{"allocation_id": line["id"], "used_volume_ml": "350", "sold_units": "3", "returned_units": "2"}],
+            "samples_count": 40,
+            "notes": "Busy stand. Half a bottle poured; two unopened back to the cellar door.",
+        },
+    )
     db.commit()
 
 

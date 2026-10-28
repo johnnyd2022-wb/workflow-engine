@@ -260,6 +260,13 @@ def finalise_tasting(event_id):
     return _write(service.finalise, event_id, request.get_json(silent=True))
 
 
+@bp.get("/api/crm/tastings/<event_id>/invoice-lines")
+@requires_auth
+def tasting_invoice_lines(event_id):
+    """Xero lines that may be bottles sold at this tasting or event, to link when closing it."""
+    return jsonify({"lines": service.invoice_line_choices(db_session(), g.current_org_id, event_id)})
+
+
 @bp.post("/api/crm/tastings/<event_id>/cancel")
 @requires_auth
 def cancel_tasting(event_id):

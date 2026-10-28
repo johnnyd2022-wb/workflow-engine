@@ -20,8 +20,9 @@
 .tasting-wide { grid-column: 1 / -1; }
 .tasting-fields label, .tasting-note-field, .tasting-stock-search label, .tasting-detail label { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: 13px; font-weight: 500; }
 .tasting-fields small { font-size: 11px; color: var(--ui-text-muted); font-weight: 400; }
-#page-content #tasting-form input, #page-content #tasting-form select, #page-content #tasting-form textarea, #page-content #tasting-detail input, #page-content #tasting-detail textarea { width: 100% !important; height: auto !important; min-height: 40px !important; padding: 9px 11px !important; font-size: 14px !important; border: 1px solid var(--ui-border) !important; border-radius: 6px !important; background: var(--ui-surface) !important; color: var(--ui-text) !important; font-family: inherit !important; }
+#page-content #tasting-form input, #page-content #tasting-form select, #page-content #tasting-form textarea, #page-content #tasting-detail input:not([type="checkbox"]), #page-content #tasting-detail textarea { width: 100% !important; height: auto !important; min-height: 40px !important; padding: 9px 11px !important; font-size: 14px !important; border: 1px solid var(--ui-border) !important; border-radius: 6px !important; background: var(--ui-surface) !important; color: var(--ui-text) !important; font-family: inherit !important; }
 .tasting-note-field { margin-top: 20px; }
+#tasting-form > .tasting-note-field:first-child { margin: 0 0 18px; }
 .tasting-stock-editor { border-top: 1px solid var(--ui-border); margin: 24px 0 0; padding-top: 22px; }
 #page-content .tasting-stock-editor h3, #page-content .tasting-detail h3 { font-size: 16px; color: var(--ui-text); margin: 0 0 8px; }
 .tasting-stock-search { display: flex; gap: 10px; margin: 14px 0; }
@@ -38,6 +39,17 @@
 .tasting-detail-line strong { display: block; font-size: 14px; margin-bottom: 5px; }
 .tasting-detail-line p, .tasting-detail-note { font-size: 13px; line-height: 1.6; color: var(--ui-text-muted); white-space: pre-wrap; overflow-wrap: anywhere; margin: 5px 0; }
 .tasting-detail-line label { max-width: 235px; margin-top: 12px; }
+.tasting-close-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 170px)); gap: 14px; align-items: end; }
+.tasting-close-fields label { max-width: none; }
+.tasting-detail-line p.tasting-close-tally { margin-top: 10px; }
+.tasting-detail-line p.tasting-close-tally.is-over { color: var(--error); font-weight: 500; }
+.tasting-invoices { border: 0; padding: 0; margin: 20px 0 18px; min-width: 0; }
+.tasting-invoices legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.tasting-detail label.tasting-invoice { flex-direction: row; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--ui-border); font-weight: 400; }
+.tasting-invoice input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--ui-accent); }
+.tasting-invoice span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tasting-invoice strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.tasting-invoice small { font-size: 12px; color: var(--ui-text-muted); }
 .tasting-detail details { margin: 12px 0; font-size: 12px; color: var(--ui-text-muted); }
 .tasting-detail summary { cursor: pointer; font-weight: 600; }
 .tasting-detail .tasting-fields { margin: 18px 0; }
@@ -48,6 +60,7 @@
 @media (max-width: 760px) {
   #page-content .tasting-dialog { padding: 20px; width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
   .tasting-fields, .tasting-detail-facts { grid-template-columns: minmax(0,1fr); }
+  .tasting-close-fields { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
   .tasting-wide { grid-column: 1; }
   .tasting-stock-line { grid-template-columns: minmax(0,1fr) 40px; }
   .tasting-stock-line > label:first-child { grid-column: 1 / -1; }

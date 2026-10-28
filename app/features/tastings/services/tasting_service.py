@@ -128,6 +128,7 @@ def save_event(db, org_id, actor_id, data, event_id=None):
         "contact_id",
         "notes",
         "allocations",
+        "kind",
     }
     if not isinstance(data, dict) or set(data) - allowed:
         raise TastingError("Unknown tasting fields")
@@ -152,6 +153,10 @@ def save_event(db, org_id, actor_id, data, event_id=None):
     fields["venue_type"] = value("venue_type")
     if fields["venue_type"] not in {"own", "external"}:
         raise TastingError("Choose own or external venue")
+    # A tasting pours samples; an event can also sell bottles. Both can bring bottles back.
+    fields["kind"] = value("kind", "tasting") or "tasting"
+    if fields["kind"] not in {"tasting", "event"}:
+        raise TastingError("Choose a tasting or an event")
     fields["starts_at"] = (
         timestamp(data["starts_at"]) if "starts_at" in data else (event.starts_at if event else timestamp(None))
     )
@@ -572,27 +577,69 @@ def dispatch(db, org_id, actor_id, event_id, data, key):
     return event
 
 
+def _bottles(value, label):
+    """A whole number of bottles (cans, units) from a close, zero when left out."""
+    if value is None or value == "":
+        return Decimal("0")
+    number = amount(value, zero=True)
+    if number != number.to_integral_value():
+        raise TastingError(f"{label} must be whole bottles")
+    return number
+
+
 def finalise(db, org_id, actor_id, event_id, data):
-    if not isinstance(data, dict) or set(data) - {"usage", "samples_count", "notes"}:
+    """Close an outing: per stock line, the mL poured, the bottles sold (counted here, plus any
+    Xero invoice lines named in ``invoice_lines``) and the unopened bottles brought back.
+
+    Bottles sold at the outing came out of outing stock, which was removed for excise when it
+    left; a linked Xero line is matched to its batch for traceability but never moves warehouse
+    stock or counts as a second removal. Returned bottles go back where they came from as their
+    own lot, duty paid, and are listed for the CCA as a possible credit (never deducted).
+    """
+    if not isinstance(data, dict) or set(data) - {"usage", "samples_count", "notes", "invoice_lines"}:
         raise TastingError("Unknown outcome fields")
     raw = data.get("usage")
     if not isinstance(raw, list) or not 0 <= len(raw) <= 20:
         raise TastingError("Record usage for each allocation")
     usage = {}
     for line in raw:
-        if not isinstance(line, dict) or set(line) != {"allocation_id", "used_volume_ml"}:
+        if (
+            not isinstance(line, dict)
+            or not {"allocation_id", "used_volume_ml"} <= set(line)
+            or set(line) - {"allocation_id", "used_volume_ml", "sold_units", "returned_units"}
+        ):
             raise TastingError("Record allocation and measured used millilitres")
         key = uid(line["allocation_id"])
         if key in usage:
             raise TastingError("Duplicate allocation outcome")
-        usage[key] = amount(line["used_volume_ml"], zero=True)
+        usage[key] = {
+            "used": amount(line["used_volume_ml"], zero=True),
+            "sold": _bottles(line.get("sold_units"), "Bottles sold"),
+            "returned": _bottles(line.get("returned_units"), "Bottles brought back"),
+        }
+    raw_links = data.get("invoice_lines") or []
+    if not isinstance(raw_links, list) or len(raw_links) > 50:
+        raise TastingError("Link at most fifty invoice lines")
+    links, seen_links = [], set()
+    for link in raw_links:
+        if not isinstance(link, dict) or set(link) != {"allocation_id", "xero_invoice_id", "line_key"}:
+            raise TastingError("Each invoice line needs its stock line, invoice and line")
+        pair = (text(link["xero_invoice_id"], 100), text(link["line_key"], 160))
+        if pair in seen_links:
+            raise TastingError("An invoice line is linked twice")
+        seen_links.add(pair)
+        links.append((uid(link["allocation_id"]), *pair))
     count = data.get("samples_count")
     if count is not None and (type(count) is not int or not 0 <= count <= 1000000):
         raise TastingError("Samples count must be a nonnegative whole number, at most 1000000")
     notes = text(data.get("notes"), 4000, optional=True)
     digest = fingerprint(
         {
-            "usage": sorted((str(k), str(v.normalize())) for k, v in usage.items()),
+            "usage": sorted(
+                (str(k), str(v["used"].normalize()), str(v["sold"].normalize()), str(v["returned"].normalize()))
+                for k, v in usage.items()
+            ),
+            "invoice_lines": sorted(f"{a}|{i}|{k}" for a, i, k in links),
             "samples_count": count,
             "notes": notes,
         }
@@ -607,6 +654,7 @@ def finalise(db, org_id, actor_id, event_id, data):
     lines = TastingRepository(db).allocations(org_id, event.id)
     if set(usage) != {line.id for line in lines}:
         raise TastingError("Record measured usage for every allocation")
+    by_id = {line.id: line for line in lines}
     pools = {
         row.id: row
         for row in db.query(TastingStockLot)
@@ -615,14 +663,36 @@ def finalise(db, org_id, actor_id, event_id, data):
         .with_for_update()
         .populate_existing()
     }
+    sources = {
+        row.id: row
+        for row in db.query(InventoryItem).filter(
+            InventoryItem.org_id == org_id,
+            InventoryItem.id.in_([line.source_item_id for line in lines if line.source_item_id]),
+        )
+    }
+    linked = _link_invoice_lines(db, org_id, event, by_id, sources, links)
+    returned_on = utc_now().astimezone(NZ).date()
     for line in lines:
-        used = usage[line.id]
+        outcome = usage[line.id]
+        used, sold, returned = outcome["used"], outcome["sold"] + linked.get(line.id, Decimal("0")), outcome["returned"]
         if used > line.reserved_volume_ml:
             raise TastingError("Used volume cannot exceed dispatched volume")
         lot = pools[line.stock_lot_id]
+        bottles = sold + returned
+        if bottles and not line.source_item_id:
+            raise TastingError("Bottles can be sold or brought back only from stock taken as bottles")
+        unit_ml = lot.initial_volume_ml / lot.quantity if bottles else Decimal("0")
+        if bottles > line.quantity or used + bottles * unit_ml > line.reserved_volume_ml:
+            raise TastingError(f"{lot.snapshot['product']}: poured, sold and brought back come to more than was taken")
         lot.reserved_volume_ml -= line.reserved_volume_ml
-        lot.remaining_volume_ml -= used
+        lot.remaining_volume_ml -= used + bottles * unit_ml
         line.used_volume_ml = used
+        line.sold_units = sold
+        line.returned_units = returned
+        if returned:
+            line.return_item_id = _return_bottles(
+                db, org_id, event, line, sources[line.source_item_id], returned, returned_on
+            ).id
         line.state = "completed"
     event.status = "completed"
     event.samples_count = count
@@ -636,6 +706,178 @@ def finalise(db, org_id, actor_id, event_id, data):
     db.flush()
     _emit_lifecycle(db, event, actor_id, "completed")
     return event
+
+
+def _link_invoice_lines(db, org_id, event, lines, sources, links):
+    """Xero lines for bottles sold at the outing: their warehouse match is undone and they are
+    recorded against the outing's stock instead. Returns bottles linked per stock line."""
+    if not links:
+        return {}
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
+
+    sales = SalesTraceabilityService(db)
+    totals = {}
+    for allocation_id, invoice_id, line_key in links:
+        line = lines.get(allocation_id)
+        if line is None or not line.source_item_id:
+            raise TastingError("Link invoice lines to stock taken as bottles")
+        source = sources[line.source_item_id]
+        try:
+            invoice, _xero_line, match, quantity = sales._line_and_match(org_id, invoice_id, line_key)
+        except ValueError as exc:
+            raise TastingError(str(exc)) from None
+        if (invoice.invoice_type or "").upper() != "ACCREC" or (invoice.status or "").upper() not in (
+            "AUTHORISED",
+            "PAID",
+        ):
+            raise TastingError("Only an approved or paid sales invoice can be linked")
+        if match.biz_e_product_name != source.name:
+            raise TastingError(f"That invoice line is for {match.biz_e_product_name}, not {source.name}")
+        existing = sales._line_allocations(org_id, invoice.xero_invoice_id, line_key)
+        if any(a.tasting_allocation_id for a in existing):
+            raise TastingError("That invoice line is already recorded as sold at a tasting or event", 409)
+        sales._reverse_allocations(existing, invoice=invoice)  # the bottles never left the warehouse for it
+        db.add(
+            SalesFifoAllocation(
+                org_id=org_id,
+                xero_invoice_id=invoice.xero_invoice_id,
+                xero_line_key=line_key,
+                inventory_item_id=source.id,
+                product_mapping_id=match.id,
+                product_name=match.biz_e_product_name,
+                quantity=quantity,
+                unit=source.unit,
+                tasting_allocation_id=line.id,
+            )
+        )
+        totals[line.id] = totals.get(line.id, Decimal("0")) + quantity
+    db.flush()
+    return totals
+
+
+def invoice_line_choices(db, org_id, event_id):
+    """Xero lines that may be bottles sold at this outing: invoices dated on its days, for the
+    products it took as bottles, not already recorded as sold at an outing. Lines for the
+    outing's own customer are suggested."""
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.crm.services.sales_traceability_service import SalesTraceabilityService, _positive_quantity
+
+    event = get_event(db, org_id, event_id)
+    lines = [line for line in TastingRepository(db).allocations(org_id, event.id) if line.source_item_id]
+    names = {
+        row.id: row.name
+        for row in db.query(InventoryItem).filter(
+            InventoryItem.org_id == org_id, InventoryItem.id.in_([line.source_item_id for line in lines])
+        )
+    }
+    wanted = {names[line.source_item_id]: str(line.id) for line in lines}
+    if not wanted:
+        return []
+    first, last = event.starts_at.astimezone(NZ).date(), event.ends_at.astimezone(NZ).date()
+    invoices = (
+        db.query(XeroInvoice)
+        .filter(
+            XeroInvoice.org_id == org_id,
+            XeroInvoice.date >= first,
+            XeroInvoice.date <= last,
+            func.upper(XeroInvoice.invoice_type) == "ACCREC",
+            func.upper(XeroInvoice.status).in_(("AUTHORISED", "PAID")),
+        )
+        .order_by(XeroInvoice.date, XeroInvoice.invoice_number)
+        .limit(200)
+        .all()
+    )
+    sales = SalesTraceabilityService(db)
+    taken = {
+        (a.xero_invoice_id, a.xero_line_key)
+        for a in db.query(SalesFifoAllocation).filter(
+            SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.tasting_allocation_id.isnot(None)
+        )
+    }
+    contacts = {
+        c.id: c.name
+        for c in db.query(XeroContact).filter(
+            XeroContact.org_id == org_id, XeroContact.id.in_({i.contact_id for i in invoices if i.contact_id})
+        )
+    }
+    by_invoice = {}
+    rows = (
+        db.query(XeroInvoiceLineItem)
+        .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id.in_([i.id for i in invoices]))
+        .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+        .all()
+    )
+    for row in rows:
+        by_invoice.setdefault(row.invoice_id, []).append(row)
+    # Matched the way the sync matches them, with the mappings read once rather than per line.
+    config = sales.config_repo.get_for_org(org_id)
+    strict = True if config is None else bool(config.strict_mapping)
+    mappings = (
+        db.query(ProductMapping).filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True)).all()
+    )
+    out = []
+    for invoice in invoices:
+        for index, row in enumerate(by_invoice.get(invoice.id, [])):
+            key = (row.xero_line_item_id or f"position:{index + 1}").strip()
+            if (invoice.xero_invoice_id, key) in taken:
+                continue
+            match = sales._find_mapping(row, mappings, strict)
+            quantity = _positive_quantity(row.quantity)
+            if match is None or quantity is None or match.biz_e_product_name not in wanted:
+                continue
+            quantity *= int(getattr(match, "units_per_line", None) or 1)
+            out.append(
+                {
+                    "allocation_id": wanted[match.biz_e_product_name],
+                    "xero_invoice_id": invoice.xero_invoice_id,
+                    "line_key": key,
+                    "invoice_number": invoice.invoice_number or invoice.xero_invoice_id,
+                    "date": invoice.date.isoformat(),
+                    "customer": contacts.get(invoice.contact_id),
+                    "product": match.biz_e_product_name,
+                    "quantity": str(quantity.normalize()),
+                    "suggested": bool(event.contact_id and invoice.contact_id == event.contact_id),
+                }
+            )
+    return out
+
+
+def _return_bottles(db, org_id, event, line, source, returned, on):
+    """Unopened bottles back from an outing: a lot of their own where they came from. Duty was
+    recorded when they left, so this lot is duty paid; any credit is the CCA's to ask Customs for."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    lot = db.query(TastingStockLot).filter(TastingStockLot.id == line.stock_lot_id).one()
+    item = InventoryRepository(db).create_inventory_item(
+        org_id=org_id,
+        name=source.name,
+        quantity=str(returned),
+        unit=source.unit,
+        inventory_type=source.inventory_type,
+        supplier=source.supplier,
+        purchase_date=source.purchase_date,
+        supplier_batch_number=source.supplier_batch_number,
+        expiry_date=source.expiry_date,
+        extra_data={
+            **{k: v for k, v in (source.extra_data or {}).items() if k in ("abv_percent", "batch_number")},
+            "duty_paid_return": {
+                "tasting_id": str(event.id),
+                "tasting_title": event.title,
+                "allocation_id": str(line.id),
+                "returned_on": on.isoformat(),
+                "removed_on": lot.removed_on.isoformat(),
+                "source_cca": (lot.snapshot or {}).get("source_cca"),
+            },
+        },
+        commit=False,
+        site_id=source.site_id,
+        location_id=source.location_id,
+    )
+    return item
 
 
 def cancel(db, org_id, actor_id, event_id):
@@ -701,6 +943,7 @@ def event_dict(db, event, *, detail=True):
             "notes",
             "samples_count",
             "outcome_notes",
+            "kind",
         ]
     }
     result.update(
@@ -753,6 +996,11 @@ def event_dict(db, event, *, detail=True):
                     "quantity": str(line.quantity),
                     "reserved_volume_ml": str(line.reserved_volume_ml),
                     "used_volume_ml": str(line.used_volume_ml),
+                    "sold_units": str(line.sold_units or 0),
+                    "returned_units": str(line.returned_units or 0),
+                    "unit_volume_ml": str(pool.initial_volume_ml / pool.quantity)
+                    if pool and line.source_item_id
+                    else None,
                     "state": line.state,
                     "product": pool.snapshot["product"] if pool else item.name if item else None,
                     "batch": pool.snapshot.get("batch") if pool else item.supplier_batch_number if item else None,

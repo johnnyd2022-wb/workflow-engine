@@ -266,6 +266,38 @@ def _cca_removals(session: Session, org_id: UUID, start: date, end: date, licenc
     return out
 
 
+def _outing_returns(session: Session, org_id: UUID, start: date, end: date) -> list[Removal]:
+    """Unopened bottles back from a tasting or event: duty was recorded when they left, so
+    they are listed as a possible credit to raise with Customs, never deducted."""
+    from app.features.tastings.models import Tasting, TastingAllocation
+
+    rows = (
+        session.query(TastingAllocation, InventoryItem, Tasting)
+        .join(
+            InventoryItem,
+            (InventoryItem.org_id == TastingAllocation.org_id) & (InventoryItem.id == TastingAllocation.return_item_id),
+        )
+        .join(Tasting, (Tasting.org_id == TastingAllocation.org_id) & (Tasting.id == TastingAllocation.tasting_id))
+        .filter(TastingAllocation.org_id == org_id, TastingAllocation.returned_units > 0)
+        .all()
+    )
+    out = []
+    for line, item, outing in rows:
+        back = date.fromisoformat(((item.extra_data or {}).get("duty_paid_return") or {}).get("returned_on"))
+        if start <= back < end:
+            out.append(
+                Removal(
+                    kind="returned",
+                    occurred_on=back,
+                    recorded_at=item.created_at,
+                    item=item,
+                    quantity=Decimal(str(line.returned_units)),
+                    reference=f"Back from {outing.title}",
+                )
+            )
+    return out
+
+
 def unassigned_tastings(session: Session, org_id: UUID, start: date, end: date) -> list[dict]:
     """Tasting removals in the period whose record names no source CCA."""
     from app.features.tastings.services.excise_adapter import legacy_removals
@@ -316,6 +348,8 @@ def _removals(session: Session, org_id: UUID, start: date, end: date, licensed_o
         item = items.get(allocation.inventory_item_id)
         if item is None or (licensed_only and not _licensed(item, locations)):
             continue  # sold from stock already removed (e.g. a rep's car): counted when it left
+        if allocation.tasting_allocation_id or (item.extra_data or {}).get("duty_paid_return"):
+            continue  # sold at a tasting/event, or from bottles back from one: removed when they left
         transfer = transfers_by_invoice.get(invoice.xero_invoice_id)
         out.append(
             Removal(
@@ -362,6 +396,7 @@ def _removals(session: Session, org_id: UUID, start: date, end: date, licensed_o
     from app.features.tastings.services.excise_adapter import legacy_removals
 
     out.extend(legacy_removals(session, org_id, start, end))
+    out.extend(_outing_returns(session, org_id, start, end))
     out.extend(_contract_dispatches(session, org_id, start, end, locations, licensed_only))
     return out
 
@@ -530,7 +565,13 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
         profile = profiles.get(product.casefold())
         if r.kind == "returned":
             returns.append(
-                {"product": product, "quantity": _s(r.quantity), "unit": r.item.unit, "date": r.occurred_on.isoformat()}
+                {
+                    "product": product,
+                    "quantity": _s(r.quantity),
+                    "unit": r.item.unit,
+                    "date": r.occurred_on.isoformat(),
+                    "reference": r.reference,
+                }
             )
             continue
         litres = _litres(r.quantity, r.item.unit, profile)

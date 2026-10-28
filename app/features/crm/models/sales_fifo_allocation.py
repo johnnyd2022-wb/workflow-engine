@@ -41,6 +41,10 @@ class SalesFifoAllocation(TenantScoped, Base):
     status = Column(String(20), nullable=False, default="confirmed", server_default="confirmed")
     # Filled from a batch made after the invoice date: a pre-sale, shown not blocked.
     presold = Column(Boolean, nullable=False, default=False, server_default="false")
+    # A sale made at a tasting or event (stock_outings_001): matched to its batch for
+    # traceability, but it consumed outing stock, so it never moves warehouse stock and is
+    # never a second excise removal.
+    tasting_allocation_id = Column(UUID(as_uuid=True), nullable=True)
     review_due_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
 

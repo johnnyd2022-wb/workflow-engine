@@ -1591,6 +1591,7 @@ def _serialise_task(t, db=None) -> dict:
         "task_type": t.task_type or "general",
         "tasting_id": str(t.tasting[0].id) if t.tasting else None,
         "tasting_status": t.tasting[0].status if t.tasting else None,
+        "tasting_kind": t.tasting[0].kind if t.tasting else None,
         "tasting_starts_at": t.tasting[0].starts_at.isoformat() if t.tasting else None,
         "tasting_venue": t.tasting[0].venue_name if t.tasting else None,
         "href": "/crm/tasks?task_id=" + str(t.id) if t.tasting else None,
