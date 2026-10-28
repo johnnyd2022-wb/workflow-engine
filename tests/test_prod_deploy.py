@@ -17,8 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # A small daemon model records container identity/running state and injects failures.
 # The actual run_prod.sh AND prod_db.sh execute unchanged inside a disposable repo.
-FAKE = r"""import json, os, pathlib, signal, subprocess, sys
+FAKE = r"""import fcntl, json, os, pathlib, signal, subprocess, sys
 state_path = pathlib.Path(os.environ["DEPLOY_STATE"])
+lock = (state_path.parent / (state_path.name + ".lock")).open("w")
+fcntl.flock(lock, fcntl.LOCK_EX)
 s = json.loads(state_path.read_text())
 a = sys.argv[1:]
 command = pathlib.Path(sys.argv[0]).name
