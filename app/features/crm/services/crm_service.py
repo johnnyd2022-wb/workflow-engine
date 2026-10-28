@@ -841,6 +841,116 @@ class CRMService:
     def customer_breakdown(self, org_id: UUID, top_n: int = 20) -> list[dict]:
         return self.invoice_repo.customer_sales_breakdown(org_id, top_n=top_n)
 
+    def product_sales_by_store(self, org_id: UUID, start_date: date, end_date: date) -> dict:
+        """Sales line quantities in mapped stock units, grouped both ways.
+
+        Unmapped Xero lines cannot safely be mixed into bottle/unit rankings: a
+        quantity of one may be a case. Keep their value visible for reconciliation.
+        """
+        config = self.traceability_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        mappings = self.mapping_repo.list_for_org(org_id)
+        rows = self.invoice_repo.customer_product_breakdown(
+            org_id, limit=None, start_date=start_date, end_date=end_date
+        )
+        customers: dict[str, dict] = {}
+        products: dict[str, dict] = {}
+        unmapped_revenue = Decimal("0")
+        unmapped_rows: list[dict] = []
+        for row in rows:
+            mapping = SalesTraceabilityService._find_mapping(
+                SimpleNamespace(description=row["description"], item_code=row["item_code"]), mappings, strict
+            )
+            if mapping is None:
+                unmapped_revenue += Decimal(str(row["total_revenue"]))
+                unmapped_rows.append(
+                    {
+                        "contact_id": row["contact_id"],
+                        "contact_name": row["contact_name"],
+                        "item_code": row["item_code"],
+                        "description": row["description"],
+                        "xero_quantity": row["total_qty"],
+                        "line_revenue": row["total_revenue"],
+                    }
+                )
+                continue
+            quantity = Decimal(str(row["total_qty"])) * int(mapping.units_per_line or 1)
+            revenue = Decimal(str(row["total_revenue"]))
+            customer_id = row["contact_id"]
+            product_key = mapping.biz_e_product_name.casefold()
+            customer = customers.setdefault(
+                customer_id,
+                {
+                    "contact_id": customer_id,
+                    "contact_name": row["contact_name"],
+                    "total_units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                    "products": {},
+                },
+            )
+            product = products.setdefault(
+                product_key,
+                {
+                    "product_name": mapping.biz_e_product_name,
+                    "total_units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                    "customers": {},
+                },
+            )
+            customer["total_units"] += quantity
+            customer["line_revenue"] += revenue
+            product["total_units"] += quantity
+            product["line_revenue"] += revenue
+            customer_product = customer["products"].setdefault(
+                product_key,
+                {"product_name": mapping.biz_e_product_name, "units": Decimal("0"), "line_revenue": Decimal("0")},
+            )
+            product_customer = product["customers"].setdefault(
+                customer_id,
+                {
+                    "contact_id": customer_id,
+                    "contact_name": row["contact_name"],
+                    "units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                },
+            )
+            for entry in (customer_product, product_customer):
+                entry["units"] += quantity
+                entry["line_revenue"] += revenue
+
+        def serialise(entry: dict) -> dict:
+            result = {
+                key: float(value) if isinstance(value, Decimal) else value
+                for key, value in entry.items()
+                if key not in {"products", "customers"}
+            }
+            for child_key in ("products", "customers"):
+                if child_key in entry:
+                    result[child_key] = sorted(
+                        (serialise(child) for child in entry[child_key].values()),
+                        key=lambda child: (
+                            -child["units"],
+                            child.get("product_name", child.get("contact_name", "")).casefold(),
+                        ),
+                    )
+            return result
+
+        return {
+            "customers": sorted(
+                (serialise(row) for row in customers.values()),
+                key=lambda row: (-row["total_units"], row["contact_name"].casefold()),
+            ),
+            "products": sorted(
+                (serialise(row) for row in products.values()),
+                key=lambda row: (-row["total_units"], row["product_name"].casefold()),
+            ),
+            "unmapped_xero_items": len(unmapped_rows),
+            "unmapped_line_revenue": float(unmapped_revenue),
+            "unmapped": sorted(
+                unmapped_rows, key=lambda row: (row["contact_name"].casefold(), (row["description"] or "").casefold())
+            ),
+        }
+
     def rankings(
         self,
         org_id: UUID,

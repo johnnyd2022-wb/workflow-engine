@@ -1571,6 +1571,112 @@ class TestCRMAnalyticsAPI:
     def _customer_analytics(self, app_client, contact, **params):
         return app_client.get(f"/api/crm/customers/{contact.id}/analytics", query_string=params)
 
+    def test_product_sales_by_store_counts_mapped_units_and_preserves_invoice_totals(self, app_client, db, org):
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        alpha = self._customer(db, org, "Alpha Store")
+        bravo = self._customer(db, org, "Bravo Store")
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin bottle",
+                match_type="exact",
+                units_per_line=1,
+            )
+        )
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin case",
+                match_type="exact",
+                units_per_line=6,
+            )
+        )
+        self._invoice(db, org, alpha, date(2025, 2, 10), [("Gin case", 2, 120), ("Gin bottle", 1, 20)])
+        self._invoice(db, org, bravo, date(2025, 2, 11), [("Gin bottle", 10, 200), ("Unmapped", 3, 30)])
+        self._invoice(db, org, alpha, date(2025, 2, 12), [("Gin case", 99, 999)], status="DRAFT")
+        self._invoice(db, org, alpha, date(2025, 2, 13), [("Gin case", 99, 999)], invoice_type="ACCPAY")
+        self._invoice(db, org, alpha, date(2025, 3, 1), [("Gin case", 99, 999)])
+        db.commit()
+
+        response = app_client.get(
+            "/api/crm/analytics/product-sales-by-store",
+            query_string={"start_date": "2025-02-10", "end_date": "2025-02-11"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [(r["contact_name"], r["total_units"], r["line_revenue"]) for r in data["customers"]] == [
+            ("Alpha Store", 13.0, 140.0),
+            ("Bravo Store", 10.0, 200.0),
+        ]
+        assert [(r["product_name"], r["total_units"], r["line_revenue"]) for r in data["products"]] == [
+            ("Gin", 23.0, 340.0)
+        ]
+        assert [(r["contact_name"], r["units"]) for r in data["products"][0]["customers"]] == [
+            ("Alpha Store", 13.0),
+            ("Bravo Store", 10.0),
+        ]
+        assert data["unmapped_xero_items"] == 1
+        assert data["unmapped_line_revenue"] == 30.0
+        assert [(r["contact_name"], r["description"], r["xero_quantity"]) for r in data["unmapped"]] == [
+            ("Bravo Store", "Unmapped", 3.0)
+        ]
+        # Invoice totals count all valid lines, whereas mapped-unit rankings exclude unmapped lines.
+        totals = self._rankings(app_client, entity="customers", start_date="2025-02-10", end_date="2025-02-11")
+        assert sum(row["total"] for row in totals.get_json()["rankings"]) == 370.0
+
+    @pytest.mark.parametrize(
+        "params",
+        [
+            {"start_date": "bad", "end_date": "2025-02-10"},
+            {"start_date": "2025-02-11", "end_date": "2025-02-10"},
+            {"start_date": "2025-02-10"},
+        ],
+    )
+    def test_product_sales_by_store_rejects_invalid_dates(self, app_client, params):
+        assert app_client.get("/api/crm/analytics/product-sales-by-store", query_string=params).status_code == 400
+
+    def test_customer_invoice_history_pages_past_the_five_recent_invoices(self, app_client, db, org):
+        contact = self._customer(db, org, "Many invoices")
+        for i in range(26):
+            self._invoice(db, org, contact, date(2025, 1, 1) + timedelta(days=i), [("Gin", 1, 10)])
+        db.commit()
+
+        overview = app_client.get(f"/api/crm/customers/{contact.id}").get_json()
+        first = app_client.get(f"/api/crm/customers/{contact.id}/invoices?page=1&page_size=25").get_json()
+        second = app_client.get(f"/api/crm/customers/{contact.id}/invoices?page=2&page_size=25").get_json()
+        assert len(overview["recent_invoices"]) == 5
+        assert (first["total"], len(first["invoices"]), len(second["invoices"])) == (26, 25, 1)
+        assert first["invoices"][0]["date"] == "2025-01-26"
+        assert second["invoices"][0]["date"] == "2025-01-01"
+
+    def test_product_sales_by_store_is_tenant_scoped(self, app_client, db, org, other_org):
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin",
+                match_type="exact",
+                units_per_line=1,
+            )
+        )
+        db.flush()
+        self._invoice(db, org, self._customer(db, org, "Our store"), date(2025, 2, 10), [("Gin", 2, 20)])
+        self._invoice(
+            db, other_org, self._customer(db, other_org, "Other store"), date(2025, 2, 10), [("Gin", 99, 990)]
+        )
+        db.commit()
+
+        data = app_client.get(
+            "/api/crm/analytics/product-sales-by-store",
+            query_string={"start_date": "2025-02-10", "end_date": "2025-02-10"},
+        ).get_json()
+        assert [(r["contact_name"], r["total_units"]) for r in data["customers"]] == [("Our store", 2.0)]
+
     @pytest.fixture()
     def other_org(self, db):
         """A second tenant, removed on its own connection: committing ``db`` here would expire the

@@ -59,3 +59,29 @@ test('Edit details still fills the form from the customer', () => {
   assert.equal(page.editForm.addresses.STREET.line1, '1 Quay St');
   assert.equal(page.editForm.addresses.POBOX.line1, '');
 });
+
+test('Invoices tab fetches paginated history instead of stopping at five recent invoices', async () => {
+  const calls = [];
+  const invoices = Array.from({ length: 25 }, (_, i) => ({ id: `invoice-${i + 1}` }));
+  const context = vm.createContext({ CRMAPI: {
+    getCustomerInvoices: async (_id, params) => {
+      calls.push(params);
+      return { invoices: params.page === 1 ? invoices : [{ id: 'invoice-26' }], page: params.page, total: 26 };
+    },
+  }, document: { getElementById: () => null }, window: {}, console });
+  vm.runInContext(SRC, context);
+  const detail = context.crmCustomerDetail('contact-1');
+  detail.$nextTick = (fn) => fn && fn();
+  detail.recentInvoices = [{ id: 'recent-1', date: '2025-01-01', status: 'PAID' }];
+  detail.setTab('invoices');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(detail.invoiceTotal, 26);
+  assert.equal(detail.invoices.length, 25);
+  assert.equal(detail.lastOrder.id, 'recent-1');
+  await detail.loadInvoices(2);
+  assert.equal(detail.invoices[0].id, 'invoice-26');
+  assert.equal(detail.lastOrder.id, 'recent-1');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].page_size, 25);
+  assert.match(TEMPLATE, /Showing.*invoiceTotal.*invoices/);
+});

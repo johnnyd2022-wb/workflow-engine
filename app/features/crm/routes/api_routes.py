@@ -861,6 +861,22 @@ def rankings():
     return jsonify({"rankings": data}), 200
 
 
+@api_bp.route("/api/crm/analytics/product-sales-by-store", methods=["GET"])
+@requires_auth
+def product_sales_by_store():
+    """Mapped product units by customer/store for an inclusive invoice-date window."""
+    try:
+        start_date = date.fromisoformat(request.args["start_date"])
+        end_inclusive = date.fromisoformat(request.args["end_date"])
+        end_date = end_inclusive + timedelta(days=1)
+    except (KeyError, ValueError, OverflowError):
+        return jsonify({"error": "start_date and end_date must be YYYY-MM-DD"}), 400
+    if start_date > end_inclusive:
+        return jsonify({"error": "start_date must be on or before end_date"}), 400
+    data = _crm_service().product_sales_by_store(UUID(g.org_id), start_date, end_date)
+    return jsonify(data), 200
+
+
 @api_bp.route("/api/crm/analytics/churn-risk", methods=["GET"])
 @requires_auth
 def churn_risk():
