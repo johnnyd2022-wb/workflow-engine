@@ -140,6 +140,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     // preserve ordering (React before ReactDOM before Babel before text/babel).
     const doc = new DOMParser().parseFromString(template, 'text/html');
     document.documentElement.replaceWith(doc.documentElement);
+    // The desktop diagram is a fixed-size canvas. On a phone, scaling it down
+    // makes its labels unreadable, so present the same story as a vertical flow.
+    const mobileStyle = document.createElement('style');
+    mobileStyle.textContent = `
+      #mobile-diagram-story { display: none; }
+      @media (max-width: 640px) {
+        html, body { min-height: 100%; height: auto; overflow: auto; }
+        body { display: block; background: #0d0d0d; color: #f9fafb; padding: 24px 16px 40px; }
+        .stage, #canvas { display: none; }
+        #mobile-diagram-story { display: block; max-width: 480px; margin: 0 auto; font: 15px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
+        #mobile-diagram-story h1 { font-size: 28px; line-height: 1.15; margin: 0 0 12px; }
+        #mobile-diagram-story p { color: #b8c1c8; margin: 0 0 24px; }
+        #mobile-diagram-story ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; counter-reset: stages; }
+        #mobile-diagram-story li { counter-increment: stages; background: #1b222a; border: 1px solid #334450; border-radius: 12px; padding: 16px; }
+        #mobile-diagram-story li::before { content: counter(stages, decimal-leading-zero); display: block; color: #2dd4bf; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+        #mobile-diagram-story strong { display: block; font-size: 17px; margin-bottom: 4px; }
+        #mobile-diagram-story span { display: block; color: #b8c1c8; }
+        #mobile-diagram-story .outcome { border-left: 3px solid #2dd4bf; padding: 16px 0 0 16px; margin-top: 24px; }
+      }`;
+    document.head.appendChild(mobileStyle);
+    const mobileStory = document.createElement('main');
+    mobileStory.id = 'mobile-diagram-story';
+    mobileStory.innerHTML = `<h1>From ingredient to bottle</h1>
+      <p>One connected record follows each batch from receiving through production, sale and verification.</p>
+      <ol>
+        <li><strong>Receive materials</strong><span>Record supplier lots and stock as they arrive.</span></li>
+        <li><strong>Make the product</strong><span>Follow ingredients, quantities and checks through every production step.</span></li>
+        <li><strong>Bottle and sell</strong><span>Keep finished batches and stock on hand linked to Xero sales.</span></li>
+        <li><strong>Trace and prepare</strong><span>Find the customers behind a batch and gather evidence for NP3 and excise.</span></li>
+      </ol>
+      <div class="outcome"><strong>Audit-ready by default</strong><span>Clear records help your team reduce errors and reconstruct what happened.</span></div>`;
+    document.body.appendChild(mobileStory);
     const dead = Array.from(document.scripts);
     for (const old of dead) {
       const s = document.createElement('script');

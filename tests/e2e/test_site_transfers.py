@@ -4,7 +4,9 @@ The internal operations gate is enabled only in this isolated fixture. The modul
 provider and its generic field metadata are real; requests are not intercepted.
 """
 
+import os
 import threading
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -54,7 +56,7 @@ def transfer_server(transfers, db, flask_app, monkeypatch):  # noqa: F811
         thread.join(timeout=5)
 
 
-@pytest.mark.parametrize("width", [1440, 390])
+@pytest.mark.parametrize("width", [1440, 390, 320])
 def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, width):
     url, email, destination = transfer_server
     context = browser.new_context(ignore_https_errors=True, viewport={"width": width, "height": 1000})
@@ -106,5 +108,9 @@ def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, 
         expect(docket.locator("body")).to_contain_text("BROWSER-DOCKET")
         expect(docket.locator("body")).to_contain_text("BROWSER-0")
         expect(docket.locator("body")).to_contain_text("BROWSER-1")
+        assert docket.evaluate("document.documentElement.scrollWidth") <= width
+        if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            docket.screenshot(path=str(Path(directory) / f"core__site-transfers__docket-{width}.png"), full_page=True)
     finally:
         context.close()

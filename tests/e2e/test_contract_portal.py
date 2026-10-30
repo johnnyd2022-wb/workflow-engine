@@ -1,5 +1,7 @@
 """Real HTTPS/CSRF portal publishing and sign-in regression; Chromium stays in E2E."""
 
+import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -11,12 +13,13 @@ from tests.e2e.conftest import csrf_headers, login_through_ui
 pytestmark = pytest.mark.e2e
 
 
-def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, fresh_user, db):
+@pytest.mark.parametrize("width", [320, 390])
+def test_publish_invite_and_customer_readonly_portal_at_phone_width(browser, app_url, fresh_user, db, width):
     admin = fresh_user(UserRole.ADMIN)
     contexts = []
     try:
         staff_context = browser.new_context(
-            base_url=app_url, ignore_https_errors=True, viewport={"width": 390, "height": 844}
+            base_url=app_url, ignore_https_errors=True, viewport={"width": width, "height": 844}
         )
         contexts.append(staff_context)
         page = staff_context.new_page()
@@ -75,18 +78,25 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
 
         customer_context = browser.new_context(
-            base_url=app_url, ignore_https_errors=True, viewport={"width": 390, "height": 844}
+            base_url=app_url, ignore_https_errors=True, viewport={"width": width, "height": 844}
         )
         contexts.append(customer_context)
         portal = customer_context.new_page()
         portal.goto(link)
         assert "#" not in portal.url
+        if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+            portal.screenshot(path=str(Path(directory) / f"portal__invite__valid-{width}.png"), full_page=True)
         password = "E2E-Portal-Password-2026"
         portal.locator('[name="password"]').fill(password)
         portal.get_by_role("button", name="Create portal account").click()
         expect(portal.get_by_role("heading", name="Your orders", exact=True)).to_be_visible()
+        if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            portal.screenshot(path=str(Path(directory) / f"portal-{width}.png"), full_page=True)
         portal.get_by_role("link", name=order["reference"], exact=True).click()
         expect(portal.get_by_role("heading", name=order["reference"], exact=True)).to_be_visible()
+        if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+            portal.screenshot(path=str(Path(directory) / f"portal__orders__seeded-{width}.png"), full_page=True)
         expect(portal.get_by_text("Shared actual ABV: 40.2%")).to_be_visible()
         expect(portal.get_by_text("Approve the shared label proof")).to_be_visible()
         portal.get_by_role("button", name="Approve proof").click()

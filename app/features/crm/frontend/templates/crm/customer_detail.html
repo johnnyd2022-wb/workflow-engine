@@ -317,10 +317,10 @@
             </div>
           </template>
           <div class="sales-analytics__pagination" x-show="invoicesLoaded && invoiceTotal > 0" x-cloak style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;flex-wrap:wrap;">
-            <span role="status" x-text="`Showing ${(invoicePage - 1) * invoicePageSize + 1}–${Math.min(invoicePage * invoicePageSize, invoiceTotal)} of ${invoiceTotal} invoices`"></span>
+            <span role="status" x-text="invoiceRangeLabel"></span>
             <div style="display:flex;gap:8px;align-items:center;">
               <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage - 1)" :disabled="invoicesLoading || invoicePage <= 1">Previous</button>
-              <span x-text="`Page ${invoicePage} of ${Math.ceil(invoiceTotal / invoicePageSize)}`"></span>
+              <span x-text="invoicePageLabel"></span>
               <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage + 1)" :disabled="invoicesLoading || invoicePage * invoicePageSize >= invoiceTotal">Next</button>
             </div>
           </div>

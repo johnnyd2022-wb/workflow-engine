@@ -18,6 +18,14 @@ function crmCustomerDetail(contactId) {
     invoicePage: 1,
     invoicePageSize: 25,
     invoiceTotal: 0,
+    get invoiceRangeLabel() {
+      const first = (this.invoicePage - 1) * this.invoicePageSize + 1;
+      const last = Math.min(this.invoicePage * this.invoicePageSize, this.invoiceTotal);
+      return `Showing ${first}–${last} of ${this.invoiceTotal} invoices`;
+    },
+    get invoicePageLabel() {
+      return `Page ${this.invoicePage} of ${Math.ceil(this.invoiceTotal / this.invoicePageSize)}`;
+    },
     invoicesLoaded: false,
     invoicesLoading: false,
     invoiceError: '',
