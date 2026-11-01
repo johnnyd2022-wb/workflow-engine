@@ -2177,3 +2177,114 @@ def test_sales_redesign_plan_is_excluded_but_review_docs_are_not():
 
     assert "docs/sales-redesign-plan.md" not in rel
     assert "docs/core-load-performance-design.md" in rel
+
+
+# ---------------------------------------------------------------------------
+# code markers: a marker is a comment, not an identifier that happens to be spelled TODO
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def code_tree(tmp_path, monkeypatch):
+    """A tmp repo whose only code root is `app/`, scanned by the real ripgrep path."""
+    if not fi.shutil.which("rg"):
+        pytest.skip("ripgrep is not installed")
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app",))
+    (tmp_path / "app").mkdir()
+    return tmp_path
+
+
+def _scan_markers(root, **files):
+    for name, text in files.items():
+        (root / "app" / name).write_text(text, encoding="utf-8")
+    return {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+
+def test_a_constant_named_todo_is_not_a_work_marker(code_tree):
+    """`DONE, TODO, BLOCKED = "done", "todo", "blocked"` was indexed as an open P4 item
+    (de586e6f) because only the word was matched; its long tail got past the length gate."""
+    found = _scan_markers(
+        code_tree,
+        **{
+            "states.py": 'DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"\n',
+            "label.py": 'TODO = "the label shown on a step that has not been started"\n',
+            "use.py": 'status = {"state": TODO, "label": "not started yet, nothing to do"}\n',
+        },
+    )
+
+    assert found == set()
+
+
+def test_markers_in_every_comment_style_are_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{
+            "a.py": "x = 1\n# TODO: handle the empty queue properly\n",
+            "b.js": "var y = 2; // FIXME retry on a 502 from the proxy\n",
+            "c.css": "/* HACK: pin the dialog width until the shell is fixed */\n",
+            "d.html": "<!-- TODO: replace this banner with the shared component -->\n",
+            "e.html": "{# XXX: the partial renders twice on boosted navigation #}\n",
+            "f.js": "/**\n * BUG: the tally ignores linked invoices on reopen\n */\n",
+            "g.py": "x = 3  # TODO(johnny): drop this once the importer is rewritten\n",
+        },
+    )
+
+    assert found == {
+        ("app/a.py", 2),
+        ("app/b.js", 1),
+        ("app/c.css", 1),
+        ("app/d.html", 1),
+        ("app/e.html", 1),
+        ("app/f.js", 2),
+        ("app/g.py", 1),
+    }
+
+
+def test_a_marker_leading_a_docstring_line_is_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{"doc.py": 'def f():\n    """Do the thing.\n\n    TODO: split this into read and write halves\n    """\n'},
+    )
+
+    assert found == {("app/doc.py", 4)}
+
+
+def test_the_scanners_own_test_fixtures_are_not_indexed_as_work_owed(code_tree, monkeypatch):
+    """The sample comments in this file's own fixtures are real-looking markers; indexing them
+    queued seven phantom P4 items the first time they were written."""
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app", "tests"))
+    (code_tree / "tests").mkdir()
+    (code_tree / "tests" / "test_findings_index.py").write_text(
+        'SAMPLE = "# TODO: handle the empty queue properly"\n', encoding="utf-8"
+    )
+    (code_tree / "tests" / "test_other.py").write_text("# TODO: cover the empty queue properly\n", encoding="utf-8")
+
+    found = {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+    assert found == {("tests/test_other.py", 1)}
+
+
+@pytest.mark.parametrize(
+    ("line", "is_note"),
+    [
+        ("# TODO: handle the empty queue properly", True),
+        ("x = 3  # TODO(johnny): drop this once the importer is rewritten", True),
+        ("var y = 2; // FIXME retry on a 502 from the proxy", True),
+        ("/* HACK: pin the dialog width until the shell is fixed */", True),
+        ("<!-- TODO: replace this banner with the shared component -->", True),
+        ("{# XXX: the partial renders twice on boosted navigation #}", True),
+        (" * BUG: the tally ignores linked invoices on reopen", True),
+        ("    TODO: split this into read and write halves", True),
+        ('DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"', False),
+        ('TODO = "the label shown on a step that has not been started"', False),
+        ('status = {"state": TODO, "label": "not started yet, nothing to do"}', False),
+    ],
+)
+def test_marker_classification_needs_no_ripgrep(line, is_note):
+    """The tree-scan tests above skip where ripgrep is absent (CI's image has none); this pins the
+    same rule on the matcher alone so it is still enforced there."""
+    match = fi.CODE_MARKER_RE.search(line)
+
+    assert match is not None
+    assert fi._is_code_note(line, match) is is_note
