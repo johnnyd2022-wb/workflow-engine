@@ -372,13 +372,18 @@ def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browse
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width):
+def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width, db):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/settings")
         expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
         # Plan 2.5: sites and people are Settings tabs now, not cards in an Organisation category.
+        # GL-P07 A1 (!597): Sites shows only for a business with the multi_site subscription.
         row = page.get_by_role("tablist", name="Settings pages")
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Integrations", "Tasks"])
+        FeatureSubscriptionRepository(db).grant(UUID(workspace_user["org_id"]), "multi_site")
+        db.commit()
+        page.reload()
         expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Tasks"])
         expect(row.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(row.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
