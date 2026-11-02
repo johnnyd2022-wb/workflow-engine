@@ -140,5 +140,8 @@ def test_the_phone_keeps_its_bottom_bar_whatever_was_chosen_on_a_desktop(desktop
     assert round(bar["width"]) == 390 and bar["y"] > 700
     expect(page.locator("[data-sidebar-toggle]")).to_be_hidden()
     assert page.locator(".main-content").bounding_box()["x"] == 0
-    for name in ["Home", "Production", "Settings"]:
+    for name in ["Home", "Production"]:
         expect(page.locator("#sidebar").get_by_role("link", name=name, exact=True)).to_be_visible()
+    expect(page.locator("#sidebar a[href='/core/settings']")).to_be_hidden()
+    page.get_by_role("button", name="Account menu").click()
+    expect(page.locator(".bee-menu__settings")).to_be_visible()

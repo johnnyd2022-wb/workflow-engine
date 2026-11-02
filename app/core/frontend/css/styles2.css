@@ -545,6 +545,9 @@
     .sidebar .nav-item {
       flex: 1;
     }
+    .sidebar .nav-item--settings {
+      display: none;
+    }
     .sidebar .nav-link {
       flex-direction: column;
       align-items: center;
