@@ -83,5 +83,8 @@ test('Invoices tab fetches paginated history instead of stopping at five recent 
   assert.equal(detail.lastOrder.id, 'recent-1');
   assert.equal(calls.length, 2);
   assert.equal(calls[0].page_size, 25);
-  assert.match(TEMPLATE, /Showing.*invoiceTotal.*invoices/);
+  assert.equal(detail.invoiceRangeLabel, 'Showing 26–26 of 26 invoices');
+  assert.equal(detail.invoicePageLabel, 'Page 2 of 2');
+  assert.match(TEMPLATE, /x-text="invoiceRangeLabel"/);
+  assert.match(TEMPLATE, /x-text="invoicePageLabel"/);
 });
