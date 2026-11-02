@@ -200,17 +200,18 @@ and a clean diff don't show that a page works or looks right. Only a browser doe
 3. **Design and shoot every change at three layouts: desktop, laptop and mobile.** A
    change isn't done until it works at all three:
 
-   | Layout  | Viewport | In `ui_shots.py`                               |
-   |---------|----------|------------------------------------------------|
-   | Desktop | 1440×900 | `DESKTOP`                                      |
-   | Laptop  | 1280×800 | no constant; pass `{"width": 1280, "height": 800}` |
-   | Mobile  | 390×844  | `PHONE`                                        |
+   | Layout  | Viewport | In `ui_shots.py` |
+   |---------|----------|------------------|
+   | Desktop | 1440×900 | `DESKTOP`        |
+   | Laptop  | 1280×800 | `LAPTOP`         |
+   | Mobile  | 390×844  | `PHONE`          |
 
    **On mobile, the page must never scroll sideways.** Wide content reflows, stacks or
    becomes cards; only a deliberately scrollable inner region, such as a wide data table,
-   may scroll horizontally. Assert this in the scenario rather than eyeballing it:
-   `page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")` must
-   be true on every mobile shot.
+   may scroll horizontally. `shot()` enforces this: at any width ≤ 480px it fails the
+   scenario when the page scrolls sideways, and names the widest elements that stick out.
+   The screenshot is saved first, so you can see the overflow. Never dismiss that failure;
+   fix the layout.
 4. **Cover the states that break.** At each layout, shoot each of these:
    - an empty list and a populated one
    - an error state

@@ -108,10 +108,59 @@ def settle(page, extra_ms: int = 400) -> None:
 
 
 def shot(page, out: Path, name: str, *, full: bool = False) -> Path:
-    """Save OUT/<name>.png. `full` captures the whole scroll height (the fixed shell repeats in it)."""
+    """Save OUT/<name>.png. `full` captures the whole scroll height (the fixed shell repeats in it).
+
+    At a mobile width this also fails the scenario if the page scrolls sideways. The shot is
+    saved first so you can see the overflow.
+    """
     path = Path(out) / f"{name}.png"
     page.screenshot(path=str(path), full_page=full)
+    viewport = page.viewport_size or {}
+    if viewport.get("width", DESKTOP["width"]) <= MOBILE_MAX_WIDTH:
+        assert_no_sideways_scroll(page, name)
     return path
+
+
+# An inner region that scrolls on purpose (a wide table in an overflow-x: auto wrapper) is
+# fine; only the page itself scrolling sideways is a fault. The list names the widest
+# offenders so the fix starts in the right place.
+_SIDEWAYS_OVERFLOW_JS = """() => {
+    const width = window.innerWidth;
+    const scrollWidth = document.documentElement.scrollWidth;
+    if (scrollWidth <= width) return null;
+    const offenders = [];
+    for (const el of document.body.querySelectorAll("*")) {
+        const rect = el.getBoundingClientRect();
+        if (rect.right <= width + 1 || rect.width === 0) continue;
+        let clipped = false;
+        for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+            const overflowX = getComputedStyle(up).overflowX;
+            if (overflowX !== "visible" && up.getBoundingClientRect().right <= width + 1) {
+                clipped = true;
+                break;
+            }
+        }
+        if (clipped) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = typeof el.className === "string" && el.className.trim()
+            ? "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".")
+            : "";
+        offenders.push({el: el.tagName.toLowerCase() + id + cls, right: Math.round(rect.right)});
+    }
+    offenders.sort((a, b) => b.right - a.right);
+    return {width, scrollWidth, offenders: offenders.slice(0, 5)};
+}"""
+
+
+def assert_no_sideways_scroll(page, name: str = "page") -> None:
+    """Raise if the page is wider than a mobile viewport, naming the elements that stick out."""
+    overflow = page.evaluate(_SIDEWAYS_OVERFLOW_JS)
+    if overflow:
+        offenders = ", ".join(f"{o['el']} (right edge {o['right']}px)" for o in overflow["offenders"])
+        raise AssertionError(
+            f"{name}: page scrolls sideways at {overflow['width']}px "
+            f"(content is {overflow['scrollWidth']}px wide); widest: {offenders or 'unknown'}"
+        )
 
 
 def theme(page, mode: str) -> None:
@@ -121,9 +170,12 @@ def theme(page, mode: str) -> None:
 
 
 DESKTOP = {"width": 1440, "height": 900}
+LAPTOP = {"width": 1280, "height": 800}
 TABLET = {"width": 1024, "height": 800}
 PHONE = {"width": 390, "height": 844}
 WALL = {"width": 1920, "height": 1080}  # a TV on the wall
+# At or below this width a shot is a mobile shot, and the page must not scroll sideways.
+MOBILE_MAX_WIDTH = 480
 
 
 # ── Seeding ─────────────────────────────────────────────────────────────────────────────
