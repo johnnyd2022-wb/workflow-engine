@@ -229,8 +229,8 @@ html[data-spa-theme="dark"] #page-content .customs-bucket__list em { color: #fdb
 
 @media (max-width: 720px) {
   #page-content .customs-excise, #page-content .customs-card { padding: 18px; }
-  #page-content .customs-views { width: 100%; }
-  #page-content .customs-views a { flex: 1 1 0; text-align: center; padding: 7px 8px; }
+  #page-content .customs-views { width: 100%; flex-wrap: wrap; border-radius: 16px; overflow-x: visible; }
+  #page-content .customs-views a { flex: 1 1 30%; min-width: 0; min-height: 44px; display: grid; place-items: center; text-align: center; padding: 7px 8px; white-space: normal; }
   #page-content .customs-page .excise-periods { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   #page-content .customs-page .excise-period { padding: 10px 10px; }
   #page-content .customs-page .excise-period strong { font-size: 14px; }

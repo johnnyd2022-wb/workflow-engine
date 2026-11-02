@@ -79,7 +79,7 @@
             </div>
             <section class="sales-analytics__product-section" aria-labelledby="analytics-top-products-customers-title">
               <div class="workspace-subheading sales-analytics__product-heading">
-                <div><h3 id="analytics-top-products-customers-title">Top customers by units</h3><p class="workspace-caption" x-show="filteredProductCustomerRows.length > 0" x-text="`Showing ${filteredProductCustomers.length} of ${filteredProductCustomerRows.length} customers / stores`"></p></div>
+                <div><h3 id="analytics-top-products-customers-title">Top customers by units</h3><p class="workspace-caption" x-show="filteredProductCustomerRows.length > 0" x-text="productCustomerCountLabel"></p></div>
                 <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openProductTopNModal()">Top <span x-text="productTopLabel"></span></button>
               </div>
               <p class="sales-analytics__empty" x-show="filteredProductCustomerRows.length === 0">No mapped sales for these dates and this customer filter.</p>
@@ -88,7 +88,7 @@
                 <thead><tr><th>Customer / store</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Products</th></tr></thead>
                 <tbody>
                   <template x-for="row in filteredProductCustomers" :key="row.contact_id">
-                    <tr><td class="sales-analytics__product-name" x-text="row.contact_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.products.length + (row.products.length === 1 ? ' product' : ' products')"></summary><ul><template x-for="item in row.products" :key="item.product_name"><li x-text="`${item.product_name}: ${formatUnits(item.units)} units · ${formatCurrency(item.line_revenue)}`"></li></template></ul></details></td></tr>
+                    <tr><td class="sales-analytics__product-name" x-text="row.contact_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.products.length + (row.products.length === 1 ? ' product' : ' products')"></summary><ul><template x-for="item in row.products" :key="item.product_name"><li x-text="formatProductBreakdown(item)"></li></template></ul></details></td></tr>
                   </template>
                 </tbody>
               </table>
@@ -102,7 +102,7 @@
                 <thead><tr><th>Product</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Stores</th></tr></thead>
                 <tbody>
                   <template x-for="row in productSales.products" :key="row.product_name">
-                    <tr><td class="sales-analytics__product-name" x-text="row.product_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.customers.length + (row.customers.length === 1 ? ' customer / store' : ' customers / stores')"></summary><ul><template x-for="store in row.customers" :key="store.contact_id"><li><span x-text="store.contact_name"></span>: <span x-text="`${formatUnits(store.units)} units · ${formatCurrency(store.line_revenue)}`"></span></li></template></ul></details></td></tr>
+                    <tr><td class="sales-analytics__product-name" x-text="row.product_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.customers.length + (row.customers.length === 1 ? ' customer / store' : ' customers / stores')"></summary><ul><template x-for="store in row.customers" :key="store.contact_id"><li><span x-text="store.contact_name"></span>: <span x-text="formatStoreBreakdown(store)"></span></li></template></ul></details></td></tr>
                   </template>
                 </tbody>
               </table>
@@ -226,7 +226,7 @@
     <div class="crm-lane-sheet__body">
       <div class="crm-form-group">
         <label class="crm-form-label" for="analytics-product-top-count">Number of customers / stores to display</label>
-        <input id="analytics-product-top-count" class="crm-form-input" type="number" min="1" :max="Math.max(1, filteredProductCustomerRows.length)" x-model.number="productTopDraftValue" @keydown.enter.prevent="applyProductTopNModal()">
+        <input id="analytics-product-top-count" class="crm-form-input" type="number" min="1" :max="productTopMax" x-model.number="productTopDraftValue" @keydown.enter.prevent="applyProductTopNModal()">
       </div>
       <div style="display:flex; justify-content:flex-end;">
         <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="showAllProductCustomers()">Show all</button>
@@ -298,6 +298,20 @@ function crmAnalytics() {
     get filteredProductCustomers() {
       const rows = this.filteredProductCustomerRows;
       return this.productShowAll ? rows : rows.slice(0, this.productTopN);
+    },
+
+    get productCustomerCountLabel() {
+      return `Showing ${this.filteredProductCustomers.length} of ${this.filteredProductCustomerRows.length} customers / stores`;
+    },
+
+    get productTopMax() { return Math.max(1, this.filteredProductCustomerRows.length); },
+
+    formatProductBreakdown(item) {
+      return `${item.product_name}: ${this.formatUnits(item.units)} units · ${this.formatCurrency(item.line_revenue)}`;
+    },
+
+    formatStoreBreakdown(store) {
+      return `${this.formatUnits(store.units)} units · ${this.formatCurrency(store.line_revenue)}`;
     },
 
     get productTopLabel() {

@@ -39,6 +39,10 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
   #settings-account .settings-section-list { display: block; }
   #page-content .settings-overview .settings-card { padding: 18px; }
 }
+@media (max-width: 359px) {
+  .settings-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
+  #page-content .settings-nav a { min-height: 44px; display: grid; place-items: center; white-space: normal; }
+}
 #page-content #settings-load-retry { margin-bottom: 20px; }
 
 /* GL-C02: the terms and privacy policy are always one tap away from Settings. */

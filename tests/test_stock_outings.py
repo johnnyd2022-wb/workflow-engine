@@ -94,11 +94,9 @@ def test_take_ten_sell_six_bring_four_back(db, world, monkeypatch):  # noqa: F81
     db.commit()
     event = _event(db, world)
     assert event.kind == "event"
-    # Bottles come back dated the day the outing is closed. Close it in October, the same
-    # period as the removal, or the credit lands in whatever month the suite runs in.
-    monkeypatch.setattr(service, "utc_now", lambda: datetime(2026, 10, 21, 1, tzinfo=UTC))
+    # The draft below covers October, so close the historical outing in October too.
+    monkeypatch.setattr(service, "utc_now", lambda: datetime(2026, 10, 20, 12, tzinfo=UTC))
     line = _close(db, world, event, sold="6", returned="4")
-    monkeypatch.undo()
     assert (line.sold_units, line.returned_units) == (6, 4)
     db.refresh(item)
     assert item.quantity == 0  # all ten left when they were taken out

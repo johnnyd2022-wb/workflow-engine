@@ -83,6 +83,10 @@ html[data-spa-theme="dark"] #page-content .np3-fact--bad .np3-fact__value { colo
 #page-content .np3-page #np3-check-search { width: 100% !important; min-height: 40px; margin: 0; }
 #page-content .np3-filters:empty { display: none; }
 #page-content .np3-sections { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+@media (max-width: 767px) {
+  #page-content .np3-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; }
+  #page-content .np3-section-tab { min-width: 0; }
+}
 #page-content .np3-section-tab { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); background: var(--ui-surface, #fff); color: var(--ui-text, #172033); text-align: left; box-shadow: none; }
 #page-content .np3-section-tab:not(.is-active):hover { border-color: var(--ui-accent, #0d9488); background: var(--ui-surface, #fff); }
 #page-content .np3-section-tab.is-active { border-color: var(--ui-accent, #0d9488); background: var(--ui-accent-soft, #ccfbf1); }
