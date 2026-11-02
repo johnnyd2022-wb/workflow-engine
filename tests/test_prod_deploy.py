@@ -162,7 +162,9 @@ def deploy(tmp_path, request):
                 # The script's parent Bash PID is the process a human/operator signals.
                 # A nested deploy_app subshell would miss this signal and fail this test.
                 argv = ["bash", "-c", 'export DEPLOY_SCRIPT_PID=$BASHPID; exec bash "$1"', "bash", script]
-            self.result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
+            # Failed health checks exercise the 60-attempt retry path. Under CI xdist,
+            # the fixture's fake commands can take longer than 30 seconds to run it.
+            self.result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=90)
             self.state = json.loads(state.read_text())
             return self
 
