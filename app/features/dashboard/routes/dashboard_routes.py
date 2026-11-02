@@ -38,7 +38,7 @@ def _local_date_expr(col):
 
 @requires_auth
 def dashboard():
-    return render_template("dashboard/dashboard.html", active_page="dashboard")
+    return render_template("dashboard/dashboard.html", active_page="dashboard", org_name=g.org_name)
 
 
 def _dashboard_parse_due_date(raw: Any) -> date | None:
