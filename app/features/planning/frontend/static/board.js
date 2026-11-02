@@ -167,15 +167,21 @@
       if (batch.snapshot.timing_reason) body.append(node('p', batch.snapshot.timing_reason));
       const material = materialAssessment?.batches.find(row => row.batch_id === batch.id);
       if (material) {
-        body.append(node('p', 'Materials observed ' + materialAssessment.observed_at));
+        body.append(node('p', 'Materials checked ' + new Date(materialAssessment.observed_at).toLocaleString('en-NZ', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'})));
         if (material.stale) body.append(node('p', 'Plan changed. Check materials again.'));
         else {
-          body.append(node('p', material.material_start_date ? 'Materials available from ' + material.material_start_date : 'Material availability unresolved'));
+          if (material.material_start_date) body.append(node('p', 'Materials available from ' + material.material_start_date));
           if (material.material_timing_estimate) body.append(node('p', 'Timing estimate with these materials ' + material.material_timing_estimate));
-          (material.bindings || []).forEach(binding => {
-            const fact = materialAssessment.observations.find(lot => lot.id === binding.inventory_item_id);
-            if (fact) body.append(node('p', fact.name + ' · On hand observed: ' + fact.on_hand_quantity + ' ' + fact.unit));
-          });
+          // What this check committed to the batch, lot by lot, and what it's short of.
+          if (material.material_start_date && (material.allocations || []).length) {
+            const held = node('ul', undefined, 'board-batch__held'); held.setAttribute('aria-label', 'Held for this batch');
+            material.allocations.forEach(row => {
+              const fact = materialAssessment.observations.find(lot => lot.id === row.lot_id);
+              held.append(node('li', (fact ? fact.name : 'Lot') + ' · ' + amount(row.lot_quantity ?? row.quantity) + ' ' + (row.lot_unit || row.unit) + ' held'));
+            });
+            body.append(held);
+          }
+          (material.shortages || []).forEach(row => body.append(node('p', 'Short of ' + (row.material || 'the chosen lot') + ': ' + amount(row.quantity) + ' ' + row.unit)));
           const reasons = node('ul'); material.reasons.forEach(reason => reasons.append(node('li', reason))); body.append(reasons);
         }
       }
@@ -384,9 +390,9 @@
         [duration, waiting].forEach(input => { input.min = '0'; input.max = '525600'; input.step = '1'; input.required = true; }); fieldset.append(row);
         (step.inputs || []).forEach((input, index) => {
           if (!input || input.source_output_id != null) return;
-          const label = node('label', 'Exact raw lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');
+          const label = node('label', 'Lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');
           const select = node('select'); select.dataset.materialStep = step.step_id; select.dataset.materialIndex = index;
-          option(select, '', 'Select a lot');
+          option(select, '', 'Soonest to expire');
           materialLots.filter(lot => lot.unit === input.unit).forEach(lot => option(select, lot.id, lot.name + ' · Lot ' + lot.id.slice(0, 8) + ' · ' + lot.unit));
           const binding = workflow.setting?.snapshot.material_bindings?.find(entry => entry.step_id === step.step_id && entry.input_index === index);
           if (binding) {
