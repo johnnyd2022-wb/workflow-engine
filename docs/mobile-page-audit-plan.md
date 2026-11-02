@@ -11,7 +11,7 @@ The goal is a usable, polished phone experience across every navigable HTML page
 
 ## Acceptance criteria
 
-- The document does not scroll horizontally at phone width. Wide data grids may scroll inside a clearly bounded container.
+- The document and visible page controls do not scroll horizontally at phone width. The Playwright route audit checks both document width and nested horizontal scroll containers at 320 and 390 px.
 - Titles, labels, values, and controls remain readable without zoom; no overlay hides primary content or actions.
 - Navigation opens, closes, and reaches the current workspace. Primary actions and filters are reachable and usable by touch.
 - Forms, drawers, dialogs, empty states, loading states, and populated states use the same spacing and visual language as established pages.

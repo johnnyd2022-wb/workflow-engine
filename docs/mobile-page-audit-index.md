@@ -119,6 +119,9 @@ The following GET routes are redirects or service endpoints, so the destination 
 
 ## Findings and changes
 
+- Follow-up: the phone bottom bar now has four tabs. Settings is reached through a touch-sized button directly under the organisation name in the bee account menu; the desktop Settings sidebar link remains available.
+- Home now uses the current organisation name as its page heading at every viewport size, from the existing request context.
+- The nested-scroll scan found cramped Customs, NP3, Source Map, Settings, Inventory and shared section tabs. Their phone layouts now wrap or form two-column grids so every option is visible without a sideways swipe.
 - Replaced unreadably scaled process-diagram labels with a vertical phone story; desktop keeps the existing diagram.
 - Fixed CSP-safe Alpine expressions on Sales Analytics and customer invoice pagination, which otherwise caused browser errors when those pages mounted.
 - Formatted the case detail UTC deadline for people rather than showing a raw timestamp.
@@ -127,6 +130,8 @@ The following GET routes are redirects or service endpoints, so the destination 
 
 ## Verification
 
+- Follow-up phone scan: full 320 px and 390 px Playwright inventory runs — 71 passed at each width, including zero visible nested horizontal-scroll containers. The 320 px and 390 px account-menu screenshots were reviewed.
+- Desktop sidebar and Settings navigation regression — 12 passed. The Settings tabs fixture now grants the multi-site entitlement required for the Sites tab it asserts.
 - `MOBILE_AUDIT_WIDTH=320 MOBILE_AUDIT_SCREENSHOTS=/tmp/mobile-page-audit/screenshots uv run pytest tests/e2e/test_mobile_page_audit.py tests/e2e/test_contract_portal.py` — 69 passed.
 - `MOBILE_AUDIT_WIDTH=768 MOBILE_AUDIT_SCREENSHOTS=/tmp/mobile-page-audit/screenshots uv run pytest tests/e2e/test_mobile_page_audit.py` — 67 passed.
 - Populated Sales Analytics regression — 26 passed.

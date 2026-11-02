@@ -4,6 +4,7 @@ Screenshots are saved when MOBILE_AUDIT_SCREENSHOTS is set. The visual review le
 is docs/mobile-page-audit-index.md; geometry alone does not certify visual quality.
 """
 
+import json
 import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -106,15 +107,32 @@ def _capture_and_measure(page, path):
         target = Path(out) / f"{path.strip('/').replace('/', '__') or 'landing'}-{PHONE_WIDTH}"
         target.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(target.with_suffix(".png")), full_page=True)
-    return page.evaluate(
+    geometry = page.evaluate(
         """() => ({
           viewport: innerWidth,
           document: document.documentElement.scrollWidth,
           body: document.body.scrollWidth,
           title: document.title,
-          heading: document.querySelector('h1')?.textContent?.trim() || ''
+          heading: document.querySelector('h1')?.textContent?.trim() || '',
+          sideways: [...document.querySelectorAll('#page-content *')].filter(el => {
+            const style = getComputedStyle(el);
+            return el.getClientRects().length &&
+              ['auto', 'scroll'].includes(style.overflowX) &&
+              el.scrollWidth > el.clientWidth + 2;
+          }).map(el => ({
+            tag: el.tagName.toLowerCase(),
+            class: String(el.className).slice(0, 100),
+            width: el.clientWidth,
+            scroll: el.scrollWidth
+          })).slice(0, 20)
         })"""
     )
+    if report := os.environ.get("MOBILE_AUDIT_SCROLL_REPORT"):
+        with Path(report).open("a") as stream:
+            stream.write(json.dumps({"path": path, "width": PHONE_WIDTH, **geometry}) + "\n")
+    if PHONE_WIDTH <= 390:
+        assert not geometry["sideways"], f"{path}: sideways scrolling inside the page: {geometry['sideways']}"
+    return geometry
 
 
 @pytest.mark.parametrize("path", PUBLIC_PAGES)
@@ -150,6 +168,48 @@ def test_app_page_at_phone_width(browser, storage_state_path, app_url, path):
         assert urlparse(page.url).path.rstrip("/") == path.rstrip("/"), f"{path} redirected to {page.url}"
         geometry = _capture_and_measure(page, path)
         assert geometry["document"] <= geometry["viewport"] + 1, f"{path}: {geometry}"
+        assert_clean_page(page)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [320, 390, 1440])
+def test_home_uses_org_name_and_phone_settings_lives_in_account_menu(
+    browser, storage_state_path, app_url, e2e_user, width
+):
+    context = browser.new_context(
+        base_url=app_url,
+        ignore_https_errors=True,
+        storage_state=storage_state_path,
+        viewport={"width": width, "height": 844},
+    )
+    page = context.new_page()
+    attach_probe(page)
+    try:
+        page.goto("/core/dashboard")
+        expect(page.locator("#dashboard-page-title")).to_have_text(e2e_user["org_name"])
+        settings_tab = page.locator("#sidebar a[href='/core/settings']")
+        account_button = page.get_by_role("button", name="Account menu")
+        if width < 768:
+            expect(settings_tab).to_be_hidden()
+            page.wait_for_load_state("networkidle")
+            account_button.click()
+            settings_button = page.locator(".bee-menu__settings")
+            expect(settings_button).to_be_visible()
+            expect(page.locator(".bee-menu__org")).to_have_text(e2e_user["org_name"])
+            if out := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+                target = Path(out) / f"account-menu-{width}.png"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(target))
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+            settings_button.click()
+            page.wait_for_url("**/core/settings")
+            expect(page.locator(".bee-menu")).to_be_hidden()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        else:
+            expect(settings_tab).to_be_visible()
+            account_button.click()
+            expect(page.locator(".bee-menu__settings")).to_be_hidden()
         assert_clean_page(page)
     finally:
         context.close()
