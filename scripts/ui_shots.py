@@ -63,6 +63,7 @@ SEED_KINDS = (
     "planner",
     "board",
     "commitments",
+    "forecast",
     "contracts",
     "dispatch",
     "stocktake",
@@ -1627,6 +1628,76 @@ def _seed_stocktake(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_forecast(db, org_id, inv) -> None:
+    """Sales history for the Planner's forecast (GL-P07 B3): 70 weeks of Xero sales for each
+    bottled product the production workflows make, busier towards Christmas, opening stock for
+    each, and stock targets on some. Needs `production` seeded first."""
+    import math
+
+    from app.core.utils.unit_conversion import is_count_unit
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.planning import demand_service, forecast_service
+
+    today = date.today()
+    # The finished product of each workflow: the bottled output, or anything counted in units.
+    products = [
+        row
+        for row in demand_service.output_catalog(db, org_id)
+        if is_count_unit(row["unit"]) or "bottle" in row["name"].lower()
+    ]
+    if not products:
+        raise SystemExit("ui-shots: `forecast` needs `production` before it (seed production forecast)")
+    paces = [26, 15, 8, 6, 30]
+    stocks = ["60", "180", "12", "90", "0"]
+    targets = ["10", "24", None, "4", "6"]
+    for index, product in enumerate(products[:5]):
+        db.add(
+            ProductMapping(org_id=org_id, biz_e_product_name=product["name"], xero_description_pattern=product["name"])
+        )
+        if stocks[index] != "0":
+            inv.create_inventory_item(
+                org_id=org_id,
+                name=product["name"],
+                quantity=stocks[index],
+                unit=product["unit"],
+                inventory_type="final_product",
+                extra_data={"opening_stock": True},
+                commit=False,
+            )
+        for week in range(70):
+            day = today - timedelta(weeks=week, days=2)
+            # Christmas sells about twice the year's pace; mid-winter a little under.
+            season = 1 + 0.6 * math.cos((day.timetuple().tm_yday - 355) / 365 * 2 * math.pi)
+            units = max(0, round(paces[index] * season + (week * 7 + index * 3) % 5 - 2))
+            if not units:
+                continue
+            invoice = XeroInvoice(
+                org_id=org_id,
+                xero_invoice_id=str(uuid.uuid4()),
+                xero_tenant_id="ui-shots",
+                invoice_number=f"INV-F{index}{week:03d}",
+                invoice_type="ACCREC",
+                status="PAID",
+                date=day,
+            )
+            db.add(invoice)
+            db.flush()
+            db.add(
+                XeroInvoiceLineItem(
+                    org_id=org_id,
+                    invoice_id=invoice.id,
+                    xero_line_item_id=f"F{index}-{week}",
+                    description=product["name"],
+                    quantity=Decimal(units),
+                )
+            )
+        if targets[index]:
+            forecast_service.set_target(db, org_id, uuid.UUID(product["id"]), targets[index])
+    db.commit()
+
+
 def _seed_commitments(db, org_id, inv) -> None:
     """Material commitments on the Production board (GL-P07 B2): a lemon syrup workflow whose
     sugar and lemons are met from stock, first-expiring first, three batches of it planned for
@@ -1744,7 +1815,10 @@ def _seed_board(db, org_id, inv) -> None:
     for demand in demands:
         if str(demand.source_output_id) not in configured:
             continue
-        rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+        try:
+            rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+        except batch_service.PlanningConflictError:
+            continue  # already covered by batches planned for earlier demand (B3 netting)
         for row in rows:  # one batch a working day, so the week reads as a schedule
             day = monday + timedelta(days=offset % 10 + (offset % 10 >= 5) * 2)
             shift = day - row.proposed_start_date
@@ -2457,6 +2531,7 @@ def cmd_seed(args) -> int:
             "planner": _seed_planner,
             "board": _seed_board,
             "commitments": _seed_commitments,
+            "forecast": _seed_forecast,
             "contracts": _seed_contracts,
             "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,

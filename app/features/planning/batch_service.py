@@ -6,8 +6,9 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
+from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process
 from app.core.db.models.process_version import ProcessVersion
@@ -19,7 +20,7 @@ from app.core.domain.ready_date_rules import VALID_READY_DATE_UNITS, duration_to
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
 from app.features.planning.demand_service import MAX_QUANTITY
-from app.features.planning.engine import BatchRule, Demand, StepTiming, StockKey, build_plan, workflow_duration
+from app.features.planning.engine import BatchRule, Demand, StepTiming, StockKey, Supply, build_plan, workflow_duration
 from app.features.planning.models import PlanningDemand
 
 MAX_PLAN_BATCHES = 500
@@ -446,6 +447,67 @@ def _use_by_rule(snapshot):
     }
 
 
+def _netting(db, org_id, demand, key, site, today):
+    """GL-P07 B3 (§7.3b): plan only what stock and batches don't already cover. Every open
+    demand for the product is netted in due-date order against its stock on hand at the site and
+    every live batch of it, so a demand isn't covered twice by the same stock."""
+    from app.core.db.repositories.inventory_repo import producer_stock_predicate
+
+    demands = [Demand(str(demand.id), key, demand.quantity, demand.due_date, demand.priority)]
+    if demand.source == "forecast":
+        # Already net: the forecast counted stock on hand and every planned batch when it
+        # sized this, so netting again would plan too little.
+        return tuple(demands), ()
+    for row in db.query(PlanningDemand).filter(
+        PlanningDemand.org_id == org_id,
+        PlanningDemand.status == "open",
+        PlanningDemand.source_output_id == demand.source_output_id,
+        PlanningDemand.unit == demand.unit,
+        PlanningDemand.id != demand.id,
+    ):
+        demands.append(Demand(str(row.id), key, row.quantity, row.due_date, row.priority))
+    supplies = []
+    # Made by this workflow, or opening stock (no output recorded) under one of its names.
+    from app.features.planning.demand_service import output_catalog
+    from app.features.planning.forecast_service import _product_names
+
+    outputs = {row["id"]: row for row in output_catalog(db, org_id) if row["id"] == str(demand.source_output_id)}
+    names = _product_names(db, org_id, outputs).get(str(demand.source_output_id), set())
+    stock = db.query(InventoryItem).filter(
+        InventoryItem.org_id == org_id,
+        InventoryItem.inventory_type == "final_product",
+        or_(
+            InventoryItem.source_output_id == demand.source_output_id,
+            InventoryItem.source_output_id.is_(None) & func.lower(func.trim(InventoryItem.name)).in_(names),
+        ),
+        InventoryItem.unit == demand.unit,
+        InventoryItem.quantity > 0,
+        producer_stock_predicate(),
+    )
+    if site is not None:
+        stock = stock.filter(or_(InventoryItem.site_id == site.id, InventoryItem.site_id.is_(None)))
+    for item in stock:
+        if item.expiry_date is not None and item.expiry_date < today:
+            continue  # out of date stock covers nothing
+        supplies.append(Supply(f"lot:{item.id}", key, item.quantity, today, item.expiry_date))
+    for batch in db.query(PlanningBatch).filter(
+        PlanningBatch.org_id == org_id,
+        PlanningBatch.source_output_id == demand.source_output_id,
+        PlanningBatch.unit == demand.unit,
+        PlanningBatch.status.notin_(("started", "cancelled")),
+        PlanningBatch.site_id == (site.id if site else None),
+    ):
+        ready = batch.theoretical_ready_date or batch.proposed_start_date + timedelta(
+            days=batch.snapshot.get("elapsed_days", 0)
+        )
+        use_by = batch.snapshot.get("use_by_date")
+        expiry = date.fromisoformat(use_by) if use_by else None
+        supplies.append(
+            Supply(f"batch:{batch.id}", key, batch.quantity, ready, expiry if expiry and expiry >= ready else None)
+        )
+    return tuple(demands), tuple(supplies)
+
+
 def plan_demand(db, org_id, demand_id, data, *, today):
     _body(data, ("site_id",))
     org = _lock_org(db, org_id)
@@ -489,9 +551,10 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         raise PlanningConflictError("Workflow or output units changed; review demand and planning settings")
     key = StockKey(str(demand.source_output_id), unit, str(site.id) if site else None)
     try:
+        demands, supplies = _netting(db, org_id, demand, key, site, today)
         plan = build_plan(
-            (Demand(str(demand.id), key, demand.quantity, demand.due_date, demand.priority),),
-            (),
+            demands,
+            supplies,
             (
                 BatchRule(
                     key,
@@ -505,7 +568,9 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         )
     except OverflowError as exc:
         raise ValueError("Workflow timing exceeds the supported calendar") from exc
-    group = plan.batches[0]
+    group = next((row for row in plan.batches if row.demand_id == str(demand.id)), None)
+    if group is None:
+        raise PlanningConflictError("Stock on hand and batches already planned cover this demand")
     if group.batch_count > MAX_PLAN_BATCHES:
         raise ValueError(f"Plan at most {MAX_PLAN_BATCHES} batches at once; review the demand or batch size")
     generation = (

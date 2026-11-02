@@ -87,6 +87,69 @@ def cancel_demand(demand_id):
     return jsonify(service.demand_dict(row))
 
 
+@planning_bp.get("/api/core/planner/forecast")
+@requires_auth
+@requires_org_scope
+def get_forecast():
+    """GL-P07 B3: per product, how fast it sells, when it runs out, and what to plan."""
+    from app.features.planning import forecast_service
+
+    try:
+        window = int(request.args.get("window", forecast_service.DEFAULT_WINDOW_WEEKS))
+        rows = forecast_service.forecast(db_session, _org_id(), today=date.today(), window_weeks=window)
+    except ValueError as exc:
+        return jsonify({"error": str(exc) if "window" in str(exc) else "Choose a window of 1 to 52 weeks"}), 400
+    return jsonify({"products": rows})
+
+
+@planning_bp.post("/api/core/planner/targets/<uuid:output_id>")
+@requires_auth
+@requires_org_scope
+def set_stock_target(output_id):
+    from app.features.planning import forecast_service
+
+    try:
+        row = forecast_service.set_target(
+            db_session, _org_id(), output_id, (request.get_json(silent=True) or {}).get("weeks")
+        )
+        db_session.commit()
+    except ValueError as exc:
+        db_session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"weeks_of_cover": format(row.weeks_of_cover.normalize(), "f") if row else None})
+
+
+@planning_bp.post("/api/core/planner/forecast/<uuid:output_id>/plan")
+@requires_auth
+@requires_org_scope
+def plan_forecast(output_id):
+    """Plan it in one click: the forecast's suggestion becomes demand, and its batches are planned."""
+    from app.features.planning import forecast_service
+
+    try:
+        demand = forecast_service.accept_suggestion(db_session, _org_id(), output_id, today=date.today())
+        _audit("planning_demand_created", demand)
+        rows, _ = batches.plan_demand(db_session, _org_id(), demand.id, {}, today=date.today())
+        for row in rows:
+            _batch_audit("planning_batch_created", row)
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"demand": service.demand_dict(demand), "batches": [batches.batch_dict(row) for row in rows]}), 201
+
+
+@planning_bp.post("/api/core/planner/contract-demand/sync")
+@requires_auth
+@requires_org_scope
+def sync_contract_demand():
+    """Confirmed contract order lines become demand once; changed or withdrawn ones follow."""
+    from app.features.planning import forecast_service
+
+    changed = forecast_service.sync_contract_demand(db_session, _org_id())
+    db_session.commit()
+    return jsonify(changed)
+
+
 def _planning_error(exc):
     db_session.rollback()
     status = 409 if isinstance(exc, batches.PlanningConflictError) else 400

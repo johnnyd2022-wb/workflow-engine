@@ -51,6 +51,7 @@ def demand_dict(row: PlanningDemand) -> dict:
         "due_date": row.due_date.isoformat(),
         "priority": row.priority,
         "status": row.status,
+        "source": row.source,
     }
 
 

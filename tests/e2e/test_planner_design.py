@@ -199,10 +199,117 @@ def test_planner_has_no_layout_preview_left(browser, app_url, workspace_user):
         page.goto("/core/planner")
         page.evaluate('sessionStorage.setItem("planner-design-style", "2")')
         _open(page, "3")
-        expect(page.locator("[data-style-pick]")).to_have_count(0)
+        # CONCEPT ONLY (GL-P07 B3 draft): the stock cover layout switch is in until a style is
+        # picked; restore `to_have_count(0)` with it.
+        expect(page.locator("[data-style-pick]")).to_have_count(3)
         expect(page.locator(".planner-row__rank")).to_have_count(0)
         expect(page.locator(".planner-group")).to_have_count(0)
         # Soonest due first, as the board orders it.
         assert page.locator("[data-demand-list] .planner-row h3").first.inner_text() == "Regional Wines summer order"
+    finally:
+        context.close()
+
+
+def _forecast():
+    """Two products: one to plan now, one with cover to spare."""
+    weeks = [{"week_ending": _due(7 * week), "stock": str(220 - 40 * week)} for week in range(1, 13)]
+    return {
+        "products": [
+            {
+                "output_id": GIN,
+                "name": "Navy Strength Gin",
+                "unit": "L",
+                "process_id": GIN,
+                "weekly_rate": "39.2",
+                "window_weeks": 12,
+                "seasonal_factor": None,
+                "history_weeks": 70,
+                "on_hand": "221",
+                "planned": "0",
+                "waiting": "0",
+                "runs_out": _due(39),
+                "projection": weeks,
+                "weeks_of_cover": "5.6",
+                "target_weeks": "10",
+                "suggestion": {
+                    "quantity": "160",
+                    "batches": 4,
+                    "need_by": _due(39),
+                    "plan_by": _due(37),
+                    "late": False,
+                },
+                "sentence": "Navy Strength Gin runs out soon at 39 L a week; plan 4 batches to keep 10 weeks' cover.",
+            },
+            {
+                "output_id": PINK,
+                "name": "Pink Gin",
+                "unit": "L",
+                "process_id": PINK,
+                "weekly_rate": "12.8",
+                "window_weeks": 12,
+                "seasonal_factor": None,
+                "history_weeks": 70,
+                "on_hand": "300",
+                "planned": "0",
+                "waiting": "0",
+                "runs_out": _due(160),
+                "projection": [{"week_ending": w["week_ending"], "stock": "250"} for w in weeks],
+                "weeks_of_cover": "22.9",
+                "target_weeks": None,
+                "suggestion": None,
+                "sentence": "Pink Gin runs out later at 13 L a week.",
+            },
+        ]
+    }
+
+
+def _open_with_forecast(page, style):
+    page.route("**/api/core/planner/forecast", lambda route: route.fulfill(json=_forecast()))
+    page.route(
+        "**/api/core/planner/contract-demand/sync",
+        lambda route: route.fulfill(json={"added": 0, "updated": 0, "cancelled": 0}),
+    )
+    _open(page, style)
+    expect(page.get_by_role("region", name="Stock cover", exact=True)).to_be_visible()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+@pytest.mark.parametrize("style", ["1", "2", "3"])
+def test_concept_stock_cover_fits_every_width(browser, app_url, workspace_user, width, style):
+    """CONCEPT ONLY: each stock cover layout at phone, laptop and wide; deleted with the losing two."""
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        _open_with_forecast(page, style)
+        expect(page.locator("[data-cover-brief]")).to_have_text(
+            "1 product needs planning. Navy Strength Gin first, by "
+            + page.evaluate(
+                f"new Date('{_due(37)}T00:00:00').toLocaleDateString('en-NZ', {{day: 'numeric', month: 'short'}})"
+            )
+            + "."
+        )
+        if style != "2" or width > 390:  # the projection's Plan column scrolls into view on a phone
+            expect(page.get_by_role("button", name="Plan 4 batches of Navy Strength Gin")).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+    finally:
+        context.close()
+
+
+def test_plan_it_in_one_click(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    calls = []
+    try:
+        page.route(
+            f"**/api/core/planner/forecast/{GIN}/plan",
+            lambda route: (
+                calls.append(route.request.method),
+                route.fulfill(status=201, json={"demand": {}, "batches": [{}, {}, {}, {}]}),
+            ),
+        )
+        _open_with_forecast(page, "1")
+        page.get_by_role("button", name="Plan 4 batches of Navy Strength Gin").click()
+        expect(page.locator("[data-cover-brief]")).to_have_text(
+            "4 batches of Navy Strength Gin planned. They are on the production board."
+        )
+        assert calls == ["POST"]
     finally:
         context.close()

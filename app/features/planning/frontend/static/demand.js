@@ -71,6 +71,8 @@
       card.dataset.status = demand.status;
       var main = el('div', null, 'planner-row__main');
       main.appendChild(el('h3', demand.reference));
+      var from = { contract: 'Contract order', forecast: 'From the forecast' }[demand.source];
+      if (from) main.appendChild(el('span', from, 'planner-source'));
       var output = outputs.get(demand.source_output_id);
       main.appendChild(el('p', amount(demand.quantity, demand.unit) + ' · ' + (output ? output.name : 'Output no longer available'), 'planner-row__what'));
       card.appendChild(main);
@@ -93,6 +95,173 @@
       }
       return card;
     }
+
+    // ── Stock cover (GL-P07 B3) ─────────────────────────────────────────────────────────
+    var forecast = null;
+    function shortDay(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }); }
+    function planLabel(item) {
+      var s = item.suggestion;
+      if (s.batches) return 'Plan ' + plural(s.batches, 'batch', 'batches');
+      return 'Plan ' + amount(s.quantity, item.unit);
+    }
+    function planButton(item, className) {
+      var button = el('button', planLabel(item), className || 'workspace-button workspace-button--primary planner-primary planner-plan');
+      button.type = 'button';
+      button.setAttribute('aria-label', planLabel(item) + ' of ' + item.name);
+      button.addEventListener('click', async function () {
+        button.disabled = true; report('');
+        try {
+          var result = await api('/api/core/planner/forecast/' + encodeURIComponent(item.output_id) + '/plan', 'POST', {});
+          report('');
+          await load();
+          announce(plural(result.batches.length, 'batch', 'batches') + ' of ' + item.name + ' planned. ' + (result.batches.length === 1 ? 'It is' : 'They are') + ' on the production board.');
+        } catch (err) { if (err.name !== 'AbortError') { report(err.message); button.disabled = false; } }
+      });
+      return button;
+    }
+    function targetEditor(item) {
+      var wrap = el('form', null, 'planner-target');
+      wrap.setAttribute('hx-boost', 'false');
+      var label = el('label');
+      label.appendChild(el('span', 'Keep'));
+      var input = el('input'); input.type = 'number'; input.min = '0.5'; input.max = '104'; input.step = '0.5'; input.inputMode = 'decimal';
+      input.value = item.target_weeks || ''; input.placeholder = '—';
+      input.setAttribute('aria-label', 'Weeks of cover to keep of ' + item.name);
+      label.appendChild(input);
+      label.appendChild(el('span', 'weeks'));
+      wrap.appendChild(label);
+      var save = el('button', 'Save', 'planner-target__save'); save.type = 'submit'; save.hidden = true;
+      wrap.appendChild(save);
+      input.addEventListener('input', function () { save.hidden = input.value === (item.target_weeks || ''); });
+      wrap.addEventListener('submit', async function (event) {
+        event.preventDefault(); save.disabled = true; report('');
+        try { await api('/api/core/planner/targets/' + encodeURIComponent(item.output_id), 'POST', { weeks: input.value }); await loadForecast(); }
+        catch (err) { if (err.name !== 'AbortError') { report(err.message); save.disabled = false; } }
+      });
+      if (!canRecord) { input.disabled = true; }
+      return wrap;
+    }
+    function coverWords(item) {
+      if (item.weeks_of_cover == null) return 'No recent sales';
+      var weeks = Number(item.weeks_of_cover);
+      return (weeks >= 52 ? 'Over a year' : Math.floor(weeks) + ' weeks') + ' of cover';
+    }
+    function coverMeter(item) {
+      var meter = el('div', null, 'planner-meter');
+      var weeks = Number(item.weeks_of_cover || 0), target = Number(item.target_weeks || 0);
+      var scale = Math.max(weeks, target, 1) * 1.15;
+      var fill = el('span', null, 'planner-meter__fill');
+      fill.style.width = Math.min(100, (weeks / scale) * 100) + '%';
+      fill.dataset.state = target && weeks < target ? 'short' : 'ok';
+      meter.appendChild(fill);
+      if (target) { var mark = el('span', null, 'planner-meter__target'); mark.style.left = (target / scale) * 100 + '%'; mark.title = 'Target: ' + target + ' weeks'; meter.appendChild(mark); }
+      meter.setAttribute('role', 'img');
+      meter.setAttribute('aria-label', coverWords(item) + (target ? ', target ' + target + ' weeks' : ''));
+      return meter;
+    }
+    function renderMakeNext(host, rows) {
+      rows.forEach(function (item) {
+        var line = el('article', null, 'planner-cover__row');
+        line.dataset.state = item.suggestion ? (item.suggestion.late ? 'late' : 'plan') : 'ok';
+        var main = el('div', null, 'planner-cover__main');
+        main.appendChild(el('h3', item.name));
+        // The heading names the product; the line under it starts with what happens to it.
+        var detail = item.sentence.indexOf(item.name + ' ') === 0 ? item.sentence.slice(item.name.length + 1) : item.sentence;
+        main.appendChild(el('p', detail.charAt(0).toUpperCase() + detail.slice(1), 'planner-cover__sentence'));
+        line.appendChild(main);
+        var gauge = el('div', null, 'planner-cover__gauge');
+        gauge.appendChild(el('span', coverWords(item), 'planner-cover__weeks'));
+        gauge.appendChild(coverMeter(item));
+        line.appendChild(gauge);
+        line.appendChild(targetEditor(item));
+        var act = el('div', null, 'planner-cover__act');
+        if (item.suggestion && canRecord) act.appendChild(planButton(item));
+        else if (item.suggestion) act.appendChild(el('span', planLabel(item), 'planner-cover__todo'));
+        line.appendChild(act);
+        host.appendChild(line);
+      });
+    }
+    function renderProjection(host, rows) {
+      var wrap = el('div', null, 'planner-projection');
+      var table = el('table'); var head = el('thead'); var hr = el('tr');
+      hr.appendChild(el('th', 'Product'));
+      (rows[0] ? rows[0].projection : []).forEach(function (week, index) { var th = el('th', index === 0 ? 'This wk' : shortDay(week.week_ending)); th.scope = 'col'; hr.appendChild(th); });
+      hr.appendChild(el('th', ''));
+      head.appendChild(hr); table.appendChild(head);
+      var body = el('tbody');
+      rows.forEach(function (item) {
+        var tr = el('tr');
+        var name = el('th'); name.scope = 'row'; name.appendChild(el('span', item.name, 'planner-projection__name'));
+        name.appendChild(el('span', item.weekly_rate + ' ' + item.unit + '/wk', 'planner-projection__rate'));
+        tr.appendChild(name);
+        var target = Number(item.target_weeks || 0);
+        item.projection.forEach(function (week) {
+          var level = Number(week.stock);
+          var td = el('td', level < 0 ? 'Short' : level.toLocaleString('en-NZ'));
+          // Amber: by then, what's left lasts less than the target, the same runway the plan suggestion uses.
+          var runway = item.runs_out ? (new Date(item.runs_out) - new Date(week.week_ending)) / (7 * DAY) : Infinity;
+          td.dataset.state = level < 0 ? 'short' : target && runway < target ? 'low' : 'ok';
+          td.title = shortDay(week.week_ending) + ': ' + (level < 0 ? 'short by ' + (-level) : level) + ' ' + item.unit;
+          tr.appendChild(td);
+        });
+        var act = el('td', null, 'planner-projection__act');
+        if (item.suggestion && canRecord) act.appendChild(planButton(item, 'workspace-button planner-plan'));
+        tr.appendChild(act);
+        body.appendChild(tr);
+      });
+      table.appendChild(body); wrap.appendChild(table); host.appendChild(wrap);
+      host.appendChild(el('p', 'Stock expected at the end of each week: on hand, plus batches ready by then, less sales at the current pace. Amber: from then, it lasts less than the weeks you keep.', 'workspace-caption planner-projection__key'));
+    }
+    function renderBriefing(host, rows) {
+      var list = el('ul', null, 'planner-briefing');
+      rows.forEach(function (item) {
+        var li = el('li');
+        li.dataset.state = item.suggestion ? (item.suggestion.late ? 'late' : 'plan') : 'ok';
+        li.appendChild(el('p', item.sentence));
+        var row = el('div', null, 'planner-briefing__actions');
+        if (item.suggestion && canRecord) row.appendChild(planButton(item, 'planner-link-button'));
+        row.appendChild(targetEditor(item));
+        li.appendChild(row);
+        list.appendChild(li);
+      });
+      host.appendChild(list);
+    }
+    function renderCover() {
+      var host = root.querySelector('[data-cover-list]');
+      if (!host || !forecast) return;
+      host.replaceChildren();
+      var rows = forecast.products;
+      root.querySelector('[data-cover-empty]').hidden = rows.length > 0;
+      var toPlan = rows.filter(function (item) { return item.suggestion; });
+      var late = toPlan.filter(function (item) { return item.suggestion.late; });
+      set('[data-cover-basis]', rows.length ? 'Last ' + (rows[0].window_weeks || 12) + ' weeks of sales' : '');
+      var first = toPlan.slice().sort(function (a, b) { return a.suggestion.plan_by < b.suggestion.plan_by ? -1 : 1; })[0];
+      var brief = toPlan.length
+        ? plural(toPlan.length, 'product needs', 'products need') + ' planning' + (late.length ? ', ' + late.length + ' already late' : '') + '. ' +
+          (first.suggestion.late ? first.name + ' should be planned now.' : first.name + ' first, by ' + shortDay(first.suggestion.plan_by) + '.')
+        : rows.some(function (item) { return item.target_weeks; }) ? 'Every product with a target has its cover, counting batches already planned.' : rows.length ? 'Set how many weeks of stock to keep, and this says when to make more.' : '';
+      set('[data-cover-brief]', brief);
+      var style = root.dataset.plannerStyle;
+      if (style === '2') renderProjection(host, rows);
+      else if (style === '3') renderBriefing(host, rows);
+      else renderMakeNext(host, rows);
+    }
+    function announce(message) { var live = root.querySelector('[data-cover-brief]'); if (live) live.textContent = message; }
+    async function loadForecast() {
+      try { forecast = await api('/api/core/planner/forecast'); renderCover(); }
+      catch (err) { if (err.name !== 'AbortError') report('Stock cover could not load. ' + (err.message || '')); }
+    }
+    /* CONCEPT ONLY: the layout switch. */
+    function applyStyle(style) {
+      root.dataset.plannerStyle = style;
+      root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === style)); });
+      renderCover();
+    }
+    (function () {
+      var from = new URLSearchParams(window.location.search).get('style'), saved = null;
+      try { saved = window.localStorage.getItem('planner-style'); } catch (e) { saved = null; }
+      applyStyle(['1', '2', '3'].indexOf(from) >= 0 ? from : ['1', '2', '3'].indexOf(saved) >= 0 ? saved : '1');
+    }());
 
     function render() {
       if (!cache) return;
@@ -146,7 +315,11 @@
     async function load() {
       layout.setAttribute('aria-busy', 'true');
       try {
-        cache = await api('/api/core/planner/demands');
+        // Confirmed contract orders become demand once; a stale one is harmless here.
+        if (canRecord) await api('/api/core/planner/contract-demand/sync', 'POST', {}).catch(function () {});
+        var both = await Promise.all([api('/api/core/planner/demands'), api('/api/core/planner/forecast').catch(function () { return null; })]);
+        cache = both[0];
+        if (both[1]) forecast = both[1];
         report('');
         if (form) {
           var select = form.querySelector('[data-output-select]');
@@ -160,6 +333,7 @@
         }
         root.dataset.loaded = 'true';
         render();
+        renderCover();
       } catch (err) {
         if (err.name === 'AbortError') return;
         // A failed load is not an empty planner: say so and keep the figures blank.
@@ -181,6 +355,8 @@
       if (event.target.closest('[data-add-toggle]')) { showForm(addCard.hidden); return; }
       if (event.target.closest('[data-add-close]')) { showForm(false); return; }
       if (event.target.closest('[data-planning-retry]')) load();
+      var pick = event.target.closest('[data-style-pick]');
+      if (pick) { applyStyle(pick.dataset.stylePick); try { window.localStorage.setItem('planner-style', pick.dataset.stylePick); } catch (e) { /* per viewer only */ } }
     }
     async function onSubmit(event) {
       event.preventDefault(); report('');

@@ -17,6 +17,7 @@ class PlanningDemand(TenantScoped, Base):
         CheckConstraint("quantity > 0 AND quantity <= 99999999999999.9999", name="ck_planning_demand_quantity"),
         CheckConstraint("priority >= 0 AND priority <= 100", name="ck_planning_demand_priority"),
         CheckConstraint("status IN ('open', 'cancelled', 'fulfilled')", name="ck_planning_demand_status"),
+        CheckConstraint("source IN ('manual','contract','forecast')", name="ck_planning_demand_source"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,5 +29,24 @@ class PlanningDemand(TenantScoped, Base):
     due_date = Column(Date, nullable=False, index=True)
     priority = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String(20), nullable=False, default="open", server_default="open")
+    # GL-P07 B3: typed in, a confirmed contract order line (`source_ref` is its id), or an
+    # accepted forecast suggestion.
+    source = Column(String(20), nullable=False, default="manual", server_default="manual")
+    source_ref = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PlanningStockTarget(TenantScoped, Base):
+    """Weeks of cover to keep of a product (GL-P07 B3); the forecast turns it into demand."""
+
+    __tablename__ = "planning_stock_targets"
+    __table_args__ = (
+        UniqueConstraint("org_id", "source_output_id", name="uq_planning_stock_target_output"),
+        CheckConstraint("weeks_of_cover > 0 AND weeks_of_cover <= 104", name="ck_planning_stock_target_weeks"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_output_id = Column(UUID(as_uuid=True), nullable=False)
+    weeks_of_cover = Column(Numeric(6, 2), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
