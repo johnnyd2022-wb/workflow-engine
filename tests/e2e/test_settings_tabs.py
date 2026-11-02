@@ -11,6 +11,7 @@ from playwright.sync_api import expect
 
 from app.core.db.models.user import UserRole
 from tests.e2e.test_crm_contact_sync_ui import client, sales_page  # noqa: F401 -- fixture re-export
+from tests.factories import grant_multi_site
 from tests.test_crm import db, org  # noqa: F401 -- fixture re-export
 from tests.test_crm import user as _member  # noqa: F401 -- fixture re-export
 
@@ -24,6 +25,7 @@ TABS = ["Account", "People", "Sites", "Integrations", "Tasks"]
 def user(_member, db):  # noqa: F811
     # People and Sites are for admins.
     _member.role = UserRole.ADMIN
+    grant_multi_site(db, _member.org_id)
     db.commit()
     return _member
 

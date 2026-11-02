@@ -768,6 +768,36 @@ body.htmx-request-loading #page-content {
   font-weight: 400;
 }
 
+.bee-menu__settings {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .bee-menu__settings {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    min-width: 160px;
+    margin-top: 14px;
+    padding: 10px 20px;
+    border: 1px solid rgba(45, 212, 191, 0.5);
+    border-radius: 12px;
+    background: rgba(45, 212, 191, 0.16);
+    color: #f5fffd;
+    font: 600 0.9rem "Roboto", system-ui, sans-serif;
+    text-decoration: none;
+  }
+  .bee-menu__settings svg { width: 18px; height: 18px; }
+  .bee-menu__settings:hover,
+  .bee-menu__settings:focus-visible {
+    background: rgba(45, 212, 191, 0.28);
+    outline: 2px solid #2dd4bf;
+    outline-offset: 2px;
+  }
+}
+
 .bee-menu__hint {
   margin-top: 6px;
   font-size: 0.75rem;

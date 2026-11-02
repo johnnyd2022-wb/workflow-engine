@@ -51,6 +51,11 @@
 #page-content .section-tabs .flow-mode-segment--active:hover { background: none; box-shadow: none; color: var(--ui-accent-strong, #115e59); font-weight: 700; border-bottom-color: var(--ui-accent, #0f766e); }
 #page-content .section-tabs .flow-mode-segment:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: -3px; border-radius: 4px; }
 #page-content .section-tabs .flow-mode-segment[hidden] { display: none; }
+@media (max-width: 359px) {
+  #page-content .section-tabs { width: 100%; overflow-x: visible; }
+  #page-content .section-tabs .flow-mode-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  #page-content .section-tabs .flow-mode-segment { width: 100%; padding-inline: 6px; text-align: center; white-space: normal; }
+}
 /* The head starts where Home's title does; the shell's own top padding would push it lower.
    Not `> .section-head`: an in-app visit nests a second #page-content inside the first (the
    shell selects #page-content and swaps it in as the target's contents), and both must lose
