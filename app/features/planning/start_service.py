@@ -190,6 +190,10 @@ def start_batch(db, org_id, batch_id, data, key):
             raise service.PlanningConflictError("Workflow steps changed; review and replan this batch")
         row.execution_id = execution.id
         row.status = "started"
+        # What planning held for it now belongs to the batch being made.
+        from app.features.planning.material_adapter import close_commitments
+
+        close_commitments(db, org_id, row.id, "consumed")
         row.blockers = row.snapshot["readiness_reasons"]
         row.revision += 1
         changed = True
