@@ -2074,6 +2074,10 @@ html[data-spa-theme="dark"] #page-content .sm-page {
 /* Browse: segmented control and tiles */
 #page-content .sm-page .sm-browse-seg { display: inline-flex; align-self: flex-start; gap: 2px; width: auto; max-width: 100%; margin: 4px 0 18px; padding: 3px; overflow-x: auto; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 9px; background: var(--ui-surface-subtle, #f1f5f9); }
 #page-content .sm-page .sm-browse-seg__btn { flex: 0 0 auto; height: 32px; min-height: 0; padding: 0 16px; border: 0; border-radius: 6px; background: transparent; color: var(--ui-text-muted, #64748b); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+@media (max-width: 480px) {
+  #page-content .sm-page .sm-browse-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; overflow-x: visible; }
+  #page-content .sm-page .sm-browse-seg__btn { width: 100%; min-height: 44px; padding: 0 6px; }
+}
 #page-content .sm-page .sm-browse-seg__btn:hover { background: transparent; color: var(--ui-text, #172033); }
 #page-content .sm-page .sm-browse-seg__btn--active,
 #page-content .sm-page .sm-browse-seg__btn--active:hover,

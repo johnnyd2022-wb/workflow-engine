@@ -7,7 +7,7 @@ never a second removal and never taken from warehouse stock. The 4 go back where
 as their own lot, duty paid, and are listed as a possible credit to raise with Customs.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -88,12 +88,14 @@ def _removal_refs(d):
     return sorted((r["kind"], r["quantity"]) for line in d["lines"] for r in line["removals"])
 
 
-def test_take_ten_sell_six_bring_four_back(db, world):  # noqa: F811
+def test_take_ten_sell_six_bring_four_back(db, world, monkeypatch):  # noqa: F811
     org, _, item, *_ = world
     item.supplier_batch_number = "WB-26-041"
     db.commit()
     event = _event(db, world)
     assert event.kind == "event"
+    # The draft below covers October, so close the historical outing in October too.
+    monkeypatch.setattr(service, "utc_now", lambda: datetime(2026, 10, 20, 12, tzinfo=UTC))
     line = _close(db, world, event, sold="6", returned="4")
     assert (line.sold_units, line.returned_units) == (6, 4)
     db.refresh(item)
