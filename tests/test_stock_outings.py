@@ -7,7 +7,7 @@ never a second removal and never taken from warehouse stock. The 4 go back where
 as their own lot, duty paid, and are listed as a possible credit to raise with Customs.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -26,6 +26,13 @@ from app.features.tastings.services import tasting_service as service
 from tests.test_tastings import payload, world  # noqa: F401 -- shared fixture
 
 OCT = date(2026, 10, 1)
+
+
+@pytest.fixture(autouse=True)
+def _closed_in_october(monkeypatch):
+    """Bottles brought back are dated the day the outing closes. These tests read October's
+    excise entry, so they close in October whatever today's date is."""
+    monkeypatch.setattr(service, "utc_now", lambda: datetime(2026, 10, 21, 1, tzinfo=UTC))
 
 
 def _event(db, world, quantity="10"):  # noqa: F811
