@@ -277,12 +277,13 @@
     }
 
     var facts = el('dl', 'sup-facts');
-    [['Contact', 'contact_name'], ['Phone', 'phone'], ['Email', 'email'], ['Address', 'address'], ['Notes', 'notes']].forEach(function (pair) {
+    [['Contact', 'contact_name'], ['Phone', 'phone'], ['Email', 'email'], ['Lead time', 'lead_time_days'], ['Address', 'address'], ['Notes', 'notes']].forEach(function (pair) {
       var row = el('div', 'sup-facts__row');
       row.appendChild(el('dt', '', pair[0]));
       var dd = el('dd');
       var value = supplier[pair[1]];
-      if (!value) dd.appendChild(el('span', 'sup-none', 'Not recorded'));
+      if (pair[1] === 'lead_time_days' && value != null) value = value === 1 ? '1 day' : value + ' days';
+      if (value == null || value === '') dd.appendChild(el('span', 'sup-none', 'Not recorded'));
       else if (pair[1] === 'phone' || pair[1] === 'email') dd.appendChild(contactLink(pair[1], value));
       else dd.textContent = value;
       row.appendChild(dd);
