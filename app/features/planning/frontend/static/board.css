@@ -139,3 +139,6 @@ html[data-spa-theme="dark"] #page-content .production-board .board-batch__form--
   .board-toolbar__nav { flex-wrap: wrap; }
   #page-content .production-board .board-toolbar__title { flex-basis: 100%; margin: 4px 0 0; }
 }
+/* GL-P07 B2b: a shortage whose order-by date has come says so in the warning colour. */
+#page-content .production-board .board-batch p.board-batch__order-now { color: #b45309; font-weight: 600; }
+html[data-spa-theme="dark"] #page-content .production-board .board-batch p.board-batch__order-now { color: #fbbf24; }

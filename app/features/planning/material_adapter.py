@@ -92,6 +92,14 @@ def material_name(name):
     return " ".join(str(name or "").split()).casefold()
 
 
+def readable(quantity, unit):
+    """A shortage in the unit people order in: 1.5 kg, not 1500 g."""
+    for small, large in (("g", "kg"), ("ml", "L")):
+        if normalize_unit(unit) == small and quantity >= 1000:
+            return format((quantity / 1000).normalize(), "f"), large
+    return format(quantity.normalize(), "f"), unit
+
+
 def base_unit(unit):
     """One unit per kind of quantity, so lots held in kg meet an input written in g."""
     unit = normalize_unit(unit)
@@ -218,6 +226,40 @@ def _material_lots(db, org_id, materials):
     if len(lots) > 1000:
         raise service.PlanningConflictError("Review the material plan before assessing more than 1,000 lots")
     return [item for item in lots if material_name(item.name) in materials]
+
+
+def _material_suppliers(db, org_id, materials):
+    """For each material, the supplier of its most recent lot and that supplier's lead time."""
+    if not materials:
+        return {}
+    from app.core.db.models.supplier import Supplier
+
+    lots = (
+        db.query(InventoryItem.name, InventoryItem.supplier)
+        .filter(
+            InventoryItem.org_id == org_id,
+            InventoryItem.inventory_type == "raw_material",
+            InventoryItem.supplier.isnot(None),
+            func.lower(func.trim(InventoryItem.name)).in_({" ".join(name.split()) for name in materials}),
+        )
+        .order_by(InventoryItem.created_at.desc())
+        .limit(2000)
+        .all()
+    )
+    latest = {}
+    for name, supplier in lots:
+        if supplier and supplier.strip():
+            latest.setdefault(material_name(name), supplier.strip())
+    if not latest:
+        return {}
+    leads = {
+        row.name.strip().lower(): (row.name, row.lead_time_days)
+        for row in db.query(Supplier).filter(
+            Supplier.org_id == org_id,
+            func.lower(func.trim(Supplier.name)).in_({supplier.lower() for supplier in latest.values()}),
+        )
+    }
+    return {material: leads.get(supplier.lower(), (supplier, None)) for material, supplier in latest.items()}
 
 
 def _observe(db, org_id, lot_ids, today, materials=frozenset()):
@@ -517,6 +559,28 @@ def assess(db, org_id, data, *, today):
     }
     lot_units = {identity: item.unit for identity, item in allocated.items()}
     names = {entry["material"]: entry["name"] for _, auto in definitions.values() for entry in auto}
+    sources = _material_suppliers(
+        db,
+        org_id,
+        {
+            row.key.product_id.removeprefix("material:")
+            for batch in result.batches
+            for row in batch.shortages_at_start
+            if row.key.product_id.startswith("material:")
+        },
+    )
+
+    def order_by(batch, material):
+        """Who to order a short material from, and the last day to order it to arrive for the
+        batch's start, from that supplier's lead time."""
+        supplier, lead = sources.get(material, (None, None))
+        latest = batch.proposed_start_date - timedelta(days=lead) if lead is not None else None
+        return {
+            "supplier": supplier,
+            "lead_time_days": lead,
+            "order_by": latest.isoformat() if latest else None,
+            "order_now": bool(latest and latest <= today),
+        }
 
     def in_lot_unit(row):
         unit = lot_units.get(service._id(row.supply_id), row.key.unit)
@@ -564,13 +628,14 @@ def assess(db, org_id, data, *, today):
                             "material": names.get(
                                 row.key.product_id.removeprefix("material:"),
                                 row.key.product_id.removeprefix("material:"),
-                            )
+                            ),
+                            **order_by(batch, row.key.product_id.removeprefix("material:")),
                         }
                         if row.key.product_id.startswith("material:")
                         else {"lot_id": row.key.product_id.removeprefix("lot:")}
                     ),
-                    "quantity": str(row.quantity),
-                    "unit": row.key.unit,
+                    "quantity": readable(row.quantity, row.key.unit)[0],
+                    "unit": readable(row.quantity, row.key.unit)[1],
                 }
                 for row in assessed.shortages_at_start
             ],

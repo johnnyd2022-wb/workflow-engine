@@ -1686,6 +1686,15 @@ def _seed_commitments(db, org_id, inv) -> None:
     )
     batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
     db.commit()
+    # GL-P07 B2b: the sugar supplier's lead time, and the materials check already run, so the
+    # board, the lot, the dispose page and Notifications all have something to show.
+    from app.core.db.models.supplier import Supplier
+    from app.features.planning import material_adapter
+
+    db.add(Supplier(org_id=org_id, name="Moore Wilson's", lead_time_days=3, phone="04 384 9906"))
+    db.commit()
+    material_adapter.assess(db, org_id, {}, today=today)
+    db.commit()
     _ = step
 
 
