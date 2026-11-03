@@ -46,6 +46,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(fi, "scan_code_markers", lambda: [])
     monkeypatch.setattr(fi, "scan_open_mrs", lambda: [])
     monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({}, []))
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})
     monkeypatch.setattr(fi, "merged_commit_closures", lambda: {})
     monkeypatch.setattr(fi, "suppressed_ids", lambda items: {})
     monkeypatch.setattr(fi, "compute_budget", lambda cfg=None: {"items": 2, "why": "test", "quota": None})
@@ -1944,6 +1945,278 @@ def test_findings_sweep_closure_mr_is_not_re_indexed_from_its_own_writeup(monkey
     assert [i.source_ref for i in items] == ["!226"], (
         f"only the non-closure MR should contribute items, got {[(i.source_ref, i.title) for i in items]}"
     )
+
+
+# --- an open MR's `Findings-Index:` trailer takes its items off the worklist until it merges ---
+
+
+def _open_mrs(*descriptions):
+    return [{"iid": 600 + n, "title": f"mr {n}", "description": d} for n, d in enumerate(descriptions)]
+
+
+def test_open_mr_claims_reads_every_id_from_every_open_mrs_trailer(monkeypatch):
+    mrs = _open_mrs(
+        "## Per finding\n- owed: x\n\nFindings-Index: 1f24d8a6, A8C9782F\n",
+        "no trailer here, just prose about 0286511e\n",
+        "Findings-Index: b69bff9b, a8c9782f\n",  # a8c9782f is also in !600; the first MR listed keeps it
+        None,  # an MR with no description at all
+    ) + [{"iid": None, "description": "Findings-Index: cccccccc\n"}, {"description": "Findings-Index: dddddddd\n"}]
+    seen = []
+
+    def fake_glab(args, timeout=45):
+        seen.append(args)
+        return mrs
+
+    monkeypatch.setattr(fi, "_glab_json", fake_glab)
+
+    assert fi.open_mr_claims() == {"1f24d8a6": "!600", "a8c9782f": "!600", "b69bff9b": "!602"}
+    # Open MRs only: `--merged` would claim shipped work, `--all` would claim closed-unmerged MRs' items.
+    assert seen == [["mr", "list", "--output", "json", "--per-page", "50"]]
+
+
+@pytest.mark.parametrize("answer", [None, {"message": "401 Unauthorized"}, "oops"])
+def test_open_mr_claims_is_none_when_gitlab_cannot_be_read(monkeypatch, answer):
+    """None, not {}: 'no MR claims anything' and 'could not look' must stay distinguishable, because
+    the sweep releases items whose claim has gone and must not do so during an outage."""
+    monkeypatch.setattr(fi, "_glab_json", lambda args, timeout=45: answer)
+
+    assert fi.open_mr_claims() is None
+
+
+def test_open_mr_claims_is_empty_when_open_mrs_claim_nothing(monkeypatch):
+    monkeypatch.setattr(fi, "_glab_json", lambda args, timeout=45: _open_mrs("just a description"))
+
+    assert fi.open_mr_claims() == {}
+
+
+def test_sweep_marks_an_item_fixed_in_an_open_mr_as_mr_open(store, monkeypatch):
+    """Daily runs kept re-picking the same finding because its fix sat in an unmerged MR: the next
+    run starts from origin/main, which does not have it, so it read as untouched work."""
+    claimed = make_item(detail="a finding whose fix is in an open findings-sweep MR")
+    unclaimed = make_item(detail="a different finding nobody has an MR for")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [claimed, unclaimed])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {claimed.id: "!617", "deadbeef": "!617"})  # deadbeef: not indexed
+
+    result = fi.sweep()
+
+    records = result["store"]["items"]
+    assert records[claimed.id]["status"] == "mr-open"
+    assert records[claimed.id]["mr"] == "!617"
+    assert records[unclaimed.id]["status"] == "outstanding"
+    assert "deadbeef" not in records
+    assert result["stats"]["in_open_mr"] == 1
+
+
+def test_a_claim_does_not_override_an_item_already_being_worked_or_settled(store, monkeypatch):
+    working = make_item(detail="a finding this run has already started on")
+    settled = make_item(detail="a finding a human marked wont-fix")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [working, settled])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][working.id], "in-progress", "started")
+    fi._note(saved["items"][settled.id], "wont-fix", "scope", explicit=True)
+    fi.save_store(saved)
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {working.id: "!9", settled.id: "!9"})
+
+    result = fi.sweep()
+
+    assert result["store"]["items"][working.id]["status"] == "in-progress"
+    assert result["store"]["items"][settled.id]["status"] == "wont-fix"
+    assert result["stats"]["in_open_mr"] == 0
+
+
+def test_next_skips_items_already_claimed_by_an_open_mr(store, monkeypatch, capsys):
+    import argparse
+
+    claimed = make_item(detail="a finding whose fix is in an open findings-sweep MR", priority="P0")
+    other = make_item(detail="a lower-priority finding with no MR", priority="P3")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [claimed, other])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {claimed.id: "!617"})
+    fi.sweep()
+
+    assert fi.cmd_next(argparse.Namespace(limit=5, json=True)) == 0
+
+    picked = [r["id"] for r in json.loads(capsys.readouterr().out)["items"]]
+    assert picked == [other.id]  # the P0 outranks it, and is skipped only because !617 has it
+
+
+# The scheduled runner keeps ONE store in its own checkout across days, so the next tests keep the
+# store between sweeps (no unlinking) -- that is where a claim that goes away has to be taken back.
+
+
+def _picked(capsys):
+    import argparse
+
+    fi.cmd_next(argparse.Namespace(limit=5, json=True))
+    return [r["id"] for r in json.loads(capsys.readouterr().out)["items"]]
+
+
+def test_an_item_is_released_when_its_open_mr_is_closed_unmerged(store, monkeypatch, capsys):
+    """A one-way latch would hide owed work for good: the MR closes, its trailer leaves the open list,
+    and without a release the item stays `mr-open` -- skipped by `next` on every later day."""
+    item = make_item(detail="a finding whose MR was closed without merging", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+    assert _picked(capsys) == []
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # !617 was closed
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "outstanding"
+    assert result["stats"]["released_from_open_mr"] == 1
+    assert result["stats"]["in_open_mr"] == 0
+    assert _picked(capsys) == [item.id]
+
+
+def test_a_gitlab_outage_neither_claims_nor_releases(store, monkeypatch, capsys):
+    item = make_item(detail="a finding that is claimed when GitLab goes down", priority="P1")
+    fresh = make_item(detail="a finding first seen during the outage", priority="P2")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item, fresh])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: None)  # glab unreachable
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"  # not released on no information
+    assert result["store"]["items"][fresh.id]["status"] == "outstanding"
+    assert result["stats"]["in_open_mr"] == 1  # still reported
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_no_remote_sweep_does_not_look_at_open_mrs(store, monkeypatch):
+    item = make_item(detail="a claimed finding on a --no-remote sweep", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    def must_not_be_called():
+        raise AssertionError("--no-remote must not call glab")
+
+    monkeypatch.setattr(fi, "open_mr_claims", must_not_be_called)
+    result = fi.sweep(skip_remote=True)
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+
+
+def test_a_hand_recorded_mr_open_is_not_released(store, monkeypatch):
+    """An `mr-open` that no open MR has ever claimed (its MR merged without a trailer, say) has no claim
+    to lose, so the release leaves it alone."""
+    item = make_item(detail="a finding someone recorded as mr-open by hand", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "mr-open", "recorded by hand")
+    fi.save_store(saved)
+
+    result = fi.sweep()  # open_mr_claims() is {} -- nothing claims it
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_a_claimed_item_whose_mr_has_merged_is_closed_not_released(store, monkeypatch):
+    """The claim vanishes because the MR merged -- possibly days ago, outside the merged-MR window.
+    The commit trailer on origin/main remembers; the item is done, not owed again."""
+    item = make_item(detail="a finding whose MR merged while the runner was down", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit abc1234"})
+    result = fi.sweep()
+
+    record = result["store"]["items"][item.id]
+    assert (record["status"], record["mr"]) == ("done", "commit abc1234")
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_a_hand_recorded_mr_open_is_adopted_once_an_open_mr_claims_it_and_then_released(store, monkeypatch, capsys):
+    """The skill's Step 4 opens the MR (trailer in the description) and THEN runs
+    `record --status mr-open`. In a store that outlives the run, that hand-recorded mark must still
+    be taken back when the MR closes unmerged, or the item is skipped by `next` for good."""
+    item = make_item(detail="a finding recorded mr-open by hand right after its MR was opened", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "in-progress", "started")
+    fi._note(saved["items"][item.id], "mr-open", "recorded by hand")
+    saved["items"][item.id]["mr"] = "!7"
+    fi.save_store(saved)
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!7"})
+    fi.sweep()  # the MR is open and claims it: adopted
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # closed unmerged
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "outstanding"
+    assert _picked(capsys) == [item.id]
+
+
+def test_a_hand_record_ends_a_claim_so_a_later_unclaimed_mr_open_is_kept(store, monkeypatch):
+    """Any status change must clear the claim tag. Otherwise a stale tag outlives a manual wont-fix,
+    and a later hand-recorded mr-open (no MR claims it) would inherit it and be released."""
+    item = make_item(detail="a claimed finding a human later closed by hand and then reopened", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!7"})
+    fi.sweep()  # claimed and tagged
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "wont-fix", "scope", explicit=True)
+    fi._note(saved["items"][item.id], "mr-open", "a different MR, recorded by hand")
+    fi.save_store(saved)
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # nothing claims it any more
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_in_open_mr_does_not_count_an_item_the_same_sweep_closes_or_suppresses(store, monkeypatch):
+    gone = make_item(detail="a claimed finding whose source text disappears", priority="P1")
+    muted = make_item(detail="a claimed finding a human has ruled a false positive", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [gone, muted])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {gone.id: "!7", muted.id: "!7"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [muted])  # `gone`'s text is deleted
+    monkeypatch.setattr(fi, "suppressed_ids", lambda items: {muted.id: "human verdict"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][gone.id]["status"] == "done"  # existing behaviour: shipped
+    assert result["store"]["items"][muted.id]["status"] == "suppressed"
+    assert result["stats"]["in_open_mr"] == 0
+
+
+def test_the_pointer_follows_a_claim_that_moves_to_another_mr(store, monkeypatch):
+    item = make_item(detail="a finding whose fix moved from one MR to a replacement", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!5"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!6"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["mr"] == "!6"
+    assert result["stats"]["in_open_mr"] == 1  # counted in steady state, not only on the day it changed
+
+
+def test_a_claimed_item_whose_source_text_is_gone_is_closed_by_the_disappearance_pass(store, monkeypatch):
+    """The `item_id in found` guard: a claim must not mark an item the sweep no longer sees as mr-open,
+    or it would be closed as 'shipped' rather than 'gone'."""
+    item = make_item(detail="a finding whose report text is deleted while an MR claims it", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "gone"
+    assert result["stats"]["in_open_mr"] == 0
 
 
 # --- page-design review reports: sections that record what is right, or already corrected ---
