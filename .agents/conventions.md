@@ -27,11 +27,16 @@ app/features/<slug>/
   models/       # one file per SQLAlchemy model
   frontend/     # templates/, css/, js/
 ```
-Evidence: `app/features/crm/{routes,services,repositories,models,frontend}/` (19 `*_repo.py`
-files, 7 `*_service*.py`, 9 `*_routes.py` repo-wide — this is the established split, not
-a one-off). The always-on core blueprint (`app/core/backend/backend.py`) predates this
-split and is a single 5800-line file — don't copy that shape for new features; it's
-legacy scale, not the pattern to follow.
+Evidence: `app/features/crm/{routes,services,repositories,models,frontend}/`, and the same
+`*_repo.py` / `*_service*.py` / `*_routes.py` split across the other `app/features/*`
+slices — this is the established split, not a one-off. The always-on core blueprint
+(`app/core/backend/backend.py`) predates this split and was once a single
+multi-thousand-line file. It is being carved up: most core routes now live in sibling
+modules in `app/core/backend/` (`execution_routes.py`, `inventory_routes.py`,
+`process_design_routes.py`, `stocktake.py`, `tasks.py`), and the
+`scripts/check_backend_size.py` job in `.gitlab-ci.yml` fails a branch that grows
+`backend.py`. Don't copy the old shape for new features, and don't add routes to
+`backend.py`; it's legacy, not the pattern to follow.
 
 Multiple `Blueprint()` objects per feature are normal: `app/features/crm/crm_bp.py:15`
 (parent), plus `crm_api` (`routes/api_routes.py:14`), `crm_pages`
@@ -109,21 +114,28 @@ publishing, HTTP callbacks, or fire-and-forget async work** — side effects bel
 commit or in an out-of-band worker. This is enforced by review, not by a lint rule; treat
 it as load-bearing.
 
-## 6. Testing — flat files, no shared fixtures (a gap, not a convention to copy)
+## 6. Testing — flat files, shared fixtures and factories
 
-Actual layout is `tests/test_<thing>.py`, flat — **not** `tests/unit/<slug>/` +
-`tests/integration/<slug>/` as `new-feature`'s scaffold in step 2 suggests. There is no
-`conftest.py` anywhere in the repo. Every file that needs a DB session redefines its own
-`db` fixture (e.g. `tests/test_dashboard_summary.py:21-27`), and every test needing
-isolation seeds two orgs by hand and tears them down in a `finally` block
-(`tests/test_dashboard_summary.py:109-149`, `org_a`/`org_b` via
-`OrganisationRepository.create_org`, manual `db.query(...).filter(...).in_([...]).delete()`
-cleanup). No factory-boy dependency exists yet (`pyproject.toml`'s `dev` group is ruff
-only). This repetition, and the two-org/two-user world that `security-audit` and
-`e2e-playwright` assume exists, is exactly what the new **test-fixtures** skill exists to
-consolidate — see its `SKILL.md`. `new-feature`/`review-feature` should write new tests
-as flat `tests/test_<slug>.py` files using the shared fixtures once that skill ships,
-not the `tests/unit/<slug>/` shape in their current SKILL.md text.
+Layout is `tests/test_<thing>.py`, flat (browser tests live in `tests/e2e/`) — **not**
+`tests/unit/<slug>/` + `tests/integration/<slug>/`; `new-feature`'s scaffold says the same.
+
+Shared setup exists and new tests should use it, owned by the **test-fixtures** skill (see
+its `SKILL.md`):
+
+- `tests/conftest.py` — the `db` fixture (a per-test session, closed afterwards), the
+  `two_org_two_user` world that `security-audit` and `e2e-playwright` assume (a hostile
+  neighbour org must exist to prove a query can't see across it), and the purge of orgs a
+  run created (`tests/org_purge.py`). The same file owns the `live_server` gate
+  (**suite-warden**'s).
+- `tests/factories.py` — factory-boy factories (`OrganisationFactory`, `UserFactory`,
+  `InventoryItemFactory`, `ProcessFactory`, `ExecutionFactory`, …) and
+  `DEFAULT_TEST_PASSWORD`. `factory-boy` is in the `dev` extra of `pyproject.toml`.
+
+Some older files predate this and still define their own `db` fixture (a local fixture
+shadows the shared one, so they keep working) or seed orgs by hand and tear them down in a
+`finally` block. That is the pattern to retire, not to copy: reach for `two_org_two_user`
+and the factories first, and add a factory the moment a second test needs the same kind
+of row.
 
 ## 7. Naming
 
