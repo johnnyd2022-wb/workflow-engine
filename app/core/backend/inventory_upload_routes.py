@@ -175,7 +175,9 @@ def _parse_upload(org_id):
     validation = []
     raw_rows = []
     truncated = False
-    sites_enabled = None
+    # A Site column is judged by its header, not its cells: with multiple sites off, every row
+    # of a file that has one is flagged, blank cells included.
+    sites_enabled = _sites_on(org_id) if "site" in col_map else None
     sites_by_name = {}
     for i, row in enumerate(reader):
         if i >= CSV_MAX_ROWS:
@@ -193,22 +195,17 @@ def _parse_upload(org_id):
 
         status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
         unit = canonical_unit if canonical_unit else unit_raw
-        if status == "ok" and site:
+        if status == "ok" and sites_enabled is False:
+            status, message = "error", "Remove the Site column: multiple sites are off"
+        elif status == "ok" and site:
             # The same check csv-commit makes, so a bad site name shows in the preview, not after.
-            if sites_enabled is None:
-                sites_enabled = _sites_on(org_id)
             key = site.lower()
             if key not in sites_by_name:
                 from app.features.sites.service import site_named
 
-                sites_by_name[key] = site_named(db_session, org_id, site) if sites_enabled else None
+                sites_by_name[key] = site_named(db_session, org_id, site)
             if sites_by_name[key] is None:
-                status = "error"
-                message = (
-                    f"No active site called {site}"
-                    if sites_enabled
-                    else "Remove the Site column: multiple sites are off"
-                )
+                status, message = "error", f"No active site called {site}"
         raw_rows.append(row)
 
         validation.append({"row_index": row_index, "status": status, "message": message})

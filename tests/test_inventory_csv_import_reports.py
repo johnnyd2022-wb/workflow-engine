@@ -114,6 +114,24 @@ def test_preview_flags_a_site_column_while_sites_are_off(world):  # noqa: F811
     assert "multiple sites are off" in res["validation"][0]["message"]
 
 
+def test_a_blank_site_column_is_still_flagged_while_sites_are_off(world):  # noqa: F811
+    """The Site check is per column: blank cells used to pass it (breaker-codex, !634 round 1)."""
+    _, admin, _, _ = world
+    text = "Item Name,Quantity,Unit,Site\nCassia,1,kg,\nCumin,1,kg,Main site\n"
+    res = admin.post("/api/core/inventory/csv-validate", data=text.encode(), content_type="text/csv").get_json()
+    assert [v["status"] for v in res["validation"]] == ["error", "error"]
+    assert all("multiple sites are off" in v["message"] for v in res["validation"])
+    assert res["summary"]["ready"] == 0
+
+
+def test_a_blank_site_cell_is_fine_while_sites_are_on(world):  # noqa: F811
+    _, admin, _, _ = world
+    _enable(admin)
+    text = "Item Name,Quantity,Unit,Site\nCassia,1,kg,\n"
+    res = admin.post("/api/core/inventory/csv-validate", data=text.encode(), content_type="text/csv").get_json()
+    assert res["validation"][0]["status"] == "ok"
+
+
 def test_another_orgs_site_name_is_unknown_here(world):  # noqa: F811
     _, admin, _, neighbour = world
     _enable(admin)
