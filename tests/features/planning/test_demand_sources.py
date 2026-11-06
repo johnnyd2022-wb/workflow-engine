@@ -154,6 +154,24 @@ def test_held_expired_and_other_org_stock_is_never_counted(db, demand_world):
     assert len(rows) == 3
 
 
+def test_a_lot_under_a_quality_hold_is_not_stock_until_released(db, demand_world):
+    from app.core.services.lot_holds import place_hold, release_hold
+
+    org_id, output_id, _ = _setup(db, demand_world)
+    lot = _stock(db, org_id, output_id, 600)
+    (hold,) = place_hold(db, org_id, lot.id, "Off taste in QC", None)
+    db.flush()
+    demand = _demand(db, org_id, output_id, 600, 5)
+    rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=TODAY)
+    assert len(rows) == 3
+    for row in rows:
+        row.status = "cancelled"
+    release_hold(db, org_id, hold.id, "Retested fine", None)
+    db.flush()
+    rows, changed = batch_service.plan_demand(db, org_id, demand.id, {}, today=TODAY)
+    assert rows == [] and not changed
+
+
 def test_earlier_due_demand_takes_the_stock_first(db, demand_world):
     org_id, output_id, _ = _setup(db, demand_world)
     _stock(db, org_id, output_id, 300)
