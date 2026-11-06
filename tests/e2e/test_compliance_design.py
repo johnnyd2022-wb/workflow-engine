@@ -18,7 +18,9 @@ def compliance_page(browser, app_url, fresh_user, db):
     user = fresh_user(UserRole.ADMIN)
     FeatureSubscriptionRepository(db).grant(UUID(user["org_id"]), "compliant")
     db.commit()
-    context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": 1440, "height": 900})
+    context = browser.new_context(
+        base_url=app_url, ignore_https_errors=True, bypass_csp=True, viewport={"width": 1440, "height": 900}
+    )
     page = context.new_page()
     login_through_ui(page, user["email"], user["password"])
     saved = page.request.put(

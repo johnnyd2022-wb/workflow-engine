@@ -543,13 +543,13 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
-            # GL-S03: see app/core/security/csp.py. The strict target goes out report-only on
-            # pages, so the browser tells /csp-report what still needs moving off inline script.
+            # GL-S03: the nonce policy is enforced; report-only remains for regression telemetry.
             framable = response.headers.get("X-Frame-Options") == "SAMEORIGIN"
-            response.headers["Content-Security-Policy"] = csp.enforced_policy(framable=framable)
+            nonce = csp.csp_nonce()
+            response.headers["Content-Security-Policy"] = csp.enforced_policy(nonce, framable=framable)
             if response.mimetype == "text/html":
                 response.headers["Content-Security-Policy-Report-Only"] = csp.report_only_policy(
-                    csp.csp_nonce(), framable=framable
+                    nonce, framable=framable
                 )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year

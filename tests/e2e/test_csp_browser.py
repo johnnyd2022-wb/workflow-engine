@@ -1,10 +1,7 @@
-"""GL-S03 in the browser: every page, on a full load and on a boosted arrival, breaks nothing under
-the enforced CSP, and every inline <script> it runs passes the strict nonce policy (sent
-report-only). What the strict policy still reports, inline handlers and Alpine's evaluated
-attributes, is the rest of the migration (docs/csp-migration-plan.md) and is printed, not failed.
-"""
+"""GL-S03 in the browser: every page runs under the strict policy on full and boosted loads."""
 
 import pytest
+from playwright.sync_api import expect
 
 from app.ui.page_registry import PAGES
 from tests.e2e.test_boosted_navigation import _compliant_subscription  # noqa: F401 -- autouse: Compliance pages
@@ -21,8 +18,8 @@ document.addEventListener('securitypolicyviolation', (e) => {
 """
 
 _BOOST = """(path) => {
-  window.__boostSettled = false;
-  document.body.addEventListener('htmx:afterSettle', () => { window.__boostSettled = true; }, { once: true });
+  document.body.dataset.boostSettled = 'false';
+  document.body.addEventListener('htmx:afterSettle', () => { document.body.dataset.boostSettled = 'true'; }, { once: true });
   const link = document.createElement('a');
   link.href = path;
   document.querySelector('#page-content').prepend(link);
@@ -41,8 +38,8 @@ def _inline_script_blocks(violations):
 
 
 @pytest.mark.parametrize("path", [entry.path for entry in PAGES], ids=lambda p: p)
-def test_a_page_runs_under_the_policy_and_its_inline_scripts_carry_the_nonce(logged_in_page, path):
-    page = logged_in_page
+def test_a_page_runs_under_the_policy_and_its_inline_scripts_carry_the_nonce(strict_csp_page, path):
+    page = strict_csp_page
     page.add_init_script(_LISTEN)
 
     page.goto(path)
@@ -53,14 +50,13 @@ def test_a_page_runs_under_the_policy_and_its_inline_scripts_carry_the_nonce(log
     page.wait_for_load_state("networkidle")
     page.evaluate("window.__csp = []")
     page.evaluate(_BOOST, path)
-    page.wait_for_function("window.__boostSettled === true", timeout=15_000)
+    expect(page.locator("body")).to_have_attribute("data-boost-settled", "true", timeout=15_000)
     page.wait_for_load_state("networkidle")
     boosted = _violations(page)
 
     for how, seen in (("full load", full), ("boosted", boosted)):
         enforced = [v for v in seen if v["disposition"] == "enforce"]
         assert not enforced, f"{path} ({how}): the enforced policy blocked {enforced}"
+        report_only = [v for v in seen if v["disposition"] == "report"]
+        assert not report_only, f"{path} ({how}): the report-only policy blocked {report_only}"
         assert not _inline_script_blocks(seen), f"{path} ({how}): inline script without the nonce"
-    left = {(v["directive"], v["sample"]) for v in full + boosted}
-    if left:
-        print(f"{path}: {len(left)} still to migrate: {sorted(left)[:5]}")

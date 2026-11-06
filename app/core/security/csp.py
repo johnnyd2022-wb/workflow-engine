@@ -1,15 +1,12 @@
 """Content Security Policy for the app's pages (GL-S03).
 
-The enforced policy still allows inline and evaluated script: Alpine's standard build
-evaluates its attributes, and about eighty templates use inline ``on*`` handlers. Moving
-off both is a migration over several MRs (``docs/csp-migration-plan.md``). Meanwhile:
+The enforced policy runs script only from our own files or an inline block carrying
+the response nonce. Alpine uses its CSP build and htmx does not evaluate expressions.
 
 - every response gets a fresh **nonce**, and every inline ``<script>`` in a template carries
   it (``nonce="{{ csp_nonce() }}"``), so the strict policy can be switched on without
   touching those blocks again;
-- the strict target policy is sent as ``Content-Security-Policy-Report-Only``, and the
-  browser reports what it would block to ``/csp-report``, which logs it. That log is the
-  migration's to-do list, and an empty one is the signal to enforce.
+- the matching report-only policy keeps ``/csp-report`` available for regressions.
 """
 
 from __future__ import annotations
@@ -62,15 +59,12 @@ def _shared(framable: bool) -> list[str]:
     ]
 
 
-def enforced_policy(*, framable: bool = False) -> str:
-    """What the browser enforces today: inline blocks and eval still allowed, everything else tight.
-
-    No handler attributes (onclick="..."): step 2 moved every one to app/ui/shared/actions.js.
-    """
+def enforced_policy(nonce: str, *, framable: bool = False) -> str:
+    """Only first-party scripts and inline blocks with this response's nonce may run."""
     return "; ".join(
         [
             *_shared(framable),
-            f"script-src 'self' 'unsafe-inline' 'unsafe-eval' {_CF_SCRIPT}",
+            f"script-src 'self' 'nonce-{nonce}' {_CF_SCRIPT}",
             "script-src-attr 'none'",
         ]
     )

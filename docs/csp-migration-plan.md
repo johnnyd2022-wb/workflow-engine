@@ -2,10 +2,8 @@
 
 ## Where it stands
 
-The enforced policy allows `'unsafe-inline'` and `'unsafe-eval'` in `script-src`. Either one
-lets injected markup run script, so the HTML escaping and the semgrep `innerHTML` rules are the
-only line of defence against XSS. The goal is a policy where script runs only from our own
-files or from an inline block carrying the response's nonce:
+The enforced policy now runs script only from our own files or from an inline block
+carrying the response's nonce:
 
 ```
 script-src 'self' 'nonce-…' https://static.cloudflareinsights.com; script-src-attr 'none'
@@ -43,11 +41,10 @@ style can't run script. Moving them is cosmetic work with little security return
    - Inline `x-data="{…}"` objects stay: the CSP build's parser reads object literals. The 11 named components (`crmOverview()` and so on) are registered with `Alpine.data()` in `base_spa.html`, again before each boosted swap is initialised.
    - The parser rejects template literals, `?.`, arrow functions, statement sequences, `+=` and browser globals. 94 expressions were rewritten as concatenation and ternaries; the rest moved into component methods.
    - `tests/e2e/test_alpine_csp_expressions.py` runs all 1,342 expressions through the build's own parser, so a new one it can't read fails CI rather than a click in production.
-4. **Enforce.**
+4. **Enforce** (this MR).
    - Remove `'unsafe-inline'` and `'unsafe-eval'` from `script-src` and add `script-src-attr 'none'`.
    - Set htmx `allowEval: false` and keep the report endpoint.
-   - The browser walk then asserts zero report-only violations as well.
-   - Playwright's own `wait_for_function` and `evaluate` count as eval under a strict policy. The e2e context sets `bypass_csp=True` for helpers only, and the walk keeps a CSP-honouring context.
+   - The browser walk asserts zero enforced and report-only violations.
 
 ## Checks
 
