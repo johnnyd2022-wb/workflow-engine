@@ -122,8 +122,38 @@ if [ -n "$DB_PASSWORD" ]; then
     DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
 fi
 
-docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"
+# From here the old app is gone: any failure exits 3 so the CI job rolls back to :test-stable
+# (a "name already in use" or port conflict used to exit 125 and leave test with no app).
+if ! docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"; then
+    echo "❌ Could not start workflow-engine-test after removing the old app."
+    exit 3
+fi
 
-echo "✅ Test environment started on port 8001"
+# Don't report success until the app answers. cd_e2e used to start while the container was
+# still booting and fail on ERR_CONNECTION_REFUSED (main 2026-09-30, 10-14, 10-25; see
+# .agents/reports/ci/pipeline-health-2026-11.md). /healthcheck also proves the database
+# connection. Exit 3 means "the new app is running but never became healthy" -- the old app
+# is already gone, so the CI job rolls back to :test-stable on exactly that code.
+HEALTH_URL="${DEPLOY_HEALTH_URL:-https://127.0.0.1:8001/healthcheck}"
+echo "Waiting for $HEALTH_URL ..."
+healthy=""
+for _ in $(seq 1 "${DEPLOY_HEALTH_ATTEMPTS:-60}"); do
+    if [ "$(docker inspect -f '{{.State.Running}}' workflow-engine-test 2>/dev/null)" != true ]; then
+        echo "❌ workflow-engine-test exited during startup."
+        break
+    fi
+    if curl --max-time 5 -kfs "$HEALTH_URL" >/dev/null 2>&1; then
+        healthy=1
+        break
+    fi
+    sleep "${DEPLOY_HEALTH_INTERVAL:-2}"
+done
+if [ -z "$healthy" ]; then
+    echo "❌ workflow-engine-test did not pass its health check. Last log lines:"
+    docker logs --tail 40 workflow-engine-test 2>&1 || true
+    exit 3
+fi
+
+echo "✅ Test environment started on port 8001 and passed its health check"
 echo "View logs with: docker logs -f workflow-engine-test"
 echo "Browse to: https://test-workflow-engine.whistlebird.co.nz"
