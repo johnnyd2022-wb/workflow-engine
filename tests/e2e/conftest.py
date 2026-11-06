@@ -222,11 +222,12 @@ def app_url(e2e_preconditions) -> str:
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, app_url):
-    """Trust the self-signed cert and default navigation to the app."""
+    """Trust the test cert and let Playwright's script helpers run under strict app CSP."""
     return {
         **browser_context_args,
         "base_url": app_url,
         "ignore_https_errors": True,
+        "bypass_csp": True,
     }
 
 
@@ -488,7 +489,20 @@ def logged_in_page(browser, storage_state_path, app_url):
         base_url=app_url,
         ignore_https_errors=True,
         storage_state=storage_state_path,
+        bypass_csp=True,
     )
+    page = context.new_page()
+    attach_probe(page)
+    try:
+        yield page
+    finally:
+        context.close()
+
+
+@pytest.fixture()
+def strict_csp_page(browser, storage_state_path, app_url):
+    """Real CSP for the policy walk and security tests; no helper bypass."""
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True, storage_state=storage_state_path)
     page = context.new_page()
     attach_probe(page)
     try:

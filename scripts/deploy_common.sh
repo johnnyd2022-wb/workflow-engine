@@ -106,7 +106,8 @@ deploy_app() {
 
     wait_health() {
         local name=$1 mode=$2
-        for _ in $(seq 1 60); do
+        # 60 tries, 2s apart. The deploy tests lower it: each try runs their fake docker.
+        for _ in $(seq 1 "${DEPLOY_HEALTH_ATTEMPTS:-60}"); do
             # Never accept a healthy response from a different process on the host port.
             if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != true ]; then
                 break
