@@ -228,16 +228,24 @@ def sync_after_order_change(db, org_id: UUID, user_id) -> None:
     from app.core.db.models.audit_log import AuditLog
 
     try:
+        from datetime import date as _date
+
+        from app.features.planning.replan import replan
+
         result = sync_contract_demand(db, org_id)
+        for event in replan(db, org_id, today=_date.today(), trigger="contract_order_saved"):
+            result["changes"].append((f"planning_batch_auto_{event.kind}", event))
         for action, row in result["changes"]:
             db.add(
                 AuditLog(
                     org_id=org_id,
                     user_id=user_id,
                     action=action,
-                    entity="planning_demand",
-                    entity_id=row.id,
-                    meta_data={"source_output_id": str(row.source_output_id), "source_ref": row.source_ref},
+                    entity="planning_batch" if action.startswith("planning_batch_") else "planning_demand",
+                    entity_id=row.batch_id if action.startswith("planning_batch_") else row.id,
+                    meta_data={"reason": row.reason}
+                    if action.startswith("planning_batch_")
+                    else {"source_output_id": str(row.source_output_id), "source_ref": row.source_ref},
                 )
             )
         db.commit()

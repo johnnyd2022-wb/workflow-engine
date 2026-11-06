@@ -104,6 +104,16 @@ def test_freezes_exact_lot_and_does_not_substitute_same_name_or_mutate_stock(db,
     assert own.quantity == Decimal(5) and sibling.quantity == Decimal(100)
     assert all(row.forecast_ready_date is None and row.status == "blocked" for row in batches)
     assert db.query(Execution).filter(Execution.org_id == org_id).count() == 0
+    # B4: the start check is real. Its materials are held and on hand, and nothing else
+    # stops it here, so it clears; a quality hold on the lot it holds closes it again.
+    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == ()
+    from app.core.services.lot_holds import place_hold
+
+    place_hold(db, org_id, own.id, "Contamination suspected", None)
+    db.flush()
+    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == (
+        "The Sugar lot is on quality hold: Contamination suspected",
+    )
     assert not start_service.can_start_batch(db, org_id, batches[0])
 
 

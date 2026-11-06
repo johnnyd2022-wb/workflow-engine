@@ -472,8 +472,17 @@ def _netting_inputs(db, org_id, demand, unit, site, *, today):
     owners = demand_owners(db, org_id, rivals)
     demands = [demand, *(row for row in rivals if owners[row.id] == owner)]
     stock, _ = on_hand(db, org_id, demand.source_output_id, unit, site, owner, today=today)
+    # The demand's own batches aren't supply for it: they are what it plans (replan re-sizes them).
     planned = planned_output(
-        db, org_id, demand.source_output_id, unit, site, owner, today=today, sources=("manual", "contract")
+        db,
+        org_id,
+        demand.source_output_id,
+        unit,
+        site,
+        owner,
+        today=today,
+        sources=("manual", "contract"),
+        exclude_demand_ids=(demand.id,),
     )
     return demands, [*stock, *planned], owner
 
@@ -552,12 +561,9 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         .scalar()
         or 0
     ) + 1
-    blockers = [
-        *setting.snapshot["readiness_reasons"],
-        "Materials have not been checked",
-        "Capacity has not been checked",
-        "Site compliance has not been checked",
-    ]
+    # Capacity and the site's compliance are checked live by the start check (B4); what's
+    # stored is what only a separate step can clear.
+    blockers = [*setting.snapshot["readiness_reasons"], "Materials have not been checked"]
     version = latest_version(db, org_id, process.id)
     start_reasons = list(setting.snapshot["start_reasons"])
     version_digest = None
@@ -595,12 +601,53 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         "covered_quantity": format(position.supplied_quantity, "f"),
         "shortfall_quantity": format(position.shortfall, "f"),
     }
+    rows = new_batches(
+        db,
+        org_id,
+        demand,
+        setting,
+        process.id,
+        site,
+        unit,
+        snapshot,
+        blockers,
+        generation,
+        range(1, group.batch_count + 1),
+        group.start_date,
+        today=today,
+    )
+    return rows, True
+
+
+def new_batches(
+    db, org_id, demand, setting, process_id, site, unit, snapshot, blockers, generation, numbers, start, *, today
+):
+    """Persist batches of a demand, each placed against the site's capacity (B4) when the site
+    has a capacity setting: on time if any slot fits, else the earliest slot that does."""
+    from app.features.planning import placement
+
+    capacity = placement.site_capacity(db, org_id, site.id) if site else None
+    elapsed = timedelta(days=snapshot["elapsed_days"])
     rows = []
-    for number in range(1, group.batch_count + 1):
+    for number in numbers:
+        batch_start, note, extra = start, None, []
+        if capacity is not None:
+            placed, note = placement.place(capacity, snapshot, start, today=today)
+            if placed is None:
+                extra = [note]
+                note = None
+            else:
+                batch_start = placed
+                placement.add(capacity, snapshot, batch_start)
+        ready = batch_start + elapsed
+        due = date.fromisoformat(snapshot["due_date"])
+        timing = snapshot["timing_reason"]
+        if note:
+            timing = f"{note}; ready {ready.isoformat()}" + (" (late)" if ready > due else "")
         row = PlanningBatch(
             org_id=org_id,
-            demand_id=demand_id,
-            process_id=process.id,
+            demand_id=demand.id,
+            process_id=process_id,
             setting_id=setting.id,
             site_id=site.id if site else None,
             source_output_id=demand.source_output_id,
@@ -611,16 +658,16 @@ def plan_demand(db, org_id, demand_id, data, *, today):
             priority=demand.priority,
             revision=1,
             status="blocked",
-            proposed_start_date=group.start_date,
-            theoretical_ready_date=None if setting.snapshot["readiness_reasons"] else group.ready_date,
+            proposed_start_date=batch_start,
+            theoretical_ready_date=None if snapshot["readiness_reasons"] else ready,
             forecast_ready_date=None,
-            snapshot=snapshot,
-            blockers=blockers,
+            snapshot={**snapshot, "timing_reason": timing},
+            blockers=[*blockers, *extra],
         )
         db.add(row)
         rows.append(row)
     db.flush()
-    return rows, True
+    return rows
 
 
 def batch_dict(row, *, can_start=False):
@@ -673,9 +720,20 @@ def list_batches(db, org_id, start, end):
     from app.features.planning.start_service import can_start_batch
 
     return {
-        "batches": [batch_dict(row, can_start=can_start_batch(db, org_id, row)) for row in rows[:1000]],
+        "batches": [_with_start_check(db, org_id, row, can_start_batch) for row in rows[:1000]],
         "truncated": len(rows) > 1000,
     }
+
+
+def _with_start_check(db, org_id, row, can_start_batch):
+    """The batch, whether it can start, and (for batches due to start within a week) what the
+    live start check says still stops it, in plain words."""
+    item = batch_dict(row, can_start=can_start_batch(db, org_id, row))
+    if row.status in ("blocked", "planned") and row.proposed_start_date <= date.today() + timedelta(days=7):
+        from app.features.planning.start_service import evaluate_start
+
+        item["start_blockers"] = list(evaluate_start(db, org_id, row).blockers)
+    return item
 
 
 def _locked_batch(db, org_id, batch_id):
@@ -737,6 +795,8 @@ def update_batch(db, org_id, batch_id, data, *, today):
         row.theoretical_ready_date = None if row.snapshot["readiness_reasons"] else ready
         row.forecast_ready_date = None
         row.status = "blocked"
+        # Someone chose this day: an automatic replan won't move it for capacity (B4).
+        row.snapshot = {**row.snapshot, "placed_by": "person"}
     elif action == "cancel":
         from app.features.planning.material_adapter import close_commitments
 

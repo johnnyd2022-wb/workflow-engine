@@ -23,14 +23,131 @@ class StartCheck:
 
 
 def evaluate_start(db, org_id, batch) -> StartCheck:
-    """Future adapters must inspect current stock, capacity and module constraints.
+    """What stops this batch starting now, recalculated from the records each time (B4).
 
-    Persisted flags or HTTP payloads cannot grant clearance. Until those adapters
-    are integrated, even an empty database blockers list is not evidence to start.
+    Persisted flags or HTTP payloads never grant clearance: materials are read from the batch's
+    live commitments and the lots they hold, capacity from every other live batch at the site,
+    and the site's compliance from the installed module. Each blocker is a plain sentence.
     """
-    return StartCheck(
-        ("Materials have not been checked", "Capacity has not been checked", "Site compliance has not been checked")
+    today = date.today()
+    blockers = [
+        *_material_blockers(db, org_id, batch, today),
+        *_capacity_blockers(db, org_id, batch, today),
+        *_compliance_blockers(db, org_id, batch, today),
+    ]
+    return StartCheck(tuple(dict.fromkeys(blockers)))
+
+
+def _material_blockers(db, org_id, batch, today):
+    from decimal import Decimal, InvalidOperation
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.services.lot_holds import open_holds
+    from app.core.utils.unit_conversion import convert_quantity_decimal
+    from app.features.planning.forecast_models import (
+        PlanningMaterialAssessment,
+        PlanningMaterialBatchAssessment,
+        PlanningMaterialCommitment,
     )
+    from app.features.planning.material_adapter import SHORT, UNCHECKED, _pending_inputs, readable
+
+    # The batch's latest material check is the evidence, never a flag on the batch.
+    latest = (
+        db.query(PlanningMaterialBatchAssessment)
+        .join(
+            PlanningMaterialAssessment,
+            (PlanningMaterialAssessment.org_id == PlanningMaterialBatchAssessment.org_id)
+            & (PlanningMaterialAssessment.id == PlanningMaterialBatchAssessment.assessment_id),
+        )
+        .filter(PlanningMaterialBatchAssessment.org_id == org_id, PlanningMaterialBatchAssessment.batch_id == batch.id)
+        .order_by(PlanningMaterialAssessment.sequence.desc())
+        .first()
+    )
+    if latest is None or UNCHECKED in (batch.blockers or []):
+        return [UNCHECKED]
+    if SHORT in (batch.blockers or []) or not (latest.result or {}).get("material_start_date"):
+        return [SHORT]
+    held = (
+        db.query(PlanningMaterialCommitment)
+        .filter(
+            PlanningMaterialCommitment.org_id == org_id,
+            PlanningMaterialCommitment.batch_id == batch.id,
+            PlanningMaterialCommitment.status == "active",
+        )
+        .all()
+    )
+    if not held:
+        # Only a recipe with no bought-in materials may hold nothing. Read the recipe itself:
+        # a cleared flag on the batch is not evidence its materials were checked.
+        from app.features.planning.material_adapter import raw_inputs
+
+        steps = (
+            db.query(service.Step)
+            .filter(service.Step.org_id == org_id, service.Step.process_id == batch.process_id)
+            .all()
+        )
+        try:
+            needs = raw_inputs(steps)
+        except ValueError:
+            return ["The workflow's inputs need review before this batch can start"]
+        return [UNCHECKED] if needs else []
+    lots = {
+        item.id: item
+        for item in db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.id.in_({row.inventory_item_id for row in held}))
+        .all()
+    }
+    holds = open_holds(db, org_id, lots.keys())
+    pending = _pending_inputs(db, org_id, list(lots))
+    reasons = []
+    needed = {}
+    for row in held:
+        needed.setdefault(row.inventory_item_id, []).append(row)
+    for lot_id, rows in needed.items():
+        lot = lots.get(lot_id)
+        name = rows[0].material
+        if lot is None:
+            reasons.append(f"The {name} lot held for this batch is gone; check materials again")
+            continue
+        if lot_id in holds:
+            reasons.append(f"The {name} lot is on quality hold: {holds[lot_id].reason}")
+        if lot.expiry_date is not None and lot.expiry_date < today:
+            reasons.append(f"The {name} lot went out of date on {lot.expiry_date.day} {lot.expiry_date:%b}")
+        try:
+            want = sum((convert_quantity_decimal(row.quantity, row.unit, lot.unit) for row in rows), Decimal(0))
+            have = Decimal(lot.quantity)
+            for used, used_unit in pending.get(str(lot_id), ()):
+                have -= convert_quantity_decimal(Decimal(str(used)), used_unit, lot.unit)
+        except (TypeError, ValueError, InvalidOperation):
+            reasons.append(f"The {name} lot's quantity can't be read; check materials again")
+            continue
+        if have < want:
+            left, unit = readable(max(have, Decimal(0)), lot.unit)
+            need, need_unit = readable(want, lot.unit)
+            reasons.append(f"Only {left} {unit} of {name} is left on hand; this batch holds {need} {need_unit}")
+    return reasons
+
+
+def _capacity_blockers(db, org_id, batch, today):
+    from app.features.planning import placement
+
+    capacity = placement.site_capacity(db, org_id, batch.site_id, exclude_ids=[batch.id])
+    if capacity is None:
+        return []
+    return placement.describe(placement.overloads(capacity, batch.snapshot, batch.proposed_start_date, today=today))
+
+
+def _compliance_blockers(db, org_id, batch, today):
+    from app.core.db.models.site import Site
+    from app.features.compliant.platform.production_checks import start_blockers
+
+    query = db.query(Site).filter(Site.org_id == org_id)
+    site = (
+        query.filter(Site.id == batch.site_id).one_or_none()
+        if batch.site_id
+        else query.filter(Site.is_default.is_(True)).one_or_none()
+    )
+    return start_blockers(db, org_id, site, max(batch.proposed_start_date, today))
 
 
 def _operational_site(db, org, planned_site_id):

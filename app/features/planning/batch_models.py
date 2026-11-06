@@ -102,3 +102,27 @@ class PlanningBatch(TenantScoped, Base):
     blockers = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PlanningReplanEvent(TenantScoped, Base):
+    """The planner moved, added or cancelled a batch by itself, and why (GL-P07 B4)."""
+
+    __tablename__ = "planning_replan_events"
+    __table_args__ = (
+        CheckConstraint("kind IN ('moved', 'added', 'cancelled')", name="ck_planning_replan_event_kind"),
+        ForeignKeyConstraint(
+            ["org_id", "batch_id"],
+            ["planning_batches.org_id", "planning_batches.id"],
+            name="fk_planning_replan_event_batch",
+            ondelete="CASCADE",
+        ),
+    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    batch_id = Column(UUID(as_uuid=True), nullable=False)
+    demand_id = Column(UUID(as_uuid=True), nullable=False)
+    kind = Column(String(20), nullable=False)
+    from_date = Column(Date, nullable=True)
+    to_date = Column(Date, nullable=True)
+    reason = Column(String(300), nullable=False)
+    trigger = Column(String(40), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)

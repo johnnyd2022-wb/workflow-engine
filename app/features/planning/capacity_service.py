@@ -75,7 +75,7 @@ def save_setting(db, org_id, site_id, data):
         if (
             not isinstance(group, dict)
             or not required <= set(group)
-            or set(group) - required - {"working_days", "closed_dates"}
+            or set(group) - required - {"working_days", "closed_dates", "units"}
         ):
             raise ValueError("Resource groups need ID, name and daily minutes")
         group_id = str(_uuid(group["id"]))
@@ -93,6 +93,8 @@ def save_setting(db, org_id, site_id, data):
                 "id": group_id,
                 "name": name,
                 "minutes_per_day": _whole(group["minutes_per_day"], 1, 1440, "Daily capacity"),
+                # How many of this resource there are (e.g. 2 stills): each runs one step at a time.
+                "units": _whole(group.get("units", 1), 1, 50, "Units"),
                 "working_days": working_days,
                 "closed_dates": closed_dates,
             }
@@ -132,6 +134,14 @@ def save_setting(db, org_id, site_id, data):
     row.config = {"groups": clean_groups, "assignments": clean_assignments}
     db.flush()
     return row
+
+
+def day_capacity(group, day):
+    """Minutes the group can work on a calendar day: every unit's minutes, or none when closed."""
+    working_days, closed_dates = _calendar(group)
+    if day.weekday() not in working_days or day.isoformat() in closed_dates:
+        return 0
+    return group["minutes_per_day"] * int(group.get("units", 1))
 
 
 def setting_dict(row):
@@ -252,7 +262,7 @@ def review(db, org_id, start, end):
                 if not load["minutes"]:
                     continue
                 closed = calendar_day.weekday() not in working_days or day in closed_dates
-                capacity = 0 if closed else group["minutes_per_day"]
+                capacity = day_capacity(group, calendar_day)
                 overloaded = load["minutes"] > capacity
                 movable = sorted(
                     (item for item in load["batches"] if not item["pinned"]),

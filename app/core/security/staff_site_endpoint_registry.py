@@ -387,6 +387,8 @@ ENDPOINT_COVERAGE = {
     ("planning.get_stock_cover", "GET"): "blocked",
     ("planning.save_stock_target", "POST"): "blocked",
     ("planning.plan_stock_cover", "POST"): "blocked",
+    ("planning.replan_now", "POST"): "blocked",
+    ("planning.get_replan_events", "GET"): "blocked",
     ("planning.planner_page", "GET"): "blocked",
     ("planning.static", "GET"): "blocked",
     ("process_templates.process_templates_api.apply_starter_pack", "POST"): "blocked",
