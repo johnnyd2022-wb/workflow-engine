@@ -218,9 +218,27 @@ def get_stock_cover():
     try:
         weeks = forecast_service.window_weeks(request.args.get("weeks"))
         site = _site_arg(request.args.get("site_id"))
-        return jsonify(forecast_service.cover(db_session, _org_id(), site, today=date.today(), weeks=weeks))
+        result = forecast_service.cover(db_session, _org_id(), site, today=date.today(), weeks=weeks)
     except ValueError as exc:
         return _planning_error(exc)
+    # Which site this is, and the others to choose from when the business runs several.
+    result["site_id"] = str(site.id) if site else None
+    result["sites"] = _planning_sites()
+    return jsonify(result)
+
+
+def _planning_sites():
+    from app.core.db.models.site import Site
+
+    if not g.current_org.multiple_sites_enabled:
+        return []
+    rows = (
+        db_session.query(Site)
+        .filter(Site.org_id == _org_id(), Site.is_active.is_(True))
+        .order_by(Site.is_default.desc(), Site.name)
+        .all()
+    )
+    return [{"id": str(row.id), "name": row.name, "is_default": bool(row.is_default)} for row in rows]
 
 
 @planning_bp.post("/api/core/planner/targets")

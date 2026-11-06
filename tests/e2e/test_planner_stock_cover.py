@@ -120,7 +120,7 @@ def test_phone_shows_sources_stock_cover_and_plans_a_suggestion(browser, app_url
     try:
         page.route("**/api/core/planner/demands", lambda route: route.fulfill(json=_demands_with_sources()))
         page.route("**/api/core/planner/demand/sync", sync)
-        page.route("**/api/core/planner/cover", lambda route: route.fulfill(json=_cover()))
+        page.route("**/api/core/planner/cover*", lambda route: route.fulfill(json=_cover()))
         page.route("**/api/core/planner/targets", targets)
         page.route("**/api/core/planner/cover/plan", plan)
         page.goto("/core/planner")
@@ -137,6 +137,7 @@ def test_phone_shows_sources_stock_cover_and_plans_a_suggestion(browser, app_url
 
         cover = page.locator("[data-cover-list] .planner-cover-row")
         expect(cover).to_have_count(2)
+        expect(page.locator("[data-cover-site]")).to_be_hidden()  # one site: no picker
         expect(cover.nth(0)).to_contain_text("Runs out 23 Nov at 38 L a week; plan 2 batches by 21 Nov.")
         expect(cover.nth(1).get_by_role("button")).to_have_count(0)  # no target, nothing to plan
 
@@ -145,15 +146,81 @@ def test_phone_shows_sources_stock_cover_and_plans_a_suggestion(browser, app_url
         target.fill("8")
         target.press("Tab")
         expect(page.locator("[data-planning-status]")).to_have_text("Keeping 8 weeks of Navy Strength Gin.")
-        assert sent["targets"] == [{"source_output_id": GIN, "weeks_of_cover": "8"}]
+        assert sent["targets"] == [{"source_output_id": GIN, "weeks_of_cover": "8", "site_id": None}]
 
         page.get_by_role("button", name="Plan 2 batches of Navy Strength Gin").click()
         expect(page.locator("[data-planning-status]")).to_contain_text("Planned 2 batches of Navy Strength Gin")
         key, body = sent["plans"][0]
-        assert body == {"source_output_id": GIN}
+        assert body == {"source_output_id": GIN, "site_id": None}
         assert key and len(key) >= 8
 
         # Nothing on a phone scrolls sideways.
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    finally:
+        context.close()
+
+
+MAIN, CELLAR = "aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000002"
+
+
+def test_phone_site_picker_drives_cover_targets_and_plan(browser, app_url, workspace_user):
+    """With several sites, stock cover, a target and Plan are all for the site chosen."""
+    context, page = _page(browser, app_url, workspace_user, 390)
+    asked, sent = [], {"targets": [], "plans": []}
+
+    def cover(route):
+        site = route.request.url.partition("site_id=")[2] or MAIN
+        asked.append(site)
+        body = _cover()
+        body.update(
+            site_id=site,
+            sites=[
+                {"id": MAIN, "name": "Main distillery", "is_default": True},
+                {"id": CELLAR, "name": "Cellar door", "is_default": False},
+            ],
+        )
+        route.fulfill(json=body)
+
+    try:
+        page.route("**/api/core/planner/demands", lambda route: route.fulfill(json=_demands()))
+        page.route(
+            "**/api/core/planner/demand/sync",
+            lambda route: route.fulfill(json={"changes": {}, "held": [], "unmapped": []}),
+        )
+        page.route("**/api/core/planner/cover*", cover)
+        page.route(
+            "**/api/core/planner/targets",
+            lambda route: (
+                sent["targets"].append(json.loads(route.request.post_data)),
+                route.fulfill(json={"target": None}),
+            ),
+        )
+        page.route(
+            "**/api/core/planner/cover/plan",
+            lambda route: (
+                sent["plans"].append(json.loads(route.request.post_data)),
+                route.fulfill(
+                    status=201, json={"demand": {}, "batches": [{"proposed_start_date": date.today().isoformat()}]}
+                ),
+            ),
+        )
+        page.goto("/core/planner")
+        picker = page.get_by_label("Site")
+        expect(picker).to_have_value(MAIN)
+        picker.select_option(label="Cellar door")
+        expect(picker).to_have_value(CELLAR)
+        assert asked[-1] == CELLAR
+
+        target = page.get_by_label("Weeks of cover to keep: Navy Strength Gin")
+        target.fill("")
+        target.press("Tab")
+        expect(page.locator("[data-planning-status]")).to_contain_text("Stock target cleared")
+        assert sent["targets"] == [{"source_output_id": GIN, "weeks_of_cover": None, "site_id": CELLAR}]
+
+        page.get_by_role("button", name="Plan 2 batches of Navy Strength Gin").click()
+        expect(page.locator("[data-planning-status]")).to_contain_text("Planned 1 batch")
+        assert sent["plans"] == [{"source_output_id": GIN, "site_id": CELLAR}]
+        assert asked[-1] == CELLAR  # the reload after planning stays on the chosen site
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     finally:
         context.close()

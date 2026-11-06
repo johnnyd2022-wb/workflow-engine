@@ -17,6 +17,7 @@
     var controller = new AbortController();
     var cache = null;
     var cover = null;
+    var siteId = null; // the site stock cover, targets and Plan are for; null = the default site
     var synced = null;
     var status = root.querySelector('[data-planning-status]');
 
@@ -157,7 +158,7 @@
         input.addEventListener('change', async function () {
           input.disabled = true; report('');
           try {
-            await api('/api/core/planner/targets', 'POST', { source_output_id: product.source_output_id, weeks_of_cover: input.value === '' ? null : input.value });
+            await api('/api/core/planner/targets', 'POST', { source_output_id: product.source_output_id, weeks_of_cover: input.value === '' ? null : input.value, site_id: siteId });
             say(input.value === '' ? 'Stock target cleared for ' + product.name + '.' : 'Keeping ' + input.value + ' weeks of ' + product.name + '.');
             await loadCover();
           } catch (err) { if (err.name !== 'AbortError') { report(err.message); input.disabled = false; } }
@@ -178,7 +179,7 @@
         plan.addEventListener('click', async function () {
           plan.disabled = true; report(''); say('');
           try {
-            var result = await api('/api/core/planner/cover/plan', 'POST', { source_output_id: product.source_output_id }, { 'Idempotency-Key': key });
+            var result = await api('/api/core/planner/cover/plan', 'POST', { source_output_id: product.source_output_id, site_id: siteId }, { 'Idempotency-Key': key });
             var count = result.batches.length;
             say(count ? 'Planned ' + plural(count, 'batch', 'batches') + ' of ' + product.name + ', starting ' + shortDate(result.batches[0].proposed_start_date) + '. They are on the production board.' : result.message);
             await load();
@@ -191,6 +192,7 @@
     }
 
     function renderCover() {
+      renderSites();
       var list = root.querySelector('[data-cover-list]');
       var errorLine = root.querySelector('[data-cover-error]');
       list.replaceChildren();
@@ -212,8 +214,23 @@
       });
     }
 
+    function coverPath() {
+      return '/api/core/planner/cover' + (siteId ? '?site_id=' + encodeURIComponent(siteId) : '');
+    }
+    function renderSites() {
+      var label = root.querySelector('[data-cover-site]');
+      var select = root.querySelector('[data-cover-site-select]');
+      var sites = (cover && cover.sites) || [];
+      label.hidden = sites.length < 2;
+      if (label.hidden) return;
+      select.replaceChildren();
+      sites.forEach(function (site) {
+        var option = el('option', site.name); option.value = site.id; select.appendChild(option);
+      });
+      select.value = cover.site_id || sites[0].id;
+    }
     async function loadCover() {
-      try { cover = await api('/api/core/planner/cover'); }
+      try { cover = await api(coverPath()); }
       catch (err) { if (err.name === 'AbortError') return; cover = { error: err.message || '' }; }
       renderCover();
     }
@@ -280,7 +297,7 @@
         }
         var results = await Promise.all([
           api('/api/core/planner/demands'),
-          api('/api/core/planner/cover').catch(function (err) { if (err.name === 'AbortError') throw err; return { error: err.message || '' }; })
+          api(coverPath()).catch(function (err) { if (err.name === 'AbortError') throw err; return { error: err.message || '' }; })
         ]);
         cache = results[0];
         cover = results[1];
@@ -331,12 +348,20 @@
         form.reset(); showForm(false); await load();
       } catch (err) { if (err.name !== 'AbortError') report(err.message); } finally { button.disabled = false; }
     }
+    async function onSite(event) {
+      if (!event.target.matches('[data-cover-site-select]')) return;
+      siteId = event.target.value || null;
+      say('');
+      await loadCover();
+    }
+    root.addEventListener('change', onSite);
     root.addEventListener('click', onClick);
     if (form) form.addEventListener('submit', onSubmit);
     load();
     return function () {
       controller.abort();
       root.removeEventListener('click', onClick);
+      root.removeEventListener('change', onSite);
       if (form) form.removeEventListener('submit', onSubmit);
     };
   }

@@ -8,7 +8,10 @@ import pytest
 
 from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.execution_step import ExecutionStep
+from app.core.db.models.feature_subscription import FeatureSubscription
+from app.core.db.models.organisation import Organisation
 from app.core.db.models.process_version import ProcessVersion
+from app.core.db.models.site import Site
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -56,7 +59,9 @@ def _stock(db, org_id, output_id, quantity, **extra):
     then stamps another output id on it (a hostile row, written past the repository's check)."""
     forged = extra.pop("forged_output", None)
     step = db.query(Step).filter(Step.org_id == org_id).first()
-    execution = ExecutionRepository(db).create_execution(org_id, step.process_id, commit=False)
+    execution = ExecutionRepository(db).create_execution(
+        org_id, step.process_id, commit=False, site_id=extra.get("site_id")
+    )
     execution_step = (
         db.query(ExecutionStep)
         .filter(ExecutionStep.org_id == org_id, ExecutionStep.execution_id == execution.id)
@@ -421,7 +426,7 @@ def test_rate_runs_out_and_a_target_suggests_whole_batches_with_a_plan_by_date(d
     forecast_service.save_target(db, org_id, None, {"source_output_id": str(output_id), "weeks_of_cover": 8})
     (row,) = _cover(db, org_id)["products"]
     assert row["weekly_rate"] == "10"
-    assert row["seasonality"] == "Less than 12 months of sales, so no seasonal adjustment"
+    assert row["seasonality"] == "Less than 12 months of its sales, so no seasonal adjustment"
     runs_out = TODAY + timedelta(days=35)  # 50 / (10 / 7)
     assert row["runs_out_on"] == runs_out.isoformat()
     # 8 weeks' cover plus the 2 days making it = 82.9, less 50 available: one 250-bottle batch.
@@ -452,7 +457,8 @@ def test_with_a_years_sales_the_coming_weeks_are_scaled_by_last_years_season(db,
     _mapping(db, org_id, output_id)
     trailing = [_sale(7 * k + 1, 10) for k in range(12)]  # 120 in the last 12 weeks
     year_ago = [_sale(364 - 7 * k - 1, 20) for k in range(12)]  # 240 in the same 12 weeks ahead, last year
-    sales({org_id: trailing + year_ago}, {org_id: TODAY - timedelta(days=400)})
+    first = [_sale(400, 5)]  # its first sale, over a year ago: outside every window used below
+    sales({org_id: trailing + year_ago + first}, {org_id: TODAY - timedelta(days=400)})
     (row,) = _cover(db, org_id)["products"]
     # Last year's average week: 360 / 52 = 6.92; those weeks sold 20 a week = x2.89.
     assert row["seasonality_factor"] == "2.89"
@@ -561,6 +567,63 @@ def test_plan_it_without_a_target_or_a_shortfall_is_refused(db, demand_world, sa
     assert db.query(PlanningDemand).filter(PlanningDemand.org_id == org_id).count() == 0
 
 
+def test_seasonality_needs_a_year_of_that_products_own_sales(db, demand_world, sales):
+    """An old product's history doesn't lend a season to one first sold 11 weeks ago."""
+    org_id, output_id, step = _setup(db, demand_world)
+    old_output = uuid4()
+    step.outputs = [*step.outputs, {"id": str(old_output), "name": "Old Gin", "unit": "bottles", "quantity": 250}]
+    db.flush()
+    _mapping(db, org_id, output_id, "New Gin")
+    _mapping(db, org_id, old_output, "Old Gin")
+    new = [_sale(7 * k + 1, 10, product="New Gin") for k in range(11)]
+    old = [_sale(7 * k + 1, 10, product="Old Gin") for k in range(60)]
+    sales({org_id: new + old}, {org_id: TODAY - timedelta(days=7 * 59 + 1)})
+    rows = {row["name"]: row for row in _cover(db, org_id)["products"]}
+    assert rows["Gin"]["seasonality_factor"] is None
+    assert rows["Gin"]["weekly_rate"] == "9.17"  # 110 over 12 weeks, unadjusted
+    assert rows["Gin"]["seasonality"] == "Less than 12 months of its sales, so no seasonal adjustment"
+    assert rows["Old Gin"]["seasonality_factor"] is not None
+
+
+def _two_sites(db, org_id):
+    org = db.get(Organisation, org_id)
+    # The plan includes multiple sites, and the business has switched them on (flushed only:
+    # the test's rollback, or the route test's cleanup, removes it).
+    db.add(FeatureSubscription(org_id=org_id, feature_key="multi_site"))
+    org.multiple_sites_enabled = True
+    main = Site(org_id=org_id, name="Main distillery", is_default=True)
+    cellar = Site(org_id=org_id, name="Cellar door", is_default=False)
+    db.add_all([main, cellar])
+    db.flush()
+    return main, cellar
+
+
+def test_stock_cover_targets_and_plan_it_follow_the_chosen_site(db, demand_world, sales):
+    org_id, output_id, _ = _setup(db, demand_world)
+    main, cellar = _two_sites(db, org_id)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _stock(db, org_id, output_id, 500, site_id=main.id)
+    _stock(db, org_id, output_id, 30, site_id=cellar.id)
+    forecast_service.save_target(db, org_id, cellar, {"source_output_id": str(output_id), "weeks_of_cover": 8})
+
+    def row(site):
+        (product,) = forecast_service.cover(db, org_id, site, today=TODAY, weeks=12)["products"]
+        return product
+
+    assert (row(main)["on_hand"], row(main)["target_weeks"], row(main)["suggestion"]) == ("500", None, None)
+    assert (row(cellar)["on_hand"], row(cellar)["target_weeks"]) == ("30", "8")
+    assert row(cellar)["suggestion"]["batches"] == 1
+    demand, rows, _ = forecast_service.plan_forecast(
+        db, org_id, {"source_output_id": str(output_id), "site_id": str(cellar.id)}, "site-retry-1", today=TODAY
+    )
+    assert {batch.site_id for batch in rows} == {cellar.id}
+    with pytest.raises(batch_service.PlanningConflictError, match="weeks of cover"):
+        forecast_service.plan_forecast(
+            db, org_id, {"source_output_id": str(output_id), "site_id": str(main.id)}, "site-retry-2", today=TODAY
+        )
+
+
 # --- routes -------------------------------------------------------------------------------
 
 
@@ -610,6 +673,32 @@ def test_routes_sync_cover_target_and_plan_it(db, demand_clients, flask_app):
     db.rollback()
     db.query(PlanningStockTarget).filter(PlanningStockTarget.org_id.in_([org_id])).delete(synchronize_session=False)
     db.commit()
+
+
+def test_cover_route_offers_sites_and_reads_targets_for_the_chosen_one(db, demand_clients):
+    client, org_id, output_id = demand_clients[0]
+    main, cellar = _two_sites(db, org_id)
+    db.commit()
+    try:
+        body = {"source_output_id": str(output_id), "weeks_of_cover": 5, "site_id": str(cellar.id)}
+        assert client.post("/api/core/planner/targets", json=body).status_code == 200
+        at_cellar = client.get(f"/api/core/planner/cover?site_id={cellar.id}").get_json()
+        assert at_cellar["site_id"] == str(cellar.id)
+        assert [site["name"] for site in at_cellar["sites"]] == ["Main distillery", "Cellar door"]
+        assert at_cellar["products"][0]["target_weeks"] == "5"
+        at_main = client.get("/api/core/planner/cover").get_json()
+        assert at_main["site_id"] == str(main.id)
+        assert at_main["products"] == []  # no target or sales at the main site
+        foreign = demand_clients[1][0].get(f"/api/core/planner/cover?site_id={cellar.id}")
+        assert foreign.status_code == 400
+    finally:
+        db.rollback()
+        db.query(PlanningStockTarget).filter(PlanningStockTarget.org_id == org_id).delete(synchronize_session=False)
+        db.query(AuditLog).filter(AuditLog.org_id == org_id).delete(synchronize_session=False)
+        db.query(Site).filter(Site.org_id == org_id).delete(synchronize_session=False)
+        db.query(FeatureSubscription).filter(FeatureSubscription.org_id == org_id).delete(synchronize_session=False)
+        db.query(Organisation).filter(Organisation.id == org_id).update({"multiple_sites_enabled": False})
+        db.commit()
 
 
 def test_saving_a_contract_order_syncs_the_planner(db, demand_clients, flask_app):
