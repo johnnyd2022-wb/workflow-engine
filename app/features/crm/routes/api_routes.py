@@ -308,6 +308,62 @@ def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
         return jsonify({"error": str(e)}), 400
 
 
+@api_bp.route("/api/crm/returns", methods=["GET"])
+@requires_auth
+def list_customer_returns():
+    """GL-P01b: goods customers sent back, newest first."""
+    from app.features.crm.services.sales_returns import recent, serialise
+
+    return jsonify({"returns": [serialise(r) for r in recent(db_session(), UUID(g.org_id))]}), 200
+
+
+@api_bp.route("/api/crm/returns", methods=["POST"])
+@requires_auth
+def record_customer_return():
+    """GL-P01b: record what physically came back. Only this moves stock; a credit note never does."""
+    from datetime import date
+
+    from app.features.crm.services.sales_returns import ReturnConflictError, ReturnError, record_return, serialise
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send the return as JSON"}), 400
+    line_id = None
+    if data.get("credit_note_line_id") is not None:
+        line_id = _uuid_or_none(data.get("credit_note_line_id"))
+        if line_id is None:
+            return jsonify({"error": "Credit note line not found"}), 404
+    try:
+        received_on = date.fromisoformat(str(data.get("received_on") or date.today().isoformat()))
+    except ValueError:
+        return jsonify({"error": "Received date must be YYYY-MM-DD"}), 400
+    session = db_session()
+    try:
+        ret = record_return(
+            session,
+            UUID(g.org_id),
+            UUID(g.user_id),
+            condition=str(data.get("condition") or ""),
+            quantity=data.get("quantity"),
+            received_on=received_on,
+            note=data.get("note") if isinstance(data.get("note"), str) else None,
+            credit_note_line_id=line_id,
+            product_name=data.get("product_name") if isinstance(data.get("product_name"), str) else None,
+            unit=data.get("unit") if isinstance(data.get("unit"), str) else None,
+        )
+        session.commit()
+    except LookupError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 404
+    except ReturnConflictError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 409
+    except ReturnError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"return": serialise(ret)}), 201
+
+
 @api_bp.route("/api/crm/invoices/<invoice_id>/trace-items", methods=["GET"])
 @requires_auth
 def get_invoice_trace_items(invoice_id: str):

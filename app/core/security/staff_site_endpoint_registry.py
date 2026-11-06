@@ -266,6 +266,8 @@ ENDPOINT_COVERAGE = {
     ("crm.crm_api.get_invoice_pdf", "GET"): "blocked",
     ("crm.crm_api.list_pending_returns", "GET"): "blocked",
     ("crm.crm_api.record_credit_note_line_no_return", "POST"): "blocked",
+    ("crm.crm_api.list_customer_returns", "GET"): "blocked",
+    ("crm.crm_api.record_customer_return", "POST"): "blocked",
     ("crm.crm_api.get_invoice_view_url", "GET"): "blocked",
     ("crm.crm_api.get_matching_candidates", "GET"): "blocked",
     ("crm.crm_api.get_matching_queue", "GET"): "blocked",

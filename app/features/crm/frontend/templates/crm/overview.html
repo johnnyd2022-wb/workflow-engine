@@ -61,7 +61,7 @@
 
     <section class="workspace-card sales-returns-pending" aria-labelledby="sales-returns-pending-title">
       <h2 id="sales-returns-pending-title">Did stock come back?</h2>
-      <p class="sales-returns-pending__intro">Mapped product lines on authorised Xero credit notes need a return decision. Recording “no goods” keeps the credit note and does not change stock.</p>
+      <p class="sales-returns-pending__intro">A credit note is money, not stock. For each credited product, record what physically came back (only that changes stock, and goods back into bond show on the excise draft as a possible credit), or that it was a credit only.</p>
       <p class="sales-returns-pending__message" x-show="pendingReturnsLoading" role="status">Loading credit-note lines…</p>
       <p class="sales-returns-pending__message" x-show="pendingReturnsError" x-text="pendingReturnsError" role="alert"></p>
       <template x-if="!pendingReturnsLoading && !pendingReturnsError && pendingReturns.length === 0">
@@ -73,10 +73,30 @@
             <div class="sales-returns-pending__details">
               <strong x-text="item.product_name"></strong>
               <span x-text="(item.credit_note_number || 'Credit note') + (item.contact ? ' · ' + item.contact : '')"></span>
-              <span x-text="(item.date || 'Date not recorded') + ' · ' + (item.description || item.item_code || 'Credit line') + (item.quantity ? ' · Qty ' + item.quantity : '')"></span>
-              <span class="sales-returns-pending__amount" x-text="formatInvoiceCurrency(Number(item.line_amount || 0), item.currency)"></span>
+              <span x-text="creditLineSummary(item)"></span>
+              <span class="sales-returns-pending__amount" x-text="creditLineAmount(item)"></span>
             </div>
             <div class="sales-returns-pending__decision" x-show="canRecordReturns" x-cloak>
+              <fieldset class="sales-returns-pending__came-back">
+                <legend>Goods came back</legend>
+                <p class="sales-returns-pending__hint" x-show="hasReturned(item)" x-text="returnedHint(item)"></p>
+                <div class="sales-returns-pending__fields">
+                  <label><span>How many</span><input type="number" min="0" step="any" inputmode="decimal" :aria-label="'How many ' + item.product_name + ' came back'" x-model="returnForms[item.line_id].quantity"></label>
+                  <label><span>Condition</span>
+                    <select :aria-label="'Condition of returned ' + item.product_name" x-model="returnForms[item.line_id].condition">
+                      <option value="resaleable">Fine: back into stock</option>
+                      <option value="damaged">Damaged: back on quality hold</option>
+                      <option value="destroyed">Destroyed: nothing back</option>
+                    </select>
+                  </label>
+                  <label><span>Received</span><input type="date" :aria-label="'Date ' + item.product_name + ' came back'" x-model="returnForms[item.line_id].received_on"></label>
+                </div>
+                <label class="sales-returns-pending__note-label"><span>Note (optional)</span>
+                  <input type="text" maxlength="500" :aria-label="'Note on returned ' + item.product_name" x-model="returnForms[item.line_id].note">
+                </label>
+                <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" :disabled="pendingReturnBusyId === item.line_id" @click="recordReturn(item)" x-text="pendingReturnBusyId === item.line_id ? 'Saving…' : 'Record return'"></button>
+              </fieldset>
+              <p class="sales-returns-pending__or" aria-hidden="true">or</p>
               <label class="sales-returns-pending__note-label">
                 <span>Why were no goods returned?</span>
                 <textarea maxlength="500" rows="2" required :aria-label="'Why no goods returned for ' + item.product_name" :value="pendingReturnNotes[item.line_id] || ''" @input="pendingReturnNotes[item.line_id] = $event.target.value"></textarea>

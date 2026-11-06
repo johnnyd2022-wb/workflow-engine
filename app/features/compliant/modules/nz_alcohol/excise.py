@@ -397,7 +397,42 @@ def _removals(session: Session, org_id: UUID, start: date, end: date, licensed_o
 
     out.extend(legacy_removals(session, org_id, start, end))
     out.extend(_outing_returns(session, org_id, start, end))
+    out.extend(_customer_returns(session, org_id, start, end, locations, licensed_only))
     out.extend(_contract_dispatches(session, org_id, start, end, locations, licensed_only))
+    return out
+
+
+def _customer_returns(
+    session: Session, org_id: UUID, start: date, end: date, locations: dict, licensed_only: bool = True
+) -> list[Removal]:
+    """Goods a customer sent back into stock (GL-P01b). Duty was recorded when they were sold,
+    so a return into the licensed area is listed as a possible credit to raise with Customs,
+    never deducted. Destroyed returns put nothing back, so they are not listed."""
+    from app.features.crm.models.sales_return import SalesReturn
+
+    rows = (
+        session.query(SalesReturn, InventoryItem)
+        .join(
+            InventoryItem,
+            (InventoryItem.org_id == SalesReturn.org_id) & (InventoryItem.id == SalesReturn.resulting_lot_id),
+        )
+        .filter(SalesReturn.org_id == org_id, SalesReturn.received_on >= start, SalesReturn.received_on < end)
+        .all()
+    )
+    out = []
+    for ret, item in rows:
+        if licensed_only and not _licensed(item, locations):
+            continue
+        out.append(
+            Removal(
+                kind="returned",
+                occurred_on=ret.received_on,
+                recorded_at=ret.created_at,
+                item=item,
+                quantity=Decimal(str(ret.quantity)),
+                reference=f"Customer return: {ret.product_name} ({ret.condition})",
+            )
+        )
     return out
 
 
