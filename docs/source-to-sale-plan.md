@@ -897,10 +897,14 @@ Founder decisions for this phase:
       everything exactly as today. On, the org defines its sites (name, address, kind:
       manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
       is the default. Existing stock and executions go to the default site.
+      - [x] Three gates, all off by default (deployment flag, `multi_site` subscription,
+        the business's own switch), a movable default site, and the Sites page that walks
+        the setup (!597, !598).
     - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
       locations (2.1) become places within a site. Screens and APIs filter by site; every
       total can be shown per site or for the whole business. No separate database or org
       per site.
+      - [x] Every add flow asks where; Inventory shows what is where by site (!599).
     - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
       be linked to zero or more registrations: a Customs CCA licence (one licence may
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
@@ -921,6 +925,8 @@ Founder decisions for this phase:
         immutable batch-lineage fragments, confirmed-loss policy checks and printable
         carrier/consignment docket (!438). Operational release stays internally off;
         overage resolution, drag/scan and the complete movement workflow remain open.
+      - [x] One Move dialog and a Stock transfers page built for receiving (!600).
+        Drag/scan stays open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
@@ -949,6 +955,8 @@ Founder decisions for this phase:
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] An excise entry per CCA licence with several sites; the licence register
+        decides which areas are licensed (!601).
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
@@ -1104,6 +1112,8 @@ Founder decisions for this phase:
       - [x] Workflow batch-size settings and explicit step duration/wait snapshots,
         fixed output-ready timing and exact workflow-version pinning (!440);
         unknown readiness stays unknown and delivery forecasts remain unpublished.
+      - [x] Step working and waiting time set on the workflow, planner defaults from it,
+        and expiry-aware planned surplus (!606).
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
@@ -1116,6 +1126,13 @@ Founder decisions for this phase:
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
         dependent-production planning and forecast integration remain.
+      - [x] Checking materials commits them to planned batches: bound lots first, the
+        rest from the material's lots soonest-expiring first; cancel releases, start
+        consumes (!611).
+      - [x] Each lot shows what planned batches hold; disposing into a hold warns;
+        suppliers carry a lead time and every shortage says who to order from and by
+        when, on the board and as a notification (!615). Intermediates made by another
+        workflow are still not planned.
     - [x] e. **Can we do it?** (!449, !464, !467) Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
