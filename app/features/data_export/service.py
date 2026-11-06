@@ -28,10 +28,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import LargeBinary, Table, select, text
+from sqlalchemy import LargeBinary, MetaData, Table, select, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
-from app.core.db.models.models import Base
 from app.core.utils.time import utc_now
 
 # Whole tables left out, with the reason a reader of the README sees.
@@ -43,6 +43,8 @@ EXCLUDED_TABLES: dict[str, str] = {
     "xero_oauth_tokens": "Xero access tokens (secrets)",
     "user_identities": "Google sign-in links (security internals)",
     "system_findings_cache": "a cache of computed notifications, rebuilt from the other records",
+    "admin_org_notes": "Biz-E staff's internal account notes",
+    "admin_org_documents": "Biz-E staff's internal account documents",
 }
 
 # Tables with no org_id: either the organisation itself (exported, filtered by id) or
@@ -86,15 +88,27 @@ MAX_ROWS_PER_TABLE = 1_000_000
 FETCH_BATCH = 1_000
 
 
-def tenant_tables() -> list[Table]:
-    """Tables exported for one organisation, sorted by name."""
-    out = []
-    for table in Base.metadata.tables.values():
-        if table.name in EXCLUDED_TABLES or table.name in NON_TENANT_TABLES:
-            continue
-        if "org_id" in table.c or table.name == ORG_TABLE:
-            out.append(table)
-    return sorted(out, key=lambda t: t.name)
+def org_table_names(conn: Connection) -> set[str]:
+    """Every table in the live schema with an org_id column.
+
+    Read from the database, not ``Base.metadata``: some models are imported lazily, and a
+    table a migration created must not be skipped because no module happened to load it.
+    """
+    rows = conn.execute(
+        text(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND column_name = 'org_id'"
+        )
+    )
+    return set(rows.scalars())
+
+
+def tenant_tables(conn: Connection) -> list[Table]:
+    """Tables exported for one organisation, reflected from the database, sorted by name."""
+    names = sorted((org_table_names(conn) | {ORG_TABLE}) - set(EXCLUDED_TABLES) - set(NON_TENANT_TABLES))
+    meta = MetaData()
+    meta.reflect(bind=conn, only=names)
+    return [meta.tables[name] for name in names]
 
 
 def exported_columns(table: Table) -> list:
@@ -227,7 +241,7 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
     """Yield the ZIP for ``org_id`` chunk by chunk. ``stats`` is filled in as it goes."""
     stats = stats if stats is not None else ExportStats()
     generated_at = utc_now()
-    tables = tenant_tables()
+    tables = tenant_tables(session.connection())
     pipe = _Pipe()
     conn = session.connection().execution_options(stream_results=True, yield_per=FETCH_BATCH)
 

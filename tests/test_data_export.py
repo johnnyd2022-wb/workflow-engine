@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pyotp
 import pytest
+from sqlalchemy import MetaData
 
 from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -72,22 +73,28 @@ def two_orgs(db, flask_app):  # noqa: F811
 # --- classification: a new table or secret-looking column cannot slip through -------------------
 
 
-def test_every_org_table_is_exported_or_excluded_with_a_reason(flask_app):  # noqa: F811
-    exported = {t.name for t in service.tenant_tables()}
+def test_every_org_table_is_exported_or_excluded_with_a_reason(db):
+    """Read from the migrated database, so a table no model imports is still caught."""
+    exported = {t.name for t in service.tenant_tables(db.connection())}
+    for name in service.org_table_names(db.connection()):
+        assert name in exported or service.EXCLUDED_TABLES.get(name), (
+            f"{name} has org_id: export it or add it to EXCLUDED_TABLES with a reason"
+        )
+    assert service.ORG_TABLE in exported
+    # Lazily imported models (planning) are exported all the same.
+    assert "planning_material_commitments" in exported
+
+
+def test_every_model_without_org_id_is_classified(flask_app):  # noqa: F811
     for table in Base.metadata.tables.values():
-        if "org_id" in table.c:
-            assert table.name in exported or service.EXCLUDED_TABLES.get(table.name), (
-                f"{table.name} has org_id: export it or add it to EXCLUDED_TABLES with a reason"
-            )
-        elif table.name != service.ORG_TABLE:
+        if "org_id" not in table.c and table.name != service.ORG_TABLE:
             assert service.NON_TENANT_TABLES.get(table.name), (
                 f"{table.name} has no org_id: is it a business record? classify it in NON_TENANT_TABLES"
             )
-    assert service.ORG_TABLE in exported
 
 
-def test_every_secret_looking_column_is_dropped_or_declared_safe(flask_app):  # noqa: F811
-    for table in service.tenant_tables():
+def test_every_secret_looking_column_is_dropped_or_declared_safe(db):
+    for table in service.tenant_tables(db.connection()):
         for col in service.exported_columns(table):
             if service.SECRET_NAME.search(col.name):
                 assert (table.name, col.name) in service.SAFE_LOOKING_SECRET, (
@@ -95,8 +102,10 @@ def test_every_secret_looking_column_is_dropped_or_declared_safe(flask_app):  # 
                 )
 
 
-def test_classification_names_only_real_tables_and_columns(flask_app):  # noqa: F811
-    tables = Base.metadata.tables
+def test_classification_names_only_real_tables_and_columns(db):
+    meta = MetaData()
+    meta.reflect(bind=db.connection())
+    tables = meta.tables
     for name in [*service.EXCLUDED_TABLES, *service.NON_TENANT_TABLES]:
         assert name in tables, f"stale entry {name}"
     for table, column in [*service.EXCLUDED_COLUMNS, *service.SAFE_LOOKING_SECRET]:
@@ -117,7 +126,7 @@ def test_admin_download_holds_own_rows_and_never_the_neighbours(db, two_orgs):
     zf = _download(client_a)
     names = set(zf.namelist())
     assert {"README.txt", "summary/stock.csv", "summary/batches.csv", "tables/inventory_items.csv"} <= names
-    assert {f"tables/{t.name}.csv" for t in service.tenant_tables()} <= names
+    assert {f"tables/{t.name}.csv" for t in service.tenant_tables(db.connection())} <= names
     assert not any(n.startswith(f"tables/{t}.") for t in service.EXCLUDED_TABLES for n in names)
 
     items = _rows(zf, "tables/inventory_items.csv")
@@ -136,7 +145,7 @@ def test_admin_download_holds_own_rows_and_never_the_neighbours(db, two_orgs):
 def test_every_org_scoped_csv_holds_only_this_org(db, two_orgs):
     org_a, client_a, _org_b = two_orgs
     zf = _download(client_a)
-    for table in service.tenant_tables():
+    for table in service.tenant_tables(db.connection()):
         if "org_id" not in table.c:
             continue
         for row in _rows(zf, f"tables/{table.name}.csv"):
@@ -215,7 +224,7 @@ def test_the_zip_is_streamed_in_chunks(db, two_orgs, flask_app):  # noqa: F811
     for i in range(30):
         _item(db, org_a.id, f"Bulk-{i}")
     chunks = [c for c in service.stream_export(db, org_a.id, org_a.name) if c]
-    assert len(chunks) > len(service.tenant_tables())  # at least one chunk per table, not one blob
+    assert len(chunks) > len(service.tenant_tables(db.connection()))  # at least one chunk per table, not one blob
     zf = zipfile.ZipFile(io.BytesIO(b"".join(chunks)))
     assert zf.testzip() is None
     assert len(_rows(zf, "tables/inventory_items.csv")) == 30
@@ -254,7 +263,7 @@ def test_binary_columns_become_files(db, two_orgs, monkeypatch):
     doc_id = uuid4()
     conn.execute(table.insert(), [{"id": doc_id, "org_id": org_a.id, "title": "COA", "content": b"%PDF-1"}])
     conn.execute(table.insert(), [{"id": uuid4(), "org_id": uuid4(), "title": "theirs", "content": b"NOPE"}])
-    monkeypatch.setattr(service, "tenant_tables", lambda: [table])
+    monkeypatch.setattr(service, "tenant_tables", lambda _conn: [table])
 
     zf = zipfile.ZipFile(io.BytesIO(b"".join(service.stream_export(db, org_a.id, org_a.name))))
     rows = _rows(zf, "tables/data_export_probe.csv")
