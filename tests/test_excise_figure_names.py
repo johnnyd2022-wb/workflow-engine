@@ -22,3 +22,10 @@ def test_customs_screen_tags_the_filing_draft_and_links_to_the_sales_estimate():
     assert "'Filing draft'" in CUSTOMS and "'Lodged return'" in CUSTOMS
     assert "Compare with the sales estimate for " in CUSTOMS
     assert "Sales behind " not in CUSTOMS
+
+
+def test_customs_says_why_the_figures_differ_in_visible_text_not_a_tooltip():
+    # Breaker review of !627: a title= tooltip can't be read on a phone or by keyboard.
+    assert "'aria-describedby': 'excise-estimate-why'" in CUSTOMS
+    assert "id: 'excise-estimate-why', className: 'excise-hint'" in CUSTOMS
+    assert "title: 'An estimate from invoices" not in CUSTOMS

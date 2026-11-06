@@ -334,16 +334,20 @@
   }
 
   function linksPiece(d) {
+    var box = el('div', { className: 'customs-links-box' });
     var wrap = el('p', { className: 'customs-links' });
     wrap.append(el('a', { href: TSW_LOGIN, target: '_blank', rel: 'noopener', 'data-tsw-link': '', text: 'Open Trade Single Window ↗' }));
+    box.append(wrap);
     if (state.frequency === 'monthly') {
       wrap.append(document.createTextNode(' · '), el('a', {
         href: '/crm/excise?month=' + d.period_start.slice(0, 7),
-        title: 'An estimate from invoices. It can differ from this draft: tastings, samples and moves under bond leave without an invoice.',
+        'aria-describedby': 'excise-estimate-why',
         text: 'Compare with the sales estimate for ' + d.label,
       }));
+      // GL-P05: visible text, not a tooltip, so phone and keyboard users see it too.
+      box.append(el('p', { id: 'excise-estimate-why', className: 'excise-hint', text: 'The sales estimate comes from invoices, so it can differ from this filing draft: stock poured at tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after the stock left.' }));
     }
-    return wrap;
+    return box;
   }
 
   function lodgePiece(d) {
