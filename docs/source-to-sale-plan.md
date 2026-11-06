@@ -1096,11 +1096,11 @@ Founder decisions for this phase:
         forecasts and stock targets remain.
       - [x] Confirmed contract order lines become demand and stay in step (changed,
         unconfirmed, completed; left alone once a batch starts); lines without a workflow
-        output are listed, never matched by name (!B3MR).
+        output are listed, never matched by name (!641).
       - [x] Stock cover per product from connected sales: weekly rate over 4–52 weeks,
         seasonality from last year with 12+ months of history, runs-out date from stock on
         hand and planned batches; weeks-of-cover targets per output (and site) suggest whole
-        batches with a plan-by date, and "Plan" turns one into planned demand (!B3MR). Sales
+        batches with a plan-by date, and "Plan" turns one into planned demand (!641). Sales
         orders as demand and pre-sales (1.1) remain.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
@@ -1112,7 +1112,7 @@ Founder decisions for this phase:
         inventory netting and order/target adapters remain.
       - [x] Netting: a demand plans batches only for what stock on hand and batches already
         planned don't cover, earlier-due demand first; a covered demand plans none.
-        Contract demand nets only against its own customer's stock and batches (!B3MR).
+        Contract demand nets only against its own customer's stock and batches (!641).
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
