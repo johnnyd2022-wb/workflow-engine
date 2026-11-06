@@ -240,5 +240,6 @@ def quantities(recall_id, contact_id):
             cid,
             recovered=b.get("recovered", 0),
             disposed=b.get("disposed", 0),
+            unrecoverable=b.get("unrecoverable", 0),
         ),
     )

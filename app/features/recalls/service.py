@@ -111,7 +111,12 @@ def scope_for(session: Session, org_id: UUID, lot_id: UUID) -> tuple[list[dict],
         key = (contact.id if contact else None, name, allocation.product_name, allocation.unit)
         qty = Decimal(str(allocation.quantity))
         if not qty.is_finite():
-            continue  # NUMERIC can hold NaN; a corrupt sale line must not poison the customer's total
+            # A recall must never silently leave a customer out: refuse, naming what to fix.
+            raise RecallError(
+                f"The quantity on {invoice.invoice_number or invoice.xero_invoice_id} for {allocation.product_name} "
+                f"({name}) isn't a number. Correct that sale line, then open the recall.",
+                409,
+            )
         grouped[key]["quantity"] += qty
         grouped[key]["invoices"].add(invoice.invoice_number or invoice.xero_invoice_id)
     customers = [
@@ -292,26 +297,34 @@ def _contacts(session: Session, org_id: UUID, recall_id: UUID) -> list[RecallCon
     )
 
 
+def _accounted(c: RecallContact) -> Decimal:
+    return Decimal(str(c.recovered_qty)) + Decimal(str(c.disposed_qty)) + Decimal(str(c.unrecoverable_qty or 0))
+
+
 def _contact_done(c: RecallContact) -> bool:
-    if c.unreachable_note:
-        return True
-    accounted = Decimal(str(c.recovered_qty)) + Decimal(str(c.disposed_qty))
-    return c.acknowledged_at is not None and accounted >= Decimal(str(c.quantity_supplied))
+    """Answered (acknowledged, or recorded unreachable) AND every unit accounted for. Unreachable
+    is not a free pass for the stock: what can't be got back is recorded as not recoverable."""
+    answered = c.acknowledged_at is not None or bool(c.unreachable_note)
+    return answered and _accounted(c) >= Decimal(str(c.quantity_supplied))
 
 
 def blockers(session: Session, org_id: UUID, recall: Recall) -> list[str]:
     """What still stops this recall being closed, in plain words. Empty means complete."""
     out = []
     for c in _contacts(session, org_id, recall.id):
-        if c.unreachable_note:
-            continue
-        if c.acknowledged_at is None:
+        if c.acknowledged_at is None and not c.unreachable_note:
             out.append(f"{c.customer_name} hasn't acknowledged the notice ({c.product_name})")
-        left = Decimal(str(c.quantity_supplied)) - Decimal(str(c.recovered_qty)) - Decimal(str(c.disposed_qty))
+        left = Decimal(str(c.quantity_supplied)) - _accounted(c)
         if left > 0:
-            out.append(
-                f"{_plain(left)} {c.unit} of {c.product_name} at {c.customer_name} not yet recovered or disposed of"
-            )
+            if c.unreachable_note:
+                out.append(
+                    f"{_plain(left)} {c.unit} of {c.product_name} at {c.customer_name} (unreachable) not accounted for: "
+                    "record what came back, or what can't be recovered"
+                )
+            else:
+                out.append(
+                    f"{_plain(left)} {c.unit} of {c.product_name} at {c.customer_name} not yet recovered or disposed of"
+                )
     return out
 
 
@@ -400,18 +413,33 @@ def record_unreachable(session, org_id, user_id, recall_id, contact_id, *, note)
     return c
 
 
-def record_quantities(session, org_id, user_id, recall_id, contact_id, *, recovered, disposed) -> RecallContact:
-    """Set the totals so far (not deltas): what came back to you, and what the customer disposed of."""
+def record_quantities(
+    session, org_id, user_id, recall_id, contact_id, *, recovered, disposed, unrecoverable=0
+) -> RecallContact:
+    """Set the totals so far (not deltas): what came back to you, what the customer disposed of,
+    and (unreachable customers only) what can't be recovered."""
     recall, c = _contact(session, org_id, recall_id, contact_id)
     rec = _qty(recovered, "Recovered")
     dis = _qty(disposed, "Disposed of")
+    lost = _qty(unrecoverable, "Can't be recovered")
+    if lost > 0 and not c.unreachable_note:
+        raise RecallError("Only stock at a customer you couldn't reach can be written off as not recoverable")
     supplied = Decimal(str(c.quantity_supplied))
-    if rec + dis > supplied:
+    if rec + dis + lost > supplied:
         raise RecallError(f"Only {_plain(supplied)} {c.unit} were supplied to {c.customer_name}")
     c.recovered_qty = rec
     c.disposed_qty = dis
+    c.unrecoverable_qty = lost
     c.updated_by = user_id
-    _log(session, org_id, recall, c, "quantities", user_id, {"recovered": str(rec), "disposed": str(dis)})
+    _log(
+        session,
+        org_id,
+        recall,
+        c,
+        "quantities",
+        user_id,
+        {"recovered": str(rec), "disposed": str(dis), "unrecoverable": str(lost)},
+    )
     session.flush()
     return c
 
@@ -460,6 +488,7 @@ def serialise_contact(c: RecallContact) -> dict:
         "unreachable_note": c.unreachable_note,
         "recovered_qty": _plain(c.recovered_qty),
         "disposed_qty": _plain(c.disposed_qty),
+        "unrecoverable_qty": _plain(c.unrecoverable_qty or 0),
         "done": _contact_done(c),
     }
 
@@ -470,7 +499,7 @@ def serialise(session: Session, org_id: UUID, recall: Recall) -> dict:
     case = session.get(OperationalCase, recall.case_id)
     contacts = _contacts(session, org_id, recall.id)
     supplied = sum((Decimal(str(c.quantity_supplied)) for c in contacts), Decimal(0))
-    accounted = sum((Decimal(str(c.recovered_qty)) + Decimal(str(c.disposed_qty)) for c in contacts), Decimal(0))
+    accounted = sum((_accounted(c) for c in contacts), Decimal(0))
     left = blockers(session, org_id, recall)
     return {
         "id": str(recall.id),

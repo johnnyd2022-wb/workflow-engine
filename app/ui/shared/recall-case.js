@@ -119,7 +119,9 @@
       if (c.notice_sent_at) trail.push('Notice sent ' + fmtDate(c.notice_sent_at) + ' by ' + c.notice_channel);
       if (c.acknowledged_at) trail.push('Acknowledged ' + fmtDate(c.acknowledged_at) + ' by ' + c.acknowledged_by + (c.ack_note ? ' (' + c.ack_note + ')' : ''));
       if (c.unreachable_note) trail.push('Unreachable: ' + c.unreachable_note);
-      if (Number(c.recovered_qty) || Number(c.disposed_qty)) trail.push(c.recovered_qty + ' recovered · ' + c.disposed_qty + ' disposed of by them');
+      if (Number(c.recovered_qty) || Number(c.disposed_qty) || Number(c.unrecoverable_qty)) {
+        trail.push(c.recovered_qty + ' recovered · ' + c.disposed_qty + ' disposed of by them' + (Number(c.unrecoverable_qty) ? ' · ' + c.unrecoverable_qty + ' can\u2019t be recovered' : ''));
+      }
       if (trail.length) {
         var ul = el('ul', { className: 'rc-contact__trail' });
         trail.forEach(function (t) { ul.append(el('li', { text: t })); });
@@ -135,7 +137,7 @@
           actions.append(button('Acknowledged…', function () { ackForm(c); }));
           actions.append(button('Can’t reach them…', function () { unreachableForm(c); }));
         }
-        if (!c.unreachable_note) actions.append(button('Recovered / disposed…', function () { qtyForm(c); }));
+        if (!c.done) actions.append(button('Recovered / disposed…', function () { qtyForm(c); }));
       }
       art.append(actions);
       return art;
@@ -206,7 +208,15 @@
         { name: 'recovered', label: 'Came back to you', type: 'number', value: c.recovered_qty, attrs: { min: '0', step: 'any', inputmode: 'decimal' },
           hint: 'Record the goods themselves under Sales: Record a return (damaged puts them on hold).' },
         { name: 'disposed', label: 'Disposed of by them', type: 'number', value: c.disposed_qty, attrs: { min: '0', step: 'any', inputmode: 'decimal' } },
-      ], 'Save', function (i) { return api('POST', path(c, 'quantities'), { recovered: i.recovered.value || 0, disposed: i.disposed.value || 0 }); });
+      ].concat(c.unreachable_note ? [
+        { name: 'unrecoverable', label: 'Can\u2019t be recovered', type: 'number', value: c.unrecoverable_qty, attrs: { min: '0', step: 'any', inputmode: 'decimal' },
+          hint: 'Stock still out there that you can\u2019t get back from a customer you couldn\u2019t reach. Kept on the recall with why.' },
+      ] : []), 'Save', function (i) {
+        return api('POST', path(c, 'quantities'), {
+          recovered: i.recovered.value || 0, disposed: i.disposed.value || 0,
+          unrecoverable: i.unrecoverable ? (i.unrecoverable.value || 0) : 0,
+        });
+      });
     }
 
     async function showNotice(c) {

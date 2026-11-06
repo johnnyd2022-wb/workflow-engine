@@ -231,8 +231,19 @@ def test_the_case_resolves_only_when_every_customer_is_accounted_for(db, org_a, 
     )
     assert unreachable.status_code == 200
 
+    # Unreachable is an answer, not a pass for the stock: Harbour Bar's 4 are still unaccounted for.
     progress = admin_client.get(f"/api/core/recalls/{rid}").get_json()["recall"]["progress"]
-    assert progress["complete"] is True and progress["accounted"] == "18" and progress["unreachable"] == 1
+    assert progress["complete"] is False and progress["accounted"] == "18" and progress["unreachable"] == 1
+    assert progress["blockers"] == [
+        "4 each of Navy Gin 700ml at Harbour Bar (unreachable) not accounted for: "
+        "record what came back, or what can't be recovered"
+    ]
+    still = _case_to(admin_client, case_id, 3, "resolved", **resolve)
+    assert still.status_code == 409 and still.get_json()["error_code"] == "recall_incomplete"
+    lost = admin_client.post(f"{base}/{hb['id']}/quantities", json={"recovered": "0", "unrecoverable": "4"})
+    assert lost.status_code == 200 and lost.get_json()["contact"]["unrecoverable_qty"] == "4"
+    progress = admin_client.get(f"/api/core/recalls/{rid}").get_json()["recall"]["progress"]
+    assert progress["complete"] is True and progress["accounted"] == "22"
     assert _case_to(admin_client, case_id, 3, "resolved", **resolve).status_code == 200
     # Closed: the customer record is frozen.
     assert admin_client.post(f"{base}/{kb['id']}/quantities", json={"recovered": "18"}).status_code == 409
@@ -296,7 +307,7 @@ def test_another_business_sees_none_of_it(db, org_b, admin_client, org_b_client,
     assert _open(org_b_client, world).status_code == 404
 
 
-def test_a_corrupt_nan_sale_line_is_left_out_and_nan_cannot_be_stored(db, org_a, admin_client, world):
+def test_a_corrupt_nan_sale_line_refuses_the_recall_and_nan_cannot_be_stored(db, org_a, admin_client, world):
     from sqlalchemy import text
     from sqlalchemy.exc import IntegrityError
 
@@ -306,10 +317,29 @@ def test_a_corrupt_nan_sale_line_is_left_out_and_nan_cannot_be_stored(db, org_a,
     )
     db.commit()
     db.expire_all()
+    # Never silently drop a customer from a recall: refuse, naming the sale line to fix.
+    refused = _open(admin_client, world)
+    assert refused.status_code == 409
+    assert "INV-0103" in refused.get_json()["error"] and "Harbour Bar" in refused.get_json()["error"]
+    db.execute(
+        text("UPDATE crm_sales_fifo_allocations SET quantity = 4 WHERE org_id = :org AND quantity = 'NaN'"),
+        {"org": org_a.id},
+    )
+    db.commit()
+    db.expire_all()
     recall = _open(admin_client, world).get_json()["recall"]
-    assert [c["customer_name"] for c in recall["contacts"]] == ["Kererū Bottle Store"]
+    assert [c["customer_name"] for c in recall["contacts"]] == ["Harbour Bar", "Kererū Bottle Store"]
     contact_id = recall["contacts"][0]["id"]
     with pytest.raises(IntegrityError):
         db.execute(text("UPDATE recall_contacts SET recovered_qty = 'NaN' WHERE id = :id"), {"id": contact_id})
         db.commit()
     db.rollback()
+
+
+def test_only_an_unreachable_customer_can_have_stock_written_off(admin_client, world):
+    recall = _open(admin_client, world).get_json()["recall"]
+    c = recall["contacts"][0]
+    resp = admin_client.post(
+        f"/api/core/recalls/{recall['id']}/contacts/{c['id']}/quantities", json={"recovered": "0", "unrecoverable": "1"}
+    )
+    assert resp.status_code == 400 and "couldn't reach" in resp.get_json()["error"]

@@ -81,12 +81,17 @@ class RecallContact(TenantScoped, Base):
         ),
         # Postgres NUMERIC accepts NaN and sorts it above every number, so "> 0" alone lets it in.
         CheckConstraint(
-            "quantity_supplied <> 'NaN'::numeric AND recovered_qty <> 'NaN'::numeric AND disposed_qty <> 'NaN'::numeric",
+            "quantity_supplied <> 'NaN'::numeric AND recovered_qty <> 'NaN'::numeric AND disposed_qty <> 'NaN'::numeric AND unrecoverable_qty <> 'NaN'::numeric",
             name="ck_recall_contact_finite",
         ),
         CheckConstraint("quantity_supplied > 0", name="ck_recall_contact_supplied"),
+        # Only a customer recorded as unreachable can have stock written off as not recoverable.
         CheckConstraint(
-            "recovered_qty >= 0 AND disposed_qty >= 0 AND recovered_qty + disposed_qty <= quantity_supplied",
+            "unrecoverable_qty = 0 OR unreachable_note IS NOT NULL",
+            name="ck_recall_contact_unrecoverable_needs_unreachable",
+        ),
+        CheckConstraint(
+            "recovered_qty >= 0 AND disposed_qty >= 0 AND unrecoverable_qty >= 0 AND recovered_qty + disposed_qty + unrecoverable_qty <= quantity_supplied",
             name="ck_recall_contact_accounted",
         ),
     )
@@ -107,5 +112,7 @@ class RecallContact(TenantScoped, Base):
     unreachable_note = Column(Text, nullable=True)
     recovered_qty = Column(Numeric(18, 4), nullable=False, default=0)
     disposed_qty = Column(Numeric(18, 4), nullable=False, default=0)
+    # Unreachable customers only: stock written off as not recoverable, with the unreachable note as why.
+    unrecoverable_qty = Column(Numeric(18, 4), nullable=False, default=0)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

@@ -73,6 +73,7 @@ def upgrade():
         sa.Column("unreachable_note", sa.Text(), nullable=True),
         sa.Column("recovered_qty", sa.Numeric(18, 4), nullable=False, server_default="0"),
         sa.Column("disposed_qty", sa.Numeric(18, 4), nullable=False, server_default="0"),
+        sa.Column("unrecoverable_qty", sa.Numeric(18, 4), nullable=False, server_default="0"),
         sa.Column("updated_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("org_id", "id", name="uq_recall_contacts_org_id"),
@@ -84,12 +85,17 @@ def upgrade():
         ),
         # Postgres NUMERIC accepts NaN and sorts it above every number, so "> 0" alone lets it in.
         sa.CheckConstraint(
-            "quantity_supplied <> 'NaN'::numeric AND recovered_qty <> 'NaN'::numeric AND disposed_qty <> 'NaN'::numeric",
+            "quantity_supplied <> 'NaN'::numeric AND recovered_qty <> 'NaN'::numeric AND disposed_qty <> 'NaN'::numeric AND unrecoverable_qty <> 'NaN'::numeric",
             name="ck_recall_contact_finite",
         ),
         sa.CheckConstraint("quantity_supplied > 0", name="ck_recall_contact_supplied"),
+        # Only a customer recorded as unreachable can have stock written off as not recoverable.
         sa.CheckConstraint(
-            "recovered_qty >= 0 AND disposed_qty >= 0 AND recovered_qty + disposed_qty <= quantity_supplied",
+            "unrecoverable_qty = 0 OR unreachable_note IS NOT NULL",
+            name="ck_recall_contact_unrecoverable_needs_unreachable",
+        ),
+        sa.CheckConstraint(
+            "recovered_qty >= 0 AND disposed_qty >= 0 AND unrecoverable_qty >= 0 AND recovered_qty + disposed_qty + unrecoverable_qty <= quantity_supplied",
             name="ck_recall_contact_accounted",
         ),
     )
