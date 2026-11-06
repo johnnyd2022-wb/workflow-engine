@@ -30,7 +30,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core", "production", "overview", "Production overview", None, None),
     Page("/core/cases", "production", "overview", "Cases", None, None),
     Page("/core/cases/new", "production", "overview", "New case", "/core/cases", None),
-    Page("/core/tasks", "production", "overview", "Tasks", None, None),
+    Page("/core/tasks", "production", "overview", "Production tasks", None, None),
     Page("/core/planner", "production", "planner", "Production demand", None, None),
     Page("/core/planner/board", "production", "planner", "Production board", "/core/planner", None),
     Page("/core/executions/live", "production", "batches", "Batches", None, None),
@@ -157,7 +157,7 @@ PAGES: tuple[Page, ...] = (
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
-    Page("/crm/excise", "sales", "excise", "Excise", None, "crm"),
+    Page("/crm/excise", "sales", "excise", "Excise estimate", None, "crm"),
     Page("/core/settings", "settings", "account", "My account", None, None),
     Page("/core/people", "settings", "people", "People and roles", None, None),
     Page("/core/sites", "settings", "sites", "Sites", None, None),
@@ -229,11 +229,12 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     "sales": (
         Tab("overview", "Overview", "/crm", ("sales.view",)),
         Tab("customers", "Customers", "/crm/customers", ("sales.view",)),
-        Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
+        Tab("tasks", "Sales tasks", "/crm/tasks", ("sales.view",)),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
-        # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales.
-        Tab("excise", "Excise", "/crm/excise", ("sales.view",), when="nz_alcohol"),
+        # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales. GL-U02b: one name
+        # per place: the estimate lives in Sales, the filing draft in Compliance → Customs.
+        Tab("excise", "Excise estimate", "/crm/excise", ("sales.view",), when="nz_alcohol"),
         # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
     ),
@@ -245,7 +246,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         # Only where the deployment and the organisation's plan allow multiple sites (GL-P07).
         Tab("sites", "Sites", "/core/sites", ("settings.manage",), when="multi_site"),
         Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
-        Tab("section-settings", "Tasks", "/core/tasks/configuration", ("production.view",)),
+        Tab("section-settings", "Task settings", "/core/tasks/configuration", ("production.view",)),
     ),
 }
 

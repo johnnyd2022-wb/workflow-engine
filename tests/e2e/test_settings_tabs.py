@@ -18,7 +18,7 @@ from tests.test_crm import user as _member  # noqa: F401 -- fixture re-export
 pytestmark = pytest.mark.e2e
 
 HOST = "https://crm.test"
-TABS = ["Account", "People", "Sites", "Integrations", "Tasks"]
+TABS = ["Account", "People", "Sites", "Integrations", "Task settings"]
 
 
 @pytest.fixture()

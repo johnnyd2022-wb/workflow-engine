@@ -243,7 +243,7 @@ def test_tasting_is_inline_in_shared_tasks_and_survives_boosted_round_trip(logge
     page.get_by_role("button", name="Close tasting details").click()
     page.get_by_role("tab", name="Customers", exact=True).click()
     page.wait_for_url("**/crm/customers")
-    page.get_by_role("tab", name="Tasks", exact=True).click()
+    page.get_by_role("tab", name="Sales tasks", exact=True).click()
     page.wait_for_url("**/crm/tasks")
     expect(page.locator("#tasks-page")).to_have_attribute("aria-busy", "false")
     # HTMX deliberately disables history cache; each Back forces a document reload.
