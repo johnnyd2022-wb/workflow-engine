@@ -3,6 +3,7 @@ each shortage, a notification for it, the lot's detail saying what's held, and a
 before disposing into a hold."""
 
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -168,3 +169,42 @@ def test_disposing_into_a_hold_warns_but_isnt_blocked(held_client):
     # Disposing only what's free says nothing.
     page = client.get(f"/core/inventory/dispose/confirm?inventory_item_id={lot.id}&quantity_wasted=1")
     assert "Planned batches hold" not in page.get_data(as_text=True)
+
+
+# Breaker review of !615: stale shortages must not flag health; alert IDs follow the material.
+def test_stale_shortage_does_not_flag_health(monkeypatch):
+    monkeypatch.setattr(
+        "app.features.planning.material_adapter.latest",
+        lambda *_: {
+            "batches": [
+                {
+                    "batch_id": str(uuid4()),
+                    "stale": True,
+                    "shortages": [{"material": "Sugar", "quantity": "1", "unit": "kg", "order_now": True}],
+                }
+            ]
+        },
+    )
+    result = run_planned_material_shortages_check(uuid4(), None)
+    assert result.data["system_alerts"] == []
+    assert result.flagged is False
+
+
+def test_alert_id_stays_with_material_when_shortage_order_changes(monkeypatch):
+    batch_id = str(uuid4())
+    rows = [
+        {"material": "Sugar", "quantity": "1", "unit": "kg"},
+        {"material": "Salt", "quantity": "1", "unit": "kg"},
+    ]
+    monkeypatch.setattr(
+        "app.features.planning.material_adapter.latest",
+        lambda *_: {"batches": [{"batch_id": batch_id, "shortages": rows}]},
+    )
+    before = {
+        row["title"]: row["id"] for row in run_planned_material_shortages_check(uuid4(), None).data["system_alerts"]
+    }
+    rows.reverse()
+    after = {
+        row["title"]: row["id"] for row in run_planned_material_shortages_check(uuid4(), None).data["system_alerts"]
+    }
+    assert before == after

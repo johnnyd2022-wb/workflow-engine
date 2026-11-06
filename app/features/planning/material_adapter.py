@@ -262,7 +262,15 @@ def _material_suppliers(db, org_id, materials):
     return {material: leads.get(supplier.lower(), (supplier, None)) for material, supplier in latest.items()}
 
 
-def _observe(db, org_id, lot_ids, today, materials=frozenset()):
+FREE_SUFFIX = ":free"
+
+
+def _lot_id(supply_id):
+    """The lot behind a supply. A bound lot's leftover is offered as `<lot id>:free`."""
+    return service._id(str(supply_id).removesuffix(FREE_SUFFIX))
+
+
+def _observe(db, org_id, lot_ids, today, materials=frozenset(), bound_demand=None):
     lots = (
         db.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id, InventoryItem.id.in_(lot_ids))
@@ -272,8 +280,10 @@ def _observe(db, org_id, lot_ids, today, materials=frozenset()):
         if lot_ids
         else []
     )
-    # A lot an owner bound to an input is offered only there; the rest of a material's lots are
-    # offered to any input of that material, first-expiring first.
+    # A lot an owner bound to an input is offered there first, up to what the bindings ask for;
+    # whatever is left joins the rest of the material's lots, offered to any input of that
+    # material, first-expiring first. `bound_demand` is what the bindings ask of each lot, by unit.
+    bound_demand = bound_demand or {}
     lots += [item for item in _material_lots(db, org_id, materials) if item.id not in set(lot_ids)]
     bound = {str(identity) for identity in lot_ids}
     pending = _pending_inputs(db, org_id, [item.id for item in lots])
@@ -350,20 +360,42 @@ def _observe(db, org_id, lot_ids, today, materials=frozenset()):
             observations[str(item.id)]["ready_date"] = None
         if not observations[str(item.id)]["reasons"]:
             site = str(item.site_id) if item.site_id else None
+            free = check.quantity
             if str(item.id) in bound:
-                key, quantity = StockKey("lot:" + str(item.id), item.unit, site), check.quantity
-            else:
-                try:
-                    unit = base_unit(item.unit)
-                    key = StockKey("material:" + material_name(item.name), unit, site)
-                    quantity = convert_quantity_decimal(check.quantity, item.unit, unit)
-                except ValueError:
-                    observations[str(item.id)]["reasons"].append("Material unit can't be converted")
-                    continue
+                asked = Decimal(0)
+                for amount, unit in bound_demand.get(str(item.id), ()):
+                    try:
+                        asked += convert_quantity_decimal(amount, unit, item.unit)
+                    except (TypeError, ValueError, InvalidOperation):
+                        pass  # the binding is flagged for its unit in assess()
+                held = min(free, asked) if bound_demand else free
+                free -= held
+                supplies[str(item.id)] = MaterialSupply(
+                    str(org_id),
+                    Supply(
+                        str(item.id),
+                        StockKey("lot:" + str(item.id), item.unit, site),
+                        held,
+                        check.ready_date,
+                        item.expiry_date,
+                    ),
+                    MaterialSource.ON_HAND,
+                )
             observations[str(item.id)]["material"] = material_name(item.name)
-            supplies[str(item.id)] = MaterialSupply(
+            if free <= 0 or material_name(item.name) not in materials:
+                continue
+            try:
+                unit = base_unit(item.unit)
+                key = StockKey("material:" + material_name(item.name), unit, site)
+                quantity = convert_quantity_decimal(free, item.unit, unit)
+            except ValueError:
+                if str(item.id) not in bound:
+                    observations[str(item.id)]["reasons"].append("Material unit can't be converted")
+                continue
+            identity = str(item.id) + FREE_SUFFIX if str(item.id) in bound else str(item.id)
+            supplies[identity] = MaterialSupply(
                 str(org_id),
-                Supply(str(item.id), key, quantity, check.ready_date, item.expiry_date),
+                Supply(identity, key, quantity, check.ready_date, item.expiry_date),
                 MaterialSource.ON_HAND,
             )
     return observations, supplies
@@ -480,7 +512,11 @@ def assess(db, org_id, data, *, today):
     if len(lot_ids) > 1000:
         raise service.PlanningConflictError("Review the material plan before assessing more than 1,000 lots")
     materials = frozenset(entry["material"] for _, auto in definitions.values() for entry in auto)
-    observations, supplies = _observe(db, org_id, lot_ids, today, materials)
+    bound_demand = {}
+    for bindings, _ in definitions.values():
+        for entry in bindings:
+            bound_demand.setdefault(entry["inventory_item_id"], []).append((Decimal(entry["quantity"]), entry["unit"]))
+    observations, supplies = _observe(db, org_id, lot_ids, today, materials, bound_demand)
     engine_batches, recipes = [], []
     for batch in batches:
         key = StockKey(str(batch.source_output_id), batch.unit, str(batch.site_id) if batch.site_id else None)
@@ -554,7 +590,7 @@ def assess(db, org_id, data, *, today):
         item.id: item
         for item in db.query(InventoryItem).filter(
             InventoryItem.org_id == org_id,
-            InventoryItem.id.in_({service._id(row.supply_id) for batch in result.batches for row in batch.allocations}),
+            InventoryItem.id.in_({_lot_id(row.supply_id) for batch in result.batches for row in batch.allocations}),
         )
     }
     lot_units = {identity: item.unit for identity, item in allocated.items()}
@@ -583,7 +619,7 @@ def assess(db, org_id, data, *, today):
         }
 
     def in_lot_unit(row):
-        unit = lot_units.get(service._id(row.supply_id), row.key.unit)
+        unit = lot_units.get(_lot_id(row.supply_id), row.key.unit)
         return format(convert_quantity_decimal(row.quantity, row.key.unit, unit).normalize(), "f"), unit
 
     for order, (batch, assessed) in enumerate(zip(batches, result.batches, strict=True)):
@@ -613,7 +649,7 @@ def assess(db, org_id, data, *, today):
             ],
             "allocations": [
                 {
-                    "lot_id": row.supply_id,
+                    "lot_id": str(_lot_id(row.supply_id)),
                     "quantity": str(row.quantity),
                     "unit": row.key.unit,
                     "lot_quantity": in_lot_unit(row)[0],
@@ -669,7 +705,7 @@ def _commit(db, org_id, run, batches, assessed, lots):
         if result.earliest_start_date is None:
             continue
         for row in result.allocations:
-            lot = lots[service._id(row.supply_id)]
+            lot = lots[_lot_id(row.supply_id)]
             # Held in the lot's own unit, which is how its stock is counted.
             quantity = convert_quantity_decimal(row.quantity, row.key.unit, lot.unit)
             if quantity <= 0:

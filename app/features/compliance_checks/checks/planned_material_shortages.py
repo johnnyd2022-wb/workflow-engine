@@ -37,13 +37,15 @@ def run_planned_material_shortages_check(org_id: UUID, session: Session) -> Chec
 
     assessment = latest(session, org_id)
     alerts = []
+    flagged = False
     for batch in (assessment or {}).get("batches", []):
         if batch.get("stale"):
-            continue
-        for index, short in enumerate(batch.get("shortages") or []):
+            continue  # the plan changed since the check: neither an alert nor a health flag
+        for short in batch.get("shortages") or []:
             material = short.get("material")
             if not material:
                 continue  # a lot the owner chose; the board explains it
+            flagged = flagged or bool(short.get("order_now"))
             supplier = short.get("supplier")
             if short.get("order_by"):
                 when = f"Order from {supplier} by {_day(short['order_by'])} ({short['lead_time_days']}-day lead time)"
@@ -53,7 +55,9 @@ def run_planned_material_shortages_check(org_id: UUID, session: Session) -> Chec
                 when = "No supplier on record for it"
             alerts.append(
                 {
-                    "id": f"{batch['batch_id']}:{index}",
+                    # Stable per action (this batch, this material), never the list position:
+                    # a dismissal must stay with Sugar when the shortages reorder.
+                    "id": f"{batch['batch_id']}:{' '.join(material.lower().split())}",
                     "area": "Production",
                     "title": f"Order {_amount(short['quantity'])} {short['unit']} of {material}",
                     "description": f"{when}. A planned batch is short of it.",
@@ -65,11 +69,7 @@ def run_planned_material_shortages_check(org_id: UUID, session: Session) -> Chec
     return CheckResult(
         check_id=CHECK_ID,
         # Only an order that should already have gone out changes system health.
-        flagged=any(
-            short.get("order_now")
-            for batch in (assessment or {}).get("batches", [])
-            for short in batch.get("shortages") or []
-        ),
+        flagged=flagged,
         message=f"{len(alerts)} planned material shortage(s)." if alerts else None,
         data={"system_alerts": alerts, "system_finding": {"area": "Production"}},
     )
