@@ -2,13 +2,15 @@
 
 Each public function takes (page, out) and is one view worth looking at. Keep one function
 per state you would otherwise have to click to: the page as it loads, a filter applied, the
-empty state, a panel open, the phone width, the dark theme.
+empty state, a panel open, the laptop and phone widths, the dark theme. Every UI change is
+shot at desktop, laptop and phone; at phone width `shot` fails the scenario if the page
+scrolls sideways.
 
     env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot OUT \
         --scenarios .claude/skills/page-design/scenarios.example.py
 """
 
-from ui_shots import PHONE, TABLET, settle, shot, theme
+from ui_shots import LAPTOP, PHONE, TABLET, settle, shot, theme
 
 PAGE = "/core/inventory/view"
 READY = "#inv-view-tbody tr"  # something that only exists once the page has its data
@@ -44,6 +46,11 @@ def detail_open(page, out):
     settle(page)
     shot(page, out, "detail")
     page.keyboard.press("Escape")
+
+
+def laptop(page, out):
+    _open(page, LAPTOP)
+    shot(page, out, "laptop")
 
 
 def tablet(page, out):

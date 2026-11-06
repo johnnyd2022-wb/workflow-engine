@@ -199,6 +199,15 @@ def _is_code_note(content: str, m: re.Match[str]) -> bool:
     return not lead.strip() and content[m.end("marker") : m.end("marker") + 1] in (":", "(")
 
 
+# The bare word is not enough: `DONE, TODO, BLOCKED = "done", "todo", "blocked"` is a status
+# enum, and it was indexed as an unfixable code-marker finding (id de586e6f). A marker is the
+# word inside a comment (`#`, which also opens Jinja's `{#`; `//`; `/*`; `<!--`; or a ` * `
+# block-comment line) or in the explicit `TODO:` / `TODO(who)` syntax, which also covers a
+# docstring. An identifier is neither.
+# Trade-off, stated so it is not discovered later: a marker with no colon outside those comment
+# styles (a docstring line `TODO fix this`, a SQL `-- TODO`, an ini `; TODO`) is not indexed.
+COMMENT_OPENER_RE = re.compile(r"#|//|/\*|<!--|^\s*\*")
+
 # Text that means an item is already dealt with, so it should not enter the worklist.
 #
 # The trailing alternatives were added after the first real sweep: a `review-feature` /
@@ -928,6 +937,9 @@ def scan_code_markers() -> list[Item] | None:
         m = CODE_MARKER_RE.search(content)
         if not m:
             continue
+        explicit = content[m.end("marker") :].startswith((":", "("))
+        if not explicit and not COMMENT_OPENER_RE.search(content[: m.start("marker")]):
+            continue  # an identifier or string that happens to be spelled TODO
         marker, text = m.group("marker"), m.group("text").strip()
         # `DONE, TODO, BLOCKED = ...` names a constant, not work owed.
         if not _is_code_note(content, m):

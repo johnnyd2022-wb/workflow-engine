@@ -2561,3 +2561,63 @@ def test_marker_classification_needs_no_ripgrep(line, is_note):
 
     assert match is not None
     assert fi._is_code_note(line, match) is is_note
+
+
+def test_code_marker_scan_ignores_an_identifier_named_like_a_marker_but_keeps_real_markers(tmp_path, monkeypatch):
+    """`app/core/backend/getting_started.py` declares a status enum whose members include one
+    spelled like the first marker word. The scanner matched the bare word and indexed that
+    line as a code-marker finding nobody can fix (findings-sweep 2026-11-05, id de586e6f). A
+    marker is a comment, or the explicit `WORD:` / `WORD(who)` syntax; an identifier is
+    neither. Every real spelling must still be found, or the fix would quietly shrink the
+    worklist.
+
+    The marker words are bound to names and interpolated into the fixture text, never written
+    inline in a comment here: a comment in this file reading as a marker would be indexed as a
+    finding in this very file.
+    """
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    todo, fixme, hack, xxx, bug = "TODO", "FIXME", "HACK", "XXX", "BUG"
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "status.py").write_text(
+        f'DONE, {todo}, BLOCKED = "done", "todo", "blocked"\n'
+        f'state = {{"status": DONE if finished else {todo}, "note": "pending review of the whole step list"}}\n'
+        f"# {todo} tighten this validation before the pilot customer goes live\n"
+        f"value = compute()  # {fixme}(johnny) this retry loop never backs off between attempts\n"
+        '"""\n'
+        f"{hack}: reuse the cached parser until the importer is rewritten\n"
+        '"""\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "widget.js").write_text(
+        f"const a = 1; // {xxx} replace this polling loop with a server push\n"
+        "/*\n"
+        f" * {bug} the dialog keeps its scroll position after the form resets\n"
+        " */\n"
+        f"x = 1; /* {hack} keep this in step with the server-side limit */\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "page.html").write_text(
+        f"<!-- {todo} replace this banner once the design is settled -->\n"
+        f"{{# {fixme} drop this block when the legacy layout goes #}}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+
+    items = fi.scan_code_markers()
+
+    assert items is not None, "scan_code_markers could not run"
+    found = {(i.source_path, i.source_line, i.title.split(":")[0]) for i in items}
+    assert found == {
+        ("app/status.py", 3, todo),
+        ("app/status.py", 4, fixme),
+        ("app/status.py", 6, hack),
+        ("app/widget.js", 1, xxx),
+        ("app/widget.js", 3, bug),
+        ("app/widget.js", 5, hack),
+        ("app/page.html", 1, todo),
+        ("app/page.html", 2, fixme),
+    }, f"the identifier on lines 1-2 must not be indexed and every real marker must be, got: {sorted(found)}"

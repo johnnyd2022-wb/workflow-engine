@@ -132,3 +132,47 @@ def test_ac1_database_rejects_unknown_type(db, world):
         db.execute(text("UPDATE crm_tasks SET task_type = 'unsupported' WHERE id = :id"), {"id": task.id})
         db.commit()
     db.rollback()
+
+
+@pytest.mark.parametrize(
+    ("permissions", "can_record", "can_dispatch"),
+    [
+        # Stock rights alone: the page loads, but neither write affordance is offered. Before the
+        # fix `data-can-dispatch` followed `inventory.adjust` alone and showed this user the form.
+        (["sales.view", "inventory.adjust"], "false", "false"),
+        # Recording without stock rights: the dispatch POST would be refused, so no form.
+        (["sales.view", "sales.record"], "true", "false"),
+        (["sales.view", "sales.record", "inventory.adjust"], "true", "true"),
+    ],
+)
+def test_dispatch_form_needs_both_backend_permissions(db, world, typed_client, permissions, can_record, can_dispatch):
+    """The dispatch form is offered only to someone the server will let dispatch: the tasting
+    dispatch endpoint needs `sales.record` (route policy) and `inventory.adjust` (checked in
+    the handler). The page derives `data-can-dispatch` from both so the UI cannot offer an
+    action that answers 403 (html-js-review F2, `.agents/reports/tastings/`)."""
+    from uuid import uuid4
+
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import UserRole
+    from tests.factories import DEFAULT_TEST_PASSWORD, UserFactory
+
+    org, *_ = world
+    role = OrgRole(org_id=org.id, name=f"Tasting role {uuid4()}", base_role="member", permissions=permissions)
+    db.add(role)
+    db.flush()
+    person = UserFactory(org_id=org.id, email=f"custom-{uuid4()}@example.test", role=UserRole.MEMBER)
+    person.custom_role_id = role.id
+    db.commit()
+
+    client = typed_client.application.test_client()
+    client.environ_base.update(wsgi_url_scheme="https", HTTP_X_FORWARDED_PROTO="https")
+    assert (
+        client.post("/auth/login", json={"email": person.email, "password": DEFAULT_TEST_PASSWORD}).status_code == 200
+    )
+
+    page = client.get("/crm/tasks")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "data-tastings-root" in html, "the tastings workspace must render for this org"
+    assert f'data-can-record="{can_record}"' in html
+    assert f'data-can-dispatch="{can_dispatch}"' in html
