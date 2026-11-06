@@ -115,6 +115,22 @@ def get_recall(recall_id):
     return jsonify({"recall": service.serialise(db_session(), g.current_org_id, recall)})
 
 
+@bp.get("/api/core/recalls/by-case/<case_id>")
+@requires_auth
+@requires_org_scope
+def get_recall_by_case(case_id):
+    """The case page asks this when a case is a recall."""
+    cid = _uuid(case_id)
+    recall = (
+        db_session().query(Recall).filter(Recall.org_id == g.current_org_id, Recall.case_id == cid).one_or_none()
+        if cid
+        else None
+    )
+    if recall is None:
+        return jsonify({"error": "Recall not found"}), 404
+    return jsonify({"recall": service.serialise(db_session(), g.current_org_id, recall)})
+
+
 @bp.get("/api/core/recalls/<recall_id>/contacts/<contact_id>/notice")
 @requires_auth
 @requires_org_scope

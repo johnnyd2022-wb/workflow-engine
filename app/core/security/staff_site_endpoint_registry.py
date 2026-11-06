@@ -330,6 +330,7 @@ ENDPOINT_COVERAGE = {
     ("recalls.open_recall", "POST"): "blocked",
     ("recalls.list_recalls", "GET"): "blocked",
     ("recalls.get_recall", "GET"): "blocked",
+    ("recalls.get_recall_by_case", "GET"): "blocked",
     ("recalls.draft_notice", "GET"): "blocked",
     ("recalls.notice_sent", "POST"): "blocked",
     ("recalls.acknowledged", "POST"): "blocked",
