@@ -50,6 +50,23 @@ def findings(report: dict) -> set[tuple[str, str]]:
     return keys
 
 
+def distrust(code: int, report: dict) -> str | None:
+    """Why an audit run can't be believed, or None. uv audit exits 0 (clean) or 1 (findings)."""
+    if "summary" not in report:
+        return f"produced no report (exit {code})"
+    if code not in (0, 1):
+        return f"exited {code}"
+    if code == 1 and not findings(report):
+        return "exited 1 but reported no findings"
+    return None
+
+
+def deps_changed(base: str) -> bool:
+    """Whether the MR touches the dependency inputs at all (fails closed to True)."""
+    out = subprocess.run(["git", "diff", "--quiet", base, "HEAD", "--", *INPUTS], capture_output=True)
+    return out.returncode != 0
+
+
 def base_findings(base: str) -> set[tuple[str, str]] | None:
     with tempfile.TemporaryDirectory() as tmp:
         for name in INPUTS:
@@ -59,8 +76,9 @@ def base_findings(base: str) -> set[tuple[str, str]] | None:
                 return None
             (Path(tmp) / name).write_text(show.stdout)
         code, report = audit(Path(tmp))
-        if "summary" not in report:
-            print(f"uv_audit_gate: auditing the base lockfile failed (exit {code})", file=sys.stderr)
+        why = distrust(code, report)
+        if why:
+            print(f"uv_audit_gate: auditing the lockfile at {base[:8]} {why}", file=sys.stderr)
             return None
         return findings(report)
 
@@ -79,13 +97,20 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--base", default="", help="merge-request diff base SHA; empty on main")
+    ap.add_argument(
+        "--target",
+        default="",
+        help="the target branch's current tip; checked too when the MR changes pyproject.toml/uv.lock",
+    )
     a = ap.parse_args(argv)
 
     code, report = audit(Path.cwd())
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(report, indent=2))
-    if "summary" not in report:
-        print(f"uv audit produced no report (exit {code})", file=sys.stderr)
+    why = distrust(code, report)
+    if why:
+        # Fail closed whatever the findings say: the scan itself didn't run cleanly.
+        print(f"uv audit {why}; failing closed.", file=sys.stderr)
         return 1
     head = findings(report)
     if head:
@@ -95,6 +120,12 @@ def main(argv=None) -> int:
         result, introduced, existing = (1 if head else 0), head, set()
     else:
         base = base_findings(a.base) if head else set()
+        if head and base is not None and deps_changed(a.base):
+            # The MR re-locks dependencies. An advisory counts as pre-existing only if the target
+            # still has it now; otherwise an MR branched before the target's fix could bring it
+            # back. No target tip to check against: fail closed.
+            tip = base_findings(a.target) if a.target else None
+            base = None if tip is None else base & tip
         result, introduced, existing = decide(head, base)
 
     for pkg, vid in sorted(introduced):
