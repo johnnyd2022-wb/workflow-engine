@@ -20,7 +20,8 @@
   var state = { ref: meta ? meta.getAttribute('content') || '' : '', lastError: null };
 
   function noteFailure(id, status, path) {
-    if (!id || status < 500) return;
+    // A boosted 404 is a failed page navigation too; keep its reference available after the toast.
+    if (!id || (status < 500 && status !== 404)) return;
     state.lastError = { ref: short(id), status: status, path: path || '', at: new Date() };
   }
 
@@ -33,7 +34,7 @@
     if (!id) return;
     var boosted = d.boosted || (d.requestConfig && d.requestConfig.boosted);
     if (boosted && xhr.status < 400) state.ref = short(id);
-    noteFailure(id, xhr.status, d.pathInfo && d.pathInfo.requestPath);
+    if (boosted || xhr.status >= 500) noteFailure(id, xhr.status, d.pathInfo && d.pathInfo.requestPath);
   });
 
   // fetch() calls that fail on the server. Passes every response and rejection through untouched.
