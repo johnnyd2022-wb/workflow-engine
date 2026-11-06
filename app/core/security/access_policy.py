@@ -301,6 +301,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.adjust_inventory_item_quantity", None, "inventory.adjust"),
     ("core.csv_validate", None, "inventory.adjust"),
     ("core.csv_commit", None, "inventory.adjust"),
+    ("core.csv_template", None, "inventory.adjust"),
+    ("core.csv_error_report", None, "inventory.adjust"),  # POST, but read-only
     ("core.consume_final_product_fifo", None, "inventory.adjust"),
     ("core.inventory_add*", None, "inventory.adjust"),
     ("core.get_matching_untracked_for_add", None, "inventory.adjust"),
