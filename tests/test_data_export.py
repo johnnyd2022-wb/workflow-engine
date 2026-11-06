@@ -267,7 +267,35 @@ def test_binary_columns_become_files(db, two_orgs, monkeypatch):
 
     zf = zipfile.ZipFile(io.BytesIO(b"".join(service.stream_export(db, org_a.id, org_a.name))))
     rows = _rows(zf, "tables/data_export_probe.csv")
-    assert [(r["title"], r["content"]) for r in rows] == [("COA", f"files/data_export_probe/{doc_id}")]
-    assert zf.read(f"files/data_export_probe/{doc_id}") == b"%PDF-1"
+    assert [(r["title"], r["content"]) for r in rows] == [("COA", f"files/data_export_probe/content/{doc_id}")]
+    assert zf.read(f"files/data_export_probe/content/{doc_id}") == b"%PDF-1"
     assert not any(b"NOPE" in zf.read(n) for n in zf.namelist())
     db.rollback()
+
+
+def test_spreadsheet_formulas_are_neutralised():
+    assert service._cell('=HYPERLINK("https://attacker.invalid","open")').startswith("'=")
+    for lead in ("+1", "-x", "@SUM(A1)", "\tx", "\rx"):
+        assert service._cell(lead) == "'" + lead
+    assert service._cell("Juniper") == "Juniper"
+    # Numbers are data, not text: a negative quantity stays a number.
+    from decimal import Decimal
+
+    assert service._cell(Decimal("-3.5")) == "-3.5"
+    assert service._cell(-2) == "-2"
+
+
+def test_the_download_limit_holds_across_workers(db, two_orgs, monkeypatch):
+    """The count comes from the audit log, so a second worker (fresh limiter memory) still refuses."""
+    from datetime import timedelta
+
+    from app.features.data_export import routes
+
+    org_a, client_a, _org_b = two_orgs
+    monkeypatch.setattr(routes, "DOWNLOAD_LIMITS", ((timedelta(hours=1), 2),))
+    assert client_a.get(URL).status_code == 200
+    assert client_a.get(URL).status_code == 200
+    routes.limiter.reset()  # what a different worker's in-memory limiter looks like
+    refused = client_a.get(URL)
+    assert refused.status_code == 429
+    assert refused.get_json()["code"] == "rate_limited"

@@ -4,7 +4,7 @@ The export is a ZIP streamed to the browser while it is built, so a large organi
 never sits in memory whole:
 
 * ``tables/<table>.csv`` — one CSV per tenant table, rows filtered by ``org_id`` alone;
-* ``files/<table>/<id>`` — binary columns (portal documents) as real files, the CSV
+* ``files/<table>/<column>/<id>`` — binary columns (portal documents) as real files, the CSV
   cell holding the path instead of the bytes;
 * ``summary/*.csv`` — plain-language views (stock, batches) with names, not UUIDs;
 * ``README.txt`` — what each file is, its columns and what they reference.
@@ -86,6 +86,7 @@ SECRET_NAME = re.compile(r"token|secret|hash|password|passwd|key|salt|otp|creden
 # real small manufacturer; it keeps a runaway table from producing an unbounded download.
 MAX_ROWS_PER_TABLE = 1_000_000
 FETCH_BATCH = 1_000
+FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def org_table_names(conn: Connection) -> set[str]:
@@ -127,8 +128,13 @@ def _cell(value) -> str:
     if isinstance(value, dict | list):
         return json.dumps(value, default=str, sort_keys=True)
     if hasattr(value, "value"):  # Enum
-        return str(value.value)
-    return str(value)
+        value = value.value
+    text_value = str(value)
+    # Text a spreadsheet would run as a formula (=, +, -, @, tab, CR) is prefixed with an
+    # apostrophe so it opens as text. Numbers are never str here, so -3.5 stays a number.
+    if isinstance(value, str) and text_value[:1] in FORMULA_LEADS:
+        return "'" + text_value
+    return text_value
 
 
 class _Pipe(io.RawIOBase):
@@ -177,6 +183,8 @@ def _readme(org_name: str, generated_at: datetime, tables: list[Table], stats: E
         "  The first row names the columns. Every row has an 'id'; a column ending '_id'",
         "  points at the 'id' of a row in another file, named below. Dates and times are",
         "  ISO 8601 in UTC. Structured details are JSON. An empty cell means no value.",
+        "  Text that starts with = + - or @ has an apostrophe in front, so a spreadsheet",
+        "  shows it as text instead of running it as a formula.",
         "",
         "Left out on purpose",
         "  Passwords, two-factor secrets, sign-in and Xero tokens, and duplicate-request",
@@ -259,9 +267,10 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
             cols = exported_columns(table)
             key = table.c.id if table.name == ORG_TABLE else table.c.org_id
             pk = list(table.primary_key.columns) or cols[:1]
-            query = select(*cols).where(key == org_id).order_by(*pk).limit(MAX_ROWS_PER_TABLE + 1)
-            binary = [i for i, c in enumerate(cols) if isinstance(c.type, LargeBinary)]
-            pending: list[tuple[str, object, str]] = []  # (zip path, row id, column)
+            # Binary columns are never read in the CSV pass: only whether a file is there.
+            binary = {c.name for c in cols if isinstance(c.type, LargeBinary)}
+            selected = [c.isnot(None).label(c.name) if c.name in binary else c for c in cols]
+            query = select(*selected).where(key == org_id).order_by(*pk).limit(MAX_ROWS_PER_TABLE + 1)
             count = 0
             with zf.open(f"tables/{table.name}.csv", "w", force_zip64=True) as out:
                 out.write(b"\xef\xbb\xbf" + _csv_line(c.name for c in cols))
@@ -270,24 +279,32 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
                         stats.truncated.append(table.name)
                         break
                     count += 1
-                    values = list(row)
-                    for i in binary:
-                        if values[i] is not None:
-                            values[i] = f"files/{table.name}/{row.id}"
-                            pending.append((values[i], row.id, cols[i].name))
+                    values = [
+                        (f"files/{table.name}/{column.name}/{row.id}" if value else None)
+                        if column.name in binary
+                        else value
+                        for column, value in zip(cols, row, strict=True)
+                    ]
                     out.write(_csv_line(_cell(v) for v in values))
                     if len(pipe._chunks) > 64:
                         yield pipe.drain()
             stats.rows[table.name] = count
             yield pipe.drain()
-            # ZipFile writes one member at a time, so files follow their CSV, fetched one by one.
-            for name, row_id, column in pending:
-                content = session.execute(
-                    select(table.c[column]).where(table.c.id == row_id, table.c.org_id == org_id)
-                ).scalar_one()
-                zf.writestr(name, bytes(content))
-                stats.files += 1
-                yield pipe.drain()
+            # Files follow their CSV (ZipFile writes one member at a time), one row at a time
+            # by keyset, so at most one file is ever in memory however many there are.
+            for column in sorted(binary):
+                after = None
+                for _ in range(MAX_ROWS_PER_TABLE):
+                    query = select(table.c.id, table.c[column]).where(key == org_id, table.c[column].isnot(None))
+                    if after is not None:
+                        query = query.where(table.c.id > after)
+                    row = session.execute(query.order_by(table.c.id).limit(1)).first()
+                    if row is None:
+                        break
+                    after = row.id
+                    zf.writestr(f"files/{table.name}/{column}/{row.id}", bytes(row[1]))
+                    stats.files += 1
+                    yield pipe.drain()
 
         zf.writestr("README.txt", _readme(org_name, generated_at, tables, stats))
     yield pipe.drain()
