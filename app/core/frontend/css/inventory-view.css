@@ -607,3 +607,11 @@ body:has(.inv-view-page) .inv-edit-input:focus { outline-color: var(--ui-accent,
 html[data-spa-theme="dark"] #page-content .inv-view-page .inv-moved { border-color: rgba(117, 224, 167, .4); background: rgba(117, 224, 167, .1); color: #75e0a7; }
 #page-content .inv-view-page .inv-drawer__foot { display: flex; gap: 10px; }
 #page-content .inv-view-page .inv-drawer__foot .inv-drawer__edit { flex: 1; }
+
+/* GL-P02: quality hold */
+#page-content .inv-view-page .inv-row__hold { display: inline-block; margin-left: 8px; vertical-align: 1px; padding: 1px 8px; border: 1px solid var(--inv-overdue-line); border-radius: 999px; background: var(--inv-overdue-soft); color: var(--inv-overdue); font-size: 11px; font-weight: 700; letter-spacing: .01em; }
+#page-content .inv-view-page .inv-drawer__qhold { display: grid; gap: 4px; margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--inv-overdue-line); border-left-width: 4px; border-radius: 10px; background: var(--inv-overdue-soft); }
+#page-content .inv-view-page .inv-drawer__qhold strong { color: var(--inv-overdue); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+#page-content .inv-view-page .inv-drawer__qhold p { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+#page-content .inv-view-page .inv-drawer__qhold .inv-muted { font-size: 13px; }
+#page-content .inv-view-page .inv-drawer__qhistory .inv-drawer__inputs li { align-items: flex-start; gap: 4px 12px; flex-wrap: wrap; }
