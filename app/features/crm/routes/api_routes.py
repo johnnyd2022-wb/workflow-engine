@@ -314,7 +314,51 @@ def list_customer_returns():
     """GL-P01b: goods customers sent back, newest first."""
     from app.features.crm.services.sales_returns import recent, serialise
 
-    return jsonify({"returns": [serialise(r) for r in recent(db_session(), UUID(g.org_id))]}), 200
+    contact_id = None
+    if request.args.get("contact_id"):
+        contact_id = _uuid_or_none(request.args.get("contact_id"))
+        if contact_id is None:
+            return jsonify({"returns": []}), 200
+    rows = recent(db_session(), UUID(g.org_id), contact_id=contact_id)
+    return jsonify({"returns": [serialise(r) for r in rows]}), 200
+
+
+@api_bp.route("/api/crm/returns/places", methods=["GET"])
+@requires_auth
+def list_return_places():
+    """GL-P01b: the stock areas a return can be received into, and whether each is in bond."""
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+
+    org_id = UUID(g.org_id)
+    sites = {s.id: s.name for s in db_session().query(Site).filter(Site.org_id == org_id).all()}
+    rows = (
+        db_session()
+        .query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    places = [
+        {
+            "id": str(loc.id),
+            "name": f"{sites[loc.site_id]} · {loc.name}" if len(sites) > 1 and loc.site_id in sites else loc.name,
+            "in_bond": bool(loc.inside_licensed_area),
+        }
+        for loc in rows
+    ]
+    return jsonify({"places": places}), 200
+
+
+@api_bp.route("/api/crm/invoices/<xero_invoice_id>/returnable", methods=["GET"])
+@requires_auth
+def list_returnable_sale_lines(xero_invoice_id: str):
+    """GL-P01b: the sale lines on an invoice that goods could come back from."""
+    from app.features.crm.services.sales_returns import returnable_sale_lines
+
+    if not xero_invoice_id or len(xero_invoice_id) > 100:
+        return jsonify({"lines": []}), 200
+    return jsonify({"lines": returnable_sale_lines(db_session(), UUID(g.org_id), xero_invoice_id)}), 200
 
 
 @api_bp.route("/api/crm/returns", methods=["POST"])
@@ -328,11 +372,17 @@ def record_customer_return():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"error": "Send the return as JSON"}), 400
-    line_id = None
-    if data.get("credit_note_line_id") is not None:
-        line_id = _uuid_or_none(data.get("credit_note_line_id"))
-        if line_id is None:
-            return jsonify({"error": "Credit note line not found"}), 404
+    ids = {}
+    for key, missing in (
+        ("credit_note_line_id", "Credit note line not found"),
+        ("allocation_id", "Sale line not found"),
+        ("location_id", "Stock area not found"),
+    ):
+        ids[key] = None
+        if data.get(key) not in (None, ""):
+            ids[key] = _uuid_or_none(str(data.get(key)))
+            if ids[key] is None:
+                return jsonify({"error": missing}), 404
     try:
         received_on = date.fromisoformat(str(data.get("received_on") or date.today().isoformat()))
     except ValueError:
@@ -347,7 +397,9 @@ def record_customer_return():
             quantity=data.get("quantity"),
             received_on=received_on,
             note=data.get("note") if isinstance(data.get("note"), str) else None,
-            credit_note_line_id=line_id,
+            credit_note_line_id=ids["credit_note_line_id"],
+            allocation_id=ids["allocation_id"],
+            location_id=ids["location_id"],
             product_name=data.get("product_name") if isinstance(data.get("product_name"), str) else None,
             unit=data.get("unit") if isinstance(data.get("unit"), str) else None,
         )

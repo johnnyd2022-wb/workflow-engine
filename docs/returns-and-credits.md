@@ -9,7 +9,7 @@ How Biz-E handles goods that come back from a customer (go-live item GL-P01). It
 | Record | Where it comes from | What it changes |
 |---|---|---|
 | **Credit note** (money) | Xero, synced with your invoices (`ACCRECCREDIT`) | Net sales on the Sales overview. Never stock. |
-| **Customer return** (goods) | You record it: Sales → Overview → *Did stock come back?* | Stock: back into the batch it was sold from, onto quality hold, or nothing. |
+| **Customer return** (goods) | You record it: Sales → Overview → *Did stock come back?*, or a customer's invoice → *Record a return* | Stock: back into the batch it was sold from, onto quality hold, or written off as waste. |
 | **Possible duty credit** (duty) | Automatic, from a return that put stock back inside the licensed area | A *possible credit* line on the excise draft (Compliance → Customs). It's never claimed for you. |
 
 ## The cases
@@ -18,12 +18,18 @@ How Biz-E handles goods that come back from a customer (go-live item GL-P01). It
 
 1. Raise the credit note in Xero as usual. After the next sync, the credited product shows under
    *Did stock come back?*
-2. Enter how many came back, choose **Fine: back into stock** and the date received, then press
-   **Record return**.
-3. Biz-E puts the goods back into the batch the sale came from (it finds the sale line on the
-   credited invoice). If it can't tell which batch, they go into a new lot of that product.
-4. If they came back into the licensed area (bond), the excise draft for that month lists them
-   as a possible credit. Decide with Customs whether to claim it.
+2. Enter how many came back, choose **Fine: back into stock**, the date received and **where it
+   was received** (bond or a duty-paid area such as the shop), then press **Record return**.
+3. Received where the batch is, the goods go back into the batch the sale came from (Biz-E finds
+   the sale line on the credited invoice). Received anywhere else, or when Biz-E can't tell the
+   batch, they become a new lot at that place, carrying the batch number so the trace reads through.
+4. If they were received into the licensed area (bond), the excise draft for that month lists them
+   as a possible credit. That's decided by where they were *received*, not where the lot is moved
+   later. Decide with Customs whether to claim it.
+
+From a customer's page you can do the same without a credit note: open the invoice, press **Record a
+return**, pick the product (Biz-E shows how many of each sale line can still come back) and save.
+The customer's **Returns** list shows every return and what happened to it.
 
 **Damaged goods**
 
@@ -34,15 +40,17 @@ an admin releases the hold with a note. If you write them off, record the lot as
 **Goods destroyed or kept by the customer**
 
 - Destroyed (by the customer, a carrier or you on arrival): choose **Destroyed: nothing back**.
-  The return is recorded but no stock changes and no duty credit is listed.
+  The return is recorded as a lot and immediately written off, so the loss is on the wastage register
+  with the reason "Customer return destroyed". No duty credit is listed.
 - Kept by the customer, or a price-only credit: use **Credit only · no goods** with a note. The
   credit note stays and nothing else changes.
 
 **A credit for more lines than came back**
 
 Record each part separately: say 2 of 3 back now and 1 later. The line stays on the list until
-what came back, or a "credit only" decision, covers the credited quantity. Biz-E refuses to
-record more back than was credited.
+what came back covers the credited quantity, or someone records **Credit only** for the rest
+(after a partial return that means "no more goods are coming"; the record keeps how many did come
+back). Biz-E refuses to record more back than was credited, or more than was sold on a sale line.
 
 **Voided or deleted invoice**
 
@@ -57,9 +65,9 @@ again, which is why the earlier return was listed as a possible credit.
 
 **Goods back with no credit note** (a swap, a breakage collected by a rep)
 
-The API takes a return without a credit-note line (`POST /api/crm/returns` with `product_name`).
-It goes into a new lot of that product. There's no screen for this yet, so ask support to
-record it until there is.
+Open the invoice on the customer's page and press **Record a return**. If there's no invoice at
+all, the API takes a return with just a product name (`POST /api/crm/returns` with
+`product_name`), which goes into a new lot of that product.
 
 ## What the records show
 

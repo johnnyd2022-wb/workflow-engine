@@ -27,7 +27,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 
+import app.core.db.models.inventory_wastage  # noqa: F401 -- registers the wastage FK target
 import app.core.db.models.lot_hold  # noqa: F401 -- registers the hold FK target
+import app.core.db.models.site  # noqa: F401
+import app.core.db.models.stock_location  # noqa: F401
+import app.features.crm.models.xero_contact  # noqa: F401
 import app.features.crm.models.xero_credit_note_line  # noqa: F401 -- registers the credit-line FK target
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
@@ -58,10 +62,20 @@ class SalesReturn(TenantScoped, Base):
             name="fk_sales_return_org_resulting_lot",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["org_id", "location_id"],
+            ["stock_locations.org_id", "stock_locations.id"],
+            name="fk_sales_return_org_location",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_sales_return_org_site", ondelete="RESTRICT"
+        ),
         CheckConstraint("quantity > 0", name="ck_sales_return_quantity"),
         CheckConstraint("condition IN ('resaleable', 'damaged', 'destroyed')", name="ck_sales_return_condition"),
         CheckConstraint(
-            "(condition = 'destroyed') = (resulting_lot_id IS NULL)", name="ck_sales_return_stock_matches_condition"
+            "resulting_lot_id IS NOT NULL AND ((condition = 'destroyed') = (wastage_id IS NOT NULL))",
+            name="ck_sales_return_stock_matches_condition",
         ),
     )
 
@@ -76,6 +90,11 @@ class SalesReturn(TenantScoped, Base):
     received_on = Column(Date, nullable=False)
     original_lot_id = Column(UUID(as_uuid=True), nullable=True)
     resulting_lot_id = Column(UUID(as_uuid=True), nullable=True)
+    # Where it was received (the dated fact excise classifies by), not where the lot sits later.
+    site_id = Column(UUID(as_uuid=True), nullable=True)
+    location_id = Column(UUID(as_uuid=True), nullable=True)
+    wastage_id = Column(UUID(as_uuid=True), ForeignKey("inventory_wastage.id", ondelete="RESTRICT"), nullable=True)
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("xero_contacts.id", ondelete="SET NULL"), nullable=True)
     hold_id = Column(UUID(as_uuid=True), ForeignKey("lot_holds.id", ondelete="RESTRICT"), nullable=True)
     note = Column(Text, nullable=True)
     recorded_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

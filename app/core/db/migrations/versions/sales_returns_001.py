@@ -33,6 +33,14 @@ def upgrade():
         sa.Column("received_on", sa.Date(), nullable=False),
         sa.Column("original_lot_id", UUID(as_uuid=True), nullable=True),
         sa.Column("resulting_lot_id", UUID(as_uuid=True), nullable=True),
+        sa.Column("site_id", UUID(as_uuid=True), nullable=True),
+        sa.Column("location_id", UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "wastage_id", UUID(as_uuid=True), sa.ForeignKey("inventory_wastage.id", ondelete="RESTRICT"), nullable=True
+        ),
+        sa.Column(
+            "contact_id", UUID(as_uuid=True), sa.ForeignKey("xero_contacts.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("hold_id", UUID(as_uuid=True), sa.ForeignKey("lot_holds.id", ondelete="RESTRICT"), nullable=True),
         sa.Column("note", sa.Text(), nullable=True),
         sa.Column("recorded_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
@@ -56,15 +64,27 @@ def upgrade():
             name="fk_sales_return_org_resulting_lot",
             ondelete="RESTRICT",
         ),
+        sa.ForeignKeyConstraint(
+            ["org_id", "location_id"],
+            ["stock_locations.org_id", "stock_locations.id"],
+            name="fk_sales_return_org_location",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_sales_return_org_site", ondelete="RESTRICT"
+        ),
         sa.CheckConstraint("quantity > 0", name="ck_sales_return_quantity"),
         sa.CheckConstraint("condition IN ('resaleable', 'damaged', 'destroyed')", name="ck_sales_return_condition"),
         sa.CheckConstraint(
-            "(condition = 'destroyed') = (resulting_lot_id IS NULL)", name="ck_sales_return_stock_matches_condition"
+            "resulting_lot_id IS NOT NULL AND ((condition = 'destroyed') = (wastage_id IS NOT NULL))",
+            name="ck_sales_return_stock_matches_condition",
         ),
     )
     op.create_index("ix_sales_returns_org_id", "sales_returns", ["org_id"])
     op.create_index("ix_sales_returns_credit_note_line_id", "sales_returns", ["credit_note_line_id"])
     op.create_index("ix_sales_returns_org_received", "sales_returns", ["org_id", "received_on"])
+    op.create_index("ix_sales_returns_org_contact", "sales_returns", ["org_id", "contact_id"])
+    op.create_index("ix_sales_returns_allocation", "sales_returns", ["allocation_id"])
 
 
 def downgrade():

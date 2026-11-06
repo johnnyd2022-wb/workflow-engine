@@ -8,6 +8,8 @@ import pytest
 
 from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_movement import InventoryMovement
+from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.lot_hold import LotHold
 from app.core.db.models.stock_location import StockLocation
 from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
@@ -37,6 +39,8 @@ def cleanup(db, org):
     for model in (SalesReturn,):
         db.query(model).filter(model.org_id == org.id).delete(synchronize_session=False)
     db.query(LotHold).filter(LotHold.org_id == org.id).delete(synchronize_session=False)
+    for model in (InventoryMovement, InventoryWastage):
+        db.query(model).filter(model.org_id == org.id).delete(synchronize_session=False)
     for model in (
         SalesFifoAllocation,
         XeroCreditNoteLine,
@@ -150,12 +154,16 @@ def test_damaged_comes_back_as_its_own_lot_on_quality_hold(db, org, credited):
     assert _qty(db, credited["lot"].id) == Decimal("4")  # the good batch is untouched
 
 
-def test_destroyed_puts_nothing_back(db, org, credited):
-    before = db.query(InventoryItem).filter(InventoryItem.org_id == org.id).count()
+def test_destroyed_is_recorded_and_written_off_on_the_wastage_register(db, org, credited):
     ret = _return(db, org.id, credited, "destroyed", "3", note="Customer binned them")
-    assert ret.resulting_lot_id is None
-    assert db.query(InventoryItem).filter(InventoryItem.org_id == org.id).count() == before
-    assert _qty(db, credited["lot"].id) == Decimal("4")
+    lot = db.get(InventoryItem, ret.resulting_lot_id)
+    assert lot.id != credited["lot"].id and lot.quantity == Decimal("0.0000")
+    waste = db.query(InventoryWastage).filter(InventoryWastage.org_id == org.id).one()
+    assert (waste.inventory_item_id, Decimal(waste.quantity_wasted), waste.id) == (lot.id, Decimal("3"), ret.wastage_id)
+    assert waste.reason == "Customer return destroyed: Customer binned them"
+    movement = db.query(InventoryMovement).filter(InventoryMovement.source_wastage_id == waste.id).one()
+    assert Decimal(str(movement.quantity)) == Decimal("-3")
+    assert _qty(db, credited["lot"].id) == Decimal("4")  # the sold batch is untouched
 
 
 def test_a_return_without_a_credit_note_makes_a_new_lot(db, org):
@@ -315,19 +323,29 @@ def test_recording_a_return_needs_sales_record():
 # --- duty ----------------------------------------------------------------------------------------
 
 
-def test_returns_into_the_licensed_area_are_possible_duty_credits(db, org, credited):
+def test_excise_classifies_a_return_by_where_it_was_received(db, org, credited):
     from app.features.compliant.modules.nz_alcohol import excise
 
-    outside = StockLocation(org_id=org.id, name="Cellar door shop", inside_licensed_area=False)
-    db.add(outside)
+    shop = StockLocation(org_id=org.id, name="Cellar door shop", inside_licensed_area=False)
+    db.add(shop)
     db.commit()
-    back = _return(db, org.id, credited, "resaleable", "1")  # into the batch, which is in the licensed area
+    back = _return(db, org.id, credited, "resaleable", "1")  # received where the batch is: in bond
     _return(db, org.id, credited, "destroyed", "1")  # nothing came back: no credit
-    standalone = sales_returns.record_return(
-        db, org.id, None, condition="resaleable", quantity="5", received_on=TODAY, product_name=PRODUCT
+    to_shop = sales_returns.record_return(
+        db,
+        org.id,
+        None,
+        condition="resaleable",
+        quantity="5",
+        received_on=TODAY,
+        product_name=PRODUCT,
+        location_id=shop.id,
     )
-    standalone_lot = db.get(InventoryItem, standalone.resulting_lot_id)
-    standalone_lot.location_id = outside.id  # duty-paid shop stock: not a duty matter
+    db.commit()
+    assert to_shop.location_id == shop.id
+    # Moving the returned lot later doesn't change where it was received.
+    db.get(InventoryItem, back.resulting_lot_id).location_id = shop.id
+    db.get(InventoryItem, to_shop.resulting_lot_id).location_id = None
     db.commit()
 
     start = TODAY.replace(day=1)
@@ -336,6 +354,113 @@ def test_returns_into_the_licensed_area_are_possible_duty_credits(db, org, credi
     rows = excise._customer_returns(db, org.id, start, end, locations)
     assert [(r.kind, r.item.id, r.quantity) for r in rows] == [("returned", back.resulting_lot_id, Decimal("1"))]
     assert rows[0].reference == f"Customer return: {PRODUCT} (resaleable)"
-    assert {r.reference for r in excise._removals(db, org.id, start, end) if r.kind == "returned"} >= {
-        rows[0].reference
+    assert rows[0].received_at == {"site_id": back.site_id, "location_id": None}
+    assert rows[0].frozen_basis is None  # so the draft lists it with the other possible credits
+    assert rows[0].reference in {r.reference for r in excise._removals(db, org.id, start, end) if r.kind == "returned"}
+
+
+def test_received_somewhere_else_is_a_new_lot_there_not_the_batch(db, org, credited):
+    shop = StockLocation(org_id=org.id, name="Cellar door shop", inside_licensed_area=False)
+    db.add(shop)
+    db.commit()
+    ret = sales_returns.record_return(
+        db,
+        org.id,
+        None,
+        condition="resaleable",
+        quantity="2",
+        received_on=TODAY,
+        credit_note_line_id=credited["line"].id,
+        location_id=shop.id,
+    )
+    db.commit()
+    lot = db.get(InventoryItem, ret.resulting_lot_id)
+    assert lot.id != credited["lot"].id and lot.location_id == shop.id and lot.extra_data["batch_number"] == 12
+    assert ret.original_lot_id == credited["lot"].id
+    assert _qty(db, credited["lot"].id) == Decimal("4")
+    with pytest.raises(LookupError):
+        sales_returns.record_return(
+            db,
+            org.id,
+            None,
+            condition="resaleable",
+            quantity="1",
+            received_on=TODAY,
+            credit_note_line_id=credited["line"].id,
+            location_id=uuid4(),
+        )
+
+
+def test_credit_only_after_a_partial_return_covers_the_rest(db, org, credited, app_client):
+    from app.core.db.models.audit_log import AuditLog as Audit
+
+    line, note = credited["line"], credited["note"]
+    _return(db, org.id, credited, "resaleable", "2")
+    resp = app_client.post(
+        f"/api/crm/credit-notes/{note.id}/lines/{line.id}/no-return", json={"note": "Third bottle kept by the customer"}
+    )
+    assert resp.status_code == 200
+    audit = db.query(Audit).filter(Audit.org_id == org.id, Audit.action == "credit_note_line_no_return").one()
+    assert (audit.meta_data["returned_before"], audit.meta_data["scope"]) in {
+        ("2.0000", "remainder"),
+        ("2", "remainder"),
     }
+    # ...and nothing more can come back against it.
+    with pytest.raises(sales_returns.ReturnConflictError):
+        _return(db, org.id, credited, "resaleable", "1")
+    assert app_client.get("/api/crm/returns/pending").get_json()["items"] == []
+
+
+def test_from_an_invoice_sale_line_with_its_own_guard(db, org, credited, app_client):
+    lines = app_client.get("/api/crm/invoices/inv-1/returnable").get_json()["lines"]
+    assert [(r["product_name"], r["sold"], r["returnable"]) for r in lines] == [(PRODUCT, "6", "6")]
+    alloc = lines[0]["allocation_id"]
+    ok = app_client.post("/api/crm/returns", json={"allocation_id": alloc, "condition": "resaleable", "quantity": "4"})
+    assert ok.status_code == 201, ok.get_json()
+    assert ok.get_json()["return"]["resulting_lot_id"] == str(credited["lot"].id)
+    too_many = app_client.post(
+        "/api/crm/returns", json={"allocation_id": alloc, "condition": "resaleable", "quantity": "3"}
+    )
+    assert too_many.status_code == 400 and "Only 2 more" in too_many.get_json()["error"]
+    assert app_client.get("/api/crm/invoices/inv-1/returnable").get_json()["lines"][0]["returnable"] == "2"
+    assert (
+        app_client.post(
+            "/api/crm/returns", json={"allocation_id": str(uuid4()), "condition": "resaleable", "quantity": "1"}
+        ).status_code
+        == 404
+    )
+    assert (
+        app_client.post(
+            "/api/crm/returns", json={"allocation_id": 123, "condition": "resaleable", "quantity": "1"}
+        ).status_code
+        == 404
+    )
+    assert app_client.get("/api/crm/invoices/nope/returnable").get_json()["lines"] == []
+
+
+def test_customer_history_lists_only_that_customers_returns(db, org, credited, app_client):
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    contact = XeroContact(org_id=org.id, xero_contact_id=f"c-{uuid4()}", name="Kererū Botanicals")
+    db.add(contact)
+    db.flush()
+    db.add(
+        XeroInvoice(
+            org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-1", contact_id=contact.id, invoice_type="ACCREC", status="AUTHORISED"
+        )
+    )
+    db.commit()
+    _return(db, org.id, credited, "resaleable", "1")
+    sales_returns.record_return(
+        db, org.id, None, condition="resaleable", quantity="1", received_on=TODAY, product_name=PRODUCT
+    )
+    db.commit()
+    mine = app_client.get(f"/api/crm/returns?contact_id={contact.id}").get_json()["returns"]
+    assert [r["contact_id"] for r in mine] == [str(contact.id)]
+    assert len(app_client.get("/api/crm/returns").get_json()["returns"]) == 2
+    assert app_client.get("/api/crm/returns?contact_id=junk").get_json()["returns"] == []
+    db.query(SalesReturn).filter(SalesReturn.org_id == org.id).delete(synchronize_session=False)
+    db.query(XeroInvoice).filter(XeroInvoice.org_id == org.id).delete(synchronize_session=False)
+    db.query(XeroContact).filter(XeroContact.org_id == org.id).delete(synchronize_session=False)
+    db.commit()

@@ -27,6 +27,16 @@ function crmCustomerDetail(contactId) {
       return `Page ${this.invoicePage} of ${Math.ceil(this.invoiceTotal / this.invoicePageSize)}`;
     },
     invoicesLoaded: false,
+    // GL-P01b: goods back from this customer.
+    canRecordReturns: false,
+    customerReturns: [],
+    returnPlaces: [],
+    returnInvoiceId: null,
+    returnLines: [],
+    returnLinesLoading: false,
+    returnDraft: { allocation_id: '', quantity: '', condition: 'resaleable', received_on: '', location_id: '', note: '' },
+    returnError: '',
+    returnSaving: false,
     invoicesLoading: false,
     invoiceError: '',
     openInvoiceId: null,
@@ -111,6 +121,7 @@ function crmCustomerDetail(contactId) {
     savingMapping: false,
 
     async init() {
+      this.canRecordReturns = this.$root.dataset.canRecordReturns === 'true';
       this.loading = true;
       this.error = null;
       try {
@@ -201,6 +212,7 @@ function crmCustomerDetail(contactId) {
         this.$nextTick(() => this.drawCustomerAnalyticsCharts());
       } else if (tab === 'invoices' && !this.invoicesLoaded && !this.invoicesLoading) {
         this.loadInvoices();
+        this.loadCustomerReturns();
       }
     },
 
@@ -219,6 +231,59 @@ function crmCustomerDetail(contactId) {
         this.invoiceError = e.message || 'Failed to load invoices.';
       } finally {
         this.invoicesLoading = false;
+      }
+    },
+
+    // ── Returns (GL-P01b) ───────────────────────────────────────
+    // The page runs Alpine's CSP build: no globals in templates, so labels are built here.
+    async loadCustomerReturns() {
+      try { this.customerReturns = (await CRMAPI.getCustomerReturns(this.contactId)).returns || []; } catch (_) { this.customerReturns = []; }
+    },
+    returnSummary(r) { return `${Number(r.quantity)} × ${r.product_name}${r.note ? ` · ${r.note}` : ''}`; },
+    returnOutcome(r) {
+      if (r.written_off) return 'Destroyed · written off';
+      if (r.on_hold) return 'Damaged · on hold';
+      return 'Back in stock';
+    },
+    returnBadgeClass(r) { return r.written_off ? 'crm-badge--voided' : (r.on_hold ? 'crm-badge--draft' : 'crm-badge--paid'); },
+    returnLineLabel(line) { return `${line.product_name} · ${line.returnable} of ${line.sold} ${line.unit} can come back`; },
+    placeLabel(place) { return place.in_bond ? `${place.name} (in bond)` : `${place.name} (duty paid)`; },
+    async openReturn(inv) {
+      this.returnInvoiceId = inv.id;
+      this.returnError = '';
+      this.returnLines = [];
+      this.returnLinesLoading = true;
+      this.returnDraft = { allocation_id: '', quantity: '', condition: 'resaleable', received_on: new Date().toLocaleDateString('en-CA'), location_id: '', note: '' };
+      try {
+        const [lines, places] = await Promise.all([
+          CRMAPI.getReturnableSaleLines(inv.xero_invoice_id),
+          this.returnPlaces.length ? Promise.resolve({ places: this.returnPlaces }) : CRMAPI.getReturnPlaces(),
+        ]);
+        this.returnLines = (lines.lines || []).filter((l) => Number(l.returnable) > 0);
+        this.returnPlaces = places.places || [];
+        if (this.returnLines.length) {
+          this.returnDraft.allocation_id = this.returnLines[0].allocation_id;
+          this.returnDraft.quantity = this.returnLines[0].returnable;
+        }
+      } catch (e) {
+        this.returnError = e.message || 'Could not load what was sold on this invoice.';
+      } finally {
+        this.returnLinesLoading = false;
+      }
+    },
+    closeReturn() { this.returnInvoiceId = null; this.returnError = ''; },
+    async submitReturn(inv) {
+      if (!(Number(this.returnDraft.quantity) > 0)) { this.returnError = 'Enter how many came back.'; return; }
+      this.returnSaving = true;
+      this.returnError = '';
+      try {
+        await CRMAPI.recordCustomerReturn({ ...this.returnDraft, location_id: this.returnDraft.location_id || null });
+        this.closeReturn();
+        await this.loadCustomerReturns();
+      } catch (e) {
+        this.returnError = e.message || 'The return could not be saved.';
+      } finally {
+        this.returnSaving = false;
       }
     },
 

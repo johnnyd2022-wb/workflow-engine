@@ -91,6 +91,12 @@
                   </label>
                   <label><span>Received</span><input type="date" :aria-label="'Date ' + item.product_name + ' came back'" x-model="returnForms[item.line_id].received_on"></label>
                 </div>
+                <label class="sales-returns-pending__note-label" x-show="returnPlaces.length > 0"><span>Received into</span>
+                  <select :aria-label="'Where returned ' + item.product_name + ' was received'" x-model="returnForms[item.line_id].location_id">
+                    <option value="">Where it was sold from</option>
+                    <template x-for="place in returnPlaces" :key="place.id"><option :value="place.id" x-text="placeLabel(place)"></option></template>
+                  </select>
+                </label>
                 <label class="sales-returns-pending__note-label"><span>Note (optional)</span>
                   <input type="text" maxlength="500" :aria-label="'Note on returned ' + item.product_name" x-model="returnForms[item.line_id].note">
                 </label>

@@ -83,6 +83,7 @@ function crmOverview() {
     pendingReturnErrors: {},
     pendingReturnBusyId: null,
     returnForms: {},
+    returnPlaces: [],
 
     async init() {
       this.loading = true;
@@ -125,6 +126,7 @@ function crmOverview() {
         this.loadWidgetLayout();
         await this.refreshCustomWidgets();
         this.loadPendingReturns(true);
+        this.loadReturnPlaces();
       } catch (e) {
         this.error = e.message || 'Failed to load Sales overview.';
         this.loadError = true;
@@ -173,10 +175,15 @@ function crmOverview() {
       if (!this.returnForms[item.line_id]) {
         const left = Math.max(Number(item.quantity || 0) - Number(item.returned || 0), 0);
         const today = new Date().toLocaleDateString('en-CA');
-        this.returnForms[item.line_id] = { quantity: left ? String(left) : '', condition: 'resaleable', received_on: today, note: '' };
+        this.returnForms[item.line_id] = { quantity: left ? String(left) : '', condition: 'resaleable', received_on: today, note: '', location_id: '' };
       }
       return this.returnForms[item.line_id];
     },
+
+    async loadReturnPlaces() {
+      try { this.returnPlaces = (await CRMAPI.getReturnPlaces()).places || []; } catch (_) { this.returnPlaces = []; }
+    },
+    placeLabel(place) { return place.in_bond ? `${place.name} (in bond)` : `${place.name} (duty paid)`; },
 
     hasReturned(item) { return Number(item.returned || 0) > 0; },
     returnedHint(item) { return `${Number(item.returned || 0)} of ${Number(item.quantity || 0)} already back`; },
@@ -201,6 +208,7 @@ function crmOverview() {
           condition: form.condition,
           received_on: form.received_on,
           note: form.note,
+          location_id: form.location_id || null,
         });
         delete this.returnForms[item.line_id];
         await this.loadPendingReturns(true);
