@@ -416,3 +416,120 @@ def test_the_sales_permission_says_an_invoice_takes_stock_off():
     from app.core.security.access_policy import PERMISSIONS
 
     assert "takes its stock off" in PERMISSIONS["sales.record"]
+
+
+# --- SALES-PERM (2026-11-06, findings 0286511e / e085bb41): what sales.manage may do to stock ---
+
+
+def _mode(world):
+    return world["client"].get("/api/crm/traceability-config").get_json()["matching_strategy"]
+
+
+def _manager(world):
+    """Connects Xero and configures sales (sales.manage) but holds no stock permission."""
+    return world["login_as"](world["custom_role"]("sales.view", "sales.record", "sales.manage", "inventory.view"))
+
+
+def test_switching_manual_to_fifo_without_stock_access_is_refused_and_moves_nothing(world):
+    world["mode"]("manual")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    world["invoice"](date(2026, 10, 1), "3")
+    world["reconcile"]()
+    assert _stock(world, lot) == 10  # manual: the sale waits for someone to pick its batch
+
+    manager = _manager(world)
+    resp = manager.put(
+        "/api/crm/traceability-config",
+        json={"matching_strategy": "fifo", "manual_review_days": 7, "strict_mapping": False},
+    )
+    assert resp.status_code == 403, resp.get_json()
+    assert resp.get_json()["code"] == "permission_denied"
+    assert _mode(world) == "manual"
+    world["reconcile"]()  # the next sync, whoever triggers it
+    assert _stock(world, lot) == 10 and world["allocations"]() == []
+
+
+def test_without_stock_access_the_other_matching_settings_still_save(world):
+    world["mode"]("manual")
+    manager = _manager(world)
+    resp = manager.put(
+        "/api/crm/traceability-config",
+        json={"matching_strategy": "manual", "manual_review_days": 12, "strict_mapping": True},
+    )
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["manual_review_days"] == 12 and _mode(world) == "manual"
+
+
+def test_with_stock_access_the_matching_mode_can_change(world):
+    world["mode"]("manual")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    world["invoice"](date(2026, 10, 1), "3")
+    keeper = world["login_as"](
+        world["custom_role"]("sales.view", "sales.record", "sales.manage", "inventory.view", "inventory.adjust")
+    )
+    resp = keeper.put(
+        "/api/crm/traceability-config",
+        json={"matching_strategy": "fifo", "manual_review_days": 7, "strict_mapping": False},
+    )
+    assert resp.status_code == 200, resp.get_json()
+    world["reconcile"]()
+    assert _stock(world, lot) == 7
+
+
+def test_a_save_that_leaves_out_the_mode_keeps_it(world):
+    """It used to fall back to fifo, which would also have slipped past the mode check."""
+    world["mode"]("manual")
+    manager = _manager(world)
+    resp = manager.put("/api/crm/traceability-config", json={"task_done_archive_days": 9})
+    assert resp.status_code == 200, resp.get_json()
+    assert _mode(world) == "manual"
+
+
+def test_in_fifo_mode_a_manual_xero_sync_under_sales_manage_applies_authorised_sales(world, monkeypatch):
+    """e085bb41, decided: a sync only brings in sales Xero already holds, and applies them to stock
+    as authorising does under sales.record (GL-S01). It is not a stock permission of its own."""
+    from types import SimpleNamespace
+
+    from app.features.crm.services.xero_sync_service import XeroSyncService
+
+    def full_sync(self, org_id, triggered_by="manual"):
+        summary = SalesTraceabilityService(self.db).reconcile_org(org_id)
+        self.db.commit()
+        return SimpleNamespace(
+            success=True,
+            partial=False,
+            contacts_synced=0,
+            invoices_synced=0,
+            sales_allocated=summary.get("allocated", 0),
+            sales_unmapped=0,
+            sales_insufficient_stock=0,
+            errors=[],
+        )
+
+    monkeypatch.setattr(XeroSyncService, "full_sync", full_sync)
+    world["mode"]("fifo")
+    lot = world["lot"]("VAT40", 10, date(2026, 9, 1))
+    world["invoice"](date(2026, 10, 1), "3")
+
+    manager = world["login_as"](world["custom_role"]("sales.view", "sales.manage", "inventory.view"))
+    resp = manager.post("/api/crm/xero/sync")
+    assert resp.status_code == 200, resp.get_json()
+    assert _stock(world, lot) == 7
+
+
+def test_the_settings_page_locks_the_matching_mode_without_stock_access(world):
+    manager = _manager(world)
+    page = manager.get("/crm/configuration").get_data(as_text=True)
+    assert 'data-testid="matching-mode-locked"' in page
+    assert 'value="fifo" x-model="draft.matching.mode" disabled' in page
+
+    owner_page = world["client"].get("/crm/configuration").get_data(as_text=True)
+    assert 'data-testid="matching-mode-locked"' not in owner_page
+    assert 'value="fifo" x-model="draft.matching.mode">' in owner_page
+
+
+def test_the_sales_manage_permission_says_what_it_does_to_stock():
+    from app.core.security.access_policy import PERMISSIONS
+
+    text = PERMISSIONS["sales.manage"]
+    assert "applies authorised sales to stock" in text and "inventory.adjust" in text

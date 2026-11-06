@@ -76,3 +76,52 @@ def test_the_page_fits_without_sideways_scroll(xero, sales_page, width):  # noqa
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     for section in ("#xero", "#mappings", "#matching", "#customers", "#revenue", "#tasks"):
         expect(sales_page.locator(section)).to_be_visible()
+
+
+@pytest.fixture()
+def without_stock_access(db, user):  # noqa: F811
+    """The signed-in person configures sales (sales.manage) but cannot adjust stock."""
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import User, UserRole
+
+    role = OrgRole(
+        org_id=user.org_id,
+        name="Sales manager (no stock)",
+        base_role="sales",
+        permissions=["sales.view", "sales.record", "sales.manage", "inventory.view"],
+        site_access_mode="all",
+    )
+    db.add(role)
+    db.flush()
+    was = user.role
+    user.role, user.custom_role_id = UserRole.SALES, role.id  # what assigning "custom:<id>" stores
+    db.commit()
+    role_id = role.id
+    yield
+    db.rollback()
+    db.query(User).filter(User.custom_role_id == role_id).update(
+        {User.role: was, User.custom_role_id: None}, synchronize_session=False
+    )
+    db.query(OrgRole).filter(OrgRole.id == role_id).delete(synchronize_session=False)
+    db.commit()
+
+
+def test_no_stock_access_locks_the_matching_mode(without_stock_access, xero, sales_page, client):  # noqa: F811
+    # The rest of the section still saves.
+    # SALES-PERM: switching the mode makes waiting sales take stock, so it needs inventory.adjust.
+    _open(sales_page)
+    matching = sales_page.locator("#matching")
+    expect(matching.get_by_test_id("matching-mode-locked")).to_be_visible()
+    for radio in matching.locator("input[name='matching_mode']").all():
+        expect(radio).to_be_disabled()
+    matching.get_by_text("Xero line must match exactly").click()
+    matching.get_by_role("button", name="Save").click()
+    expect(sales_page.locator("#matching .ss-saved")).to_have_text("Saved.")
+    assert client.get("/api/crm/traceability-config").get_json()["strict_mapping"] is False
+
+
+def test_with_stock_access_the_matching_mode_is_not_locked(xero, sales_page):  # noqa: F811
+    _open(sales_page)
+    matching = sales_page.locator("#matching")
+    expect(matching.get_by_test_id("matching-mode-locked")).to_have_count(0)
+    expect(matching.locator("input[value='manual']")).to_be_enabled()

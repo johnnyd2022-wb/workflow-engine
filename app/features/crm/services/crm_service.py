@@ -348,7 +348,8 @@ class CRMService:
 
     def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
         before = self.get_traceability_config(org_id)
-        strategy = (data.get("matching_strategy") or "fifo").strip().lower()
+        # A save that leaves the mode out keeps it; it used to fall back to fifo silently.
+        strategy = (data.get("matching_strategy") or before["matching_strategy"] or "fifo").strip().lower()
         if strategy not in {"fifo", "manual", "hybrid"}:
             raise ValueError("matching_strategy must be fifo, manual, or hybrid")
         manual_review_days = int(data.get("manual_review_days") or 7)
