@@ -260,6 +260,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
+    ("data_export.*", None, "settings.manage"),  # GL-P10: every record, admins only
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
