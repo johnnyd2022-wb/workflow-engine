@@ -547,15 +547,20 @@ uv_audit:
   stage: security
   needs: []
   image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
+  variables:
+    GIT_DEPTH: 0  # the gate reads the target branch's lockfile at the MR's diff base
   script:
     - *install_uv
     - uv sync --extra dev
-    - mkdir -p .agents/reports/security
-    - >
-      uv audit --frozen --output-format json
-      --preview-features audit-command,json-output
-      > .agents/reports/security/uv-audit.json
-      || (cat .agents/reports/security/uv-audit.json; exit 1)
+    # On an MR, an advisory already on the target branch is a warning (exit 3), not a
+    # block; one the MR introduces still fails. On main every advisory fails as before.
+    - |
+      TARGET=""
+      if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ] && git fetch -q origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; then
+        TARGET="FETCH_HEAD"
+      fi
+      python3 scripts/uv_audit_gate.py --out .agents/reports/security/uv-audit.json \
+        --base "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" --target "$TARGET"
   artifacts:
     paths:
       - .agents/reports/security/uv-audit.json
@@ -564,7 +569,8 @@ uv_audit:
   only:
     - merge_requests
     - main
-  allow_failure: false
+  allow_failure:
+    exit_codes: [3]
 
 # Supply-chain BEHAVIOUR analysis (Socket) -- the proactive layer pip_audit/uv_audit
 # can't provide. Those scan for already-published CVEs (reactive, days-to-weeks lag from
