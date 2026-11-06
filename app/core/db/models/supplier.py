@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Index, String, Text, func
+from sqlalchemy import TIMESTAMP, Column, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -19,6 +19,8 @@ class Supplier(TenantScoped, Base):
     email = Column(String(255), nullable=True)
     address = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
+    # Days from ordering to delivery; a planned batch's shortage becomes an order-by date (GL-P07 B2b).
+    lead_time_days = Column(Integer, nullable=True)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

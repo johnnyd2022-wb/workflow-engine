@@ -766,6 +766,25 @@
       els.drawerBody.appendChild(findings);
     }
 
+    // GL-P07 B2b: planned batches that hold part of this lot. A soft hold: it can still be used,
+    // but the planner will need to find the stock elsewhere.
+    var held = Array.isArray(item.committed) ? item.committed : [];
+    if (held.length) {
+      var heldTotal = held.reduce(function (sum, row) { return sum + Number(row.quantity || 0); }, 0);
+      var holds = section('Held for planned batches');
+      holds.classList.add('inv-drawer__holds');
+      holds.appendChild(el('p', 'inv-drawer__holds-summary', fmtQty(heldTotal) + ' ' + (item.unit || '') + ' of ' + fmtQty(qty(item)) + ' held · ' + fmtQty(Math.max(qty(item) - heldTotal, 0)) + ' free'));
+      var holdList = el('ul', 'inv-drawer__inputs');
+      held.forEach(function (row) {
+        var li = el('li');
+        li.appendChild(el('span', '', row.batch + ' · starts ' + fmtDate(row.starts)));
+        li.appendChild(el('span', 'inv-qty', fmtQty(Number(row.quantity)) + ' ' + row.unit));
+        holdList.appendChild(li);
+      });
+      holds.appendChild(holdList);
+      els.drawerBody.appendChild(holds);
+    }
+
     var details = section('Details');
     var list = el('dl', 'inv-facts');
     if (sitesShown()) {

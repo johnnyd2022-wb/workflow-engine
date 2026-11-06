@@ -11,6 +11,8 @@
     { key: 'contact_name', label: 'Contact', max: 255 },
     { key: 'phone', label: 'Phone', type: 'tel', max: 50 },
     { key: 'email', label: 'Email', type: 'email', max: 255 },
+    // GL-P07 B2b: a planned batch short of what they supply gets an order-by date from this.
+    { key: 'lead_time_days', label: 'Lead time · days', type: 'number', min: 0, maxValue: 365, hint: 'Days from ordering to delivery. Planning uses it to say when to order.' },
     { key: 'address', label: 'Address', textarea: true, max: 2000 },
     { key: 'notes', label: 'Notes', textarea: true, max: 4000 },
   ];
@@ -63,10 +65,12 @@
       var input = document.createElement(field.textarea ? 'textarea' : 'input');
       if (field.textarea) input.rows = 3; else input.type = field.type || 'text';
       input.className = 'spa-inp';
-      input.maxLength = field.max;
+      if (field.max) input.maxLength = field.max;
+      if (field.type === 'number') { input.min = String(field.min); input.max = String(field.maxValue); input.step = '1'; input.inputMode = 'numeric'; }
       input.required = !!field.required;
-      input.value = (supplier && supplier[field.key]) || '';
+      input.value = supplier && supplier[field.key] != null ? supplier[field.key] : '';
       label.appendChild(input);
+      if (field.hint) label.appendChild(el('small', 'core2-suppliers-form__hint', field.hint));
       body.appendChild(label);
       inputs[field.key] = input;
     });

@@ -181,7 +181,14 @@
             });
             body.append(held);
           }
-          (material.shortages || []).forEach(row => body.append(node('p', 'Short of ' + (row.material || 'the chosen lot') + ': ' + amount(row.quantity) + ' ' + row.unit)));
+          (material.shortages || []).forEach(row => {
+            // GL-P07 B2b: who to order from, and by when, from the supplier's lead time.
+            let order = '';
+            if (row.order_now) order = ' · order from ' + row.supplier + ' now';
+            else if (row.order_by) order = ' · order from ' + row.supplier + ' by ' + new Date(row.order_by + 'T00:00:00').toLocaleDateString('en-NZ', {day: 'numeric', month: 'short'});
+            else if (row.supplier) order = ' · usually from ' + row.supplier + ' (no lead time set)';
+            body.append(node('p', 'Short of ' + (row.material || 'the chosen lot') + ': ' + amount(row.quantity) + ' ' + row.unit + order, row.order_now ? 'board-batch__order-now' : undefined));
+          });
           const reasons = node('ul'); material.reasons.forEach(reason => reasons.append(node('li', reason))); body.append(reasons);
         }
       }

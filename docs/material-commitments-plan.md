@@ -33,15 +33,28 @@ shelf.
 - `commitments_for_items` answers "what's held on these lots, and for which batch". B2b uses it
   on the stock screens.
 
-## Not in this change (B2b)
+## B2b: where people see it (follow-on MR)
 
-- Inventory detail: "4 kg committed to Batch G-0412 (starts 3 Nov)".
-- Soft warnings when disposing, consuming or selling committed stock.
-- Supplier lead times turning a shortage into "order by 28 Oct", and a notification for it.
+- **The lot says what's held.** Inventory → a lot's panel lists "Held for planned batches":
+  each batch, when it starts, how much, and "3 kg of 4 held · 1 free".
+- **Disposing into a hold warns, and isn't blocked.** The dispose confirmation names the
+  batches holding the lot when the disposal would eat into them.
+- **Suppliers have a lead time** (`suppliers.lead_time_days`, 0–365, on the supplier form and
+  panel).
+- **A shortage says who to order from and by when.** The supplier is the one on the material's
+  most recent lot. The order-by date is the batch's start less that supplier's lead time. Once
+  that date has come, the board says "order now" in the warning colour. Shortages read in the
+  unit people order in (1 kg, not 1000 g).
+- **Notifications:** each shortage is an "Order 1 kg of Caster sugar" row, due on its order-by
+  date, with "Open the board". An order already late flags system health.
+
+## Still not done
+
 - Inputs made by another workflow (intermediates) still aren't planned.
-- A started batch's inputs are held only once its steps record them. Between Start and the
-  first recorded step, the floor is trusted.
+- A started batch's inputs are held only once its steps record them.
 - The start check (`evaluate_start`) stays closed until B4.
+- Consuming or selling committed stock through other screens doesn't warn yet; only disposal
+  does.
 
 ## Checks
 
