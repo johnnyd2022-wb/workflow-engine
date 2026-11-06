@@ -63,7 +63,7 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         for name, path, labels, secondary in [
             ("production", "/core", ["Overview", "Planner", "Workflows", "Inventory"], "Contract orders"),
             ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Tools"),
-            ("sales", "/crm", ["Overview", "Customers", "Tasks", "Analytics"], "Batch matching"),
+            ("sales", "/crm", ["Overview", "Customers", "Sales tasks", "Analytics"], "Batch matching"),
         ]:
             page.goto(path)
             nav = page.get_by_role("navigation", name=f"{name.title()} sections", exact=True)
@@ -374,14 +374,19 @@ def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browse
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width):
+def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width, db):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/settings")
         expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
         # Plan 2.5: sites and people are Settings tabs now, not cards in an Organisation category.
+        # GL-P07 A1 (!597): Sites shows only for a business with the multi_site subscription.
         row = page.get_by_role("tablist", name="Settings pages")
-        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Tasks"])
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Integrations", "Task settings"])
+        FeatureSubscriptionRepository(db).grant(UUID(workspace_user["org_id"]), "multi_site")
+        db.commit()
+        page.reload()
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Task settings"])
         expect(row.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(row.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()

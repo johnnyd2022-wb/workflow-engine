@@ -1,5 +1,5 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Excise · Sales{% endblock %}
+{% block title %}Excise estimate · Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="max-content crm-root ex-root" x-data="crmExcise()">
-  {% set crm_heading = "Excise" %}
+  {% set crm_heading = "Excise estimate" %}
   {% include "crm/_crm_banner.html" %}
   <p class="ex-lede">What you sold each month, its litres of alcohol, and an estimate of the duty and levy on it.</p>
 

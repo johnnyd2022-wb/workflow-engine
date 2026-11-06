@@ -1,5 +1,5 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Tasks · Sales{% endblock %}
+{% block title %}Sales tasks{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
@@ -16,7 +16,7 @@
      data-me="{{ g.current_user.id if g.current_user else '' }}">
   <header class="workspace-header">
     <div>
-      <h1>Tasks</h1>
+      <h1>Sales tasks</h1>
       <p class="tasks-summary" aria-live="polite" x-text="summaryLine">Follow-ups for your customers, and who is doing them.</p>
     </div>
     <div class="tasks-header-actions">
