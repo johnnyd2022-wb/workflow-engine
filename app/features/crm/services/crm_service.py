@@ -1664,6 +1664,7 @@ def _serialise_sync_job(j) -> dict:
         "status": j.status,
         "contacts_synced": j.contacts_synced,
         "invoices_synced": j.invoices_synced,
+        "credit_notes_synced": j.credit_notes_synced,
         "started_at": j.started_at.isoformat() if j.started_at else None,
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
         "error_message": j.error_message,

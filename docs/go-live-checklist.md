@@ -60,7 +60,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ☐ | GL-P01 | Returns, credit notes and physical stock | Decide | Importing credit notes is a fix; how a return shows on stock and duty is a design choice |
+| ◐ | GL-P01 | Returns, credit notes and physical stock | In progress | !641 GL-P01a imports credit notes, nets overview revenue and records credit-only decisions; physical returns and duty treatment continue in GL-P01b |
 | ☐ | GL-P02 | Quality hold and release on a lot | Decide | |
 | ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
 | ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |

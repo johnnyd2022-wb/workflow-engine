@@ -14,7 +14,7 @@
 {# The section head above is this page's title. #}
 {% set section_head_is_page_title = true %}
 {% block content %}
-<div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" @sales-add-widget.window="openWidgetModal()">
+<div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" data-can-record="{{ 'true' if can('sales.record') else 'false' }}" @sales-add-widget.window="openWidgetModal()">
   <div x-show="error && !loadError" class="crm-error-banner" role="alert" x-cloak>
     <span x-text="error"></span>
     <button type="button" x-show="!loadError" aria-label="Dismiss error" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
@@ -57,6 +57,37 @@
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="('Last ' + (momPeriodMonths) + ' month' + (momPeriodMonths > 1 ? 's' : '') + ' vs prior period')"></div>
       </button>
     </div>
+    </section>
+
+    <section class="workspace-card sales-returns-pending" aria-labelledby="sales-returns-pending-title">
+      <h2 id="sales-returns-pending-title">Did stock come back?</h2>
+      <p class="sales-returns-pending__intro">Mapped product lines on authorised Xero credit notes need a return decision. Recording “no goods” keeps the credit note and does not change stock.</p>
+      <p class="sales-returns-pending__message" x-show="pendingReturnsLoading" role="status">Loading credit-note lines…</p>
+      <p class="sales-returns-pending__message" x-show="pendingReturnsError" x-text="pendingReturnsError" role="alert"></p>
+      <template x-if="!pendingReturnsLoading && !pendingReturnsError && pendingReturns.length === 0">
+        <p class="sales-returns-pending__message">No mapped credit-note lines need a return decision.</p>
+      </template>
+      <div class="sales-returns-pending__list" x-show="pendingReturns.length > 0" x-cloak>
+        <template x-for="item in pendingReturns" :key="item.line_id">
+          <article class="sales-returns-pending__item">
+            <div class="sales-returns-pending__details">
+              <strong x-text="item.product_name"></strong>
+              <span x-text="(item.credit_note_number || 'Credit note') + (item.contact ? ' · ' + item.contact : '')"></span>
+              <span x-text="(item.date || 'Date not recorded') + ' · ' + (item.description || item.item_code || 'Credit line') + (item.quantity ? ' · Qty ' + item.quantity : '')"></span>
+              <span class="sales-returns-pending__amount" x-text="formatInvoiceCurrency(Number(item.line_amount || 0), item.currency)"></span>
+            </div>
+            <div class="sales-returns-pending__decision" x-show="canRecordReturns" x-cloak>
+              <label class="sales-returns-pending__note-label">
+                <span>Why were no goods returned?</span>
+                <textarea maxlength="500" rows="2" required :aria-label="'Why no goods returned for ' + item.product_name" :value="pendingReturnNotes[item.line_id] || ''" @input="pendingReturnNotes[item.line_id] = $event.target.value"></textarea>
+              </label>
+              <p class="sales-returns-pending__error" x-show="pendingReturnErrors[item.line_id]" x-text="pendingReturnErrors[item.line_id]" role="alert"></p>
+              <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :disabled="pendingReturnBusyId === item.line_id" @click="recordNoReturn(item)" x-text="pendingReturnBusyId === item.line_id ? 'Saving…' : 'Credit only · no goods'"></button>
+            </div>
+          </article>
+        </template>
+        <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" x-show="pendingReturnsHasMore" :disabled="pendingReturnsLoading" @click="loadPendingReturns(false)">Load more</button>
+      </div>
     </section>
 
     <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">

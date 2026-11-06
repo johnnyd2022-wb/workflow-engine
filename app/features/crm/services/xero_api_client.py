@@ -239,6 +239,31 @@ class XeroAPIClient:
 
         return invoices
 
+    def fetch_all_credit_notes(self, modified_after: datetime | None = None) -> list:
+        """Return all ACCRECCREDIT notes, with each page using the normal Xero retry policy."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        credit_notes = []
+        page = 1
+        kwargs: dict = {"where": 'Type=="ACCRECCREDIT"'}
+        if modified_after:
+            if modified_after.tzinfo is None:
+                modified_after = modified_after.replace(tzinfo=UTC)
+            kwargs["if_modified_since"] = modified_after
+
+        while True:
+            result = self._call_with_retry(api.get_credit_notes, tenant_id, page=page, **kwargs)
+            batch = getattr(result, "credit_notes", None) or []
+            credit_notes.extend(batch)
+            logger.debug("Credit notes page %d: %d records", page, len(batch))
+            if len(batch) < 100:
+                break
+            page += 1
+
+        return credit_notes
+
     def create_invoice(
         self,
         *,

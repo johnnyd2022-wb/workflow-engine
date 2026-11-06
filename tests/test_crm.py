@@ -626,6 +626,7 @@ class TestXeroSyncService:
         self._connect_tenant(db, org.id)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
         result = XeroSyncService(db).incremental_sync(org.id, triggered_by="test")
         assert result.success
@@ -644,6 +645,7 @@ class TestXeroSyncService:
         self._connect_tenant(db, org.id)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
         result = XeroSyncService(db).full_sync(org.id, triggered_by="test")
         assert result.success
@@ -701,6 +703,7 @@ class TestCRMInvoiceCreation:
         # bare try/except) -- stub it inert so the test doesn't depend on that side effect.
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
         return created
 
     def test_create_invoice_happy_path(self, db, org, monkeypatch):
@@ -2361,6 +2364,7 @@ class TestManualSyncFailures:
 
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", outcome(contacts, contacts_reply))
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", outcome(invoices))
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", outcome([]))
 
     def test_a_sync_that_failed_outright_is_an_error_the_page_shows(self, app_client, db, org, monkeypatch):
         _connect_xero(db, org.id)
