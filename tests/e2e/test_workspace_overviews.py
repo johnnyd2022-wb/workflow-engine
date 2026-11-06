@@ -34,7 +34,9 @@ def workspace_user(fresh_user, db):
 
 
 def _page(browser, app_url, user, width):
-    context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": width, "height": 1000})
+    context = browser.new_context(
+        base_url=app_url, ignore_https_errors=True, bypass_csp=True, viewport={"width": width, "height": 1000}
+    )
     page = context.new_page()
     login_through_ui(page, user["email"], user["password"])
     return context, page

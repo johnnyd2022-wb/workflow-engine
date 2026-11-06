@@ -1,6 +1,4 @@
-"""GL-S03: the CSP's first step. Pages carry a per-response nonce on every inline script, the
-strict target policy is sent report-only, and the browser's reports are logged without the
-query strings or fragments that can carry tokens."""
+"""GL-S03: pages enforce a fresh nonce for inline script and log sanitized CSP reports."""
 
 import io
 import json
@@ -34,6 +32,11 @@ def test_a_page_carries_one_nonce_on_every_inline_script_and_in_the_report_only_
     html = resp.get_data(as_text=True)
     target = _directives(resp.headers["Content-Security-Policy-Report-Only"])
     nonce = re.fullmatch(r"'self' 'nonce-([\w-]+)' 'report-sample' \S+", target["script-src"]).group(1)
+    enforced = _directives(resp.headers["Content-Security-Policy"])
+    assert enforced["script-src"] == f"'self' 'nonce-{nonce}' https://static.cloudflareinsights.com"
+    assert enforced["script-src-attr"] == "'none'"
+    assert "'unsafe-inline'" not in enforced["script-src"]
+    assert "'unsafe-eval'" not in enforced["script-src"]
 
     inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", html)
     assert inline, "the dashboard has inline scripts to check"
@@ -43,6 +46,7 @@ def test_a_page_carries_one_nonce_on_every_inline_script_and_in_the_report_only_
         assert f'nonce="{nonce}"' in attrs, f"inline script without this response's nonce: <script{attrs}>"
     # htmx gives the same nonce to inline scripts it runs after a boosted swap.
     assert f'"inlineScriptNonce":"{nonce}"' in html
+    assert '"allowEval":false' in html
     assert target["script-src-attr"] == "'none' 'report-sample'"
     assert target["report-uri"] == "/csp-report"
 
