@@ -31,6 +31,10 @@ And it is self-healing in both directions, which is what makes it safe to run un
     (`done` if this loop had an MR open for it, `gone` if it vanished some other way).
   - A `Findings-Index:` trailer in a merged MR description closes the items that MR
     fixed, so the loop learns its own work landed without anyone telling it.
+  - A `Findings-Index:` trailer in an *open* MR marks its items `mr-open`, and `next` skips
+    them: the daily run starts from `origin/main`, which lacks an unmerged fix, so without
+    this it re-picked the same finding every day and left another MR open for it. The mark is
+    taken back (`outstanding`) if that MR closes unmerged, and never on a glab failure.
   - An item that reappears after being closed is reopened and flagged `regressed`, the
     same regression signal `finding_history.py` provides for review findings.
   - Verdicts a human already recorded in `finding_history.py` (false-positive,
@@ -1098,6 +1102,35 @@ def merged_mr_closures(since_days: int) -> tuple[dict[str, str], list[str]]:
     return closures, seen
 
 
+def open_mr_claims() -> dict[str, str] | None:
+    """Map item-id -> "!N" for items an *open* MR says it fixes (its `Findings-Index:` trailer).
+
+    The other half of the trailer loop. `merged_mr_closures` learns an item is done once its MR
+    merges, and `scan_open_mrs` skips a closure MR's description so the writeup is not re-indexed.
+    Between those two, an item fixed in an MR that is still waiting for review looked exactly like
+    untouched work: it stayed at the top of the worklist, and the next daily run re-picked it,
+    leaving a second MR open for the same finding (two sweep MRs for the same Tastings
+    findings sat open together in November 2026).
+
+    None -- not {} -- when `glab` cannot answer, exactly like `scan_open_mrs`. "No open MR claims
+    anything" and "could not look" must stay distinguishable: the sweep releases items whose claim
+    has gone, and it must not do that because GitLab was briefly unreachable.
+    """
+    data = _glab_json(["mr", "list", "--output", "json", "--per-page", "50"])
+    if not isinstance(data, list):
+        return None
+    claims: dict[str, str] = {}
+    for mr in data:
+        if not mr.get("iid"):
+            continue
+        for match in TRAILER_RE.finditer(mr.get("description") or ""):
+            for raw_id in match.group("ids").split(","):
+                item_id = raw_id.strip().lower()
+                if item_id:
+                    claims.setdefault(item_id, f"!{mr['iid']}")  # the first MR listed to claim an id keeps it
+    return claims
+
+
 def _commits_brought_in_by(commit: str) -> set[str]:
     """``commit`` itself and, when it is a merge, the commits it merged in.
 
@@ -1134,7 +1167,9 @@ def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
 
     History never ages out and a revert does not remove a trailer, so `sweep()` applies
     these closures to an item only when it first sees it, never to a record it already
-    holds. That protects a record the store holds; the daily run starts with an empty
+    holds -- the one exception is a record the open-MR claim logic marked `mr-open` whose
+    claim has since gone: if its fix is in history it is closed rather than released. That
+    protects a record the store holds; the daily run starts with an empty
     store, so it does not protect a human's reopen or `wont-fix` across days (that needs a
     disposition in the tree, see the findings-sweep skill). A commit that a later
     `git revert` undid ("This reverts commit <sha>.") is dropped, so its items are listed
@@ -1392,6 +1427,7 @@ def _note(record: dict[str, Any], status: str, why: str, *, explicit: bool = Fal
     then-reappear case the regression check exists to catch.
     """
     record["status"] = status
+    record.pop("claimed_by_open_mr", None)  # any status change ends a claim; 2b re-tags its own
     record["status_reason"] = why
     record.setdefault("history", []).append({"at": utc_now(), "status": status, "why": why})
     if explicit and status in ("gone", "done"):
@@ -1429,6 +1465,7 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     # at birth (step 2), never one the store already holds: see merged_commit_closures.
     history_closures = merged_commit_closures()
     closures: dict[str, str] = {}
+    claims: dict[str, str] | None = None  # None = not looked at (--no-remote) or glab could not answer
     merged_seen: list[str] = []
     if not skip_remote:
         mr_items = scan_open_mrs()
@@ -1437,6 +1474,7 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         for item in mr_items or []:
             found.setdefault(item.id, item)
         closures, merged_seen = merged_mr_closures(int(cfg.get("merged_lookback_days", 2)))
+        claims = open_mr_claims()
 
     stats = {
         "new": 0,
@@ -1448,6 +1486,10 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         "gone": 0,
         "suppressed": 0,
         "unchanged": 0,
+        # Items an open MR currently claims to fix (see open_mr_claims): listed, not offered by `next`.
+        "in_open_mr": 0,
+        # Items that were claimed and no longer are (the MR closed unmerged), owed work again.
+        "released_from_open_mr": 0,
         # Items left untouched because their source wasn't scanned this run. Surfaced so
         # a degraded sweep reads as degraded rather than as a clean one that found less.
         "unverified": 0,
@@ -1505,6 +1547,43 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         else:
             stats["unchanged"] += 1
 
+    # 2b. Items an open MR already fixes are in flight, not owed: mark them so `next` does not
+    #     hand them to a run that would only redo the work. Only `outstanding` ones move -- an
+    #     item this run is working (`in-progress`) or already settled keeps its own status.
+    #     The mark is tagged (`claimed_by_open_mr`) so that only an item some open MR has claimed
+    #     can be taken back: a hand-recorded `mr-open` that no open MR ever claimed (it merged
+    #     without a trailer, say) has no claim to lose and is left alone.
+    if claims is not None:
+        for item_id, ref in claims.items():
+            record = records.get(item_id)
+            if not record or item_id not in found:
+                continue
+            if record.get("status") == "outstanding":
+                _note(record, "mr-open", f"claimed by the `Findings-Index:` trailer of open MR {ref}")
+                record["claimed_by_open_mr"] = True
+            elif record.get("status") == "mr-open":
+                # Adopt a hand-recorded `mr-open` (the skill's Step 4 writes one after opening the MR)
+                # as soon as an open MR claims it, so the release below stays tied to the claim.
+                record["claimed_by_open_mr"] = True
+            if record.get("claimed_by_open_mr") and record.get("status") == "mr-open":
+                record["mr"] = ref  # the claim may have moved to another MR since yesterday
+        # The store outlives a day on the scheduled runner (its own checkout), so a claim can
+        # also go away: the MR was closed unmerged, or its trailer was edited out. Without
+        # this the item would stay `mr-open`, and `next` would skip it, forever.
+        for item_id, record in records.items():
+            if not (record.get("claimed_by_open_mr") and record.get("status") == "mr-open"):
+                continue
+            if item_id in claims:
+                continue
+            # Step 1 already closed anything in `closures`; history covers a merge past the MR window.
+            shipped = history_closures.get(item_id)
+            if shipped:  # the MR merged after all: done, not owed
+                record["mr"] = shipped
+                _note(record, "done", f"merged in {shipped}", explicit=True)
+                stats["closed_by_merge"] += 1
+            else:
+                _note(record, "outstanding", f"no longer claimed: {record.get('mr') or 'its MR'} is not open")
+                stats["released_from_open_mr"] += 1
     # 3. Anything the index knows that the sweep no longer finds -- but ONLY for sources
     #    this run actually scanned. Absence is evidence of resolution only if we looked.
     for item_id, record in records.items():
@@ -1527,6 +1606,11 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         if record and record.get("status") != "suppressed":
             _note(record, "suppressed", why)
             stats["suppressed"] += 1
+
+    # Counted last, so an item that step 3 closed or step 4 suppressed in this same sweep is not reported.
+    stats["in_open_mr"] = sum(
+        1 for r in records.values() if r.get("claimed_by_open_mr") and r.get("status") == "mr-open"
+    )
 
     store["last_sweep"] = utc_now()
     store["last_merged_refs"] = merged_seen
@@ -1659,7 +1743,9 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     print(f"swept {result['total']} tracked item(s), {result['open']} open")
     print(
         "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, already-shipped {already_shipped}, "
-        "gone {gone}, suppressed {suppressed}, unchanged {unchanged}".format(**stats)
+        "gone {gone}, suppressed {suppressed}, unchanged {unchanged}, in-open-MR {in_open_mr}, released {released_from_open_mr}".format(
+            **stats
+        )
     )
     unscanned = [name for name, ok in result["sources_scanned"].items() if not ok]
     if unscanned:
@@ -1678,7 +1764,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
 def cmd_next(args: argparse.Namespace) -> int:
     store = load_store()
     limit = args.limit if args.limit is not None else compute_budget()["items"]
-    picks = rank(store["items"])[: max(0, limit)]
+    # An item whose fix is already in an open MR is waiting on a human, not on this loop.
+    picks = [r for r in rank(store["items"]) if r.get("status") != "mr-open"][: max(0, limit)]
     if args.json:
         print(json.dumps({"limit": limit, "items": picks}, indent=2))
         return 0

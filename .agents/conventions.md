@@ -28,15 +28,15 @@ app/features/<slug>/
   frontend/     # templates/, css/, js/
 ```
 Evidence: `app/features/crm/{routes,services,repositories,models,frontend}/`, and the same
-`*_repo.py` / `*_service*.py` / `*_routes.py` split across the other `app/features/*`
-slices — this is the established split, not a one-off. The always-on core blueprint
-(`app/core/backend/backend.py`) predates this split and was once a single
-multi-thousand-line file. It is being carved up: most core routes now live in sibling
-modules in `app/core/backend/` (`execution_routes.py`, `inventory_routes.py`,
-`process_design_routes.py`, `stocktake.py`, `tasks.py`), and the
-`scripts/check_backend_size.py` job in `.gitlab-ci.yml` fails a branch that grows
-`backend.py`. Don't copy the old shape for new features, and don't add routes to
-`backend.py`; it's legacy, not the pattern to follow.
+split under every other `app/features/*/` — the established split, not a one-off. The
+always-on core blueprint predates it. `app/core/backend/backend.py` was a single
+5,820-line route file when this section was written; it is now a remainder of a few
+hundred lines, its routes carved out into sibling modules in `app/core/backend/`
+(`execution_routes.py`, `inventory_routes.py`, `process_design_routes.py`, …). The
+`backend_size` CI job (`.gitlab-ci.yml:139`, `scripts/check_backend_size.py`) fails any MR
+that makes `backend.py` longer, so a new route never goes there — put it in a feature
+slice (or a `*_routes.py` module beside the others for Core) and don't copy the
+monolith's shape.
 
 Multiple `Blueprint()` objects per feature are normal: `app/features/crm/crm_bp.py:15`
 (parent), plus `crm_api` (`routes/api_routes.py:14`), `crm_pages`
@@ -114,28 +114,24 @@ publishing, HTTP callbacks, or fire-and-forget async work** — side effects bel
 commit or in an out-of-band worker. This is enforced by review, not by a lint rule; treat
 it as load-bearing.
 
-## 6. Testing — flat files, shared fixtures and factories
+## 6. Testing — flat files on shared fixtures (older files still carry their own)
 
-Layout is `tests/test_<thing>.py`, flat (browser tests live in `tests/e2e/`) — **not**
-`tests/unit/<slug>/` + `tests/integration/<slug>/`; `new-feature`'s scaffold says the same.
+Actual layout is `tests/test_<thing>.py`, flat — **not** `tests/unit/<slug>/` +
+`tests/integration/<slug>/` as `new-feature`'s scaffold in step 2 suggests — with
+`tests/e2e/` for Playwright and `tests/js/` for the browser-script suites. Shared
+fixtures live in `tests/conftest.py` (owned by the **test-fixtures** skill; it also holds
+the `live_server` gate owned by **suite-warden** and a session-end purge of the
+organisations a run created): `db` (a session, closed and removed afterwards) and
+`two_org_two_user` (the isolated two-tenant world `security-audit` and `e2e-playwright`
+assume). Test data comes from the factory-boy factories in `tests/factories.py`
+(`OrganisationFactory`, `UserFactory`, `InventoryItemFactory`, `ProcessFactory`,
+`ExecutionFactory`, …); `factory-boy` is in `pyproject.toml`'s `dev` extra.
 
-Shared setup exists and new tests should use it, owned by the **test-fixtures** skill (see
-its `SKILL.md`):
-
-- `tests/conftest.py` — the `db` fixture (a per-test session, closed afterwards), the
-  `two_org_two_user` world that `security-audit` and `e2e-playwright` assume (a hostile
-  neighbour org must exist to prove a query can't see across it), and the purge of orgs a
-  run created (`tests/org_purge.py`). The same file owns the `live_server` gate
-  (**suite-warden**'s).
-- `tests/factories.py` — factory-boy factories (`OrganisationFactory`, `UserFactory`,
-  `InventoryItemFactory`, `ProcessFactory`, `ExecutionFactory`, …) and
-  `DEFAULT_TEST_PASSWORD`. `factory-boy` is in the `dev` extra of `pyproject.toml`.
-
-Some older files predate this and still define their own `db` fixture (a local fixture
-shadows the shared one, so they keep working) or seed orgs by hand and tear them down in a
-`finally` block. That is the pattern to retire, not to copy: reach for `two_org_two_user`
-and the factories first, and add a factory the moment a second test needs the same kind
-of row.
+The older files predate this: many still redefine their own `db` fixture (e.g.
+`tests/test_dashboard_summary.py:39`, which shadows the shared one) and some hand-seed two
+organisations and tear them down in a `finally` block. That is legacy repetition, not the
+pattern — write new tests as flat `tests/test_<slug>.py` files on the shared `db` fixture
+and the factories, not the `tests/unit/<slug>/` shape in `new-feature`'s SKILL.md text.
 
 ## 7. Naming
 
@@ -156,3 +152,9 @@ of row.
 2. `requires_org_scope` is effectively dead code outside `org_routes.py` (§3) — either
    start using it as real defense-in-depth on new routes, or accept the middleware is
    the actual enforcement and stop implying otherwise.
+3. §3 was not re-checked in the 2026-11-03 pass that fixed §1 and §6, and two of its
+   claims no longer match the tree: `requires_org_scope` is applied 45 times across
+   `org_routes.py`, `planning/routes.py` and four `compliant/routes/*` modules (not "only in
+   `org_routes.py`"), and `backend.py` now holds 7 `@requires_auth` routes (not 61). Open
+   item 2 rests on the first claim. The `g.org_id` / `g.current_org_id` counts (95 and 13)
+   were not recounted either. Re-derive §3 before relying on it.
