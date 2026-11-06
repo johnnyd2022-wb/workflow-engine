@@ -113,7 +113,7 @@ def _sale_line_for(session: Session, org_id: UUID, note: XeroCreditNote, mapping
         # The credited invoice's sale lines are known, so every return against them must land on
         # one: that is the guard the invoice path shares, so the two can never add up past what
         # was sold. A quantity no single line can take is recorded in parts.
-        if most <= 0:
+        if not most.is_finite() or most <= 0:
             raise ReturnError("Everything sold on the credited invoice has already come back")
         raise ReturnError(
             f"Only {most.normalize():f} can come back against one sale line on the credited invoice; "
