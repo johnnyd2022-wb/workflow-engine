@@ -59,6 +59,7 @@ def test_an_incremental_sync_resumes_from_when_it_started_not_when_it_finished(d
 
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", contacts)
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", invoices)
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
     assert XeroSyncService(db).incremental_sync(org.id, triggered_by="test").success
     resume_from = _tenant(db, org.id).last_successful_sync_at
     assert resume_from <= fetched["first_fetch"]
@@ -76,6 +77,7 @@ def test_one_record_the_database_rejects_does_not_sink_the_rest_of_the_sync(db, 
         xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [good_before, bad, good_after]
     )
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
     result = XeroSyncService(db).full_sync(org.id, triggered_by="test")
 
@@ -91,6 +93,7 @@ def test_a_partial_sync_keeps_the_resume_point_so_failed_records_are_retried(db,
     _connect(db, org.id)
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
     assert XeroSyncService(db).incremental_sync(org.id, triggered_by="test").success
     before = _tenant(db, org.id).last_successful_sync_at
 
@@ -150,6 +153,7 @@ def test_an_invoice_the_database_rejects_fails_alone_and_the_others_keep_their_l
     ]
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
     monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: invoices)
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
     result = XeroSyncService(db).full_sync(org.id, triggered_by="test")
 

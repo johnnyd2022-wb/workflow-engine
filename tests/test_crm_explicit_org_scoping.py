@@ -178,6 +178,7 @@ class TestSyncJobWiring:
         _connect(db, org.id)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", reply(contacts))
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", reply(invoices))
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", reply([]))
         XeroSyncService(db).incremental_sync(org.id, triggered_by="test")
         db.expire_all()
         return XeroSyncJobRepository(db).get_latest(org.id)

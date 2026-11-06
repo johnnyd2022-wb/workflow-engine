@@ -60,8 +60,8 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ☐ | GL-P01 | Returns, credit notes and physical stock | Decide | Importing credit notes is a fix; how a return shows on stock and duty is a design choice |
 | ☑ | GL-P02 | Quality hold and release on a lot | Build | !640: held lots can't be used in production, sales, tastings, dispatch or split transfers; hold from a lot's panel (with lots made from it); release needs compliance.manage and a note; history kept |
+| ◐ | GL-P01 | Returns, credit notes and physical stock | In progress | !642 GL-P01a imports credit notes, nets overview revenue and records credit-only decisions; physical returns and duty treatment continue in GL-P01b |
 | ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
 | ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |
 | ☑ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Fix | Decided (founder away, 2026-11-06): one name each everywhere. Sales → Excise is the **Sales estimate** (from invoices); Compliance → Customs is the **Filing draft** (from removals; **Lodged return** once lodged). Each links to the other by name and says why they differ (tastings, samples, moves under bond, invoice dates). MR !627 |
