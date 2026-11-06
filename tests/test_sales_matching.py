@@ -533,3 +533,73 @@ def test_the_sales_manage_permission_says_what_it_does_to_stock():
 
     text = PERMISSIONS["sales.manage"]
     assert "applies authorised sales to stock" in text and "inventory.adjust" in text
+
+
+def test_a_mode_change_committed_mid_request_is_not_overwritten_without_stock_access(world, monkeypatch):
+    """Breaker review (!629): the mode check ran in the route, before and outside the write.
+
+    A sales.manage-only person saves with the mode they saw (manual). Between the route's check
+    and the write, someone allowed to commits fifo. Round 1 had already checked "manual" and wrote
+    manual back over fifo (200). Now the check runs inside the write's transaction, after taking the
+    config lock, against the committed fifo, and refuses.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session as SASession
+
+    from app.features.crm.services.crm_service import CRMService
+
+    world["mode"]("manual")
+    org_id = world["org"].id
+    manager = _manager(world)
+
+    original = CRMService.update_traceability_config
+
+    def concurrent_fifo_then_save(self, *args, **kwargs):
+        other = SASession(bind=world["db"].get_bind())
+        try:
+            other.execute(
+                text("UPDATE crm_sales_traceability_config SET matching_strategy = 'fifo' WHERE org_id = :org"),
+                {"org": org_id},
+            )
+            other.commit()
+        finally:
+            other.close()
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(CRMService, "update_traceability_config", concurrent_fifo_then_save)
+    resp = manager.put(
+        "/api/crm/traceability-config",
+        json={"matching_strategy": "manual", "manual_review_days": 7, "strict_mapping": False},
+    )
+    monkeypatch.undo()
+
+    assert resp.status_code == 403, resp.get_json()
+    assert _mode(world) == "fifo"
+
+
+def test_two_first_saves_for_an_org_queue_on_the_config_lock(world):
+    """No config row yet: FOR UPDATE has nothing to lock, so the advisory lock serialises them."""
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session as SASession
+
+    from app.features.crm.models.sales_traceability_config import SalesTraceabilityConfig
+    from app.features.crm.repositories.sales_traceability_repo import SalesTraceabilityConfigRepository
+
+    org_id = world["org"].id
+    world["db"].query(SalesTraceabilityConfig).filter(SalesTraceabilityConfig.org_id == org_id).delete()
+    world["db"].commit()
+    try_lock = text("SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0))")
+    key = {"key": f"crm_traceability_config:{org_id}"}
+
+    first = SASession(bind=world["db"].get_bind())
+    second = SASession(bind=world["db"].get_bind())
+    try:
+        assert SalesTraceabilityConfigRepository(first).lock_for_update(org_id) is None  # no row yet
+        assert second.execute(try_lock, key).scalar() is False  # held by the first save
+        first.rollback()  # first save ends
+        assert second.execute(try_lock, key).scalar() is True
+    finally:
+        first.rollback()
+        second.rollback()
+        first.close()
+        second.close()

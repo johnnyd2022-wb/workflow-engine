@@ -28,6 +28,14 @@ from app.observability import get_logger, start_span
 logger = get_logger(__name__)
 
 
+class MatchingModeChangeError(Exception):
+    """Changing the matching mode needs inventory.adjust (SALES-PERM)."""
+
+    def __init__(self, current: str, wanted: str):
+        super().__init__(f"matching mode {current} -> {wanted} needs inventory.adjust")
+        self.current, self.wanted = current, wanted
+
+
 class CRMService:
     def __init__(self, db: Session):
         self.db = db
@@ -346,12 +354,22 @@ class CRMService:
             "obfuscate_sales_figures": bool(getattr(row, "obfuscate_sales_figures", False)),
         }
 
-    def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
+    def update_traceability_config(self, org_id: UUID, data: dict, *, may_change_mode: bool = True) -> dict:
+        """Save the sales-traceability settings.
+
+        ``may_change_mode`` is False for someone without inventory.adjust (SALES-PERM): the
+        matching mode decides whether waiting sales take stock. It is checked here, against the
+        mode as it is under the lock, in the same transaction that writes, so a change committed
+        by someone else in between can't be overwritten by a request that may not change it.
+        """
+        self.traceability_repo.lock_for_update(org_id)
         before = self.get_traceability_config(org_id)
         # A save that leaves the mode out keeps it; it used to fall back to fifo silently.
         strategy = (data.get("matching_strategy") or before["matching_strategy"] or "fifo").strip().lower()
         if strategy not in {"fifo", "manual", "hybrid"}:
             raise ValueError("matching_strategy must be fifo, manual, or hybrid")
+        if strategy != before["matching_strategy"] and not may_change_mode:
+            raise MatchingModeChangeError(before["matching_strategy"], strategy)
         manual_review_days = int(data.get("manual_review_days") or 7)
         manual_review_days = min(90, max(1, manual_review_days))
         strict_mapping = bool(data.get("strict_mapping", True))
