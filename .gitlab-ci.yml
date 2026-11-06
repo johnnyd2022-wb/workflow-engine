@@ -792,7 +792,16 @@ deploy_test:
   image: docker:27
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+    # Exit 3 = the new app started but never passed /healthcheck. The old app is gone by then,
+    # and cd_e2e (which rollback_test_on_failure needs) won't run, so roll back here.
+    - |
+      status=0
+      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
+      if [ "$status" -eq 3 ]; then
+        echo "New app unhealthy -- rolling back to last known-good :test-stable"
+        ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable" || true
+      fi
+      exit "$status"
   environment:
     name: test
     url: https://test-workflow-engine.whistlebird.co.nz
