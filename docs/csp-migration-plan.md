@@ -45,6 +45,9 @@ style can't run script. Moving them is cosmetic work with little security return
    - Remove `'unsafe-inline'` and `'unsafe-eval'` from `script-src` and add `script-src-attr 'none'`.
    - Set htmx `allowEval: false` and keep the report endpoint.
    - The browser walk asserts zero enforced and report-only violations.
+   - General Playwright UI contexts use `bypass_csp=True` so its `wait_for_function`
+     helper can evaluate expressions. The separate `strict_csp_page` context keeps the
+     policy walk and inline-handler security test under the real CSP.
 
 ## Checks
 
