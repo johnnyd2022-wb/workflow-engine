@@ -71,7 +71,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☑ | GL-P10 | One readable export of all the business's records | Build | !639: Settings → Account → Your records; ZIP of a CSV per table, plain summaries and a README; secrets never exported; admins only, rate-limited, audit-logged |
 | ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. **Non-blocking for the 2026-10-27 check (founder):** left out of this check, still to do |
-| ☑ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | **Decision (2026-11-07; follows the founder's 2026-10-27 direction): defer commercial-depth work until a named buyer has a specific missing job.** No such buyer gap is recorded for this go-live. Keep accounting in Xero; do not present invoicing as a complete finance or distribution system. Do not claim landed-cost/margin reporting, purchase orders, general pick/pack fulfilment, or POS/e-commerce integrations. Reopen against a named prospect and the job their sale depends on. |
+| ☑ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | **Decision (!643; 2026-11-07; follows the founder's 2026-10-27 direction): defer commercial-depth work until a named buyer has a specific missing job.** No such buyer gap is recorded for this go-live. Keep accounting in Xero; do not present invoicing as a complete finance or distribution system. Do not claim landed-cost/margin reporting, purchase orders, general pick/pack fulfilment, or POS/e-commerce integrations. Reopen against a named prospect and the job their sale depends on. |
 
 ### UX and accessibility
 
