@@ -1075,8 +1075,30 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         org_id = UUID(g.org_id)
         repo = InventoryRepository(db_session)
 
+        # GL-P02: a lot that has ever been on quality hold keeps its record. It can be counted
+        # down or disposed of, never deleted (the FK is RESTRICT as the backstop).
+        from app.core.db.models.lot_hold import LotHold
+
         try:
-            success = repo.delete_inventory_item(UUID(item_id), org_id)
+            item_uuid = UUID(item_id)
+        except ValueError:
+            return jsonify({"error": "Inventory item not found"}), 404
+        if (
+            db_session.query(LotHold.id)
+            .filter(LotHold.org_id == org_id, LotHold.inventory_item_id == item_uuid)
+            .first()
+            is not None
+        ):
+            return jsonify(
+                {
+                    "error": "This lot has a quality hold record, so it can't be deleted. "
+                    "Record it as disposed or correct its count instead.",
+                    "code": "lot_has_hold_history",
+                }
+            ), 409
+
+        try:
+            success = repo.delete_inventory_item(item_uuid, org_id)
             if not success:
                 return jsonify({"error": "Inventory item not found"}), 404
 

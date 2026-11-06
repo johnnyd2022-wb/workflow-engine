@@ -349,3 +349,33 @@ def test_any_route_that_hits_a_held_lot_answers_409(flask_app):  # noqa: F811
         "error": "Juniper is on quality hold (Cloudy). Release the hold before using it.",
         "code": "lot_on_hold",
     }
+
+
+def test_a_lot_with_hold_history_cannot_be_deleted(db, org):
+    """A hold is a quality record: deleting the lot must not erase it (route says so; FK backstops)."""
+    from sqlalchemy.exc import IntegrityError
+
+    org_obj, admin = org
+    item = _lot(db, org_obj.id, "Juniper")
+    hold = _hold(db, org_obj.id, item)
+    lot_holds.release_hold(db, org_obj.id, hold.id, "Retested: passed", None)
+    db.commit()
+
+    resp = admin.delete(f"/api/core/inventory/{item.id}")
+    assert resp.status_code == 409
+    assert resp.get_json()["code"] == "lot_has_hold_history"
+    db.expire_all()
+    assert db.get(InventoryItem, item.id) is not None
+    assert [h.id for h in lot_holds.history(db, org_obj.id, item.id)] == [hold.id]
+
+    # Any other path that tries is stopped by the foreign key, not allowed to cascade.
+    with pytest.raises(IntegrityError):
+        InventoryRepository(db).delete_inventory_item(item.id, org_obj.id)
+    db.rollback()
+    assert db.query(LotHold).filter(LotHold.id == hold.id).count() == 1
+
+
+def test_a_lot_never_held_still_deletes(db, org):
+    org_obj, admin = org
+    item = _lot(db, org_obj.id, "Coriander")
+    assert admin.delete(f"/api/core/inventory/{item.id}").status_code == 200

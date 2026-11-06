@@ -26,7 +26,8 @@ class LotHold(TenantScoped, Base):
             ["org_id", "inventory_item_id"],
             ["inventory_items.org_id", "inventory_items.id"],
             name="fk_lot_hold_org_item",
-            ondelete="CASCADE",
+            # A hold is a quality record: deleting the lot must not erase it.
+            ondelete="RESTRICT",
         ),
         CheckConstraint("length(trim(reason)) > 0", name="ck_lot_hold_reason"),
         CheckConstraint(
