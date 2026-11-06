@@ -62,6 +62,7 @@ SEED_KINDS = (
     "sales",
     "planner",
     "board",
+    "commitments",
     "contracts",
     "dispatch",
     "stocktake",
@@ -1678,6 +1679,68 @@ def _seed_stocktake(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_commitments(db, org_id, inv) -> None:
+    """Material commitments on the Production board (GL-P07 B2): a lemon syrup workflow whose
+    sugar and lemons are met from stock, first-expiring first, three batches of it planned for
+    today, and enough stock for two of them. Run Check materials on the board to commit it."""
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.features.planning import batch_service, demand_service
+
+    repo = ProcessRepository(db)
+    process = repo.create_process(org_id, "Lemon syrup")
+    output_id = str(uuid.uuid4())
+    step = repo.add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        position=1000,
+        name="Cook syrup",
+        inputs=[
+            {"name": "Caster sugar", "quantity": "2", "unit": "kg", "requires_inventory_selection": True},
+            {"name": "Lemons", "quantity": "1500", "unit": "g", "requires_inventory_selection": True},
+        ],
+        outputs=[{"id": output_id, "name": "Lemon syrup", "quantity": "10", "unit": "L"}],
+        timing={"duration_minutes": 120, "wait_minutes": 0},
+    )
+    today = date.today()
+    for name, quantity, unit, days in [
+        ("Caster sugar", "1000", "g", 6),
+        ("Caster sugar", "4", "kg", 40),
+        ("Lemons", "5", "kg", 9),
+    ]:
+        inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity=quantity,
+            unit=unit,
+            inventory_type="raw_material",
+            supplier="Moore Wilson's",
+            expiry_date=today + timedelta(days=days),
+            commit=False,
+        )
+    db.commit()
+    batch_service.save_setting(
+        db,
+        org_id,
+        process.id,
+        {"source_output_id": output_id, "batch_quantity": "10", "expected_revision": 0},
+    )
+    demand = demand_service.create_demand(
+        db,
+        org_id,
+        {
+            "reference": "Cocktail bar order",
+            "source_output_id": output_id,
+            "quantity": "30",
+            "due_date": (today + timedelta(days=1)).isoformat(),
+            "priority": 50,
+        },
+    )
+    batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+    db.commit()
+    _ = step
+
+
 def _seed_board(db, org_id, inv) -> None:
     """Planned batches for the Production board: batch sizes and timings for each output the
     Planner's demand asks for, every open demand planned, the batches spread over this week and
@@ -2436,6 +2499,7 @@ def cmd_seed(args) -> int:
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
+            "commitments": _seed_commitments,
             "contracts": _seed_contracts,
             "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,

@@ -697,7 +697,10 @@ def update_batch(db, org_id, batch_id, data, *, today):
         row.forecast_ready_date = None
         row.status = "blocked"
     elif action == "cancel":
+        from app.features.planning.material_adapter import close_commitments
+
         row.status = "cancelled"
+        close_commitments(db, org_id, row.id, "released")
     row.revision += 1
     db.flush()
     return row, True
