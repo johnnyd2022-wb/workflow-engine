@@ -587,3 +587,32 @@ def test_cancelling_a_demand_releases_its_batches_commitments(db, demand_world, 
     adapter.assess(db, org_id, {}, today=TODAY)
     demand_service.cancel_demand(db, org_id, batches[0].demand_id)
     assert [_active(db, org_id, batch) for batch in batches] == [0, 0, 0]
+
+
+def _one_bound_rest_unbound(db, demand_world, monkeypatch, own_available):
+    org_id, _, _, own, sibling, _, _, batches = prepare(db, demand_world)
+    sibling.name = "Molasses"  # the only Sugar is the bound lot
+    for batch in batches[1:]:
+        batch.snapshot = {**batch.snapshot, "material_bindings": []}
+    db.flush()
+    trusted_boundary(
+        monkeypatch,
+        lambda db, org, item: adapter.LotAvailability(own_available if item.id == own.id else item.quantity, TODAY, ()),
+    )
+    adapter.assess(db, org_id, {}, today=TODAY)
+    return own, results(db, org_id)
+
+
+def test_a_bound_lots_leftover_meets_unbound_inputs(db, demand_world, monkeypatch):
+    # Breaker review of !611: binding 2 kg of a 5 kg lot hid the other 3 kg from unbound batches.
+    own, values = _one_bound_rest_unbound(db, demand_world, monkeypatch, Decimal(5))
+    assert values[0]["allocations"][0]["lot_id"] == str(own.id)
+    assert values[1]["material_status"] == "on_time"
+    assert {row["lot_id"] for row in values[1]["allocations"]} == {str(own.id)}
+
+
+def test_a_bound_lot_is_not_counted_twice(db, demand_world, monkeypatch):
+    # 3 kg: the binding takes 2 kg first, so the unbound 2 kg batch is short, not double-served.
+    _, values = _one_bound_rest_unbound(db, demand_world, monkeypatch, Decimal(3))
+    assert values[0]["material_status"] == "on_time"
+    assert values[1]["material_status"] != "on_time"
