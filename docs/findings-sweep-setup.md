@@ -125,7 +125,7 @@ sweep ─► index ─► skill picks top N ─► fixes ─► codex grades ─
 
 The trailer in the MR description is the entire feedback path. The next sweep reads it
 out of the merged MR and closes those items. **No trailer means the work merges and the
-index never learns** — the items sit `mr-open` forever and get picked up again. The
+index never learns** — once the MR is no longer open the items are picked up again. The
 script deliberately refuses to infer closure from title similarity, because a wrong
 auto-close silently drops real work off the list.
 
@@ -166,7 +166,8 @@ say so in its report.
 | Every run dies with ENOENT | systemd's PATH excludes `~/.local/bin`; see `Environment=PATH` above |
 | `budget: 0` every day | 5h or 7d window at/above 88%. Check `python3 scripts/findings_index.py budget` |
 | Index looks empty after a pull | Generated files are gitignored — run `sweep` to rebuild |
-| Items stuck at `mr-open` | The MR merged without a `Findings-Index:` trailer |
+| Items stuck at `mr-open` | Recorded by hand (`record --status mr-open`), and the MR merged without a `Findings-Index:` trailer. Items an open MR claims by trailer are released automatically when it closes |
+| Item skipped by `next` though nobody fixed it | An open MR's `Findings-Index:` trailer names it. Check `python3 scripts/findings_index.py sweep` (`in-open-MR`) and that MR |
 | Same item picked every day | It is failing; at 3 attempts the skill escalates instead of retrying |
 | `DEGRADED: gitlab not scanned` | glab missing/unauthed/down. Items are preserved, not closed — fix glab and re-sweep |
 | `worktree already exists — standing down` | A previous run's worktree is still there; inspect or remove it |
