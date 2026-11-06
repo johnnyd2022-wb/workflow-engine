@@ -10,7 +10,7 @@
 <div class="max-content crm-root ex-root" x-data="crmExcise()">
   {% set crm_heading = "Excise estimate" %}
   {% include "crm/_crm_banner.html" %}
-  <p class="ex-lede">What you sold each month, its litres of alcohol, and an estimate of the duty and levy on it.</p>
+  <p class="ex-lede">What you sold each month, its litres of alcohol, and a <strong>sales estimate</strong> of the duty and levy on it. The return you lodge is the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>, built from what left your licensed area.</p>
 
   <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span></div>
 
@@ -41,7 +41,7 @@
         <section class="ex-report" :class="{ 'ex-report--busy': loadingMonth }" aria-live="polite">
           <header class="ex-report__head">
             <h2 x-text="report.label + (report.complete ? '' : ' so far')"></h2>
-            <span class="ex-badge">Estimate</span>
+            <span class="ex-badge" title="Worked out from invoices, not what you lodge">Sales estimate</span>
           </header>
 
           <div class="ex-figures">
@@ -121,8 +121,9 @@
           <a class="crm-btn crm-btn--secondary crm-btn--sm ex-lodge-link" x-show="report.complete" :href="('/compliant/nz-alcohol/customs?period=' + (report.month) + '-01')">Lodged it? Record it in Customs →</a>
           <p class="ex-foot">
             An estimate from <span x-text="sources.join(' and ') || 'your'"></span> sales, using Customs rates in force on the 1st of the month.
-            Duty is charged on alcohol removed from your licensed area, which can differ from sales; lodge from
-            <a href="/compliant/nz-alcohol/customs">Compliance → Customs</a>.
+            Duty is charged on alcohol removed from your licensed area, so the filing draft can differ: stock poured at
+            tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after
+            the stock left. Lodge from the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>.
             <template x-if="ratesSource">
               <span>Rates: <a :href="ratesSource.excise.url" target="_blank" rel="noopener">excise</a> and
                 <a :href="ratesSource.levy.url" target="_blank" rel="noopener">alcohol levy</a>, checked

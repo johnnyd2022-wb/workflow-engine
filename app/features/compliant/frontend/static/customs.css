@@ -63,6 +63,9 @@ html[data-spa-theme="dark"] #page-content .customs-page .excise-period--more str
 html[data-spa-theme="dark"] #page-content .customs-late { color: #f97066; }
 #page-content .customs-status { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--ui-surface-subtle, #f1f5f9); color: var(--ui-text-muted, #475569); }
 #page-content .customs-status--overdue { background: #fee4e2; color: #b42318; }
+/* GL-P05: says which figure this is (the filing draft), matching Sales → Excise's "Sales estimate" tag. */
+#page-content .customs-kind { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--ui-border, #cbd5e1); color: var(--ui-text, #0f172a); }
+html[data-spa-theme="dark"] #page-content .customs-kind { border-color: rgba(255, 255, 255, .24); color: #e2e8f0; }
 #page-content .customs-status--due { background: #fef0c7; color: #8a5a00; }
 #page-content .customs-status--lodged { background: #dcfae6; color: #17603f; }
 html[data-spa-theme="dark"] #page-content .customs-status--overdue { background: rgba(240, 68, 56, .18); color: #f97066; }
