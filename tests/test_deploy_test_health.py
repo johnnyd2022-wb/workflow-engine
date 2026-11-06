@@ -105,3 +105,38 @@ def test_job_rolls_back_to_test_stable_only_when_the_new_app_is_unhealthy(tmp_pa
     deploys = log.read_text().split()
     assert deploys[0] == "reg/app/app:test-abc"
     assert ("reg/app/app:test-stable" in deploys) is rolled_back
+
+
+def test_a_failed_start_after_the_old_app_is_removed_exits_3_for_rollback(tmp_path):
+    """Review round 1 (claude-2): `docker run -d` failing after stop/rm exited 125 and skipped the rollback."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _exe(
+        bin_dir / "docker",
+        'if [ "$1" = run ] && [ "$2" = -d ]; then echo "Conflict. The container name is already in use" >&2; exit 125; fi\n'
+        "exit 0\n",
+    )
+    _exe(bin_dir / "curl", "exit 0\n")
+    env = {
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "FLASK_SECRET_KEY": "x" * 40,
+        "GOOGLE_CLIENT_ID": "id",
+        "GOOGLE_CLIENT_SECRET": "secret",
+        "HOME": str(tmp_path),
+    }
+    out = subprocess.run(
+        ["bash", str(SCRIPT), "registry.example/app:test-abc"], cwd=ROOT, env=env, capture_output=True, text=True
+    )
+    assert out.returncode == 3, out.stdout + out.stderr
+    assert "Could not start" in out.stdout
+
+
+def test_job_reports_a_failed_rollback_and_still_fails(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    _exe(tmp_path / "scripts" / "deploy_test_simple.sh", 'case "$1" in *test-stable) exit 1;; esac\nexit 3\n')
+    env = {**os.environ, "CI_REGISTRY_IMAGE": "reg/app", "CI_COMMIT_SHORT_SHA": "abc"}
+    out = subprocess.run(
+        ["bash", "-eo", "pipefail", "-c", _job_script()], cwd=tmp_path, env=env, capture_output=True, text=True
+    )
+    assert out.returncode == 3
+    assert "Rollback to :test-stable failed too" in out.stdout

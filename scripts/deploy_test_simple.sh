@@ -122,7 +122,12 @@ if [ -n "$DB_PASSWORD" ]; then
     DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
 fi
 
-docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"
+# From here the old app is gone: any failure exits 3 so the CI job rolls back to :test-stable
+# (a "name already in use" or port conflict used to exit 125 and leave test with no app).
+if ! docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"; then
+    echo "❌ Could not start workflow-engine-test after removing the old app."
+    exit 3
+fi
 
 # Don't report success until the app answers. cd_e2e used to start while the container was
 # still booting and fail on ERR_CONNECTION_REFUSED (main 2026-09-30, 10-14, 10-25; see

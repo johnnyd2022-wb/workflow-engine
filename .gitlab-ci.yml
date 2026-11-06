@@ -799,7 +799,11 @@ deploy_test:
       ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
       if [ "$status" -eq 3 ]; then
         echo "New app unhealthy -- rolling back to last known-good :test-stable"
-        ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable" || true
+        if ! ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"; then
+          # Most likely the failed deploy added a migration :test-stable doesn't know
+          # ("Can't locate revision" above). Test is left without a healthy app.
+          echo "❌ Rollback to :test-stable failed too: the test environment needs a manual fix."
+        fi
       fi
       exit "$status"
   environment:
