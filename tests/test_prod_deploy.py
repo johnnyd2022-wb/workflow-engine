@@ -143,6 +143,9 @@ def deploy(tmp_path, request):
         "GOOGLE_CLIENT_SECRET": "fixture-only",
         "POSTGRES_PASSWORD_TEST": "fixture-only",
         "POSTHOG_PROJECT_API_KEY": "fixture-token",
+        # A failing health check polls until it gives up. At the real 60 tries, each a few
+        # fake-docker calls, a busy CI runner hit the 30s timeout below.
+        "DEPLOY_HEALTH_ATTEMPTS": "3",
     }
     # Exercise secret loading rather than inheriting the developer's session key.
     env.pop("FLASK_SECRET_KEY", None)
