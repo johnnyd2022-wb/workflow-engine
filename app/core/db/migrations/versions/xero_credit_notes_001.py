@@ -1,7 +1,7 @@
 """Synced Xero receivable credit notes and audited return decisions.
 
 Revision ID: xero_credit_notes_001
-Revises: supplier_lead_time_001
+Revises: lot_holds_001
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision = "xero_credit_notes_001"
-down_revision = "supplier_lead_time_001"
+down_revision = "lot_holds_001"
 branch_labels = None
 depends_on = None
 
