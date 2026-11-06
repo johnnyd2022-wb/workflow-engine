@@ -122,9 +122,18 @@ class Plan:
 
 
 def build_plan(
-    demands: tuple[Demand, ...], supplies: tuple[Supply, ...], rules: tuple[BatchRule, ...], *, today: date
+    demands: tuple[Demand, ...],
+    supplies: tuple[Supply, ...],
+    rules: tuple[BatchRule, ...],
+    *,
+    today: date,
+    plan_for: frozenset[str] | None = None,
 ) -> Plan:
     """Net demand in due-date order, consuming first-expiring eligible supply.
+
+    ``plan_for`` limits which demands get batches: the others still take their share of supply
+    in due order, but get none planned, so they leave no planned surplus behind either. Used to
+    plan one demand netted against every other open demand for the same stock.
 
     Dates are day-granular. Duration rounds UP to a whole day. Backward planning
     stops at today and forecasts forward when the requested date is impossible.
@@ -175,7 +184,7 @@ def build_plan(
             if needed == 0:
                 break
         supplied = demand.quantity - needed
-        rule = by_key.get(demand.key)
+        rule = by_key.get(demand.key) if plan_for is None or demand.demand_id in plan_for else None
         planned = Decimal(0)
         if needed and rule is not None:
             count = int((needed / rule.batch_quantity).to_integral_value(rounding=ROUND_CEILING))

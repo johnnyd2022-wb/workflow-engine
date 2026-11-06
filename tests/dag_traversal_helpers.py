@@ -58,6 +58,13 @@ def assert_traversal_invariants(result: TraversalResult) -> None:
 
 def clear_org_synthetic_data(db: Session, org_id: UUID) -> None:
     """Remove all processes, executions, inventory for an org. Use in test teardown for synthetic DAGs."""
+    # Planner demand (contract order saves now create it) and anything planned from it.
+    from app.features.planning.batch_models import PlanningBatch
+    from app.features.planning.forecast_models import PlanningMaterialCommitment
+    from app.features.planning.models import PlanningDemand, PlanningStockTarget
+
+    for model in (PlanningMaterialCommitment, PlanningBatch, PlanningDemand, PlanningStockTarget):
+        db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
     db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete()
     exec_ids = [row[0] for row in db.query(Execution.id).filter(Execution.org_id == org_id).all()]
     if exec_ids:

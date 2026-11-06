@@ -19,8 +19,9 @@ from app.core.domain.ready_date_rules import VALID_READY_DATE_UNITS, duration_to
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
 from app.features.planning.demand_service import MAX_QUANTITY
-from app.features.planning.engine import BatchRule, Demand, StepTiming, StockKey, build_plan, workflow_duration
+from app.features.planning.engine import BatchRule, Demand, StepTiming, build_plan, workflow_duration
 from app.features.planning.models import PlanningDemand
+from app.features.planning.stock import demand_owners, on_hand, planned_output, stock_key
 
 MAX_PLAN_BATCHES = 500
 MAX_MINUTES = 525_600
@@ -446,6 +447,37 @@ def _use_by_rule(snapshot):
     }
 
 
+def _netting_inputs(db, org_id, demand, unit, site, *, today):
+    """Every open demand competing for the same stock, and the stock it competes for.
+
+    Earlier-due demand takes stock first (the engine orders them). A forecast demand's quantity
+    already counts stock on hand and planned batches, so it is planned on its own; other demand
+    neither competes with it nor counts its batches.
+    """
+    if demand.source == "forecast":
+        return [demand], [], None
+    owner = demand_owners(db, org_id, [demand])[demand.id]
+    rivals = (
+        db.query(PlanningDemand)
+        .filter(
+            PlanningDemand.org_id == org_id,
+            PlanningDemand.source_output_id == demand.source_output_id,
+            PlanningDemand.unit == unit,
+            PlanningDemand.status == "open",
+            PlanningDemand.source != "forecast",
+            PlanningDemand.id != demand.id,
+        )
+        .all()
+    )
+    owners = demand_owners(db, org_id, rivals)
+    demands = [demand, *(row for row in rivals if owners[row.id] == owner)]
+    stock, _ = on_hand(db, org_id, demand.source_output_id, unit, site, owner, today=today)
+    planned = planned_output(
+        db, org_id, demand.source_output_id, unit, site, owner, today=today, sources=("manual", "contract")
+    )
+    return demands, [*stock, *planned], owner
+
+
 def plan_demand(db, org_id, demand_id, data, *, today):
     _body(data, ("site_id",))
     org = _lock_org(db, org_id)
@@ -487,11 +519,12 @@ def plan_demand(db, org_id, demand_id, data, *, today):
     process, steps, output, unit, fingerprint = _workflow(db, org_id, setting.process_id, demand.source_output_id)
     if setting.unit != unit or demand.unit != unit or setting.workflow_fingerprint != fingerprint:
         raise PlanningConflictError("Workflow or output units changed; review demand and planning settings")
-    key = StockKey(str(demand.source_output_id), unit, str(site.id) if site else None)
+    demands, supplies, owner = _netting_inputs(db, org_id, demand, unit, site, today=today)
+    key = stock_key(demand.source_output_id, unit, site, owner)
     try:
         plan = build_plan(
-            (Demand(str(demand.id), key, demand.quantity, demand.due_date, demand.priority),),
-            (),
+            tuple(Demand(str(row.id), key, row.quantity, row.due_date, row.priority) for row in demands),
+            tuple(supplies),
             (
                 BatchRule(
                     key,
@@ -502,9 +535,14 @@ def plan_demand(db, org_id, demand_id, data, *, today):
                 ),
             ),
             today=today,
+            plan_for=frozenset({str(demand.id)}),
         )
     except OverflowError as exc:
         raise ValueError("Workflow timing exceeds the supported calendar") from exc
+    position = next(row for row in plan.positions if row.demand_id == str(demand.id))
+    if not plan.batches:
+        # Stock on hand and batches already planned cover it: nothing new to make.
+        return [], False
     group = plan.batches[0]
     if group.batch_count > MAX_PLAN_BATCHES:
         raise ValueError(f"Plan at most {MAX_PLAN_BATCHES} batches at once; review the demand or batch size")
@@ -553,6 +591,9 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         "timing_reason": group.reason,
         "elapsed_days": (group.ready_date - group.start_date).days,
         "use_by_date": group.use_by_date.isoformat() if group.use_by_date else None,
+        # What stock on hand and other planned batches already cover of this demand.
+        "covered_quantity": format(position.supplied_quantity, "f"),
+        "shortfall_quantity": format(position.shortfall, "f"),
     }
     rows = []
     for number in range(1, group.batch_count + 1):
