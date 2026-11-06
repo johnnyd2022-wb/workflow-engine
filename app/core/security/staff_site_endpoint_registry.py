@@ -321,6 +321,7 @@ ENDPOINT_COVERAGE = {
     ("go_live.create_opening_stock", "POST"): "blocked",
     ("go_live.get_go_live", "GET"): "blocked",
     ("go_live.go_live_page", "GET"): "blocked",
+    ("data_export.download_records", "GET"): "blocked",
     ("getting_started.get_getting_started", "GET"): "blocked",
     ("lot_holds.get_lot_holds", "GET"): "blocked",
     ("lot_holds.list_open_holds", "GET"): "blocked",
