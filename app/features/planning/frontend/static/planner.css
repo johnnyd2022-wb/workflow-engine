@@ -68,7 +68,11 @@ html[data-spa-theme="dark"] #page-content .planner-row__note { color: #fdb022; }
 
 /* Keep in stock: each product's pace, its target and, when it's due, one action. */
 #page-content .planner-cover { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--ui-border); }
-#page-content .planner-cover > h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ui-text); }
+#page-content .planner-cover__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+#page-content .planner-site { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; width: auto; margin: 0; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .planner-site > span { flex: none; white-space: nowrap; }
+#page-content .planner-site select { width: auto; min-width: 0; min-height: 36px; max-width: 220px; padding: 6px 10px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: 14px; }
+#page-content .planner-cover__header h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ui-text); }
 #page-content .planner-cover > .workspace-caption { margin: 2px 0 0; }
 .planner-cover-row { grid-template-columns: minmax(0, 1fr) 150px 150px; }
 #page-content .planner-cover__sentence { margin: 2px 0 0; font-size: 14px; color: var(--ui-text); overflow-wrap: anywhere; }

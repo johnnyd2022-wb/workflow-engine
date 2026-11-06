@@ -42,12 +42,18 @@ MAX_TARGET_WEEKS = Decimal("104")
 @dataclass
 class SalesHistory:
     connected: bool
-    has_year: bool
+    has_year: bool  # some output has 12 months of sales: only says whether seasons can apply at all
     # output id -> [(sold_on, units)]
     by_output: dict[str, list[tuple[date, Decimal]]] = field(default_factory=dict)
     unmapped_products: dict[str, str] = field(default_factory=dict)
     # outputs some active product mapping sells, whether or not they sold in the year
     mapped_outputs: set[str] = field(default_factory=set)
+    # output id -> its own first sale: seasonality needs a year of THIS output's history
+    first_by_output: dict[str, date] = field(default_factory=dict)
+
+    def output_has_year(self, output_id: str, today: date) -> bool:
+        first = self.first_by_output.get(output_id)
+        return first is not None and first <= today - YEAR
 
 
 def window_weeks(value) -> int:
@@ -81,17 +87,28 @@ def sales_history(db, org_id: UUID, *, today: date) -> SalesHistory:
         outputs.setdefault(name, set())
         if output_id is not None:
             outputs[name].add(str(output_id))
-    lines, _ = sale_lines(db, org_id, today - YEAR, today)
+    # Back to the org's first sale (at most 3 years) so each output's own first sale is known;
+    # rates and seasons only read the last 52 weeks.
+    start = today - YEAR
+    if history.has_year:
+        start = max(first, today - 3 * YEAR)
+    lines, _ = sale_lines(db, org_id, start, today)
     for line in lines:
         targets = outputs.get(line.product_name, set())
         if len(targets) != 1:
+            if line.sold_on < today - YEAR:
+                continue  # only this year's unlinked sales are worth fixing
             history.unmapped_products[line.product_name] = (
                 "Sold, but its product mapping has no workflow output"
                 if not targets
                 else "Sold, but its product mappings point at different workflow outputs"
             )
             continue
-        history.by_output.setdefault(next(iter(targets)), []).append((line.sold_on, Decimal(line.units)))
+        output_id = next(iter(targets))
+        if line.sold_on < history.first_by_output.get(output_id, date.max):
+            history.first_by_output[output_id] = line.sold_on
+        if line.sold_on >= today - YEAR:
+            history.by_output.setdefault(output_id, []).append((line.sold_on, Decimal(line.units)))
     return history
 
 
@@ -103,7 +120,7 @@ def weekly_rate(sales, *, today: date, weeks: int, has_year: bool):
     """(rate per week, seasonality factor or None, note)."""
     base = _units(sales, today - timedelta(weeks=weeks), today) / weeks
     if not has_year:
-        return base, None, "Less than 12 months of sales, so no seasonal adjustment"
+        return base, None, "Less than 12 months of its sales, so no seasonal adjustment"
     year_average = _units(sales, today - YEAR, today) / 52
     if year_average <= 0:
         return base, None, "No sales in the last year to compare seasons with"
@@ -171,7 +188,10 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
         unknowns.append("No product mapping sells this output, so there is no sales rate")
     else:
         rate, factor, season_note = weekly_rate(
-            history.by_output.get(output["id"], []), today=today, weeks=weeks, has_year=history.has_year
+            history.by_output.get(output["id"], []),
+            today=today,
+            weeks=weeks,
+            has_year=history.output_has_year(output["id"], today),
         )
 
     runs_out = None
