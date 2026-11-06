@@ -202,6 +202,10 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         from app.features.planning.material_adapter import commitments_for_items
 
         committed_by_id = commitments_for_items(db_session, org_id, [item.id for item in items])
+        # GL-P02: lots on quality hold, one query for the page.
+        from app.core.services.lot_holds import open_holds
+
+        holds_by_id = open_holds(db_session, org_id, [item.id for item in items])
 
         # Where each line is: its site, and the stock area inside it (one query for the names).
         from app.core.db.models.stock_location import StockLocation
@@ -623,6 +627,15 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     "location_id": str(item.location_id) if item.location_id else None,
                     "location_name": location_names.get(item.location_id),
                     "committed": committed_by_id.get(str(item.id), []),
+                    "quality_hold": (
+                        {
+                            "id": str(holds_by_id[item.id].id),
+                            "reason": holds_by_id[item.id].reason,
+                            "placed_at": holds_by_id[item.id].placed_at.isoformat(),
+                        }
+                        if item.id in holds_by_id
+                        else None
+                    ),
                 }
             )
 

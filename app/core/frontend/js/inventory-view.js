@@ -32,6 +32,12 @@
       tone: 'overdue',
       test: function (item) { var d = daysToExpiry(item); return d != null && d < 0; },
     },
+    // GL-P02: lots on quality hold can't be used until someone authorised releases them.
+    held: {
+      label: 'On quality hold',
+      tone: 'overdue',
+      test: function (item) { return !!item.quality_hold; },
+    },
     'no-batch': {
       label: 'Raw, no batch number',
       tone: 'attention',
@@ -56,6 +62,7 @@
   ];
 
   var canAdjust = root.dataset.canAdjust === 'true';
+  var canRelease = root.dataset.canRelease === 'true';
   var items = [];
   var loadSeq = 0;
   var openGroups = {};
@@ -321,6 +328,11 @@
     open.type = 'button';
     open.setAttribute('aria-haspopup', 'dialog');
     itemTd.appendChild(open);
+    if (item.quality_hold) {
+      var holdTag = el('span', 'inv-row__hold', 'On hold');
+      holdTag.title = 'Quality hold: ' + item.quality_hold.reason;
+      itemTd.appendChild(holdTag);
+    }
     if (item.system_findings && item.system_findings.length) {
       var flag = el('span', 'inv-row__flag', plural(item.system_findings.length, 'finding'));
       flag.title = item.system_findings.map(function (f) { return f.reason; }).join('\n');
@@ -760,6 +772,15 @@
     }
     els.drawerBody.appendChild(hero);
 
+    if (item.quality_hold) {
+      var banner = el('div', 'inv-drawer__qhold');
+      banner.setAttribute('role', 'status');
+      banner.appendChild(el('strong', '', 'On quality hold'));
+      banner.appendChild(el('p', '', item.quality_hold.reason));
+      banner.appendChild(el('span', 'inv-muted', 'Since ' + fmtDateTime(item.quality_hold.placed_at) + '. It can’t be used, sold or dispatched until released.'));
+      els.drawerBody.appendChild(banner);
+    }
+
     if (item.system_findings && item.system_findings.length) {
       var findings = el('ul', 'inv-drawer__findings');
       item.system_findings.forEach(function (finding) { findings.appendChild(el('li', '', finding.reason || finding.check_id)); });
@@ -838,6 +859,7 @@
     history.appendChild(historyBody);
     els.drawerBody.appendChild(history);
     loadHistory(item.id, history, historyBody);
+    loadHolds(item);
 
     els.drawerFoot.replaceChildren();
     els.drawerFoot.hidden = !canAdjust;
@@ -856,6 +878,21 @@
       edit.dataset.expiry = datePart(item.expiry_date);
       edit.dataset.barcode = item.barcode || '';
       els.drawerFoot.appendChild(edit);
+      // GL-P02: anyone who adjusts stock can hold a lot; releasing it is for an admin.
+      if (window.BizeHold) {
+        var after = function () { load(); };
+        if (!item.quality_hold) {
+          var holdBtn = el('button', 'workspace-button inv-drawer__hold', 'Hold…');
+          holdBtn.type = 'button';
+          holdBtn.addEventListener('click', function () { window.BizeHold.hold(item, { onDone: after }); });
+          els.drawerFoot.insertBefore(holdBtn, edit);
+        } else if (canRelease) {
+          var releaseBtn = el('button', 'workspace-button inv-drawer__release', 'Release…');
+          releaseBtn.type = 'button';
+          releaseBtn.addEventListener('click', function () { window.BizeHold.release(item, { onDone: after }); });
+          els.drawerFoot.insertBefore(releaseBtn, edit);
+        }
+      }
       // Moving it: to another area here, or to another site (GL-P07 A4). Offered once there is
       // somewhere to move it to.
       if (window.BizeMove && sitesShown()) {
@@ -876,6 +913,26 @@
         els.drawerFoot.insertBefore(move, edit);
       }
     }
+  }
+
+  // GL-P02: past holds on this lot, shown only when there are any.
+  function loadHolds(item) {
+    if (!window.BizeHold) return;
+    window.BizeHold.history(item.id).then(function (holds) {
+      if (!holds.length || state.item !== item.id) return;
+      var box = section('Quality holds');
+      box.classList.add('inv-drawer__qhistory');
+      var list = el('ul', 'inv-drawer__inputs');
+      holds.forEach(function (h) {
+        var li = el('li');
+        var what = el('span', '', fmtDate(h.placed_at) + ' · ' + h.reason);
+        li.appendChild(what);
+        li.appendChild(el('span', h.open ? 'inv-row__hold' : 'inv-muted', h.open ? 'On hold' : 'Released ' + fmtDate(h.released_at) + ': ' + h.release_note));
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+      els.drawerBody.appendChild(box);
+    }).catch(function () { /* the banner already says whether it is held */ });
   }
 
   // After a move: say where it went in plain words, with the next step for a dispatch.

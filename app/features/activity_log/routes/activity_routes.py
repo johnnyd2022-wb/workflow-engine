@@ -381,6 +381,12 @@ def _human_summary(ev) -> str:
         unit = p.get("unit", "")
         return f"Quantity adjusted {_format_quantity(before)} → {_format_quantity(after)} {unit}".strip()
 
+    # GL-P02: quality hold and release.
+    if et == "inventory_item.hold_placed":
+        return f"Put on quality hold: {p.get('reason') or 'no reason given'}"
+    if et == "inventory_item.hold_released":
+        return f"Released from quality hold: {p.get('note') or 'no note'}"
+
     if et == "inventory_item.consumed":
         qty = _format_quantity(p.get("quantity_consumed", "?"))
         unit = p.get("unit", "")
