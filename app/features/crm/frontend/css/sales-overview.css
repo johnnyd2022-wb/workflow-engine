@@ -21,6 +21,7 @@
   #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
   #page-content .sales-overview .crm-widget-grid { display: contents; }
   #page-content .sales-overview .sales-glance,
+  #page-content .sales-overview .sales-returns-pending,
   #page-content .sales-overview .crm-widget-card--full { grid-column: span 12; }
   #page-content .sales-overview .crm-widget-card--half { grid-column: span 6; }
   #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"][data-widget-locked="true"]) { grid-column: span 5; align-self: stretch; }
@@ -56,6 +57,26 @@ html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sa
 
 #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 #page-content .sales-overview .flow-mode-segment--active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); border-color: var(--ui-accent); }
+
+/* GL-P01a: mapped credit-note lines need a human return decision. */
+#page-content .sales-returns-pending h2 { margin: 0 0 6px; }
+#page-content .sales-returns-pending__intro,
+#page-content .sales-returns-pending__message { margin: 0 0 14px; color: var(--ui-text-muted); font-size: .86rem; }
+#page-content .sales-returns-pending__list { display: grid; gap: 10px; }
+#page-content .sales-returns-pending__item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .8fr); gap: 16px; padding: 14px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); }
+#page-content .sales-returns-pending__details { display: grid; gap: 4px; align-content: start; min-width: 0; font-size: .84rem; overflow-wrap: anywhere; }
+#page-content .sales-returns-pending__details strong { font-size: .96rem; }
+#page-content .sales-returns-pending__amount { color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+#page-content .sales-returns-pending__decision { display: grid; gap: 8px; align-content: start; }
+#page-content .sales-returns-pending__note-label { display: grid; gap: 5px; font-size: .78rem; font-weight: 700; }
+#page-content .sales-returns-pending__note-label textarea { width: 100%; min-height: 58px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; resize: vertical; }
+#page-content .sales-returns-pending__note-label textarea:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+#page-content .sales-returns-pending__decision .crm-btn { justify-self: start; }
+#page-content .sales-returns-pending__error { margin: 0; color: var(--crm-red); font-size: .8rem; }
+@media (max-width: 640px) {
+  #page-content .sales-returns-pending__item { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px; }
+  #page-content .sales-returns-pending__decision .crm-btn { width: 100%; }
+}
 
 .sales-task-due { font-size: .7rem; color: var(--ui-text-muted); }
 .sales-task-due--overdue { color: var(--crm-red); font-weight: 700; }

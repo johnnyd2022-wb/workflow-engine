@@ -349,6 +349,30 @@ class TestPagination:
             assert kw["where"] == 'Type=="ACCREC"'
             assert kw["statuses"] == ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"]
 
+    def test_fetch_all_credit_notes_filters_receivables_and_paginates(self, xero, fake_api):
+        install, calls = fake_api
+        install(get_credit_notes=[_page("credit_notes", 100), _page("credit_notes", 1)])
+
+        notes = xero.fetch_all_credit_notes()
+
+        assert len(notes) == 101
+        assert [(name, args[0], kwargs["page"]) for name, args, kwargs in calls] == [
+            ("get_credit_notes", TENANT_ID, 1),
+            ("get_credit_notes", TENANT_ID, 2),
+        ]
+        assert all(kwargs["where"] == 'Type=="ACCRECCREDIT"' for _name, _args, kwargs in calls)
+
+    def test_credit_note_pages_use_retry_and_modified_after(self, xero, fake_api, sleeps):
+        from datetime import datetime
+
+        install, calls = fake_api
+        install(get_credit_notes=[XeroHTTPError(429), _page("credit_notes", 0)])
+
+        assert xero.fetch_all_credit_notes(modified_after=datetime(2026, 1, 2, 3, 4, 5)) == []
+        assert len(calls) == 2
+        assert all(kwargs["if_modified_since"].tzinfo == UTC for _name, _args, kwargs in calls)
+        assert sleeps == [2]
+
     def test_pagination_calls_go_through_the_retry_wrapper(self, xero, fake_api, sleeps):
         install, calls = fake_api
         install(get_invoices=[XeroHTTPError(429), _page("invoices", 2)])

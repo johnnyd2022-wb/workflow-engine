@@ -74,6 +74,7 @@ class FakeXero:
         monkeypatch.setattr(
             xero_api_client_module.XeroAPIClient, "get_contact_payment_terms", get_contact_payment_terms
         )
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda *_a, **_kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "_get_api_client", unfaked)
         return self
 

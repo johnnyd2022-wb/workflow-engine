@@ -168,6 +168,12 @@ window.CRMAPI = (function () {
   async function getChurnRisk() { return request('/analytics/churn-risk'); }
   async function getCustomerContact() { return request('/analytics/customer-contact'); }
   async function getOverview() { return request('/overview'); }
+  async function getPendingReturns(page = 1) { return request(`/returns/pending?page=${page}&page_size=25`); }
+  async function recordCreditNoteLineNoReturn(creditNoteId, lineId, note) {
+    return request(`/credit-notes/${encodeURIComponent(creditNoteId)}/lines/${encodeURIComponent(lineId)}/no-return`, {
+      method: 'POST', body: { note },
+    });
+  }
   async function getTraceabilityConfig() { return request('/traceability-config'); }
   async function updateTraceabilityConfig(data) { return request('/traceability-config', { method: 'PUT', body: data }); }
   async function getOrgUsers() { return orgRequest('/users'); }
@@ -186,7 +192,7 @@ window.CRMAPI = (function () {
     getCustomers, getCustomer, createCustomer, updateCustomer, setCustomerXeroSync, retryCustomerXeroSync, getContactSyncSettings, updateContactSyncSettings, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
-    getMonthlySales, getCustomerBreakdown, getProductSalesByStore, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
+    getMonthlySales, getCustomerBreakdown, getProductSalesByStore, getRankings, getChurnRisk, getCustomerContact, getOverview, getPendingReturns, recordCreditNoteLineNoReturn, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
     getProductMappings, getFinalProducts, createProductMapping, createProductMappings, updateProductMapping, deleteProductMapping,
   };
 })();

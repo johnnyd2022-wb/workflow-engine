@@ -8,6 +8,7 @@ from app.core.db.models.execution_evidence import ExecutionEvidence
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.lot_hold import LotHold
 from app.core.db.models.org_role import OrgRole
 from app.core.db.models.org_role_site import OrgRoleSite
 from app.core.db.models.organisation import Organisation
@@ -32,6 +33,7 @@ from app.core.db.models.user_identity import UserIdentity
 from app.features.contract_manufacturing import models as _contract_models  # noqa: E402, F401
 
 __all__ = [
+    "LotHold",
     "Site",
     "SiteStockReceipt",
     "SiteStockTransfer",

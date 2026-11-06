@@ -73,9 +73,19 @@ function crmOverview() {
       top_customers: 10,
     },
     expandedProductName: null,
+    canRecordReturns: false,
+    pendingReturns: [],
+    pendingReturnsLoading: false,
+    pendingReturnsError: null,
+    pendingReturnsPage: 1,
+    pendingReturnsHasMore: false,
+    pendingReturnNotes: {},
+    pendingReturnErrors: {},
+    pendingReturnBusyId: null,
 
     async init() {
       this.loading = true;
+      this.canRecordReturns = this.$root.dataset.canRecord === 'true';
       this.loadError = false;
       this.error = null;
       if (!this.chartResizeObserver) {
@@ -113,6 +123,7 @@ function crmOverview() {
         this.loadSystemWidgetPrefs();
         this.loadWidgetLayout();
         await this.refreshCustomWidgets();
+        this.loadPendingReturns(true);
       } catch (e) {
         this.error = e.message || 'Failed to load Sales overview.';
         this.loadError = true;
@@ -129,6 +140,49 @@ function crmOverview() {
       this.endWidgetResize();
       this.chartResizeObserver?.disconnect();
       this.chartThemeObserver?.disconnect();
+    },
+
+    async loadPendingReturns(reset = false) {
+      if (this.pendingReturnsLoading) return;
+      this.pendingReturnsLoading = true;
+      this.pendingReturnsError = null;
+      if (reset) {
+        this.pendingReturns = [];
+        this.pendingReturnsPage = 1;
+        this.pendingReturnsHasMore = false;
+      }
+      const page = reset ? 1 : this.pendingReturnsPage + 1;
+      try {
+        const data = await CRMAPI.getPendingReturns(page);
+        this.pendingReturns = reset ? (data.items || []) : this.pendingReturns.concat(data.items || []);
+        this.pendingReturnsPage = page;
+        this.pendingReturnsHasMore = data.has_more === true;
+      } catch (e) {
+        this.pendingReturnsError = e.message || 'Credit-note return items could not be loaded.';
+      } finally {
+        this.pendingReturnsLoading = false;
+      }
+    },
+
+    async recordNoReturn(item) {
+      const note = String(this.pendingReturnNotes[item.line_id] || '').trim();
+      if (!note) {
+        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: 'Add a note before recording this decision.' };
+        return;
+      }
+      this.pendingReturnBusyId = item.line_id;
+      this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: '' };
+      try {
+        await CRMAPI.recordCreditNoteLineNoReturn(item.credit_note_id, item.line_id, note);
+        await this.loadPendingReturns(true);
+      } catch (e) {
+        this.pendingReturnErrors = {
+          ...this.pendingReturnErrors,
+          [item.line_id]: e.message || 'This return decision could not be saved.',
+        };
+      } finally {
+        this.pendingReturnBusyId = null;
+      }
     },
 
     setDefaultDateRange() {

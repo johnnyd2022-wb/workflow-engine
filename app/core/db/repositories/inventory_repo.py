@@ -426,6 +426,7 @@ class InventoryRepository:
         if needed is None or not needed.is_finite() or needed <= 0:
             raise ValueError("quantity must be a positive finite number")
         from app.core.db.site_operations import resolve_site
+        from app.core.services.lot_holds import held_lot_ids_subquery
 
         selected_site = resolve_site(self.db, org_id, site_id)
 
@@ -446,6 +447,8 @@ class InventoryRepository:
                     InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
                     producer_stock_predicate(),
                     InventoryItem.quantity > 0,
+                    # GL-P02: a lot on quality hold is never matched to a sale; the next lot is.
+                    InventoryItem.id.not_in(held_lot_ids_subquery(org_id)),
                 )
                 .order_by(
                     batch_number_sort.asc(),

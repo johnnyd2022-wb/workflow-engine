@@ -162,6 +162,14 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # GL-P02: quality hold and release on a lot.
+    from app.core.backend.lot_holds_routes import lot_holds_bp
+
+    app.register_blueprint(lot_holds_bp)
+    # GL-P10: download every record the business holds as one ZIP.
+    from app.features.data_export.routes import bp as data_export_bp
+
+    app.register_blueprint(data_export_bp)
     # Getting started (GL-P09): the guided first-day path.
     from app.core.backend.getting_started import getting_started_bp
 

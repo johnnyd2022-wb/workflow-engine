@@ -31,6 +31,7 @@ class XeroSyncJobRepository:
         org_id: UUID,
         contacts_synced: int = 0,
         invoices_synced: int = 0,
+        credit_notes_synced: int = 0,
     ) -> None:
         self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id, XeroSyncJob.org_id == org_id).update(
             {
@@ -38,6 +39,7 @@ class XeroSyncJobRepository:
                 "completed_at": utc_now(),
                 "contacts_synced": contacts_synced,
                 "invoices_synced": invoices_synced,
+                "credit_notes_synced": credit_notes_synced,
                 "updated_at": utc_now(),
             }
         )
@@ -61,6 +63,7 @@ class XeroSyncJobRepository:
         invoices_synced: int,
         error_message: str,
         error_details: dict | None = None,
+        credit_notes_synced: int = 0,
     ) -> None:
         self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id, XeroSyncJob.org_id == org_id).update(
             {
@@ -68,6 +71,7 @@ class XeroSyncJobRepository:
                 "completed_at": utc_now(),
                 "contacts_synced": contacts_synced,
                 "invoices_synced": invoices_synced,
+                "credit_notes_synced": credit_notes_synced,
                 "error_message": error_message,
                 "error_details": error_details,
                 "updated_at": utc_now(),

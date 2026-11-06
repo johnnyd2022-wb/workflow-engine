@@ -266,6 +266,48 @@ def get_org_invoices():
     return jsonify(result), 200
 
 
+@api_bp.route("/api/crm/returns/pending", methods=["GET"])
+@requires_auth
+def list_pending_returns():
+    """Mapped credit-note lines that still need a physical-return decision."""
+    from app.features.crm.services.credit_note_returns import pending
+
+    paging = _page_args(25)
+    if paging is None:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+    page, page_size = paging
+    return jsonify(pending(db_session(), UUID(g.org_id), page=page, page_size=page_size)), 200
+
+
+@api_bp.route("/api/crm/credit-notes/<credit_note_id>/lines/<line_id>/no-return", methods=["POST"])
+@requires_auth
+def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
+    """Record, without touching inventory, that a credited product did not come back."""
+    from app.features.crm.services.credit_note_returns import ReturnDecisionConflictError, record_no_return
+
+    note_uuid = _uuid_or_none(credit_note_id)
+    line_uuid = _uuid_or_none(line_id)
+    data = request.get_json(silent=True)
+    note = data.get("note") if isinstance(data, dict) else None
+    if note_uuid is None or line_uuid is None:
+        return jsonify({"error": "Credit note line not found"}), 404
+    if not isinstance(note, str):
+        return jsonify({"error": "Add a note of 1 to 500 characters"}), 400
+    try:
+        record_no_return(db_session(), UUID(g.org_id), note_uuid, line_uuid, UUID(g.user_id), note)
+        db_session().commit()
+        return jsonify({"ok": True, "decision": "no_return"}), 200
+    except LookupError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 404
+    except ReturnDecisionConflictError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 400
+
+
 @api_bp.route("/api/crm/invoices/<invoice_id>/trace-items", methods=["GET"])
 @requires_auth
 def get_invoice_trace_items(invoice_id: str):

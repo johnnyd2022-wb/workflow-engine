@@ -266,6 +266,7 @@ def xero_sync():
             "ok": result.success,
             "contacts_synced": result.contacts_synced,
             "invoices_synced": result.invoices_synced,
+            "credit_notes_synced": result.credit_notes_synced,
             "sales_allocated": result.sales_allocated,
             "sales_unmapped": result.sales_unmapped,
             "sales_insufficient_stock": result.sales_insufficient_stock,

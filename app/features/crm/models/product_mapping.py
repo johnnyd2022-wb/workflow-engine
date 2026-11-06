@@ -13,6 +13,7 @@ from app.core.utils.time import utc_now
 class ProductMapping(TenantScoped, Base):
     __tablename__ = "product_mappings"
     __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_product_mappings_org_id"),
         UniqueConstraint(
             "org_id", "biz_e_product_name", "xero_description_pattern", name="uq_product_mappings_org_biz_xero"
         ),

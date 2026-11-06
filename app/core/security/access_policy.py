@@ -260,9 +260,14 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
+    ("data_export.*", None, "settings.manage"),  # GL-P10: every record, admins only
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
+    # --- quality holds (GL-P02): holding is the safe direction; release is signed off
+    ("lot_holds.release_lot_hold", None, "compliance.manage"),
+    ("lot_holds.*", _READ, "inventory.view"),
+    ("lot_holds.*", None, "inventory.adjust"),
     ("go_live.set_go_live_date", None, "settings.manage"),  # changes which sales are matched
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),
@@ -308,6 +313,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.adjust_inventory_item_quantity", None, "inventory.adjust"),
     ("core.csv_validate", None, "inventory.adjust"),
     ("core.csv_commit", None, "inventory.adjust"),
+    ("core.csv_template", None, "inventory.adjust"),
+    ("core.csv_error_report", None, "inventory.adjust"),  # POST, but read-only
     ("core.consume_final_product_fifo", None, "inventory.adjust"),
     ("core.inventory_add*", None, "inventory.adjust"),
     ("core.get_matching_untracked_for_add", None, "inventory.adjust"),
@@ -372,6 +379,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("crm.crm_api.*contact_sync_settings", None, "sales.manage"),
     ("crm.crm_api.*traceability_config", _READ, "sales.view"),
     ("crm.crm_api.*traceability_config", None, "sales.manage"),
+    ("crm.crm_api.list_pending_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_credit_note_line_no_return", None, "sales.record"),
     ("tastings.*", _READ, "sales.view"),
     ("tastings.*", None, "sales.record"),
     ("crm.*", _READ, "sales.view"),
