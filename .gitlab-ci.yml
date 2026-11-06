@@ -94,6 +94,9 @@ lockfile_consistency:
   only:
     - schedules
     - merge_requests
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Renovate: proposes dependency/Docker-base-image/pre-commit-hook version bumps as MRs
@@ -116,6 +119,9 @@ renovate:
     - renovate
   only:
     - schedules
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Run ruff linter
@@ -381,6 +387,26 @@ tastings_e2e:
       - app/ui/page_registry.py
       - tests/e2e/test_tastings_page.py
   allow_failure: false
+
+# Nightly: every E2E file against main, not just the ones a diff touches. relevant_tests
+# only runs an E2E file when its inputs change and main's cd_e2e runs only the smoke file,
+# so the other ~75 files could rot unseen until an unrelated MR touched them and went red
+# (.agents/reports/ci/pipeline-health-2026-11.md). Started by the "nightly-e2e" pipeline
+# schedule (variable E2E_NIGHTLY=1); the deploy chain opts out of that pipeline above.
+# allow_failure for now: the schedule pipeline is main's head pipeline while it runs, so a red
+# one would make main_green block every MR on tests nobody has run in weeks. Flip to false
+# once a nightly run is green (board task SUITE-GREEN).
+nightly_e2e:
+  extends: mr_e2e
+  timeout: 2h
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/ -v -p no:cacheprovider
+  only:
+    refs:
+      - schedules
+    variables:
+      - $E2E_NIGHTLY == "1"
+  allow_failure: true
 
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
 # stages on main; merge requests run selected regressions and browser smoke above.
@@ -685,6 +711,9 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
 
 # Builds the CI image for this checkout when the registry does not have it yet (see
 # ci/Dockerfile.ci). Runs here, not on merge requests, for the same reason as the app
@@ -719,6 +748,9 @@ ci_image_build:
       echo "Built $IMAGE. Set CI_IMAGE_TAG to $TAG in .gitlab-ci.yml to use it."
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # ============================================================================
@@ -761,6 +793,9 @@ deploy_test:
   needs: ["docker_build_publish"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
 
@@ -808,6 +843,9 @@ cd_e2e:
   needs: ["deploy_test"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # must be the SAME runner as deploy_test (hits localhost:8001)
 
@@ -826,6 +864,9 @@ promote_test_stable:
   needs: ["cd_e2e"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target
 
@@ -848,5 +889,8 @@ rollback_test_on_failure:
   when: on_failure
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target
