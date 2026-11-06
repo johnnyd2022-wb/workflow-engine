@@ -862,7 +862,10 @@
     loadHolds(item);
 
     els.drawerFoot.replaceChildren();
-    els.drawerFoot.hidden = !canAdjust;
+    // GL-P02: releasing a hold is its own permission (compliance.manage): a Compliance role
+    // that can't edit stock still gets the Release button.
+    var canReleaseThis = !!(window.BizeHold && item.quality_hold && canRelease);
+    els.drawerFoot.hidden = !canAdjust && !canReleaseThis;
     if (canAdjust) {
       // inventory-adjust.js opens its edit sheet for any .inv-adj-btn and reads these attributes.
       var edit = el('button', 'workspace-button workspace-button--primary inv-adj-btn inv-drawer__edit', 'Edit this line');
@@ -878,20 +881,12 @@
       edit.dataset.expiry = datePart(item.expiry_date);
       edit.dataset.barcode = item.barcode || '';
       els.drawerFoot.appendChild(edit);
-      // GL-P02: anyone who adjusts stock can hold a lot; releasing it is for an admin.
-      if (window.BizeHold) {
-        var after = function () { load(); };
-        if (!item.quality_hold) {
-          var holdBtn = el('button', 'workspace-button inv-drawer__hold', 'Hold…');
-          holdBtn.type = 'button';
-          holdBtn.addEventListener('click', function () { window.BizeHold.hold(item, { onDone: after }); });
-          els.drawerFoot.insertBefore(holdBtn, edit);
-        } else if (canRelease) {
-          var releaseBtn = el('button', 'workspace-button inv-drawer__release', 'Release…');
-          releaseBtn.type = 'button';
-          releaseBtn.addEventListener('click', function () { window.BizeHold.release(item, { onDone: after }); });
-          els.drawerFoot.insertBefore(releaseBtn, edit);
-        }
+      // GL-P02: anyone who adjusts stock can hold a lot (Release is added below, for anyone allowed).
+      if (window.BizeHold && !item.quality_hold) {
+        var holdBtn = el('button', 'workspace-button inv-drawer__hold', 'Hold…');
+        holdBtn.type = 'button';
+        holdBtn.addEventListener('click', function () { window.BizeHold.hold(item, { onDone: function () { load(); } }); });
+        els.drawerFoot.insertBefore(holdBtn, edit);
       }
       // Moving it: to another area here, or to another site (GL-P07 A4). Offered once there is
       // somewhere to move it to.
@@ -912,6 +907,12 @@
         });
         els.drawerFoot.insertBefore(move, edit);
       }
+    }
+    if (canReleaseThis) {
+      var releaseBtn = el('button', 'workspace-button inv-drawer__release', 'Release…');
+      releaseBtn.type = 'button';
+      releaseBtn.addEventListener('click', function () { window.BizeHold.release(item, { onDone: function () { load(); } }); });
+      els.drawerFoot.insertBefore(releaseBtn, els.drawerFoot.firstChild);
     }
   }
 

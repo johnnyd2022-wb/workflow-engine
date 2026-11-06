@@ -99,3 +99,23 @@ def test_staff_can_hold_but_not_release(sales_page, lot, db, org):  # noqa: F811
     panel = sales_page.get_by_role("dialog", name="Juniper berries")
     expect(panel.locator(".inv-drawer__qhold")).to_contain_text("Smells off")
     expect(panel.get_by_role("button", name="Release…")).to_have_count(0)
+
+
+@pytest.mark.parametrize("role", [UserRole.COMPLIANCE])
+def test_a_compliance_role_without_stock_edit_can_release(sales_page, lot, db, org):  # noqa: F811
+    """Release is its own permission (compliance.manage), not part of editing stock."""
+    from app.core.services import lot_holds
+
+    lot_holds.place_hold(db, org.id, lot.id, "Smells off", None)
+    db.commit()
+    _open_lot(sales_page)
+    panel = sales_page.get_by_role("dialog", name="Juniper berries")
+    expect(panel.get_by_role("button", name="Edit this line")).to_have_count(0)
+    panel.get_by_role("button", name="Release…").click()
+    dialog = sales_page.locator("[data-hold-dialog]")
+    dialog.get_by_label("What was checked?").fill("Retested: passed")
+    dialog.get_by_role("button", name="Release lot").click()
+    expect(dialog).to_have_count(0)
+    expect(
+        sales_page.locator("#inv-view-tbody tr", has_text="Juniper berries").locator(".inv-row__hold")
+    ).to_have_count(0)
