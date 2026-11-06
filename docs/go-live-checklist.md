@@ -61,7 +61,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
 | ☐ | GL-P01 | Returns, credit notes and physical stock | Decide | Importing credit notes is a fix; how a return shows on stock and duty is a design choice |
-| ☐ | GL-P02 | Quality hold and release on a lot | Decide | |
+| ◐ | GL-P02 | Quality hold and release on a lot | Build | Backend !TBD: held lots can't be used in production, sales, tastings, dispatch or split transfers; release needs compliance.manage and a note; history kept. UI next |
 | ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
 | ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |

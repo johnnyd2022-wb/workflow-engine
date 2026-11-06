@@ -76,6 +76,10 @@ register_inventory_quantity_guard(engine)
 register_tenant_filter()
 register_tenant_flush_guard()
 register_site_guard()
+
+from app.core.services.lot_holds import register_lot_hold_guard  # noqa: E402 -- needs models loaded
+
+register_lot_hold_guard()
 register_transfer_guard()
 
 
