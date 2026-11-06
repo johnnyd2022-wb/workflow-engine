@@ -455,6 +455,24 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
+    /** The problem rows of a CSV as a CSV file (Blob). Same input as inventoryCsvValidate. */
+    async inventoryCsvErrorReport(formData) {
+        const url = `${this.baseURL}/inventory/csv-error-report`;
+        const csrfMeta = typeof document !== 'undefined' && document.querySelector
+            ? document.querySelector('meta[name="csrf-token"]')
+            : null;
+        const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const headers = { ...(_getRumTraceHeaders(url, 'POST') || {}) };
+        if (csrfTok) headers['X-CSRFToken'] = csrfTok;
+        const response = await fetch(url, { method: 'POST', body: formData, headers, credentials: 'same-origin' });
+        if (!response.ok) {
+            let message = `HTTP ${response.status}`;
+            try { message = (await response.json()).error || message; } catch (e) { /* not JSON */ }
+            throw new Error(message);
+        }
+        return response.blob();
+    },
+
     async inventoryCsvCommit(payload) {
         return this.request('/inventory/csv-commit', {
             method: 'POST',

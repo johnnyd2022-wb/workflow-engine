@@ -154,7 +154,9 @@
     if (d.status === 'lodged') sub = 'Recorded as lodged' + (d.entry_reference ? ' (entry ' + d.entry_reference + ')' : '') + '. These figures are locked.';
     else if (d.open) sub = 'Still running: the figures change as stock leaves the licensed area. Lodge after ' + fmtDate(d.period_end) + '.';
     else sub = 'Lodge by ' + fmtDate(d.due) + ' (15th working day). Pay by the last working day of that month.';
-    head.append(el('div', { className: 'customs-entry-head__title' }, [title, pill]), el('p', { className: 'excise-hint', text: sub }));
+    // GL-P05: this is the filing draft (removals); Sales → Excise is only an estimate from invoices.
+    var kind = el('span', { className: 'customs-kind', title: 'Built from stock that left the licensed area. This is what you lodge.', text: d.status === 'lodged' ? 'Lodged return' : 'Filing draft' });
+    head.append(el('div', { className: 'customs-entry-head__title' }, [title, kind, pill]), el('p', { className: 'excise-hint', text: sub }));
     if (st.key === 'overdue') {
       head.append(el('p', { className: 'customs-late', text: 'Customs adds 1% to unpaid duty the day after it is due, and another 4% after 7 days. Lodge and pay as soon as you can.' }));
     }
@@ -332,12 +334,20 @@
   }
 
   function linksPiece(d) {
+    var box = el('div', { className: 'customs-links-box' });
     var wrap = el('p', { className: 'customs-links' });
     wrap.append(el('a', { href: TSW_LOGIN, target: '_blank', rel: 'noopener', 'data-tsw-link': '', text: 'Open Trade Single Window ↗' }));
+    box.append(wrap);
     if (state.frequency === 'monthly') {
-      wrap.append(document.createTextNode(' · '), el('a', { href: '/crm/excise?month=' + d.period_start.slice(0, 7), text: 'Sales behind ' + d.label }));
+      wrap.append(document.createTextNode(' · '), el('a', {
+        href: '/crm/excise?month=' + d.period_start.slice(0, 7),
+        'aria-describedby': 'excise-estimate-why',
+        text: 'Compare with the sales estimate for ' + d.label,
+      }));
+      // GL-P05: visible text, not a tooltip, so phone and keyboard users see it too.
+      box.append(el('p', { id: 'excise-estimate-why', className: 'excise-hint', text: 'The sales estimate comes from invoices, so it can differ from this filing draft: stock poured at tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after the stock left.' }));
     }
-    return wrap;
+    return box;
   }
 
   function lodgePiece(d) {

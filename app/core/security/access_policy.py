@@ -260,6 +260,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
+    ("data_export.*", None, "settings.manage"),  # GL-P10: every record, admins only
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
@@ -312,6 +313,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.adjust_inventory_item_quantity", None, "inventory.adjust"),
     ("core.csv_validate", None, "inventory.adjust"),
     ("core.csv_commit", None, "inventory.adjust"),
+    ("core.csv_template", None, "inventory.adjust"),
+    ("core.csv_error_report", None, "inventory.adjust"),  # POST, but read-only
     ("core.consume_final_product_fifo", None, "inventory.adjust"),
     ("core.inventory_add*", None, "inventory.adjust"),
     ("core.get_matching_untracked_for_add", None, "inventory.adjust"),

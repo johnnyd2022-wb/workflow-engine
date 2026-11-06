@@ -20,9 +20,10 @@
           <h3 id="csv-spa-intro" class="spa-form-section-title">Template</h3>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
             Keep the column headers in your file. Replace the example row with your own data.
+            Item Name, Quantity and Unit are required.
           </p>
           <div>
-            <a id="csv-download-template" href="#" download="inventory_template.csv" class="btn btn-secondary" hx-boost="false" style="min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">Download Template</a>
+            <a id="csv-download-template" href="/api/core/inventory/csv-template" download="inventory_template.csv" class="btn btn-secondary" hx-boost="false" style="min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">Download Template</a>
           </div>
         </section>
 
@@ -38,6 +39,15 @@
         </div>
 
         <div id="csv-preview-section" style="display: none; flex: 1; min-height: 0; flex-direction: column; gap: 12px;">
+          <div id="csv-import-summary" class="csv-import-summary" role="status" hidden>
+            <p class="csv-import-summary__counts" id="csv-import-summary-counts"></p>
+            <p class="csv-import-summary__hint" id="csv-import-summary-hint" hidden>
+              Fix them as you review each row, or download the problem rows, fix them in your spreadsheet and upload that file.
+            </p>
+            <div class="csv-import-summary__actions" id="csv-import-summary-actions" hidden>
+              <button type="button" class="btn btn-secondary btn-sm" id="csv-download-problems">Download problem rows</button>
+            </div>
+          </div>
           <p id="csv-review-progress" class="csv-review-progress" aria-live="polite" style="display: none;"></p>
           <div id="csv-review-card-wrap"></div>
           <p id="csv-preview-summary" style="margin: 0;"></p>
@@ -47,9 +57,20 @@
       </div>
     {% endcall %}
   </div>
+  <style nonce="{{ csp_nonce() }}">
+    .csv-import-summary { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px;
+      border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+      background: var(--ui-surface-subtle, var(--bg-secondary)); }
+    .csv-import-summary__counts { margin: 0; font-size: 0.9375rem; color: var(--text-primary); }
+    .csv-import-summary__counts strong { font-weight: 600; }
+    .csv-import-summary__problems { color: var(--error); font-weight: 600; }
+    .csv-import-summary__hint { margin: 0; font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
+    .csv-import-summary__actions .btn { min-height: 44px; }
+    /* display:flex on these would otherwise beat the hidden attribute. */
+    .csv-import-summary[hidden], [data-csv-site][hidden] { display: none; }
+  </style>
   <script nonce="{{ csp_nonce() }}">
     (function() {
-      var CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
       var S = window.__csvInventoryPage = window.__csvInventoryPage || {};
       S.csvValidatedData = null;
       S.pendingRows = null;
@@ -92,11 +113,73 @@
         if (wrap) wrap.innerHTML = '';
         if (prog) { prog.textContent = ''; prog.style.display = 'none'; }
         if (sum) sum.textContent = '';
+        renderImportSummary(null);
+        S.lastFile = null;
         S.csvValidatedData = null;
         S.pendingRows = null;
         S.acceptedRows = null;
         S.totalReviewCount = 0;
       }
+
+      function renderImportSummary(res) {
+        var box = document.getElementById('csv-import-summary');
+        if (!box) return;
+        var s = res && res.summary;
+        if (!s || !s.rows) { box.hidden = true; return; }
+        var counts = document.getElementById('csv-import-summary-counts');
+        counts.textContent = '';
+        var total = document.createElement('strong');
+        total.textContent = s.rows + (s.rows === 1 ? ' row' : ' rows');
+        counts.appendChild(total);
+        counts.appendChild(document.createTextNode(' · ' + s.ready + ' ready'));
+        if (s.problems) {
+          counts.appendChild(document.createTextNode(' · '));
+          var bad = document.createElement('span');
+          bad.className = 'csv-import-summary__problems';
+          bad.textContent = s.problems + (s.problems === 1 ? ' needs' : ' need') + ' fixing';
+          counts.appendChild(bad);
+        }
+        document.getElementById('csv-import-summary-hint').hidden = !s.problems;
+        document.getElementById('csv-import-summary-actions').hidden = !s.problems;
+        box.hidden = false;
+      }
+
+      function saveBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+      }
+
+      // The template comes from the server (its columns are the validator's, plus Site when
+      // multiple sites are on). Fetched into a blob like the problem rows, so both downloads
+      // take the same path; the link's href still works without JavaScript.
+      S.onDownloadTemplate = function(href) {
+        fetch(href, { credentials: 'same-origin' }).then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function(blob) {
+          saveBlob(blob, 'inventory_template.csv');
+        }).catch(function(err) {
+          window.showNotification && window.showNotification('error', 'Download failed', err.message || 'Could not download the template.');
+        });
+      };
+
+      S.onDownloadProblems = function() {
+        if (!S.lastFile || !window.CoreAPI || !CoreAPI.inventoryCsvErrorReport) return;
+        var fd = new FormData();
+        fd.append('file', S.lastFile);
+        CoreAPI.inventoryCsvErrorReport(fd).then(function(blob) {
+          saveBlob(blob, 'inventory_import_problems.csv');
+        }).catch(function(err) {
+          window.showNotification && window.showNotification('error', 'Download failed', err.message || 'Could not build the problem report.');
+        });
+      };
 
       function validationForRowIndex(rowIndex) {
         if (!S.csvValidatedData || !S.csvValidatedData.validation) return null;
@@ -448,19 +531,6 @@
         renderCurrentReviewCard();
       }
 
-      S.onDownloadTemplate = function() {
-        var blob = new Blob([CSV_TEMPLATE_HEADERS + '\nExample Item,10,kg,ACME Ltd,2024-01-15,BATCH-001,2025-12-31'], { type: 'text/csv' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'inventory_template.csv';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function() { URL.revokeObjectURL(url); }, 100);
-      };
-
       S.handleCsvFile = function(file) {
         if (!file || !file.name) return;
         if (!window.CoreAPI || !window.CoreAPI.inventoryCsvValidate) {
@@ -479,6 +549,8 @@
         CoreAPI.inventoryCsvValidate(formData).then(function(res) {
           S.csvValidatedData = res;
           S.csvValidatedData._initial_row_count = (res.rows || []).length;
+          S.lastFile = file;
+          renderImportSummary(res);
           startReview();
         }).catch(function(err) {
           if (wrap) wrap.innerHTML = '<p style="padding: 16px; color: var(--error); margin: 0;">' + escapeHtml(err.message || 'Validation failed') + '</p>';
@@ -492,10 +564,16 @@
           if (!document.getElementById('csv-file-input')) return;
           var St = window.__csvInventoryPage;
           if (!St) return;
-          if (e.target.closest('#csv-download-template')) {
+          var tpl = e.target.closest('#csv-download-template');
+          if (tpl) {
             e.preventDefault();
             e.stopPropagation();
-            if (typeof St.onDownloadTemplate === 'function') St.onDownloadTemplate();
+            if (typeof St.onDownloadTemplate === 'function') St.onDownloadTemplate(tpl.getAttribute('href'));
+            return;
+          }
+          if (e.target.closest('#csv-download-problems')) {
+            e.preventDefault();
+            if (typeof St.onDownloadProblems === 'function') St.onDownloadProblems();
             return;
           }
           if (e.target.closest('#csv-browse-btn')) {
