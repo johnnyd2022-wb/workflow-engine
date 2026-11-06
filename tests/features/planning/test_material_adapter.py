@@ -389,7 +389,8 @@ def test_all_batches_share_balance_and_catalog_reads_are_bounded_without_n_plus_
         adapter.assess(db, org_id, {}, today=TODAY)
         # GL-P07 B2 adds two, still one each however many batches: inputs held by unfinished
         # steps, and the lots being committed.
-        assert len(queries) == 9
+        # +1 since GL-P02: one open-holds lookup for every lot seen (constant, not per batch).
+        assert len(queries) == 10
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", collect)
 

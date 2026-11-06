@@ -264,6 +264,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
+    # --- quality holds (GL-P02): holding is the safe direction; release is signed off
+    ("lot_holds.release_lot_hold", None, "compliance.manage"),
+    ("lot_holds.*", _READ, "inventory.view"),
+    ("lot_holds.*", None, "inventory.adjust"),
     ("go_live.set_go_live_date", None, "settings.manage"),  # changes which sales are matched
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),

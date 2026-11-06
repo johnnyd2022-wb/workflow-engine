@@ -39,6 +39,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.security.permissions import requires_auth
+from app.core.services.lot_holds import LotOnHoldError
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
@@ -1243,6 +1244,10 @@ def register_routes(
 
                 # Single commit for all inventory operations
                 db_session.commit()
+            except LotOnHoldError as e:
+                # GL-P02: a held lot was picked. Nothing is taken; say which lot and why.
+                db_session.rollback()
+                return jsonify({"error": str(e), "code": "lot_on_hold"}), 409
             except Exception as e:
                 logger.exception("Failed to commit inventory operations atomically")
                 db_session.rollback()

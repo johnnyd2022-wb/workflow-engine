@@ -285,10 +285,16 @@ def _observe(db, org_id, lot_ids, today, materials=frozenset()):
     # first-expiring first; `_supplies` decides how a bound lot is split.
     lots += [item for item in _material_lots(db, org_id, materials) if item.id not in set(lot_ids)]
     pending = _pending_inputs(db, org_id, [item.id for item in lots])
+    from app.core.services.lot_holds import open_holds
+
+    held = open_holds(db, org_id, [item.id for item in lots])
     observations = {}
     pool = []
     for item in lots:
         reasons = []
+        if item.id in held:
+            # GL-P02: a lot on quality hold can't be planned into a batch until released.
+            reasons.append(f"Lot is on quality hold: {held[item.id].reason}")
         owner_known, owner = resolve_owner(item)
         if not owner_known:
             reasons.append("Material ownership has not been confirmed")
