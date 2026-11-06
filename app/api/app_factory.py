@@ -480,6 +480,9 @@ def create_app():
     install_site_request_validation(app)
     setup_session_security(app)
     setup_observability(app)
+    from app.api.error_pages import register_error_pages
+
+    register_error_pages(app)  # GL-C04: 404/500 say how to get help, with a reference
 
     # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
     # This ensures all connections are encrypted, preventing man-in-the-middle attacks
