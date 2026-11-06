@@ -136,6 +136,11 @@ RULES: list[tuple[str, str | None, str]] = [
     ("lint_format", r"^(ruff|backend_size|feature_index_routes|data_stores)$", r"."),
     ("migration", r"^migration_reversibility$", r"."),
     ("deploy", r"^(deploy_|promote_|rollback_|docker_build|ci_image_build)", r"."),
+    # relevant_tests selected targets pytest could not collect: a node id the MR renamed or
+    # removed (TIA's map is main's last run), or, before !542's fix, an id split on spaces.
+    ("selection_stale_nodeid", None, r"ERROR: (?:file or directory )?not found: "),
+    ("xdist_collection_mismatch", None, r"Different tests were collected between gw\d+ and gw\d+"),
+    ("no_tests_collected", None, r"\[0 items\]|=+ no tests ran in"),
     (
         "shared_db_pollution",
         None,
@@ -232,7 +237,9 @@ def gl_pages(path: str, limit: int) -> list:
     return items[:limit]
 
 
-_KEY_LINE = re.compile(r"^(FAILED|ERROR) tests/|^=+ .*\b(failed|error|errors|passed)\b.* in [\d.]+s")
+_KEY_LINE = re.compile(
+    r"^(FAILED|ERROR) tests/|\bERROR: (?:file or directory )?not found: |^\d+ workers \[\d+ items\]|^=+ .*\b(failed|error|errors|passed|no tests ran)\b.* in [\d.]+s"
+)
 
 
 def failed_lines(text: str) -> str:
@@ -246,7 +253,7 @@ def failed_lines(text: str) -> str:
     for ln in lines:
         if re.match(r"^=+ short test summary info =+", ln):
             in_summary = True
-        if in_summary or _KEY_LINE.match(ln):
+        if in_summary or _KEY_LINE.search(ln):
             if ln not in keep:
                 keep.append(ln)
         if in_summary and re.match(r"^=+ .* in [\d.]+s", ln):
