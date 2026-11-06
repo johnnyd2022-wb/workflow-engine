@@ -2,7 +2,8 @@
 
 cd_e2e started against a container that was still booting and failed on
 ERR_CONNECTION_REFUSED (main 2026-09-30, 10-14, 10-25). Runs the real script with fake
-docker and curl on PATH.
+docker on PATH. The probe runs inside the app container (docker exec), because the
+shell-executor job cannot reach 127.0.0.1:8001 on the Docker host (main red 2026-11-07).
 """
 
 import os
@@ -23,25 +24,23 @@ def _exe(path: Path, body: str) -> None:
 
 
 def _run(tmp_path, *, healthy_after: int | None, running: str = "true"):
-    """healthy_after: curl succeeds from this attempt on (None = never)."""
+    """healthy_after: the in-container probe succeeds from this attempt on (None = never)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
+    count = tmp_path / "probe.count"
     _exe(
         bin_dir / "docker",
         f'echo "docker $*" >> {calls}\n'
         f'if [ "$1" = inspect ]; then echo {running}; fi\n'
         'if [ "$1" = logs ]; then echo "boot log line"; fi\n'
+        'if [ "$1" = exec ]; then\n'
+        f"  n=$(( $(cat {count} 2>/dev/null || echo 0) + 1 )); echo $n > {count}\n"
+        + (f"  [ $n -ge {healthy_after} ] && exit 0\n" if healthy_after else "")
+        + "  exit 1\nfi\n"
         "exit 0\n",
     )
-    count = tmp_path / "curl.count"
-    _exe(
-        bin_dir / "curl",
-        f"n=$(( $(cat {count} 2>/dev/null || echo 0) + 1 )); echo $n > {count}\n"
-        f'echo "curl $*" >> {calls}\n'
-        + (f"[ $n -ge {healthy_after} ] && exit 0\n" if healthy_after else "")
-        + "exit 7\n",
-    )
+    _exe(bin_dir / "curl", 'echo "curl must not be used: the job cannot reach the Docker host" >&2; exit 99\n')
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FLASK_SECRET_KEY": "x" * 40,
@@ -54,30 +53,30 @@ def _run(tmp_path, *, healthy_after: int | None, running: str = "true"):
     out = subprocess.run(
         ["bash", str(SCRIPT), "registry.example/app:test-abc"], cwd=ROOT, env=env, capture_output=True, text=True
     )
-    curls = int(count.read_text()) if count.exists() else 0
-    return out, curls, calls.read_text()
+    probes = int(count.read_text()) if count.exists() else 0
+    return out, probes, calls.read_text()
 
 
 def test_waits_until_the_app_is_healthy(tmp_path):
-    out, curls, calls = _run(tmp_path, healthy_after=3)
+    out, probes, calls = _run(tmp_path, healthy_after=3)
     assert out.returncode == 0, out.stdout + out.stderr
-    assert curls == 3
+    assert probes == 3
     assert "https://127.0.0.1:8001/healthcheck" in calls
     assert "passed its health check" in out.stdout
 
 
 def test_never_healthy_exits_3_with_the_app_logs(tmp_path):
-    out, curls, _calls = _run(tmp_path, healthy_after=None)
+    out, probes, _calls = _run(tmp_path, healthy_after=None)
     assert out.returncode == 3
-    assert curls == 5
+    assert probes == 5
     assert "boot log line" in out.stdout
     assert "✅" not in out.stdout
 
 
 def test_container_that_exits_during_startup_fails_without_waiting(tmp_path):
-    out, curls, _calls = _run(tmp_path, healthy_after=1, running="false")
+    out, probes, _calls = _run(tmp_path, healthy_after=1, running="false")
     assert out.returncode == 3
-    assert curls == 0
+    assert probes == 0
     assert "exited during startup" in out.stdout
 
 

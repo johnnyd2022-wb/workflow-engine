@@ -134,15 +134,24 @@ fi
 # .agents/reports/ci/pipeline-health-2026-11.md). /healthcheck also proves the database
 # connection. Exit 3 means "the new app is running but never became healthy" -- the old app
 # is already gone, so the CI job rolls back to :test-stable on exactly that code.
+# Probe from INSIDE the app container: deploy-target is a shell executor that itself runs in a
+# container, so 127.0.0.1:8001 from the job is not the Docker host (main went red on 2026-11-07
+# with a healthy app because curl in the job never reached it). The image always has python.
 HEALTH_URL="${DEPLOY_HEALTH_URL:-https://127.0.0.1:8001/healthcheck}"
-echo "Waiting for $HEALTH_URL ..."
+HEALTH_PROBE="import ssl,sys,urllib.request
+try:
+    r = urllib.request.urlopen(sys.argv[1], context=ssl._create_unverified_context(), timeout=5)
+    sys.exit(0 if r.status == 200 else 1)
+except Exception:
+    sys.exit(1)"
+echo "Waiting for $HEALTH_URL (probed inside workflow-engine-test) ..."
 healthy=""
 for _ in $(seq 1 "${DEPLOY_HEALTH_ATTEMPTS:-60}"); do
     if [ "$(docker inspect -f '{{.State.Running}}' workflow-engine-test 2>/dev/null)" != true ]; then
         echo "❌ workflow-engine-test exited during startup."
         break
     fi
-    if curl --max-time 5 -kfs "$HEALTH_URL" >/dev/null 2>&1; then
+    if docker exec workflow-engine-test python -c "$HEALTH_PROBE" "$HEALTH_URL" >/dev/null 2>&1; then
         healthy=1
         break
     fi
