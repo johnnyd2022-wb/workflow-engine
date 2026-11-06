@@ -683,7 +683,7 @@ def create_app():
     # so the CDN edge-caches them after the first hit and the origin stops being in the
     # asset path.
     #
-    # Scope: /static/js, /static/css, /static/inventory, /static/img (+ /crm/static/*
+    # Scope: /static/js, /static/css, /static/inventory, /static/img, /static/fonts (+ /crm/static/*
     # when CRM is on). /ui/shared (per-file auth gate) stays on its Flask route.
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
     # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
@@ -728,6 +728,8 @@ def create_app():
         app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
+    # Self-hosted webfonts (fonts.css): woff2 files plus their licence note, all public.
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "fonts"), prefix="static/fonts/")
     if crm_available:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")

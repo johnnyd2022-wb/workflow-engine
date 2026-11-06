@@ -49,8 +49,8 @@ def _shared(framable: bool) -> list[str]:
     """Everything but script: the same in the enforced and the target policy."""
     return [
         "default-src 'self'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
         "img-src 'self' data:",
         f"connect-src 'self' {_CF_CONNECT}",
         # PostHog's vendored session-recording bundle starts its rrweb compression worker
