@@ -32,4 +32,3 @@ class XeroCreditNote(TenantScoped, Base):
     last_synced_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
-

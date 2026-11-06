@@ -45,7 +45,9 @@ class SyncResult:
 
     @property
     def partial(self) -> bool:
-        return bool(self.errors) and (self.contacts_synced > 0 or self.invoices_synced > 0 or self.credit_notes_synced > 0)
+        return bool(self.errors) and (
+            self.contacts_synced > 0 or self.invoices_synced > 0 or self.credit_notes_synced > 0
+        )
 
 
 class XeroSyncService:

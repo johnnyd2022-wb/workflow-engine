@@ -500,6 +500,7 @@ def test_in_fifo_mode_a_manual_xero_sync_under_sales_manage_applies_authorised_s
             partial=False,
             contacts_synced=0,
             invoices_synced=0,
+            credit_notes_synced=0,
             sales_allocated=summary.get("allocated", 0),
             sales_unmapped=0,
             sales_insufficient_stock=0,

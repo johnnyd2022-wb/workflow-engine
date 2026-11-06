@@ -104,7 +104,7 @@ class XeroCreditNoteRepository:
 
     def pending_returns(self, org_id: UUID, *, page: int = 1, page_size: int = 25) -> tuple[list[tuple], int]:
         query = (
-        self.db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping)
+            self.db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping)
             .join(
                 XeroCreditNote,
                 (XeroCreditNote.org_id == XeroCreditNoteLine.org_id)
@@ -125,7 +125,9 @@ class XeroCreditNoteRepository:
         )
         total = query.with_entities(func.count(XeroCreditNoteLine.id)).scalar() or 0
         rows = (
-            query.order_by(XeroCreditNote.date.asc().nulls_last(), XeroCreditNote.number.asc(), XeroCreditNoteLine.line_key)
+            query.order_by(
+                XeroCreditNote.date.asc().nulls_last(), XeroCreditNote.number.asc(), XeroCreditNoteLine.line_key
+            )
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()

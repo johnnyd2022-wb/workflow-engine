@@ -294,9 +294,7 @@ def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
     if not isinstance(note, str):
         return jsonify({"error": "Add a note of 1 to 500 characters"}), 400
     try:
-        record_no_return(
-            db_session(), UUID(g.org_id), note_uuid, line_uuid, UUID(g.user_id), note
-        )
+        record_no_return(db_session(), UUID(g.org_id), note_uuid, line_uuid, UUID(g.user_id), note)
         db_session().commit()
         return jsonify({"ok": True, "decision": "no_return"}), 200
     except LookupError as e:

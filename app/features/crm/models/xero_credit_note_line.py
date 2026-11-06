@@ -53,4 +53,3 @@ class XeroCreditNoteLine(TenantScoped, Base):
     no_return_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
-
