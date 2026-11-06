@@ -6,7 +6,7 @@ import re
 from datetime import timedelta
 
 from flask import Blueprint, Response, g, jsonify, stream_with_context
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
@@ -24,12 +24,17 @@ bp = Blueprint("data_export", __name__)
 DOWNLOAD_LIMITS = ((timedelta(hours=1), 3), (timedelta(days=1), 10))
 
 
-def _over_limit(org_id, user_id) -> bool:
+def reserve_download(session, org_id, user_id) -> bool:
+    """Count recent downloads and record this one as started, atomically; False when over the cap.
+
+    A transaction-scoped advisory lock per person serialises the count and the insert, so two
+    workers racing for the last slot can't both get it. Commits (which releases the lock).
+    """
+    session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"data-export:{user_id}"})
     now = utc_now()
     for window, most in DOWNLOAD_LIMITS:
         started = (
-            db_session()
-            .query(func.count(AuditLog.id))
+            session.query(func.count(AuditLog.id))
             .filter(
                 AuditLog.org_id == org_id,
                 AuditLog.user_id == user_id,
@@ -39,8 +44,21 @@ def _over_limit(org_id, user_id) -> bool:
             .scalar()
         )
         if started >= most:
-            return True
-    return False
+            session.rollback()
+            return False
+    session.add(
+        AuditLog(
+            org_id=org_id,
+            user_id=user_id,
+            action="data_export_started",
+            entity="organisation",
+            entity_id=org_id,
+            meta_data={},
+            timestamp=now,
+        )
+    )
+    session.commit()
+    return True
 
 
 def _user_key() -> str:
@@ -57,13 +75,12 @@ def _user_key() -> str:
 def download_records():
     org_id = g.current_org_id
     user_id = g.current_user.id
-    if _over_limit(org_id, user_id):
+    if not reserve_download(db_session(), org_id, user_id):
         return jsonify(
             {"error": "You've downloaded your records several times recently. Try again later.", "code": "rate_limited"}
         ), 429
     org = db_session().get(Organisation, org_id)
     org_name = org.name if org is not None else "your business"
-    log_action("data_export_started", "organisation", org_id, {}, org_id, user_id)
     stats = ExportStats()
 
     def generate():

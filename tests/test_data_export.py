@@ -299,3 +299,81 @@ def test_the_download_limit_holds_across_workers(db, two_orgs, monkeypatch):
     refused = client_a.get(URL)
     assert refused.status_code == 429
     assert refused.get_json()["code"] == "rate_limited"
+
+
+def test_two_workers_racing_for_the_last_download_get_one_slot(db, two_orgs, monkeypatch):
+    """Each thread is its own worker with its own session; the advisory lock lets one through."""
+    import threading
+    import time
+    from datetime import timedelta
+
+    from app.core.db import SessionLocal
+    from app.features.data_export import routes
+
+    org_a, _client_a, _org_b = two_orgs
+    user_id = db.query(User).filter(User.org_id == org_a.id).one().id
+    monkeypatch.setattr(routes, "DOWNLOAD_LIMITS", ((timedelta(hours=1), 1),))
+    barrier = threading.Barrier(2)
+    results = []
+
+    def worker():
+        session = SessionLocal()
+        add = session.add
+
+        def slow_add(obj):  # hold each worker between its count and its insert
+            time.sleep(0.3)
+            add(obj)
+
+        session.add = slow_add
+        try:
+            barrier.wait()
+            results.append(routes.reserve_download(session, org_a.id, user_id))
+        finally:
+            session.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert sorted(results) == [False, True]
+    db.expire_all()
+    started = db.query(AuditLog).filter(AuditLog.org_id == org_a.id, AuditLog.action == "data_export_started")
+    assert started.count() == 1
+
+
+def test_files_are_read_in_one_query_not_one_per_file(db, two_orgs, monkeypatch):
+    from sqlalchemy import Column, LargeBinary, MetaData, String, Table, event
+    from sqlalchemy.dialects.postgresql import UUID
+
+    org_a, _client_a, _org_b = two_orgs
+    table = Table(
+        "data_export_probe2",
+        MetaData(),
+        Column("id", UUID(as_uuid=True), primary_key=True),
+        Column("org_id", UUID(as_uuid=True), nullable=False),
+        Column("title", String(50)),
+        Column("content", LargeBinary),
+        prefixes=["TEMPORARY"],
+    )
+    conn = db.connection()
+    table.create(conn)
+    conn.execute(
+        table.insert(), [{"id": uuid4(), "org_id": org_a.id, "title": f"d{i}", "content": b"x"} for i in range(5)]
+    )
+    monkeypatch.setattr(service, "tenant_tables", lambda _conn: [table])
+    blob_reads = []
+
+    def count(_conn, _cursor, statement, *_rest):
+        if "data_export_probe2.content" in statement and "IS NOT NULL" in statement and "SELECT" in statement:
+            blob_reads.append(statement)
+
+    event.listen(db.get_bind(), "before_cursor_execute", count)
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(b"".join(service.stream_export(db, org_a.id, org_a.name))))
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", count)
+    assert len([n for n in zf.namelist() if n.startswith("files/data_export_probe2/content/")]) == 5
+    # One CSV-pass query (content IS NOT NULL as a flag) and one file-pass query.
+    assert len(blob_reads) == 2, blob_reads
+    db.rollback()

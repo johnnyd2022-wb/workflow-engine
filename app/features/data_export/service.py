@@ -86,6 +86,7 @@ SECRET_NAME = re.compile(r"token|secret|hash|password|passwd|key|salt|otp|creden
 # real small manufacturer; it keeps a runaway table from producing an unbounded download.
 MAX_ROWS_PER_TABLE = 1_000_000
 FETCH_BATCH = 1_000
+FILE_BATCH = 4  # portal documents are up to 5 MiB each
 FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -251,13 +252,16 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
     generated_at = utc_now()
     tables = tenant_tables(session.connection())
     pipe = _Pipe()
-    conn = session.connection().execution_options(stream_results=True, yield_per=FETCH_BATCH)
+    # Streaming is set per statement: Connection.execution_options() would change the session's
+    # shared connection in place and turn later INSERTs into server-side cursors.
+    conn = session.connection()
+    rows_opts = {"stream_results": True, "yield_per": FETCH_BATCH}
 
     with zipfile.ZipFile(pipe, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path, (headers, sql) in SUMMARIES.items():
             with zf.open(path, "w", force_zip64=True) as out:
                 out.write(b"\xef\xbb\xbf" + _csv_line(headers))  # BOM: Excel opens UTF-8 correctly
-                for row in conn.execute(text(sql), {"org_id": org_id}):
+                for row in conn.execute(text(sql).execution_options(**rows_opts), {"org_id": org_id}):
                     out.write(_csv_line(_cell(v) for v in row))
                     if len(pipe._chunks) > 64:
                         yield pipe.drain()
@@ -274,7 +278,7 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
             count = 0
             with zf.open(f"tables/{table.name}.csv", "w", force_zip64=True) as out:
                 out.write(b"\xef\xbb\xbf" + _csv_line(c.name for c in cols))
-                for row in conn.execute(query):
+                for row in conn.execute(query.execution_options(**rows_opts)):
                     if count == MAX_ROWS_PER_TABLE:
                         stats.truncated.append(table.name)
                         break
@@ -290,18 +294,17 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
                         yield pipe.drain()
             stats.rows[table.name] = count
             yield pipe.drain()
-            # Files follow their CSV (ZipFile writes one member at a time), one row at a time
-            # by keyset, so at most one file is ever in memory however many there are.
+            # Files follow their CSV (ZipFile writes one member at a time). One query per column,
+            # read through a server-side cursor a few rows at a time: memory stays at a handful of
+            # files however many there are, and there is no query per file.
             for column in sorted(binary):
-                after = None
-                for _ in range(MAX_ROWS_PER_TABLE):
-                    query = select(table.c.id, table.c[column]).where(key == org_id, table.c[column].isnot(None))
-                    if after is not None:
-                        query = query.where(table.c.id > after)
-                    row = session.execute(query.order_by(table.c.id).limit(1)).first()
-                    if row is None:
-                        break
-                    after = row.id
+                query = (
+                    select(table.c.id, table.c[column])
+                    .where(key == org_id, table.c[column].isnot(None))
+                    .order_by(table.c.id)
+                    .limit(MAX_ROWS_PER_TABLE)
+                )
+                for row in conn.execute(query.execution_options(stream_results=True, yield_per=FILE_BATCH)):
                     zf.writestr(f"files/{table.name}/{column}/{row.id}", bytes(row[1]))
                     stats.files += 1
                     yield pipe.drain()
