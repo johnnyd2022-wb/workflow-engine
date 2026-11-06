@@ -133,6 +133,8 @@ ENDPOINT_COVERAGE = {
     ("core.create_inventory_item", "POST"): "blocked",
     ("core.create_process", "POST"): "blocked",
     ("core.csv_commit", "POST"): "blocked",
+    ("core.csv_error_report", "POST"): "blocked",
+    ("core.csv_template", "GET"): "blocked",
     ("core.csv_validate", "POST"): "blocked",
     ("core.dashboard", "GET"): "blocked",
     ("core.decode_barcode", "POST"): "blocked",
