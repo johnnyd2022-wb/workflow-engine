@@ -49,7 +49,14 @@ PERMISSIONS: dict[str, str] = {
         "Add customers, notes and tasks; edit customer details; create and authorise invoices "
         "(with FIFO matching, an authorised invoice takes its stock off the oldest batches)"
     ),
-    "sales.manage": "Connect Xero, map products, configure sales traceability",
+    # SALES-PERM (2026-11-06, follows GL-S01): connecting Xero and syncing only bring in sales
+    # Xero already holds, and a sync applies them to stock exactly as authorising does under
+    # sales.record. Changing the matching mode decides whether waiting sales take stock, so it
+    # also needs inventory.adjust (checked in the traceability-config route).
+    "sales.manage": (
+        "Connect Xero and sync, map products, configure sales traceability "
+        "(a sync applies authorised sales to stock; changing the matching mode also needs inventory.adjust)"
+    ),
     "compliance.view": "See compliance checks, evidence and reports",
     "compliance.record": "Log checks, attach evidence and sign off compliance records",
     "compliance.manage": "Configure compliance modules and their rules",

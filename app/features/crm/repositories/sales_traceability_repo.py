@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.features.crm.models.sales_traceability_config import SalesTraceabilityConfig
@@ -13,6 +14,25 @@ class SalesTraceabilityConfigRepository:
 
     def get_for_org(self, org_id: UUID) -> SalesTraceabilityConfig | None:
         return self.db.query(SalesTraceabilityConfig).filter(SalesTraceabilityConfig.org_id == org_id).first()
+
+    def lock_for_update(self, org_id: UUID) -> SalesTraceabilityConfig | None:
+        """Serialise writers of this org's config for the rest of the transaction, then load it fresh.
+
+        The advisory lock also covers the case with no row yet (nothing for FOR UPDATE to lock),
+        so two first saves can't both insert. Read committed: the read after the lock sees
+        whatever the previous holder committed; populate_existing drops a stale cached copy.
+        """
+        self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"crm_traceability_config:{org_id}"},
+        )
+        return (
+            self.db.query(SalesTraceabilityConfig)
+            .filter(SalesTraceabilityConfig.org_id == org_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
 
     def upsert(
         self,

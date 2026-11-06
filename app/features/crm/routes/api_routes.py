@@ -19,6 +19,7 @@ from app.core.backend.tasks import (
     update_lane,
 )
 from app.core.db import db_session
+from app.core.security.access_policy import has_permission
 from app.core.security.permissions import requires_auth, requires_permission
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
@@ -908,11 +909,28 @@ def get_traceability_config():
 @api_bp.route("/api/crm/traceability-config", methods=["PUT"])
 @requires_auth
 def update_traceability_config():
+    from app.features.crm.services.crm_service import MatchingModeChangeError
+
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
+    # SALES-PERM: the matching mode decides whether waiting sales take stock. Switching it
+    # (say manual -> fifo) makes the next sync consume the whole waiting backlog, the same
+    # effect as /matching/run, so changing it needs inventory.adjust beside sales.manage. The
+    # service checks it under a lock, in the transaction that writes (no read-then-write race).
+    may_change_mode = has_permission(getattr(g, "current_user", None), "inventory.adjust")
     try:
-        updated = _crm_service().update_traceability_config(org_id, data)
+        updated = _crm_service().update_traceability_config(org_id, data, may_change_mode=may_change_mode)
+    except MatchingModeChangeError:
+        db_session.rollback()
+        logger.warning("access_denied", reason="matching_mode_needs_inventory_adjust", path=request.path)
+        return jsonify(
+            {
+                "error": "Changing how sales are matched changes stock, so it needs permission to adjust stock.",
+                "code": "permission_denied",
+            }
+        ), 403
     except ValueError as e:
+        db_session.rollback()
         return jsonify({"error": str(e)}), 400
     return jsonify(updated), 200
 
