@@ -84,7 +84,8 @@ def _use(db, item, reason, new_quantity="4"):
 # --- enforcement at the flush -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("reason", sorted(lot_holds.USE_REASONS))
+# The enum members the app passes, and their plain values: both must be refused.
+@pytest.mark.parametrize("reason", [*lot_holds._USE, *(r.value for r in lot_holds._USE)], ids=str)
 def test_every_use_of_a_held_lot_is_refused(db, org, reason):
     org_obj, _ = org
     item = _lot(db, org_obj.id, "Juniper")
@@ -297,3 +298,54 @@ def test_bad_input_is_a_plain_400(db, org):
     assert bad.status_code == 400
     assert admin.post("/api/core/inventory/not-a-uuid/holds", json={"reason": "x"}).status_code == 404
     assert admin.post(f"/api/core/holds/{uuid4()}/release", json={"note": "x"}).status_code == 404
+
+
+def test_a_production_step_using_a_held_lot_is_refused_with_the_reason(db, org):
+    """The real path: completing a step that consumes the held lot answers 400 and takes nothing."""
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from tests.factories import ProcessFactory
+
+    org_obj, admin = org
+    item = _lot(db, org_obj.id, "Juniper")
+    process = ProcessFactory(org_id=org_obj.id)
+    ProcessRepository(db).add_step(
+        process.id,
+        org_obj.id,
+        step_number=1,
+        position=1000,
+        name="Macerate",
+        inputs=[{"name": "Juniper", "quantity": 2, "unit": "kg"}],
+        outputs=[],
+    )
+    execution = ExecutionRepository(db).create_execution(org_obj.id, process.id)
+    db.commit()
+    step = execution.execution_steps[0]
+    _hold(db, org_obj.id, item)
+
+    resp = admin.post(
+        f"/api/core/executions/{execution.id}/steps/{step.id}/complete",
+        json={
+            "actual_inputs": [{"inventory_item_id": str(item.id), "name": "Juniper", "quantity": 2, "unit": "kg"}],
+            "actual_outputs": [],
+        },
+    )
+    assert resp.status_code == 409, resp.data
+    assert "quality hold" in resp.get_data(as_text=True)
+    db.expire_all()
+    assert db.get(InventoryItem, item.id).quantity == Decimal("10")
+
+
+def test_any_route_that_hits_a_held_lot_answers_409(flask_app):  # noqa: F811
+    """The app-wide handler: a route with no catch of its own still says which lot and why."""
+
+    def boom():
+        raise lot_holds.LotOnHoldError("Juniper", "Cloudy")
+
+    flask_app.add_url_rule("/__test/held", "test_held_boom", boom)
+    resp = flask_app.test_client().get("/__test/held", base_url="https://localhost")
+    assert resp.status_code == 409
+    assert resp.get_json() == {
+        "error": "Juniper is on quality hold (Cloudy). Release the hold before using it.",
+        "code": "lot_on_hold",
+    }

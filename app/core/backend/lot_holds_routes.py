@@ -142,3 +142,10 @@ def list_open_holds():
             ]
         }
     )
+
+
+@lot_holds_bp.app_errorhandler(lot_holds.LotOnHoldError)
+def lot_on_hold(error):
+    """Any route whose flush hit a held lot: nothing was taken; say which lot and why."""
+    db_session().rollback()
+    return jsonify({"error": str(error), "code": "lot_on_hold"}), 409

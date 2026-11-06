@@ -28,15 +28,16 @@ from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReaso
 from app.core.utils.time import utc_now
 
 # Quantity going down for one of these reasons is a use of the stock, which a hold stops.
-USE_REASONS = frozenset(
-    {
-        InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY.value,
-        InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION.value,
-        InventoryQuantityWriteReason.TASTING_DISPATCH.value,
-        InventoryQuantityWriteReason.CONTRACT_DISPATCH.value,
-        InventoryQuantityWriteReason.STOCK_TRANSFER.value,
-    }
+_USE = (
+    InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY,
+    InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION,
+    InventoryQuantityWriteReason.TASTING_DISPATCH,
+    InventoryQuantityWriteReason.CONTRACT_DISPATCH,
+    InventoryQuantityWriteReason.STOCK_TRANSFER,
 )
+# allow_inventory_quantity_write stores str(reason): for a (str, Enum) member that is
+# "InventoryQuantityWriteReason.X", for a plain string its value. Match both.
+USE_REASONS = frozenset([r.value for r in _USE] + [str(r) for r in _USE])
 
 MAX_REASON = 500
 
