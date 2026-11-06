@@ -64,6 +64,8 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
 | !624 | `nightly_e2e`: the whole `tests/e2e/` (80 files) on a nightly schedule against main. The deploy chain opts out of that pipeline, and a test pins it. Warn-only until its first green run. | E2E rot found only when an unrelated MR touches it (the !612 pattern) |
 | `ci_health` MR (this report) | `scripts/ci_health.py` + `ci` schema: the data and classifier, re-runnable. | makes the next round measurable |
 | !625 (architect-claude) | Self-host Roboto + Momo Trust Display. | `third_party_fonts`, and the main reds it caused |
+| !630 | `deploy_test` waits for `/healthcheck` before `cd_e2e` starts; a never-healthy deploy rolls back to `:test-stable` (exit 3). Its probe curled `127.0.0.1:8001` from the job, which is not the Docker host, so main went red on a healthy app until !637 (architect-claude) moved the probe into the container via `docker exec`. | `deploy_not_ready` |
+| !632 (in review) | `cd_e2e`'s browser joins the `workflow-observability` bridge network instead of `--network host`, so docker network churn from other jobs no longer aborts loads. | `ERR_NETWORK_CHANGED` on main `cd_e2e` (the Google Fonts flake had the same root cause) |
 
 ## Decisions made
 
@@ -78,6 +80,19 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
   pipeline, so a red first run would block every MR through main_green.
 - **Didn't touch `~/.local/bin/mr-train`** (architect-claude's). The recommendation below is
   for them.
+
+## Lessons
+
+- **A CI job runs in a container: loopback is not the host.** `127.0.0.1` inside a job is
+  the job's own network namespace, not the Docker host where the app's port is published.
+  !630's health probe curled `127.0.0.1:8001`, timed out against an app that was answering
+  200s, and turned main red (fixed by !637: probe from inside the app container with
+  `docker exec`). Probe a deployed service from its own container, or by its name on a shared
+  docker network, never by loopback from the job. A local run of the script on the host
+  can't catch this, so check where the job actually executes before testing a network path.
+- **Host networking couples a job to every other job on the engine.** `cd_e2e`'s Chromium on
+  `--network host` saw each `docker network create/rm` from other jobs as a network change
+  (`ERR_NETWORK_CHANGED`). A bridge network isolates it (!632).
 
 ## What remains
 
@@ -94,8 +109,7 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
    `ci::fast` when the hash changes, so the tag never drifts silently. Not done here, to keep
    CI token scope unchanged (that needs a project access token with `api`).
 3. **cd_e2e started before the deployed app listened** (`deploy_not_ready`, 3 main reds).
-   `deploy_test` should wait on the health endpoint before `cd_e2e` starts. Small; recent
-   deploy-script MRs (!616) touch this area, so it's left to whoever owns deploy next.
+   **Done** in !630, with its probe corrected by !637 (see Lessons).
 4. **Flip `nightly_e2e` to blocking** after its first green run (SUITE-GREEN).
 5. ~~Long e2e traces~~ **Corrected (2026-11-07):** those 9 "unreadable" jobs weren't truncated.
    pytest collected nothing: a TIA-selected node id that the MR had renamed or removed
@@ -108,7 +122,7 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
 
 ## Known examples from the brief, mapped
 
-- main cd_e2e Google Fonts `ERR_NETWORK_CHANGED` → `third_party_fonts`, fixed by !625.
+- main cd_e2e Google Fonts `ERR_NETWORK_CHANGED` → `third_party_fonts`, fixed by !625. The same error later hit `https://localhost:8001`: the root cause was host networking, fixed by !632.
 - main unit_tests ui_shots sync Playwright in asyncio → `e2e_assertion`/`test_failure` 11-06, fixed by !622.
 - MR main_green fails while main mid-pipeline → `stale_main_gate`, fixed by !623.
 - !612 sales overview E2E CI-only → `e2e_assertion`; FIX-SALES-E2E (Codex) owns it.
