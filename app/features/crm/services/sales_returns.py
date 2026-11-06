@@ -64,13 +64,28 @@ def _quantity(value) -> Decimal:
     return qty
 
 
+def _stored(value) -> Decimal:
+    """A quantity read back from the database. Postgres NUMERIC can hold NaN, and comparing a
+    NaN Decimal raises InvalidOperation (not a ValueError), so a non-finite stored value is
+    refused here, before any comparison, as a plain error the route turns into a 400."""
+    try:
+        number = Decimal(str(value if value is not None else 0))
+    except (InvalidOperation, ValueError):
+        raise ReturnError(
+            "A stored quantity on this sale is not a number; correct it before recording a return"
+        ) from None
+    if not number.is_finite():
+        raise ReturnError("A stored quantity on this sale is not a number; correct it before recording a return")
+    return number
+
+
 def _returned_on_line(session: Session, org_id: UUID, line_id: UUID) -> Decimal:
     total = (
         session.query(func.coalesce(func.sum(SalesReturn.quantity), 0))
         .filter(SalesReturn.org_id == org_id, SalesReturn.credit_note_line_id == line_id)
         .scalar()
     )
-    return Decimal(str(total))
+    return _stored(total)
 
 
 def _returned_on_allocation(session: Session, org_id: UUID, allocation_id: UUID) -> Decimal:
@@ -79,7 +94,7 @@ def _returned_on_allocation(session: Session, org_id: UUID, allocation_id: UUID)
         .filter(SalesReturn.org_id == org_id, SalesReturn.allocation_id == allocation_id)
         .scalar()
     )
-    return Decimal(str(total))
+    return _stored(total)
 
 
 def _sale_line_for(session: Session, org_id: UUID, note: XeroCreditNote, mapping: ProductMapping, qty: Decimal):
@@ -105,7 +120,7 @@ def _sale_line_for(session: Session, org_id: UUID, note: XeroCreditNote, mapping
     )
     most = Decimal(0)
     for allocation in candidates:
-        left = Decimal(str(allocation.quantity)) - _returned_on_allocation(session, org_id, allocation.id)
+        left = _stored(allocation.quantity) - _returned_on_allocation(session, org_id, allocation.id)
         if left >= qty:
             return allocation
         most = max(most, left)
@@ -242,7 +257,7 @@ def record_return(
         )
         if allocation is None:
             raise LookupError("Sale line not found")
-        left = Decimal(str(allocation.quantity)) - _returned_on_allocation(session, org_id, allocation.id)
+        left = _stored(allocation.quantity) - _returned_on_allocation(session, org_id, allocation.id)
         if qty > left:
             raise ReturnError(f"Only {left.normalize():f} more can be returned from this sale")
         product_name = allocation.product_name
@@ -273,7 +288,7 @@ def record_return(
         line, credit_note, mapping = found
         if line.no_return_at is not None:
             raise ReturnConflictError("This line was recorded as credit only: no more goods are expected")
-        credited = abs(Decimal(str(line.quantity))) if line.quantity is not None else None
+        credited = abs(_stored(line.quantity)) if line.quantity is not None else None
         already = _returned_on_line(session, org_id, line.id)
         if credited is not None and already + qty > credited:
             raise ReturnError(f"Only {(credited - already).normalize():f} more can be returned against this credit")
@@ -429,7 +444,11 @@ def returnable_sale_lines(session: Session, org_id: UUID, xero_invoice_id: str) 
     )
     out = []
     for row in rows:
-        back = Decimal(str(returned.get(row.id) or 0))
+        try:
+            back = _stored(returned.get(row.id) or 0)
+            left = _stored(row.quantity) - back
+        except ReturnError:
+            continue  # a corrupt stored quantity: not offered, rather than failing the list
         out.append(
             {
                 "allocation_id": str(row.id),
@@ -437,7 +456,7 @@ def returnable_sale_lines(session: Session, org_id: UUID, xero_invoice_id: str) 
                 "unit": row.unit,
                 "sold": _plain(row.quantity),
                 "returned": _plain(back),
-                "returnable": _plain(Decimal(str(row.quantity)) - back),
+                "returnable": _plain(left),
             }
         )
     return out

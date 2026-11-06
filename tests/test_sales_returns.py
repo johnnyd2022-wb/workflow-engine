@@ -493,3 +493,25 @@ def test_invoice_and_credit_note_returns_share_the_sold_quantity(db, org, credit
     assert done.status_code == 400 and "already come back" in done.get_json()["error"]
     total = sum(r.quantity for r in db.query(SalesReturn).filter(SalesReturn.org_id == org.id))
     assert total == Decimal("6")
+
+
+def test_a_stored_nan_quantity_is_a_plain_400_not_a_crash(db, org, credited, app_client):
+    """Codex: Postgres NUMERIC holds NaN, and comparing a NaN Decimal raises InvalidOperation."""
+    from sqlalchemy import text
+
+    db.execute(
+        text("UPDATE crm_sales_fifo_allocations SET quantity = 'NaN' WHERE id = :id"),
+        {"id": credited["allocation"].id},
+    )
+    db.commit()
+    db.expire_all()  # the routes share this session; drop the cached 6
+    alloc, line = str(credited["allocation"].id), str(credited["line"].id)
+    via_sale = app_client.post(
+        "/api/crm/returns", json={"allocation_id": alloc, "condition": "resaleable", "quantity": "1"}
+    )
+    assert via_sale.status_code == 400 and "not a number" in via_sale.get_json()["error"]
+    via_credit = app_client.post(
+        "/api/crm/returns", json={"credit_note_line_id": line, "condition": "resaleable", "quantity": "1"}
+    )
+    assert via_credit.status_code == 400 and "not a number" in via_credit.get_json()["error"]
+    assert app_client.get("/api/crm/invoices/inv-1/returnable").get_json()["lines"] == []
