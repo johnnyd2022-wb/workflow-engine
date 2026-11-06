@@ -616,3 +616,21 @@ def test_a_bound_lot_is_not_counted_twice(db, demand_world, monkeypatch):
     _, values = _one_bound_rest_unbound(db, demand_world, monkeypatch, Decimal(3))
     assert values[0]["material_status"] == "on_time"
     assert values[1]["material_status"] != "on_time"
+
+
+# Breaker review of !611, round 2: a binding holds its lot only for a batch that can use it.
+def test_bound_lot_is_not_reserved_for_a_batch_that_cannot_use_it(db, demand_world, monkeypatch):
+    org_id, _, _, own, sibling, _, _, batches = prepare(db, demand_world)
+    sibling.name = "Molasses"
+    for batch in batches[1:]:
+        batch.snapshot = {**batch.snapshot, "material_bindings": []}
+    other_site = Site(org_id=org_id, name="Other site", is_default=False)
+    db.add(other_site)
+    db.flush()
+    batches[0].site_id = other_site.id  # its bound lot is at the original site, so it cannot use it
+    db.flush()
+    trusted_boundary(monkeypatch)
+    adapter.assess(db, org_id, {}, today=TODAY)
+    values = results(db, org_id)
+    assert values[0]["material_status"] == "blocked"
+    assert [row["material_status"] for row in values[1:]] == ["on_time", "on_time"]

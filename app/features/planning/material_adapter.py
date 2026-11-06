@@ -221,6 +221,7 @@ def _material_lots(db, org_id, materials):
 
 
 FREE_SUFFIX = ":free"
+MAX_REASSESS = 5  # each pass only shrinks the set of bindings that hold stock
 
 
 def _lot_id(supply_id):
@@ -228,7 +229,7 @@ def _lot_id(supply_id):
     return service._id(str(supply_id).removesuffix(FREE_SUFFIX))
 
 
-def _observe(db, org_id, lot_ids, today, materials=frozenset(), bound_demand=None):
+def _observe(db, org_id, lot_ids, today, materials=frozenset()):
     lots = (
         db.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id, InventoryItem.id.in_(lot_ids))
@@ -238,15 +239,12 @@ def _observe(db, org_id, lot_ids, today, materials=frozenset(), bound_demand=Non
         if lot_ids
         else []
     )
-    # A lot an owner bound to an input is offered there first, up to what the bindings ask for;
-    # whatever is left joins the rest of the material's lots, offered to any input of that
-    # material, first-expiring first. `bound_demand` is what the bindings ask of each lot, by unit.
-    bound_demand = bound_demand or {}
+    # Every other lot of a bound or automatic material is offered to any input of that material,
+    # first-expiring first; `_supplies` decides how a bound lot is split.
     lots += [item for item in _material_lots(db, org_id, materials) if item.id not in set(lot_ids)]
-    bound = {str(identity) for identity in lot_ids}
     pending = _pending_inputs(db, org_id, [item.id for item in lots])
     observations = {}
-    supplies = {}
+    pool = []
     for item in lots:
         reasons = []
         owner_known, owner = resolve_owner(item)
@@ -317,46 +315,55 @@ def _observe(db, org_id, lot_ids, today, materials=frozenset(), bound_demand=Non
             observations[str(item.id)]["available_quantity"] = None
             observations[str(item.id)]["ready_date"] = None
         if not observations[str(item.id)]["reasons"]:
-            site = str(item.site_id) if item.site_id else None
-            free = check.quantity
-            if str(item.id) in bound:
-                asked = Decimal(0)
-                for amount, unit in bound_demand.get(str(item.id), ()):
-                    try:
-                        asked += convert_quantity_decimal(amount, unit, item.unit)
-                    except (TypeError, ValueError, InvalidOperation):
-                        pass  # the binding is flagged for its unit in assess()
-                held = min(free, asked) if bound_demand else free
-                free -= held
-                supplies[str(item.id)] = MaterialSupply(
-                    str(org_id),
-                    Supply(
-                        str(item.id),
-                        StockKey("lot:" + str(item.id), item.unit, site),
-                        held,
-                        check.ready_date,
-                        item.expiry_date,
-                    ),
-                    MaterialSource.ON_HAND,
-                )
             observations[str(item.id)]["material"] = material_name(item.name)
-            if free <= 0 or material_name(item.name) not in materials:
-                continue
-            try:
-                unit = base_unit(item.unit)
-                key = StockKey("material:" + material_name(item.name), unit, site)
-                quantity = convert_quantity_decimal(free, item.unit, unit)
-            except ValueError:
-                if str(item.id) not in bound:
-                    observations[str(item.id)]["reasons"].append("Material unit can't be converted")
-                continue
-            identity = str(item.id) + FREE_SUFFIX if str(item.id) in bound else str(item.id)
-            supplies[identity] = MaterialSupply(
+            pool.append((item, check))
+    return observations, pool
+
+
+def _supplies(org_id, pool, bound, materials, observations, bound_demand):
+    """Offer each usable lot. A bound lot goes to its bindings first, up to what `bound_demand`
+    asks of it; the rest joins the material's shared pool as `<lot id>:free`, so nothing is
+    counted twice and nothing is withheld for a binding no batch can use."""
+    supplies = {}
+    for item, check in pool:
+        site = str(item.site_id) if item.site_id else None
+        free = check.quantity
+        if str(item.id) in bound:
+            asked = Decimal(0)
+            for amount, unit in bound_demand.get(str(item.id), ()):
+                try:
+                    asked += convert_quantity_decimal(amount, unit, item.unit)
+                except (TypeError, ValueError, InvalidOperation):
+                    pass  # the binding is flagged for its unit in assess()
+            held = min(free, asked)
+            free -= held
+            supplies[str(item.id)] = MaterialSupply(
                 str(org_id),
-                Supply(identity, key, quantity, check.ready_date, item.expiry_date),
+                Supply(
+                    str(item.id),
+                    StockKey("lot:" + str(item.id), item.unit, site),
+                    held,
+                    check.ready_date,
+                    item.expiry_date,
+                ),
                 MaterialSource.ON_HAND,
             )
-    return observations, supplies
+        if free <= 0 or material_name(item.name) not in materials:
+            continue
+        try:
+            unit = base_unit(item.unit)
+            key = StockKey("material:" + material_name(item.name), unit, site)
+            quantity = convert_quantity_decimal(free, item.unit, unit)
+        except ValueError:
+            reasons = observations[str(item.id)]["reasons"]
+            if str(item.id) not in bound and "Material unit can't be converted" not in reasons:
+                reasons.append("Material unit can't be converted")
+            continue
+        identity = str(item.id) + FREE_SUFFIX if str(item.id) in bound else str(item.id)
+        supplies[identity] = MaterialSupply(
+            str(org_id), Supply(identity, key, quantity, check.ready_date, item.expiry_date), MaterialSource.ON_HAND
+        )
+    return supplies
 
 
 def _recipe(db, org_id, batch, cache, versions):
@@ -470,11 +477,8 @@ def assess(db, org_id, data, *, today):
     if len(lot_ids) > 1000:
         raise service.PlanningConflictError("Review the material plan before assessing more than 1,000 lots")
     materials = frozenset(entry["material"] for _, auto in definitions.values() for entry in auto)
-    bound_demand = {}
-    for bindings, _ in definitions.values():
-        for entry in bindings:
-            bound_demand.setdefault(entry["inventory_item_id"], []).append((Decimal(entry["quantity"]), entry["unit"]))
-    observations, supplies = _observe(db, org_id, lot_ids, today, materials, bound_demand)
+    observations, pool = _observe(db, org_id, lot_ids, today, materials)
+    bound = {str(identity) for identity in lot_ids}
     engine_batches, recipes = [], []
     for batch in batches:
         key = StockKey(str(batch.source_output_id), batch.unit, str(batch.site_id) if batch.site_id else None)
@@ -529,9 +533,31 @@ def assess(db, org_id, data, *, today):
             errors[batch.id] = "; ".join(dict.fromkeys(reasons))
             continue
         recipes.append(MaterialRecipe(str(org_id), str(batch.id), key, tuple(requirements)))
-    result = assess_materials(
-        tuple(engine_batches), tuple(recipes), tuple(supplies.values()), org_id=str(org_id), today=today
-    )
+    # A binding holds its lot only for a batch that can use it. Assess, drop the bindings of
+    # batches that came out blocked, and assess again until that set stops changing, so a blocked
+    # batch's share of a lot flows back to the shared pool (Breaker review of !611, round 2).
+    holders = {str(b.id): bool(definitions[b.id][0]) for b in batches if b.id in definitions}
+    usable = {recipe.workflow_id for recipe in recipes}  # the batches with no errors
+    for _ in range(MAX_REASSESS):
+        bound_demand = {}
+        for batch in batches:
+            if str(batch.id) in usable:
+                for entry in definitions[batch.id][0]:
+                    bound_demand.setdefault(entry["inventory_item_id"], []).append(
+                        (Decimal(entry["quantity"]), entry["unit"])
+                    )
+        supplies = _supplies(org_id, pool, bound, materials, observations, bound_demand)
+        result = assess_materials(
+            tuple(engine_batches), tuple(recipes), tuple(supplies.values()), org_id=str(org_id), today=today
+        )
+        blocked = {
+            row.workflow_id
+            for row in result.batches
+            if row.earliest_start_date is None and row.workflow_id in usable and holders.get(row.workflow_id)
+        }
+        if not blocked:
+            break
+        usable -= blocked
     sequence = (
         db.query(func.max(PlanningMaterialAssessment.sequence))
         .filter(PlanningMaterialAssessment.org_id == org_id)
