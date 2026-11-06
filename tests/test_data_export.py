@@ -377,3 +377,29 @@ def test_files_are_read_in_one_query_not_one_per_file(db, two_orgs, monkeypatch)
     # One CSV-pass query (content IS NOT NULL as a flag) and one file-pass query.
     assert len(blob_reads) == 2, blob_reads
     db.rollback()
+
+
+def test_files_stop_where_a_cut_short_csv_stops(db, two_orgs, monkeypatch):
+    from sqlalchemy import Column, LargeBinary, MetaData, String, Table
+    from sqlalchemy.dialects.postgresql import UUID
+
+    org_a, _client_a, _org_b = two_orgs
+    table = Table(
+        "data_export_probe3",
+        MetaData(),
+        Column("id", UUID(as_uuid=True), primary_key=True),
+        Column("org_id", UUID(as_uuid=True), nullable=False),
+        Column("title", String(50)),
+        Column("content", LargeBinary),
+        prefixes=["TEMPORARY"],
+    )
+    conn = db.connection()
+    table.create(conn)
+    ids = sorted(uuid4() for _ in range(3))
+    conn.execute(table.insert(), [{"id": i, "org_id": org_a.id, "title": "d", "content": b"x"} for i in ids])
+    monkeypatch.setattr(service, "tenant_tables", lambda _conn: [table])
+    monkeypatch.setattr(service, "MAX_ROWS_PER_TABLE", 2)
+    zf = zipfile.ZipFile(io.BytesIO(b"".join(service.stream_export(db, org_a.id, org_a.name))))
+    files = sorted(n for n in zf.namelist() if n.startswith("files/data_export_probe3/content/"))
+    assert files == [f"files/data_export_probe3/content/{i}" for i in ids[:2]]
+    db.rollback()

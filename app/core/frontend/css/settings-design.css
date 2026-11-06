@@ -39,6 +39,12 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
   #settings-account .settings-section-list { display: block; }
   #page-content .settings-overview .settings-card { padding: 18px; }
 }
+@media (max-width: 640px) {
+  /* Four sections (admins also get "Your records", GL-P10) don't fit one row on a phone:
+     a 2 x 2 grid instead of a row that scrolls sideways. */
+  .settings-nav:has(> a:nth-child(4)) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
+  #page-content .settings-nav:has(> a:nth-child(4)) a { min-height: 40px; display: grid; place-items: center; white-space: normal; }
+}
 @media (max-width: 359px) {
   .settings-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
   #page-content .settings-nav a { min-height: 44px; display: grid; place-items: center; white-space: normal; }

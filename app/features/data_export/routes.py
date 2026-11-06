@@ -32,20 +32,17 @@ def reserve_download(session, org_id, user_id) -> bool:
     """
     session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"data-export:{user_id}"})
     now = utc_now()
-    for window, most in DOWNLOAD_LIMITS:
-        started = (
-            session.query(func.count(AuditLog.id))
-            .filter(
-                AuditLog.org_id == org_id,
-                AuditLog.user_id == user_id,
-                AuditLog.action == "data_export_started",
-                AuditLog.timestamp >= now - window,
-            )
-            .scalar()
+    started = AuditLog.action == "data_export_started"
+    counts = (
+        session.query(
+            *[func.count(AuditLog.id).filter(AuditLog.timestamp >= now - window) for window, _ in DOWNLOAD_LIMITS]
         )
-        if started >= most:
-            session.rollback()
-            return False
+        .filter(AuditLog.org_id == org_id, AuditLog.user_id == user_id, started)
+        .one()
+    )
+    if any(count >= most for count, (_, most) in zip(counts, DOWNLOAD_LIMITS, strict=True)):
+        session.rollback()
+        return False
     session.add(
         AuditLog(
             org_id=org_id,

@@ -28,7 +28,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import LargeBinary, MetaData, Table, select, text
+from sqlalchemy import LargeBinary, MetaData, Table, select, text, true
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
@@ -276,6 +276,7 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
             selected = [c.isnot(None).label(c.name) if c.name in binary else c for c in cols]
             query = select(*selected).where(key == org_id).order_by(*pk).limit(MAX_ROWS_PER_TABLE + 1)
             count = 0
+            last_id = None  # the last row written, so files never run past a cut-short CSV
             with zf.open(f"tables/{table.name}.csv", "w", force_zip64=True) as out:
                 out.write(b"\xef\xbb\xbf" + _csv_line(c.name for c in cols))
                 for row in conn.execute(query.execution_options(**rows_opts)):
@@ -283,6 +284,7 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
                         stats.truncated.append(table.name)
                         break
                     count += 1
+                    last_id = getattr(row, "id", None)
                     values = [
                         (f"files/{table.name}/{column.name}/{row.id}" if value else None)
                         if column.name in binary
@@ -301,6 +303,7 @@ def stream_export(session: Session, org_id: UUID, org_name: str, stats: ExportSt
                 query = (
                     select(table.c.id, table.c[column])
                     .where(key == org_id, table.c[column].isnot(None))
+                    .where(table.c.id <= last_id if table.name in stats.truncated else true())
                     .order_by(table.c.id)
                     .limit(MAX_ROWS_PER_TABLE)
                 )
