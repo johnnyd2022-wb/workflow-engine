@@ -170,6 +170,69 @@ def test_a_boosted_server_error_shows_its_error_reference(strict_csp_page):
     assert page.probe.server_errors == [f"500 GET {failed.value.url}"]
 
 
+def test_a_boosted_forbidden_page_shows_no_access_copy_and_reference(strict_csp_page):
+    page = strict_csp_page
+    page.goto("/core/settings")
+    console_before = set(page.probe.console_errors)
+    request_id = "403403ab-1111-4222-8333-444455556666"
+    path = "/core/boosted-page-forbidden"
+    page.route(
+        f"**{path}",
+        lambda route: route.fulfill(
+            status=403,
+            headers={"X-Request-ID": request_id, "Content-Type": "text/html"},
+            body="<main><h1>Forbidden</h1><p>Internal authorization detail.</p></main>",
+        ),
+    )
+    page.evaluate(
+        """path => {
+      const link = document.createElement('a');
+      link.id = 'forbidden-page-probe';
+      link.href = path;
+      link.textContent = 'Forbidden page';
+      document.querySelector('#page-content').append(link);
+      window.htmx.process(link);
+    }""",
+        path,
+    )
+
+    with page.expect_response(lambda response: response.url.endswith(path)) as failed:
+        page.locator("#forbidden-page-probe").click()
+    assert failed.value.status == 403
+    expect(page.locator("#notification-modal")).to_be_visible()
+    expect(page.locator("#notification-title")).to_have_text("No access to that page")
+    expect(page.locator("#notification-message")).to_contain_text(
+        "Your role can't open that page. Ask an admin if you need it."
+    )
+    expect(page.locator("#notification-message")).to_contain_text("Reference: 403403ab")
+    expect(page.locator("#notification-message")).not_to_contain_text("Internal authorization detail")
+    expect(page.locator("#page-content")).to_contain_text("Settings")
+    page.locator("#forbidden-page-probe").evaluate("link => link.remove()")
+
+    screenshot_dir = os.environ.get("BOOSTED_403_SHOTS_DIR")
+    if screenshot_dir:
+        destination = Path(screenshot_dir)
+        destination.mkdir(parents=True, exist_ok=True)
+        for name, width, theme in (
+            ("desktop-light", 1440, "light"),
+            ("phone-light", 390, "light"),
+            ("desktop-dark", 1440, "dark"),
+            ("phone-dark", 390, "dark"),
+        ):
+            page.set_viewport_size({"width": width, "height": 900 if width > 480 else 844})
+            page.evaluate("theme => document.documentElement.setAttribute('data-spa-theme', theme)", theme)
+            page.wait_for_timeout(400)
+            page.screenshot(path=str(destination / f"boosted-403-{name}.png"), full_page=True)
+
+    page.get_by_role("button", name="Account menu", exact=True).click()
+    page.get_by_role("menuitem", name="Help and contact").click()
+    dialog = page.locator("#bize-help")
+    expect(dialog.locator("#bize-help-error-row")).to_be_visible()
+    expect(dialog.get_by_test_id("help-last-error")).to_contain_text("403403ab (403")
+    assert set(page.probe.console_errors) - console_before == {f"Response Status Error Code 403 from {path}"}
+    assert not page.probe.failed_requests and not page.probe.server_errors
+
+
 def test_a_request_that_failed_on_the_server_is_offered_as_the_reference(strict_csp_page):
     page = strict_csp_page
     page.goto("/core/settings")

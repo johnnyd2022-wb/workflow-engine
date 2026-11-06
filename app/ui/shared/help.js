@@ -20,8 +20,8 @@
   var state = { ref: meta ? meta.getAttribute('content') || '' : '', lastError: null };
 
   function noteFailure(id, status, path) {
-    // A boosted 404 is a failed page navigation too; keep its reference available after the toast.
-    if (!id || (status < 500 && status !== 404)) return;
+    // A boosted 403/404 is a failed page navigation too; keep its reference available after the toast.
+    if (!id || (status < 500 && status !== 403 && status !== 404)) return;
     state.lastError = { ref: short(id), status: status, path: path || '', at: new Date() };
   }
 

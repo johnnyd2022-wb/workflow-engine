@@ -93,10 +93,12 @@
     var status = Number(xhr.status);
     var requestId = typeof xhr.getResponseHeader === 'function' ? xhr.getResponseHeader('X-Request-ID') : '';
     var reference = String(requestId || '').replace(/-/g, '').slice(0, 8).toLowerCase();
-    var title = status === 404 ? 'Page not found' : 'Page could not load';
+    var title = status === 404 ? 'Page not found' : (status === 403 ? 'No access to that page' : 'Page could not load');
     var message = status === 404
       ? "We couldn't find that page."
-      : 'Something went wrong while loading this page.';
+      : (status === 403
+        ? "Your role can't open that page. Ask an admin if you need it."
+        : 'Something went wrong while loading this page.');
     message += reference
       ? ' Reference: ' + reference + '. Open Help and contact to share it.'
       : ' Open Help and contact to ask for support.';
