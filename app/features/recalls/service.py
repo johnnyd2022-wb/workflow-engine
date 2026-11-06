@@ -109,7 +109,10 @@ def scope_for(session: Session, org_id: UUID, lot_id: UUID) -> tuple[list[dict],
     for allocation, invoice, contact in rows:
         name = (contact.name if contact else None) or "Unknown customer"
         key = (contact.id if contact else None, name, allocation.product_name, allocation.unit)
-        grouped[key]["quantity"] += Decimal(str(allocation.quantity))
+        qty = Decimal(str(allocation.quantity))
+        if not qty.is_finite():
+            continue  # NUMERIC can hold NaN; a corrupt sale line must not poison the customer's total
+        grouped[key]["quantity"] += qty
         grouped[key]["invoices"].add(invoice.invoice_number or invoice.xero_invoice_id)
     customers = [
         {

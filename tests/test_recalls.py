@@ -294,3 +294,22 @@ def test_another_business_sees_none_of_it(db, org_b, admin_client, org_b_client,
         == 404
     )
     assert _open(org_b_client, world).status_code == 404
+
+
+def test_a_corrupt_nan_sale_line_is_left_out_and_nan_cannot_be_stored(db, org_a, admin_client, world):
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    db.execute(
+        text("UPDATE crm_sales_fifo_allocations SET quantity = 'NaN' WHERE org_id = :org AND quantity = 4"),
+        {"org": org_a.id},
+    )
+    db.commit()
+    db.expire_all()
+    recall = _open(admin_client, world).get_json()["recall"]
+    assert [c["customer_name"] for c in recall["contacts"]] == ["Kererū Bottle Store"]
+    contact_id = recall["contacts"][0]["id"]
+    with pytest.raises(IntegrityError):
+        db.execute(text("UPDATE recall_contacts SET recovered_qty = 'NaN' WHERE id = :id"), {"id": contact_id})
+        db.commit()
+    db.rollback()

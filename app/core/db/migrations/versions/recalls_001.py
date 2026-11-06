@@ -82,6 +82,11 @@ def upgrade():
             name="fk_recall_contact_org_recall",
             ondelete="CASCADE",
         ),
+        # Postgres NUMERIC accepts NaN and sorts it above every number, so "> 0" alone lets it in.
+        sa.CheckConstraint(
+            "quantity_supplied <> 'NaN'::numeric AND recovered_qty <> 'NaN'::numeric AND disposed_qty <> 'NaN'::numeric",
+            name="ck_recall_contact_finite",
+        ),
         sa.CheckConstraint("quantity_supplied > 0", name="ck_recall_contact_supplied"),
         sa.CheckConstraint(
             "recovered_qty >= 0 AND disposed_qty >= 0 AND recovered_qty + disposed_qty <= quantity_supplied",
