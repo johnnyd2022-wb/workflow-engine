@@ -117,7 +117,7 @@ Screenshot contact sheets: [public and Production](mobile-page-audit/public-prod
 
 The following GET routes are redirects or service endpoints, so the destination page is indexed instead: `/dashboard`, `/settings`, `/complaint`, `/compliant/nz-alcohol/evidence`, `/compliant/nz-alcohol/np3-audit`, `/core/flows/create`, `/core/flows/create/step/<step>`, `/core/flows/executions/step`, `/core/tasks`, and `/crm/tastings`. `/core/site-transfers/<id>/docket` is HTML and was included above. JSON APIs, downloads, static assets, telemetry, OAuth callbacks, and fragments are not pages.
 
-## Findings and changes
+## Changes made
 
 - Follow-up: the phone bottom bar now has four tabs. Settings is reached through a touch-sized button directly under the organisation name in the bee account menu; the desktop Settings sidebar link remains available.
 - Home now uses the current organisation name as its page heading at every viewport size, from the existing request context.
