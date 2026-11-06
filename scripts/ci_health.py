@@ -34,6 +34,7 @@ CONTAINER = "workflow-engine-terraform-state-db-1"
 ADMIN_ROLE = "bize_dev_admin"
 DATABASE = "bize_dev"
 TRACE_TAIL = 12_000
+FAILED_LINES_MAX = 8_000
 
 SCHEMA = """
 CREATE SCHEMA IF NOT EXISTS ci;
@@ -64,8 +65,10 @@ CREATE TABLE IF NOT EXISTS ci.failed_jobs (
     cause text NOT NULL,
     detail text,
     trace_tail text,
+    failed_lines text,               -- FAILED/ERROR lines + pytest summary, from the WHOLE trace
     classified_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE ci.failed_jobs ADD COLUMN IF NOT EXISTS failed_lines text;
 CREATE INDEX IF NOT EXISTS failed_jobs_cause_idx ON ci.failed_jobs(cause);
 -- A pipeline is "blocked" from its creation until the next green pipeline on the same ref.
 CREATE OR REPLACE VIEW ci.pipeline_blocked AS
@@ -229,12 +232,41 @@ def gl_pages(path: str, limit: int) -> list:
     return items[:limit]
 
 
-def trace_tail(job_id: int) -> str:
+_KEY_LINE = re.compile(r"^(FAILED|ERROR) tests/|^=+ .*\b(failed|error|errors|passed)\b.* in [\d.]+s")
+
+
+def failed_lines(text: str) -> str:
+    """The lines that say what failed, wherever they are in the trace.
+
+    A verbose E2E run can push pytest's FAILED lines and summary out of the last 12 kB (9 jobs
+    in the 2026-11 report were unreadable that way). Keeps pytest's "short test summary info"
+    section and every FAILED/ERROR test line or final tally, in order, without duplicates.
+    """
+    lines, keep, in_summary = _STAMP.sub("", text).splitlines(), [], False
+    for ln in lines:
+        if re.match(r"^=+ short test summary info =+", ln):
+            in_summary = True
+        if in_summary or _KEY_LINE.match(ln):
+            if ln not in keep:
+                keep.append(ln)
+        if in_summary and re.match(r"^=+ .* in [\d.]+s", ln):
+            in_summary = False
+    return "\n".join(keep)[:FAILED_LINES_MAX]
+
+
+def fetch_trace(job_id: int) -> tuple[str, str]:
+    """(failed_lines from the whole trace, last TRACE_TAIL chars)."""
     try:
         text = gl(f"projects/{PROJECT}/jobs/{job_id}/trace", raw=True)
     except (RuntimeError, UnicodeDecodeError):
-        return ""
-    return _ANSI.sub("", text)[-TRACE_TAIL:]
+        return "", ""
+    text = _ANSI.sub("", text)
+    return failed_lines(text), text[-TRACE_TAIL:]
+
+
+def classify_job(name: str, failed: str, tail: str, failure_reason: str | None = None) -> tuple[str, str]:
+    """Classify on the failure lines first (they hold the test ids), then the tail."""
+    return classify(name, f"{failed}\n{tail}" if failed else tail, failure_reason)
 
 
 def fetch(n_mrs: int, n_main: int) -> tuple[list[dict], list[dict]]:
@@ -282,7 +314,7 @@ def fetch(n_mrs: int, n_main: int) -> tuple[list[dict], list[dict]]:
             failed_jobs.append(dict(j, pipeline_id=p["id"]))
 
     def add_trace(j):
-        j["trace"] = trace_tail(j["id"])
+        j["failed_lines"], j["trace"] = fetch_trace(j["id"])
         return j
 
     with ThreadPoolExecutor(4) as ex:
@@ -368,10 +400,10 @@ def store(pipelines: list[dict], jobs: list[dict]) -> None:
             " duration_s=EXCLUDED.duration_s, fetched_at=now();"
         )
     for j in jobs:
-        cause, det = classify(j["name"], j.get("trace", ""), j.get("failure_reason"))
+        cause, det = classify_job(j["name"], j.get("failed_lines", ""), j.get("trace", ""), j.get("failure_reason"))
         stmts.append(
             "INSERT INTO ci.failed_jobs(job_id,pipeline_id,name,stage,allow_failure,retried,started_at,finished_at,"
-            "duration_s,failure_reason,cause,detail,trace_tail) VALUES ("
+            "duration_s,failure_reason,cause,detail,trace_tail,failed_lines) VALUES ("
             + ",".join(
                 lit(x)
                 for x in (
@@ -388,27 +420,35 @@ def store(pipelines: list[dict], jobs: list[dict]) -> None:
                     cause,
                     det,
                     j.get("trace", ""),
+                    j.get("failed_lines", ""),
                 )
             )
             + ") ON CONFLICT (job_id) DO UPDATE SET cause=EXCLUDED.cause, detail=EXCLUDED.detail,"
-            " retried=EXCLUDED.retried, classified_at=now();"
+            " retried=EXCLUDED.retried, trace_tail=EXCLUDED.trace_tail, failed_lines=EXCLUDED.failed_lines,"
+            " classified_at=now();"
         )
     stmts += [POSTPASS, "COMMIT;"]
     run_sql("\n".join(stmts))
 
 
 def reclassify() -> int:
+    run_sql(SCHEMA)  # adds failed_lines to a table made before it existed
+
+    def b64(col):
+        return f"translate(encode(convert_to(coalesce({col},''),'UTF8'),'base64'),E'\\n','')"
+
     rows = run_sql(
-        "SELECT job_id, name, coalesce(failure_reason,''), translate(encode(convert_to(coalesce(trace_tail,''),'UTF8'),'base64'),E'\\n','')"
-        " FROM ci.failed_jobs",
+        f"SELECT job_id, name, coalesce(failure_reason,''), {b64('failed_lines')}, {b64('trace_tail')} FROM ci.failed_jobs",
         fetch_rows=True,
     )
     import base64  # noqa: PLC0415
 
+    def dec(v):
+        return base64.b64decode(v).decode("utf-8", "replace") if v else ""
+
     stmts = ["BEGIN;"]
-    for job_id, name, reason, b64 in rows:
-        trace = base64.b64decode(b64.replace("\\n", "")).decode("utf-8", "replace") if b64 else ""
-        cause, det = classify(name, trace, reason or None)
+    for job_id, name, reason, failed, tail in rows:
+        cause, det = classify_job(name, dec(failed), dec(tail), reason or None)
         stmts.append(
             f"UPDATE ci.failed_jobs SET cause={lit(cause)}, detail={lit(det)}, classified_at=now() WHERE job_id={job_id};"
         )
