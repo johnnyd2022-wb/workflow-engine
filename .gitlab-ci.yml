@@ -94,6 +94,9 @@ lockfile_consistency:
   only:
     - schedules
     - merge_requests
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Renovate: proposes dependency/Docker-base-image/pre-commit-hook version bumps as MRs
@@ -116,6 +119,9 @@ renovate:
     - renovate
   only:
     - schedules
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Run ruff linter
@@ -382,6 +388,26 @@ tastings_e2e:
       - tests/e2e/test_tastings_page.py
   allow_failure: false
 
+# Nightly: every E2E file against main, not just the ones a diff touches. relevant_tests
+# only runs an E2E file when its inputs change and main's cd_e2e runs only the smoke file,
+# so the other ~75 files could rot unseen until an unrelated MR touched them and went red
+# (.agents/reports/ci/pipeline-health-2026-11.md). Started by the "nightly-e2e" pipeline
+# schedule (variable E2E_NIGHTLY=1); the deploy chain opts out of that pipeline above.
+# allow_failure for now: the schedule pipeline is main's head pipeline while it runs, so a red
+# one would make main_green block every MR on tests nobody has run in weeks. Flip to false
+# once a nightly run is green (board task SUITE-GREEN).
+nightly_e2e:
+  extends: mr_e2e
+  timeout: 2h
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/ -v -p no:cacheprovider
+  only:
+    refs:
+      - schedules
+    variables:
+      - $E2E_NIGHTLY == "1"
+  allow_failure: true
+
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
 # stages on main; merge requests run selected regressions and browser smoke above.
 unit_tests:
@@ -521,15 +547,20 @@ uv_audit:
   stage: security
   needs: []
   image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
+  variables:
+    GIT_DEPTH: 0  # the gate reads the target branch's lockfile at the MR's diff base
   script:
     - *install_uv
     - uv sync --extra dev
-    - mkdir -p .agents/reports/security
-    - >
-      uv audit --frozen --output-format json
-      --preview-features audit-command,json-output
-      > .agents/reports/security/uv-audit.json
-      || (cat .agents/reports/security/uv-audit.json; exit 1)
+    # On an MR, an advisory already on the target branch is a warning (exit 3), not a
+    # block; one the MR introduces still fails. On main every advisory fails as before.
+    - |
+      TARGET=""
+      if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ] && git fetch -q origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; then
+        TARGET="FETCH_HEAD"
+      fi
+      python3 scripts/uv_audit_gate.py --out .agents/reports/security/uv-audit.json \
+        --base "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" --target "$TARGET"
   artifacts:
     paths:
       - .agents/reports/security/uv-audit.json
@@ -538,7 +569,8 @@ uv_audit:
   only:
     - merge_requests
     - main
-  allow_failure: false
+  allow_failure:
+    exit_codes: [3]
 
 # Supply-chain BEHAVIOUR analysis (Socket) -- the proactive layer pip_audit/uv_audit
 # can't provide. Those scan for already-published CVEs (reactive, days-to-weeks lag from
@@ -685,6 +717,9 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
 
 # Builds the CI image for this checkout when the registry does not have it yet (see
 # ci/Dockerfile.ci). Runs here, not on merge requests, for the same reason as the app
@@ -719,6 +754,9 @@ ci_image_build:
       echo "Built $IMAGE. Set CI_IMAGE_TAG to $TAG in .gitlab-ci.yml to use it."
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # ============================================================================
@@ -754,13 +792,29 @@ deploy_test:
   image: docker:27
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+    # Exit 3 = the new app started but never passed /healthcheck. The old app is gone by then,
+    # and cd_e2e (which rollback_test_on_failure needs) won't run, so roll back here.
+    - |
+      status=0
+      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
+      if [ "$status" -eq 3 ]; then
+        echo "New app unhealthy -- rolling back to last known-good :test-stable"
+        if ! ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"; then
+          # Most likely the failed deploy added a migration :test-stable doesn't know
+          # ("Can't locate revision" above). Test is left without a healthy app.
+          echo "❌ Rollback to :test-stable failed too: the test environment needs a manual fix."
+        fi
+      fi
+      exit "$status"
   environment:
     name: test
     url: https://test-workflow-engine.whistlebird.co.nz
   needs: ["docker_build_publish"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
 
@@ -770,17 +824,20 @@ deploy_test:
 cd_e2e:
   stage: deploy
   # deploy-target is a shell executor, so GitLab ignores `image:`. Copy the checkout
-  # into a disposable Python container and use the host network to reach the deployed
-  # test service at localhost:8001. Streaming avoids assuming the runner's checkout
+  # into a disposable Python container on the deployed app's network (workflow-observability)
+  # and reach it as workflow-engine-test:8001. Streaming avoids assuming the runner's checkout
   # path is mounted at the same location on the Docker host.
   script:
     - |
       set -euo pipefail
       CD_E2E_CONTAINER="workflow-cd-e2e-${CI_JOB_ID}"
-      # On this host network `host.docker.internal` resolves to the Windows side; the test database is
-      # published by the Docker engine on this machine, so point the name at loopback for the job.
-      docker run --detach --name "$CD_E2E_CONTAINER" --network host \
-        --add-host host.docker.internal:127.0.0.1 \
+      # Not --network host: Chromium aborts in-flight requests with net::ERR_NETWORK_CHANGED
+      # whenever another job on this Docker engine creates or removes a network, because with
+      # the host's network namespace it sees every bridge come and go (reproduced: 1 in 60
+      # loads under network churn on host, 0 on a bridge; PH-NETCHANGE). On the app's own
+      # network it sees only its own interface. The app is reached by container name; the test
+      # database through Docker Desktop's host.docker.internal, as the app itself does.
+      docker run --detach --name "$CD_E2E_CONTAINER" --network workflow-observability \
         python:3.14-bookworm sleep infinity
       cleanup_cd_e2e() {
         docker rm --force "$CD_E2E_CONTAINER" >/dev/null 2>&1 || true
@@ -794,7 +851,7 @@ cd_e2e:
         --workdir /workspace \
         --env UV_VERSION="$UV_VERSION" \
         --env ENVIRONMENT=test \
-        --env E2E_BASE_URL="https://localhost:8001" \
+        --env E2E_BASE_URL="https://workflow-engine-test:8001" \
         --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
         --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
@@ -808,6 +865,9 @@ cd_e2e:
   needs: ["deploy_test"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # must be the SAME runner as deploy_test (hits localhost:8001)
 
@@ -826,6 +886,9 @@ promote_test_stable:
   needs: ["cd_e2e"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target
 
@@ -848,5 +911,8 @@ rollback_test_on_failure:
   when: on_failure
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target

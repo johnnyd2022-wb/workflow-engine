@@ -1,26 +1,58 @@
 {
-  "generated": "2026-09-29T07:08:52+00:00",
+  "generated": "2026-11-06T08:47:44+00:00",
   "budgets_file": ".agents/perf/budgets.json",
   "results": [
     {
-      "route": "/api/core/process-templates",
+      "route": "/api/crm/tastings",
       "kind": "api",
       "metrics": {
-        "backend_ms": 9.7,
+        "backend_ms": 14.8,
+        "queries": 7
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/tastings/choices",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 30.1,
+        "queries": 8
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/tastings/pool",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 21.1,
         "queries": 6
       },
       "over_budget": [],
       "over_ceiling": []
     },
     {
-      "route": "/core/flows/create/template-catalog",
-      "kind": "page",
+      "route": "/api/crm/tastings/{event_id}",
+      "kind": "api",
       "metrics": {
-        "backend_ms": 5.1,
-        "queries": 3,
-        "lcp_ms": 60
+        "backend_ms": 28.2,
+        "queries": 10
       },
       "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/crm/tasks",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 26.2,
+        "queries": 10,
+        "lcp_ms": 276
+      },
+      "over_budget": [
+        "queries=10 > budget 5"
+      ],
       "over_ceiling": []
     }
   ]

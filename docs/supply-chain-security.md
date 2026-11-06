@@ -12,8 +12,13 @@ only flag a vulnerability once someone has found it, reported it, and it's been 
 into a database. That lag between disclosure and database entry is typically days to
 weeks — during which a known-bad package looks completely clean to this scan.
 
-Blocking (`allow_failure: false`): a real CVE in a resolved dependency stops the
-pipeline. Findings route to the **dependency-update** skill.
+Blocking on `main`: any advisory in a resolved dependency stops the pipeline, and Event
+Factory routes it to the **dependency-update** skill. On a merge request,
+`scripts/uv_audit_gate.py` also audits the target branch's lockfile at the MR's diff base.
+An advisory the MR introduces still blocks. One that is already on the target branch is a
+warning (exit 3, the job's only allowed failure code): the MR didn't cause it and can't fix
+it, so it shouldn't go red with every other open MR whenever a new advisory is published.
+If the base can't be audited, every advisory blocks (fail closed).
 
 ## `socket_security` — supply-chain behaviour analysis (proactive)
 

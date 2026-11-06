@@ -14,6 +14,8 @@
   <meta name="operational-cases-enabled" content="{{ 'true' if operational_cases_available else 'false' }}">
   <meta name="current-org-id" content="{{ g.current_org_id or '' }}">
   <meta name="current-user-id" content="{{ g.current_user.id if g.current_user else '' }}">
+  {# GL-C04: this page's reference for Help (help.js keeps it current across boosted navigation). #}
+  <meta name="request-reference" content="{{ request_reference() }}">
   {# Back/forward reload the page from the server rather than restoring an inert DOM snapshot. #}
   <meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true,"inlineScriptNonce":"{{ csp_nonce() }}","allowEval":false}'>
   <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
@@ -298,9 +300,35 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.57V21h-3v-.77a1.7 1.7 0 0 0-1.04-1.57 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.57-1.04H4v-3h1.43A1.7 1.7 0 0 0 7 9.92a1.7 1.7 0 0 0-.34-1.88L6.6 7.98l2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.7 4.7V4h3v.7a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.57 1.04H22v3h-1.03A1.7 1.7 0 0 0 19.4 15z"/></svg>
                 <span>Settings</span>
               </a>
+              <button type="button" class="bee-menu__help" role="menuitem" @click="openHelp()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                <span>Help and contact</span>
+              </button>
             </div>
           </div>
         </div>
+
+      {# GL-C04: help and contact on every page, with the reference support needs to find the
+         request. Outside #page-content so a boosted navigation keeps it; help.js fills it in. #}
+      <dialog id="bize-help" class="bize-help" aria-labelledby="bize-help-title">
+        <div class="bize-help__head">
+          <h2 id="bize-help-title">Help and contact</h2>
+          <button type="button" class="bize-help__close" data-dialog-close aria-label="Close help">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {% if support_email %}
+        <p class="bize-help__lede">Email <a id="bize-help-mail" data-support-email="{{ support_email }}" href="mailto:{{ support_email }}">{{ support_email }}</a>. The email starts with this page and its reference filled in, so we can see exactly what happened.</p>
+        {% else %}
+        <p class="bize-help__lede">Ask the person who runs biz-e for your business, and give them the reference below.</p>
+        {% endif %}
+        <dl class="bize-help__facts">
+          <div><dt>Page</dt><dd id="bize-help-page"></dd></div>
+          <div><dt>Reference</dt><dd><code id="bize-help-ref" data-testid="help-reference"></code>
+            <button type="button" class="bize-help__copy" id="bize-help-copy">Copy</button></dd></div>
+          <div id="bize-help-error-row" hidden><dt>Last error</dt><dd id="bize-help-error" data-testid="help-last-error"></dd></div>
+        </dl>
+      </dialog>
 
       <main id="page-content" class="page-content">
         {# A boosted navigation swaps only #page-content, so the page's own CSS and scripts (which a
@@ -357,6 +385,7 @@
   <script src="/ui/shared/page-init.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
   <script src="/ui/shared/dialog-focus.js" defer></script>
+  <script src="/ui/shared/help.js" defer></script>
   <script src="/ui/shared/tabs-keyboard.js" defer></script>
   <script src="/ui/shared/session-ended.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
@@ -964,6 +993,11 @@
           // Position before revealing to avoid a "jump" on scroll.
           this.positionMenu();
           this.open = true;
+          },
+
+          openHelp() {
+            this.closeMenu();
+            if (window.BizeHelp) window.BizeHelp.open();
           },
 
           closeMenu() {

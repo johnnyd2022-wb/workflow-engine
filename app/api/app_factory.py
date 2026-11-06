@@ -162,6 +162,10 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # GL-P10: download every record the business holds as one ZIP.
+    from app.features.data_export.routes import bp as data_export_bp
+
+    app.register_blueprint(data_export_bp)
     # Getting started (GL-P09): the guided first-day path.
     from app.core.backend.getting_started import getting_started_bp
 
@@ -480,6 +484,9 @@ def create_app():
     install_site_request_validation(app)
     setup_session_security(app)
     setup_observability(app)
+    from app.api.error_pages import register_error_pages
+
+    register_error_pages(app)  # GL-C04: 404/500 say how to get help, with a reference
 
     # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
     # This ensures all connections are encrypted, preventing man-in-the-middle attacks

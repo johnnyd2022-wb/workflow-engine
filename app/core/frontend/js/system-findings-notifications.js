@@ -21,7 +21,7 @@
     output_expiry: 'Stock',
     untracked_items: 'Stock',
     output_ready_date: 'Production',
-    tasks_due: 'Tasks'
+    tasks_due: 'Production tasks'
   };
 
   /** ?category= links from the Production overview's health bar. */

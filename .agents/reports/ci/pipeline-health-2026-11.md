@@ -37,7 +37,8 @@ same MR (or main), capped at 24 h; a pipeline with two causes counts under both.
 | `ci_env_db` — test DB :8401 refused in cd_e2e | 14 | 14 | 14 | 0 | 82 | 09-30 | one-off, fixed |
 | `stale_main_gate` — main_green while main was **running** | 27 | 25 | 0 | 18 | 53 | 10-16..11-06 | **fixed: !623** |
 | `e2e_assertion` — E2E failing (e.g. !612 sales overview) | 7 | 5 | 1 | 1 | 52 | 10-17..11-06 | FIX-SALES-E2E (Codex) |
-| `script_error` — e2e runs whose 12 kB tail ends before the summary | 9 | 8 | 0 | 4 | 36 | 10-19..10-27 | unread |
+| `selection_stale_nodeid` / `no_tests_collected` — relevant_tests collected nothing: a TIA-selected node id the MR renamed or removed (!598, !600), or an id split on spaces (!542, fixed by f2b9564a) | 8 | 7 | 0 | 3 | 36 | 10-19..10-27 | fixed: f2b9564a (spaces), 810f3d2f (stale ids, 10-28) |
+| `xdist_collection_mismatch` — workers collected different tests (!586) | 1 | 1 | 0 | 1 | 0.3 | 10-26 | one-off |
 | `timeout` — `test_cutover_failures…` subprocess timeouts | 3 | 3 | 0 | 3 | 25 | 11-02 | fixed: !616 |
 | `terraform_review_gate` — apply refused on changed/unapproved plan | 6 | 4 | 4 | 0 | 25 | 10-09..10-17 | by design |
 | `ci_image_missing` — `CI_IMAGE_TAG` image not built yet | 7 | 1 | 0 | 1 | 24 | 11-02 | see remaining |
@@ -96,8 +97,13 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
    `deploy_test` should wait on the health endpoint before `cd_e2e` starts. Small; recent
    deploy-script MRs (!616) touch this area, so it's left to whoever owns deploy next.
 4. **Flip `nightly_e2e` to blocking** after its first green run (SUITE-GREEN).
-5. **Long e2e traces**: 9 failures are unreadable because the summary falls outside the
-   12 kB tail. Next refresh could fetch the `FAILED` lines with a ranged read.
+5. ~~Long e2e traces~~ **Corrected (2026-11-07):** those 9 "unreadable" jobs weren't truncated.
+   pytest collected nothing: a TIA-selected node id that the MR had renamed or removed
+   (`ERROR: not found: tests/test_sites.py::test_default_cannot_change…`), an id split on
+   spaces (fixed by f2b9564a), and one xdist collection mismatch. `ci_health` now keeps each
+   job's FAILED/collection-error lines and pytest summary from the whole trace
+   (`ci.failed_jobs.failed_lines`) and names these causes. The stale-id case was already
+   fixed by 810f3d2f (10-28): TIA runs a changed test module whole instead of its recorded ids.
 6. **Re-run this monthly**: `python3 scripts/ci_health.py refresh`, then compare the table.
 
 ## Known examples from the brief, mapped
@@ -109,6 +115,6 @@ red main → main_green on a busy main → real failures → E2E rot / CI-only E
 - ci_image_current stale tag → allow_failure, so it never turned a pipeline red. The real
   cost was 11-02's missing image; see remaining item 2.
 - findings-sweep MRs conflicting → 8 of the 100 MRs. 5 red pipelines among them: 4 had
-  `new_advisory` (one of them also `main_red_inherited`), 1 an unreadable e2e tail. None was a merge
+  `new_advisory` (one of them also `main_red_inherited`), 1 a TIA-selected test id that no longer existed. None was a merge
   conflict, so their cost is review churn and re-fixing (memory: check open MRs for the
   finding id first), not red CI.

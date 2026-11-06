@@ -198,6 +198,10 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         # System findings per item (all checks) for UI: red border + reasons in dropdown
         findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
+        # GL-P07 B2b: what planned batches hold on each lot, in one query for the page.
+        from app.features.planning.material_adapter import commitments_for_items
+
+        committed_by_id = commitments_for_items(db_session, org_id, [item.id for item in items])
 
         # Where each line is: its site, and the stock area inside it (one query for the names).
         from app.core.db.models.stock_location import StockLocation
@@ -618,6 +622,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     "site_id": str(item.site_id) if item.site_id else None,
                     "location_id": str(item.location_id) if item.location_id else None,
                     "location_name": location_names.get(item.location_id),
+                    "committed": committed_by_id.get(str(item.id), []),
                 }
             )
 

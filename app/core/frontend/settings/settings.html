@@ -31,6 +31,7 @@
         <a href="#settings-account" data-settings-link="account" aria-current="page">Profile</a>
         <a href="#settings-security" data-settings-link="security">Security and sign-in</a>
         <a href="#settings-preferences" data-settings-link="preferences">Preferences</a>
+        {% if can('settings.manage') %}<a href="#settings-records" data-settings-link="records">Your records</a>{% endif %}
       </nav>
       <div class="settings-groups">
         <section class="settings-group" id="settings-account" data-settings-group="account">
@@ -235,6 +236,27 @@
           </section>
           </div>
         </section>
+
+        {% if can('settings.manage') %}
+        {# GL-P10: one download of everything the business holds, for admins only. #}
+        <section class="settings-group" id="settings-records" data-settings-group="records">
+          <div class="settings-group-heading" role="heading" aria-level="2"><span>Your records</span><small>Everything your business holds in Biz-E</small></div>
+          <div class="settings-group-content">
+          <section class="workspace-card settings-card" aria-labelledby="records-export-title">
+            <div class="card-header">
+              <h2 class="card-title" id="records-export-title">Download all your records</h2>
+            </div>
+            <div class="card-content">
+              <p class="settings-records-copy">One ZIP file with a spreadsheet (CSV) for every kind of record: stock, batches, workflows, sales, compliance, people and history. It includes plain-language summaries and a README explaining each file. Passwords and sign-in secrets are never included.</p>
+              <div class="settings-records-actions">
+                <a class="btn btn-primary" id="records-export-download" href="/api/core/export/records.zip" download hx-boost="false">Download records (.zip)</a>
+                <span class="settings-records-note">Large businesses may take a minute. Each download is recorded in the activity log.</span>
+              </div>
+            </div>
+          </section>
+          </div>
+        </section>
+        {% endif %}
       </div>
     </div>
     <p class="settings-legal-links" hx-boost="false"><a href="/pricing">Pricing</a><span aria-hidden="true">·</span><a href="/terms">Terms of service</a><span aria-hidden="true">·</span><a href="/privacy">Privacy policy</a></p>

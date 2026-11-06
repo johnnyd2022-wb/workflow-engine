@@ -34,9 +34,24 @@ class SupplierError(ValueError):
     """The request is invalid; the message is safe to show the user."""
 
 
-def clean_fields(data: dict[str, Any]) -> dict[str, str | None]:
+def _lead_time(raw: Any) -> int | None:
+    """Days from ordering to delivery: a whole number from 0 to 365, or blank."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        raise SupplierError("Lead time must be a whole number of days, from 0 to 365")
+    try:
+        days = int(raw.strip()) if isinstance(raw, str) else raw
+    except ValueError:
+        days = None
+    if not isinstance(days, int) or not 0 <= days <= 365:
+        raise SupplierError("Lead time must be a whole number of days, from 0 to 365")
+    return days
+
+
+def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
     """Validate the supplier fields present in `data`; a blank optional field is stored as null."""
-    cleaned: dict[str, str | None] = {}
+    cleaned: dict[str, Any] = {}
     for key in FIELDS:
         if key not in data:
             continue
@@ -47,6 +62,8 @@ def clean_fields(data: dict[str, Any]) -> dict[str, str | None]:
         if len(value) > _MAX_LENGTH[key]:
             raise SupplierError(f"{key.replace('_', ' ').capitalize()} must be at most {_MAX_LENGTH[key]} characters")
         cleaned[key] = value or None
+    if "lead_time_days" in data:
+        cleaned["lead_time_days"] = _lead_time(data["lead_time_days"])
     if "name" in cleaned and not cleaned["name"]:
         raise SupplierError("Supplier name is required")
     if cleaned.get("email") and ("@" not in cleaned["email"] or " " in cleaned["email"]):
@@ -58,13 +75,14 @@ def serialise(supplier: Supplier) -> dict[str, Any]:
     return {
         "id": str(supplier.id),
         **{key: getattr(supplier, key) for key in FIELDS},
+        "lead_time_days": supplier.lead_time_days,
         "created_at": supplier.created_at.isoformat() if supplier.created_at else None,
         "updated_at": supplier.updated_at.isoformat() if supplier.updated_at else None,
     }
 
 
 def _snapshot(supplier: Supplier) -> dict[str, Any]:
-    return {key: getattr(supplier, key) for key in FIELDS}
+    return {**{key: getattr(supplier, key) for key in FIELDS}, "lead_time_days": supplier.lead_time_days}
 
 
 def _record(
@@ -119,7 +137,13 @@ def _add(session: Session, org_id: UUID, actor_id: UUID | None, values: dict[str
 def create_supplier(session: Session, org_id: UUID, actor_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:
     values = clean_fields(data)
     try:
-        supplier = _add(session, org_id, actor_id, {key: values.get(key) for key in FIELDS}, source="manual")
+        supplier = _add(
+            session,
+            org_id,
+            actor_id,
+            {key: values.get(key) for key in (*FIELDS, "lead_time_days")},
+            source="manual",
+        )
         session.commit()
     except IntegrityError:  # a concurrent create of the same name
         session.rollback()
@@ -147,7 +171,7 @@ def update_supplier(
     for key, value in values.items():
         setattr(supplier, key, value)
     after = _snapshot(supplier)
-    diff = {key: {"before": before[key], "after": after[key]} for key in FIELDS if before[key] != after[key]}
+    diff = {key: {"before": before[key], "after": after[key]} for key in before if before[key] != after[key]}
     if diff:
         supplier.updated_at = utc_now()
         _record(session, org_id, actor_id, "updated", supplier, after, diff)

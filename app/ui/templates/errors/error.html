@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>{{ title }} · biz-e</title>
+  {# Standalone on purpose: a 500 must render even when the app shell is what broke. #}
+  <style>
+    :root { --bg: #f8fafc; --card: #ffffff; --text: #172033; --muted: #64748b; --border: #e2e8f0; --accent: #0d9488; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0b1220; --card: #111a2b; --text: #e5e7eb; --muted: #9ca3af; --border: #1f2a3d; --accent: #2dd4bf; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+           background: var(--bg); color: var(--text);
+           font: 16px/1.5 Inter, Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { width: 100%; max-width: 30rem; background: var(--card); border: 1px solid var(--border);
+           border-radius: 14px; padding: 32px 28px; }
+    .brand { font-weight: 700; letter-spacing: -0.01em; margin: 0 0 24px; }
+    .brand span { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-right: 8px; }
+    h1 { font-size: 1.375rem; line-height: 1.3; margin: 0 0 8px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    .help { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 0.9375rem; }
+    .help p { margin-bottom: 8px; }
+    .ref { font: 600 0.9375rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); letter-spacing: 0.04em; }
+    a { color: var(--accent); font-weight: 600; }
+    a[href^="mailto:"] { white-space: nowrap; }
+    .home { display: inline-block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="brand"><span aria-hidden="true"></span>biz-e</p>
+    <h1>{{ title }}</h1>
+    <p>{{ detail }}</p>
+    <a class="home" href="/core">Go to your home page</a>
+    <div class="help">
+      {% if support_email %}
+      <p>Need a hand? Email <a href="mailto:{{ support_email }}?subject={{ ('biz-e help (ref ' ~ reference ~ ')') | urlencode }}">{{ support_email }}</a> and quote this reference.</p>
+      {% else %}
+      <p>Need a hand? Ask the person who runs biz-e for your business, and quote this reference.</p>
+      {% endif %}
+      {% if reference %}<p>Reference: <span class="ref" data-testid="error-reference">{{ reference }}</span></p>{% endif %}
+    </div>
+  </main>
+</body>
+</html>
