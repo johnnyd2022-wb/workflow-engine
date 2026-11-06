@@ -447,7 +447,12 @@ def test_customer_history_lists_only_that_customers_returns(db, org, credited, a
     db.flush()
     db.add(
         XeroInvoice(
-            org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-1", contact_id=contact.id, invoice_type="ACCREC", status="AUTHORISED"
+            org_id=org.id,
+            xero_tenant_id="tenant",
+            xero_invoice_id="inv-1",
+            contact_id=contact.id,
+            invoice_type="ACCREC",
+            status="AUTHORISED",
         )
     )
     db.commit()
@@ -464,3 +469,27 @@ def test_customer_history_lists_only_that_customers_returns(db, org, credited, a
     db.query(XeroInvoice).filter(XeroInvoice.org_id == org.id).delete(synchronize_session=False)
     db.query(XeroContact).filter(XeroContact.org_id == org.id).delete(synchronize_session=False)
     db.commit()
+
+
+def test_invoice_and_credit_note_returns_share_the_sold_quantity(db, org, credited, app_client):
+    """Codex round 2: 4 back via the invoice, then 3 via the credit note, would be 7 of 6 sold."""
+    alloc = str(credited["allocation"].id)
+    line = str(credited["line"].id)
+    first = app_client.post(
+        "/api/crm/returns", json={"allocation_id": alloc, "condition": "resaleable", "quantity": "4"}
+    )
+    assert first.status_code == 201
+    over = app_client.post(
+        "/api/crm/returns", json={"credit_note_line_id": line, "condition": "resaleable", "quantity": "3"}
+    )
+    assert over.status_code == 400 and "Only 2 can come back" in over.get_json()["error"]
+    ok = app_client.post(
+        "/api/crm/returns", json={"credit_note_line_id": line, "condition": "resaleable", "quantity": "2"}
+    )
+    assert ok.status_code == 201 and ok.get_json()["return"]["original_lot_id"] == str(credited["lot"].id)
+    done = app_client.post(
+        "/api/crm/returns", json={"credit_note_line_id": line, "condition": "resaleable", "quantity": "1"}
+    )
+    assert done.status_code == 400 and "already come back" in done.get_json()["error"]
+    total = sum(r.quantity for r in db.query(SalesReturn).filter(SalesReturn.org_id == org.id))
+    assert total == Decimal("6")

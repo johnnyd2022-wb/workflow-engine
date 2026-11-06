@@ -103,10 +103,22 @@ def _sale_line_for(session: Session, org_id: UUID, note: XeroCreditNote, mapping
         .order_by(SalesFifoAllocation.created_at.desc(), SalesFifoAllocation.id)
         .all()
     )
+    most = Decimal(0)
     for allocation in candidates:
         left = Decimal(str(allocation.quantity)) - _returned_on_allocation(session, org_id, allocation.id)
         if left >= qty:
             return allocation
+        most = max(most, left)
+    if candidates:
+        # The credited invoice's sale lines are known, so every return against them must land on
+        # one: that is the guard the invoice path shares, so the two can never add up past what
+        # was sold. A quantity no single line can take is recorded in parts.
+        if most <= 0:
+            raise ReturnError("Everything sold on the credited invoice has already come back")
+        raise ReturnError(
+            f"Only {most.normalize():f} can come back against one sale line on the credited invoice; "
+            "record the rest separately"
+        )
     return None
 
 
