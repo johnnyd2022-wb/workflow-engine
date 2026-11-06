@@ -142,3 +142,13 @@ html[data-spa-theme="dark"] #page-content .production-board .board-batch__form--
 /* GL-P07 B2b: a shortage whose order-by date has come says so in the warning colour. */
 #page-content .production-board .board-batch p.board-batch__order-now { color: #b45309; font-weight: 600; }
 html[data-spa-theme="dark"] #page-content .production-board .board-batch p.board-batch__order-now { color: #fbbf24; }
+
+/* What the planner changed by itself: one line each, newest first. */
+.board-changes__list { list-style: none; margin: 12px 0 0; padding: 0; }
+.board-changes__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; padding: 10px 0; border-top: 1px solid var(--ui-border); }
+.board-changes__item:first-child { border-top: 0; }
+.board-changes__item strong { font-size: 14px; font-weight: 600; color: var(--ui-text); overflow-wrap: anywhere; }
+.board-changes__verb { font-size: 13px; color: var(--ui-text); white-space: nowrap; }
+.board-changes__item[data-kind="cancelled"] .board-changes__verb { color: var(--ui-text-muted); }
+.board-changes__why { grid-column: 1 / -1; font-size: 13px; color: var(--ui-text-muted); overflow-wrap: anywhere; }
+@media (max-width: 480px) { .board-changes__item { grid-template-columns: 1fr; } .board-changes__verb { white-space: normal; } }
