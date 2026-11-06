@@ -179,6 +179,25 @@ FINDING_HEADINGS = (
 # pure noise.
 CODE_MARKER_RE = re.compile(r"(?:^|[^\w])(?P<marker>TODO|FIXME|HACK|XXX|BUG)\b[:\s(]*(?P<text>.*)$")
 CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
+# The scanner's own source and tests hold marker words as patterns and sample code, not as
+# work owed, so they are never indexed.
+CODE_MARKER_SELF_PATHS = ("scripts/findings_index.py", "tests/test_findings_index.py")
+# What may precede a marker for it to be a note rather than an identifier or a string:
+# a comment leader (`#`, `//`, `/*`, a block comment's leading `*`, `<!--`, `{#`).
+CODE_MARKER_LEAD_RE = re.compile(r"#|//|/\*|<!--|\{#|^\s*\*")
+
+
+def _is_code_note(content: str, m: re.Match[str]) -> bool:
+    """True when the marker `m` found in `content` is a note, not an identifier.
+
+    Either a comment leader precedes it, or it opens its line in the `TODO:` / `TODO(who):`
+    form a docstring uses -- but not `TODO = "..."`, which is a constant.
+    """
+    lead = content[: m.start("marker")]
+    if CODE_MARKER_LEAD_RE.search(lead):
+        return True
+    return not lead.strip() and content[m.end("marker") : m.end("marker") + 1] in (":", "(")
+
 
 # The bare word is not enough: `DONE, TODO, BLOCKED = "done", "todo", "blocked"` is a status
 # enum, and it was indexed as an unfixable code-marker finding (id de586e6f). A marker is the
@@ -922,9 +941,12 @@ def scan_code_markers() -> list[Item] | None:
         if not explicit and not COMMENT_OPENER_RE.search(content[: m.start("marker")]):
             continue  # an identifier or string that happens to be spelled TODO
         marker, text = m.group("marker"), m.group("text").strip()
+        # `DONE, TODO, BLOCKED = ...` names a constant, not work owed.
+        if not _is_code_note(content, m):
+            continue
         # A bare marker with no following text says nothing actionable, and a marker
-        # inside this file's own patterns is self-reference.
-        if not text or len(text) < 10 or rel == "scripts/findings_index.py":
+        # inside this file's own patterns or its tests' sample code is self-reference.
+        if not text or len(text) < 10 or rel in CODE_MARKER_SELF_PATHS:
             continue
         if RESOLVED_MARKERS.search(text):
             continue
