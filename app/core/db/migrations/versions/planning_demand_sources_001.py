@@ -11,7 +11,7 @@ Additive only:
 Downgrade refuses while any synced/forecast demand or stock target exists, so it never loses data.
 
 Revision ID: planning_demand_sources_001
-Revises: supplier_lead_time_001
+Revises: xero_credit_notes_001
 """
 
 import sqlalchemy as sa
@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
 revision = "planning_demand_sources_001"
-down_revision = "supplier_lead_time_001"
+down_revision = "xero_credit_notes_001"
 branch_labels = None
 depends_on = None
 

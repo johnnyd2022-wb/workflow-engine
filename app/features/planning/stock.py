@@ -2,7 +2,8 @@
 
 Netting and the stock-cover forecast both read stock through here, so they agree on what
 counts: stock of exactly that workflow output, at the planning site, owned by the same party,
-not expired, not flagged on hold / quarantined / in transit, less what an unfinished batch has
+not expired, not under an open quality hold (lot_holds) or flagged on hold / quarantined / in
+transit, less what an unfinished batch has
 already recorded using. Planned output is every live batch of that output at that site.
 """
 
@@ -71,6 +72,7 @@ def demand_owners(db, org_id: UUID, demands) -> dict[UUID, UUID | None]:
 
 def on_hand(db, org_id: UUID, output_id: UUID, unit: str, site, owner_id, *, today: date):
     """(supplies, reasons). Each lot is one supply, ready today, expiring on its expiry date."""
+    from app.core.services.lot_holds import held_lot_ids_subquery
     from app.features.planning.material_adapter import _pending_inputs
 
     query = db.query(InventoryItem).filter(
@@ -78,6 +80,8 @@ def on_hand(db, org_id: UUID, output_id: UUID, unit: str, site, owner_id, *, tod
         InventoryItem.source_output_id == output_id,
         InventoryItem.quantity > 0,
         _at_site(InventoryItem.site_id, site),
+        # A lot under a quality hold (GL-P02) can't be sold or used until it is released.
+        InventoryItem.id.notin_(held_lot_ids_subquery(org_id)),
     )
     query = query.filter(
         InventoryItem.contract_customer_id == owner_id
