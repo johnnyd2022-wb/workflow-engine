@@ -654,6 +654,31 @@ def assess(db, org_id, data, *, today):
         unit = lot_units.get(_lot_id(row.supply_id), row.key.unit)
         return format(convert_quantity_decimal(row.quantity, row.key.unit, unit).normalize(), "f"), unit
 
+    # What each lot still has that no batch took, in the lot's own unit: what was observed
+    # available, less every allocation from it (bound or from its `:free` share). A batch that
+    # came out blocked lost its binding, so the engine reports its whole need short; it's
+    # really short only by what this leftover doesn't cover (decision on GL-P07-B4).
+    leftover = {}
+    for item, check in pool:
+        if check.quantity is not None and check.quantity > 0:
+            leftover[str(item.id)] = check.quantity
+    for assessed in result.batches:
+        for row in assessed.allocations:
+            lot_id = row.supply_id.removesuffix(FREE_SUFFIX)
+            if lot_id not in leftover:
+                continue
+            unit = next(item.unit for item, _ in pool if str(item.id) == lot_id)
+            try:
+                leftover[lot_id] -= convert_quantity_decimal(row.quantity, row.key.unit, unit)
+            except (TypeError, ValueError, InvalidOperation):
+                leftover[lot_id] = Decimal(0)
+
+    def short_by(assessed, row):
+        if assessed.earliest_start_date is not None or not row.key.product_id.startswith("lot:"):
+            return row.quantity
+        spare = max(leftover.get(row.key.product_id.removeprefix("lot:"), Decimal(0)), Decimal(0))
+        return max(row.quantity - spare, Decimal(0))
+
     for order, (batch, assessed) in enumerate(zip(batches, result.batches, strict=True)):
         value = {
             "assessment_order": order,
@@ -702,8 +727,8 @@ def assess(db, org_id, data, *, today):
                         if row.key.product_id.startswith("material:")
                         else {"lot_id": row.key.product_id.removeprefix("lot:")}
                     ),
-                    "quantity": readable(row.quantity, row.key.unit)[0],
-                    "unit": readable(row.quantity, row.key.unit)[1],
+                    "quantity": readable(short_by(assessed, row), row.key.unit)[0],
+                    "unit": readable(short_by(assessed, row), row.key.unit)[1],
                 }
                 for row in assessed.shortages_at_start
             ],

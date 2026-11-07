@@ -61,9 +61,12 @@ def test_phone_binds_raw_lot_and_shows_what_it_holds_for_each_batch(db, board_cl
         held = page.get_by_text("Sugar <img src=x onerror=alert(1)> · 2 kg held", exact=True)
         assert held.count() == 2
         assert page.get_by_text("Short of the chosen lot: 1 kg", exact=True).count() == 1
-        # A batch that cannot start keeps its disabled Start button in its Details.
-        page.locator(".board-batch").first.locator(".board-batch__details > summary").click()
-        assert page.get_by_role("button", name="Start batch").first.is_disabled()
+        # A batch that cannot start (the short third one) keeps its disabled Start button in its
+        # Details. Since B4 the first two, their materials held, really can start.
+        short = page.locator(".board-batch").nth(2)
+        short.locator(".board-batch__details > summary").click()
+        assert short.get_by_role("button", name="Start batch").is_disabled()
+        assert page.locator(".board-batch").first.get_by_role("button", name="Start batch").is_enabled()
         assert page.locator("[data-board-root] script, [data-board-root] img").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert page.locator("[data-board-root] input, [data-board-root] select").evaluate_all(
