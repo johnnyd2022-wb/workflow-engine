@@ -68,9 +68,18 @@ def _drop_unstarted_batches(db, org_id, demand_id) -> int:
 def _quantity(line, output):
     """The line in the output's unit, or (None, reason)."""
     try:
-        quantity = convert_quantity_decimal(Decimal(line["quantity"]), line["unit"], output["unit"])
+        ordered = Decimal(line["quantity"])
+    except (TypeError, ValueError, InvalidOperation):
+        ordered = Decimal("NaN")
+    # A stored NUMERIC 'NaN' passes the line's `quantity > 0` check: never compare it.
+    if not ordered.is_finite():
+        return None, "The ordered quantity can't be planned"
+    try:
+        quantity = convert_quantity_decimal(ordered, line["unit"], output["unit"])
     except (TypeError, ValueError, InvalidOperation):
         return None, f"Ordered in {line['unit']}, which can't be counted as {output['unit']}"
+    if not quantity.is_finite():
+        return None, "The ordered quantity can't be planned"
     if is_count_unit(output["unit"]) and quantity != quantity.to_integral_value():
         return None, f"{quantity.normalize():f} {output['unit']} is not a whole number"
     if not 0 < quantity <= MAX_QUANTITY:
