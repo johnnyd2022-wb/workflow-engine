@@ -92,7 +92,7 @@
 
     var meta = document.createElement('div');
     meta.className = 'oc-card__meta';
-    meta.appendChild(document.createTextNode('Owner: ' + (caseRow.owner_active ? (caseRow.owner_email || caseRow.owner_id) : 'Owner unavailable — reassign')));
+    meta.appendChild(document.createTextNode('Owner: ' + (caseRow.owner_active ? (caseRow.owner_name || caseRow.owner_email || caseRow.owner_id) : 'Owner unavailable — reassign')));
     var dueSpan = document.createElement('span');
     dueSpan.textContent = 'Due: ' + fmtDate(caseRow.due_at);
     meta.appendChild(dueSpan);

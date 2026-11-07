@@ -1,20 +1,17 @@
+{# The single-task page (add inventory, dispose): Style 1's page header with the title as the page's
+   h1, then the task in one workspace card (UX-SWEEP; it was a centred card title with no h1). #}
 {% macro primary_card(title="", subtitle="") -%}
-  <section class="card spa-primary-flat" style="margin-top: 24px;">
+  <div class="workspace-overview workspace-page primary-task">
     {% if title or subtitle %}
-      <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 0;">
-          {% if title %}
-            <h2 class="card-title">{{ title }}</h2>
-          {% endif %}
-          {% if subtitle %}
-            <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">{{ subtitle }}</p>
-          {% endif %}
+      <header class="workspace-header">
+        <div>
+          {% if title %}<h1>{{ title }}</h1>{% endif %}
+          {% if subtitle %}<p class="workspace-caption">{{ subtitle }}</p>{% endif %}
         </div>
-      </div>
+      </header>
     {% endif %}
-    <div class="card-content">
+    <section class="workspace-card primary-task__card">
       {{ caller() }}
-    </div>
-  </section>
+    </section>
+  </div>
 {%- endmacro %}
-
