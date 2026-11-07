@@ -37,6 +37,7 @@ MIN_WINDOW_WEEKS, MAX_WINDOW_WEEKS = 4, 52
 YEAR = timedelta(days=364)  # 52 weeks: the same weekdays a year ago
 SEASON_MIN, SEASON_MAX = Decimal("0.25"), Decimal("4")
 MAX_TARGET_WEEKS = Decimal("104")
+RUNOUT_HORIZON_DAYS = 5 * 365
 
 
 @dataclass
@@ -195,11 +196,15 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
         )
 
     runs_out = None
+    lasts_beyond = False
     if rate is not None:
         if available <= 0:
             runs_out = today
         elif rate > 0:
-            runs_out = today + timedelta(days=math.floor(available * 7 / rate))
+            days = math.floor(available * 7 / rate)
+            # Past the horizon there's no date worth showing (and far enough out, no date at all).
+            runs_out = today + timedelta(days=days) if days <= RUNOUT_HORIZON_DAYS else None
+            lasts_beyond = days > RUNOUT_HORIZON_DAYS
 
     setting = _setting(db, org_id, output_id)
     elapsed_days = None
@@ -224,7 +229,7 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
                 "due_date": max(today, due).isoformat(),
             }
 
-    summary = _summary(unit, rate, runs_out, available, target_weeks, suggestion, today, weeks)
+    summary = _summary(unit, rate, runs_out, available, target_weeks, suggestion, today, weeks, lasts_beyond)
     return {
         "source_output_id": output["id"],
         "name": output["name"],
@@ -248,14 +253,19 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
     }
 
 
-def _summary(unit, rate, runs_out, available, target_weeks, suggestion, today, weeks):
+def _summary(unit, rate, runs_out, available, target_weeks, suggestion, today, weeks, lasts_beyond=False):
     """What the stock cover says, without the product's name: the page shows that beside it."""
     if rate is None:
         return "No sales rate yet."
     if rate == 0:
         return f"No sales in the last {weeks} weeks."
     pace = f"{_amount(rate, unit)} a week"
-    head = f"Has run out, selling {pace}" if available <= 0 else f"Runs out {_day(runs_out, today)} at {pace}"
+    if available <= 0:
+        head = f"Has run out, selling {pace}"
+    elif lasts_beyond:
+        head = f"Lasts more than {RUNOUT_HORIZON_DAYS // 365} years at {pace}"
+    else:
+        head = f"Runs out {_day(runs_out, today)} at {pace}"
     if suggestion:
         count = suggestion["batches"]
         when = date.fromisoformat(suggestion["plan_by"])
