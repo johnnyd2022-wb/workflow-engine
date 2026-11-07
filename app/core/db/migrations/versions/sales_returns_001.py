@@ -4,7 +4,7 @@
 (or the hold placed on it). Downgrade refuses while any return exists.
 
 Revision ID: sales_returns_001
-Revises: xero_credit_notes_001
+Revises: recalls_001
 """
 
 import sqlalchemy as sa
@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "sales_returns_001"
-down_revision = "xero_credit_notes_001"
+down_revision = "recalls_001"
 branch_labels = None
 depends_on = None
 

@@ -79,4 +79,32 @@
     var target = isPageContent(evt);
     if (target) runAll(target);
   });
+
+  // HTMX deliberately leaves error responses unswapped. For a boosted page link that means the
+  // user stays on the old page without feedback. Keep the current page intact and surface the
+  // same request reference GL-C04 would show on a full-page error response.
+  document.addEventListener('htmx:responseError', function (evt) {
+    var d = evt.detail || {};
+    var target = isPageContent(evt);
+    var boosted = d.boosted || (d.requestConfig && d.requestConfig.boosted);
+    var xhr = d.xhr;
+    if (!target || !boosted || !xhr || Number(xhr.status) < 400) return;
+
+    var status = Number(xhr.status);
+    var requestId = typeof xhr.getResponseHeader === 'function' ? xhr.getResponseHeader('X-Request-ID') : '';
+    var reference = String(requestId || '').replace(/-/g, '').slice(0, 8).toLowerCase();
+    var title = status === 404 ? 'Page not found' : (status === 403 ? 'No access to that page' : 'Page could not load');
+    var message = status === 404
+      ? "We couldn't find that page."
+      : (status === 403
+        ? "Your role can't open that page. Ask an admin if you need it."
+        : 'Something went wrong while loading this page.');
+    message += reference
+      ? ' Reference: ' + reference + '. Open Help and contact to share it.'
+      : ' Open Help and contact to ask for support.';
+
+    if (typeof window.showNotification === 'function') {
+      window.showNotification('error', title, message);
+    }
+  });
 })();

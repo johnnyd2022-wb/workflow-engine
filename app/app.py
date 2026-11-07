@@ -8,6 +8,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 import datetime
+import ssl
 
 # Import xero client stuff here
 import subprocess
@@ -23,6 +24,19 @@ from app.utils.config_loader import config
 # Create app using factory (blueprints are registered in create_app)
 app = create_app()
 LOGGER = get_logger(__name__)
+
+
+def _development_ssl_context(cert_file: str, key_file: str) -> ssl.SSLContext:
+    """Build the HTTPS context used by the Werkzeug development/test server.
+
+    The E2E fixture uses the same TLS ceiling: Werkzeug's TLS 1.3 session-ticket
+    shutdown can reset a connection after the page loads but before its CSS arrives.
+    Production serves TLS at the proxy and does not use this context.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_file, key_file)
+    context.maximum_version = ssl.TLSVersion.TLSv1_2
+    return context
 
 
 # Log feature status from configuration
@@ -184,7 +198,7 @@ if __name__ == "__main__":
     # Only use SSL if certificate files exist
     ssl_context = None
     if os.path.exists(cert_file) and os.path.exists(key_file):
-        ssl_context = (cert_file, key_file)
+        ssl_context = _development_ssl_context(cert_file, key_file)
         LOGGER.info("ssl_enabled", cert_file=cert_file, key_file=key_file)
     else:
         LOGGER.warning("ssl_certificates_missing", cert_file=cert_file, key_file=key_file)
