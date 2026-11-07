@@ -1159,7 +1159,7 @@ Founder decisions for this phase:
         automatic moves remain in 7.3f.
       - [x] Resource groups have units (two stills run two batches at once), and planning
         places each batch against them: the latest start that fits on time, else the
-        earliest that fits, saying it is late because of capacity (!B4MR).
+        earliest that fits, saying it is late because of capacity (!649).
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
@@ -1175,12 +1175,12 @@ Founder decisions for this phase:
       - [x] Today's planned production priorities on the dashboard (!463): due and overdue
         open batches, current priority and pin/check state, bounded display and a review
         link to the board. Production permission is required for query and rendering.
-      - [x] A real start check (!B4MR): materials checked, held and still on hand, no held
+      - [x] A real start check (!649): materials checked, held and still on hand, no held
         lot on quality hold (GL-P02), room on the site's resources, and the site's
         compliance through the module hook (NZ alcohol: a food registration covering
         manufacturing there). Once clear, Start makes the execution at the batch's site and
         consumes what it held.
-      - [x] Automatic replan (!B4MR) after planner changes and whenever the board or
+      - [x] Automatic replan (!649) after planner changes and whenever the board or
         Planner loads: re-sizes planned demand to stock, moves batches whose day passed
         and batches off full days (never pinned ones, or ones a person placed), and the
         board lists what moved and why. Replanning on a finished-late batch or a flagged
@@ -1193,7 +1193,7 @@ Founder decisions for this phase:
       it (7.1c); a verification visit (2.2) or stocktake (2.6) can block a day.
       - [x] A module hook the start check asks (`compliant/platform/production_checks`);
         NZ alcohol blocks a start at a site with no food registration covering
-        manufacturing that day (!B4MR). Choosing the site at planning time, and visits or
+        manufacturing that day (!649). Choosing the site at planning time, and visits or
         stocktakes blocking a day, remain.
   - Done when: a new order for 600 bottles shows a promise date in seconds; the planner
     lays out the batches, flags a botanical short for the second one and moves its date;
