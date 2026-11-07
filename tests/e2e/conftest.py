@@ -597,3 +597,15 @@ def assert_clean_page(page) -> None:
 
     if problems:
         raise AssertionError(f"page not clean: {page.url}\n\n" + "\n\n".join(problems))
+
+
+@pytest.fixture(scope="session")
+def perf_instrumentation(app_url):
+    """One set of performance listeners shared by every browser test module.
+
+    Registering a session fixture separately in each module attaches the same
+    Flask/SQLAlchemy listeners twice when both modules run in a suite.
+    """
+    from tests.e2e.test_perf_budgets import instrument_performance
+
+    yield from instrument_performance()
