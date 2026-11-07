@@ -540,6 +540,11 @@ class PageProbe:
     def _on_console(self, msg) -> None:
         if msg.type == "error" and not self._RESOURCE_STATUS_NOISE.search(msg.text):
             self.console_errors.append(msg.text)
+        # Alpine reports a template expression that throws (a CSP build calling a global such as
+        # Number(), a typo'd property) as a *warning*, and the part of the page it drives silently
+        # stops working. Every page test should fail on it.
+        elif msg.type == "warning" and "Alpine Expression Error" in msg.text:
+            self.console_errors.append(msg.text)
 
     def _on_page_error(self, exc) -> None:
         self.console_errors.append(f"uncaught: {exc}")
