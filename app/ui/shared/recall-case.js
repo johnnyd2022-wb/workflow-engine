@@ -133,10 +133,9 @@
       actions.append(notice);
       if (canWork) {
         if (!c.notice_sent_at && !c.unreachable_note) actions.append(button('Mark notice sent', function () { noticeSentForm(c); }));
-        if (!c.acknowledged_at && !c.unreachable_note) {
-          actions.append(button('Acknowledged…', function () { ackForm(c); }));
-          actions.append(button('Can’t reach them…', function () { unreachableForm(c); }));
-        }
+        // An unreachable customer who gets back in touch can still acknowledge.
+        if (!c.acknowledged_at) actions.append(button('Acknowledged…', function () { ackForm(c); }));
+        if (!c.acknowledged_at && !c.unreachable_note) actions.append(button('Can’t reach them…', function () { unreachableForm(c); }));
         if (!c.done) actions.append(button('Recovered / disposed…', function () { qtyForm(c); }));
       }
       art.append(actions);

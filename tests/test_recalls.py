@@ -343,3 +343,32 @@ def test_only_an_unreachable_customer_can_have_stock_written_off(admin_client, w
         f"/api/core/recalls/{recall['id']}/contacts/{c['id']}/quantities", json={"recovered": "0", "unrecoverable": "1"}
     )
     assert resp.status_code == 400 and "couldn't reach" in resp.get_json()["error"]
+
+
+def test_a_real_recall_cannot_be_dismissed_around_the_check_but_a_drill_can(admin_client, world):
+    """Codex round 2: dismissing is closing too."""
+    real = _open(admin_client, world).get_json()["recall"]
+    blocked = _case_to(admin_client, real["case"]["id"], 1, "dismissed", reason="No longer relevant")
+    assert blocked.status_code == 409 and blocked.get_json()["error_code"] == "recall_incomplete"
+    assert blocked.get_json()["blockers"]
+
+
+def test_a_drill_can_be_dismissed(admin_client, world):
+    drill = _open(admin_client, world, is_drill=True).get_json()["recall"]
+    ok = _case_to(admin_client, drill["case"]["id"], 1, "dismissed", reason="Drill finished early")
+    assert ok.status_code == 200 and ok.get_json()["case"]["status"] == "dismissed"
+
+
+def test_an_unreachable_customer_who_gets_back_in_touch_can_acknowledge(admin_client, world):
+    """Codex round 2: acknowledging after a write-off was a 500 (the write-off needs 'unreachable')."""
+    recall = _open(admin_client, world).get_json()["recall"]
+    hb = next(c for c in recall["contacts"] if c["customer_name"] == "Harbour Bar")
+    base = f"/api/core/recalls/{recall['id']}/contacts/{hb['id']}"
+    assert admin_client.post(f"{base}/unreachable", json={"note": "No answer for a week"}).status_code == 200
+    assert admin_client.post(f"{base}/quantities", json={"unrecoverable": "4"}).status_code == 200
+    back = admin_client.post(f"{base}/acknowledged", json={"by": "Owner, back from holiday"})
+    assert back.status_code == 200
+    contact = back.get_json()["contact"]
+    assert contact["unreachable_note"] is None and contact["unrecoverable_qty"] == "0" and contact["done"] is False
+    blockers = admin_client.get(f"/api/core/recalls/{recall['id']}").get_json()["recall"]["progress"]["blockers"]
+    assert "4 each of Navy Gin 700ml at Harbour Bar not yet recovered or disposed of" in blockers

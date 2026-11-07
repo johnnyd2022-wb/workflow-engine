@@ -328,13 +328,15 @@ def blockers(session: Session, org_id: UUID, recall: Recall) -> list[str]:
     return out
 
 
-def assert_complete_for_case(session: Session, org_id: UUID, case: OperationalCase) -> None:
+def assert_complete_for_case(session: Session, org_id: UUID, case: OperationalCase, allow_drill: bool = False) -> None:
     """Called by the operational-case transitions: a recall resolves only when it is complete."""
     from app.features.operational_cases.services.operational_case_service import CaseError
 
     recall = session.query(Recall).filter(Recall.org_id == org_id, Recall.case_id == case.id).one_or_none()
     if recall is None:
         raise CaseError(409, "recall_missing", "recall record not found for this case")
+    if allow_drill and recall.is_drill:
+        return
     left = blockers(session, org_id, recall)
     if left:
         raise CaseError(409, "recall_incomplete", "the recall isn't complete yet", extra={"blockers": left})
@@ -395,7 +397,10 @@ def record_acknowledgement(session, org_id, user_id, recall_id, contact_id, *, b
     if at > utc_now():
         raise RecallError("It can't have been acknowledged in the future")
     c.acknowledged_at = at
+    # They were unreachable and got back in touch: the write-off no longer stands, so that stock is
+    # outstanding again (and the unreachable-only check on unrecoverable_qty keeps holding).
     c.unreachable_note = None
+    c.unrecoverable_qty = 0
     c.updated_by = user_id
     _log(session, org_id, recall, c, "acknowledged", user_id, {"by": c.acknowledged_by})
     session.flush()

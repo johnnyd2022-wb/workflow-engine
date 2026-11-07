@@ -772,12 +772,17 @@ def _apply_transition(
     _validate_owner(session, org_id, case.owner_id)
     validated = _authorize_and_validate_transition(session, org_id, case, target_status, actor, fields)
 
-    if case.source_type == RECALL_SOURCE_TYPE and target_status in (CaseStatus.RESOLVED, CaseStatus.VERIFIED):
-        # GL-P03: a recall closes only when every customer reached has acknowledged (or is
-        # recorded unreachable) and every unit supplied is recovered or disposed of.
+    if case.source_type == RECALL_SOURCE_TYPE and target_status in (
+        CaseStatus.RESOLVED,
+        CaseStatus.VERIFIED,
+        CaseStatus.DISMISSED,
+    ):
+        # GL-P03: a recall closes only when every customer reached has answered and every unit
+        # supplied is accounted for. Dismissing is closing too, so a real recall can't be dismissed
+        # around that check; a drill can (nothing was held and nothing real was sent).
         from app.features.recalls.service import assert_complete_for_case
 
-        assert_complete_for_case(session, org_id, case)
+        assert_complete_for_case(session, org_id, case, allow_drill=target_status == CaseStatus.DISMISSED)
     elif target_status == CaseStatus.VERIFIED:
         _source_lock(session, org_id, case.source_type, case.check_id, case.source_entity_type, case.source_entity_id)
         observation = untracked_items_adapter.evaluate(session, org_id, case.source_entity_id)
