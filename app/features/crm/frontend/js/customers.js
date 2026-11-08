@@ -33,9 +33,13 @@ function crmCustomers() {
     importer: { open: false, format: 'csv', text: '', fileName: '', busy: false, error: '', result: null, saved: false },
 
     async init() {
-      this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
+      const params = new URLSearchParams(window.location.search);
+      this.missingContactOnly = params.get('missing_contact') === '1';
       await this.loadXeroStatus();
       await this.loadCustomers();
+      if (params.get('new') === '1' && this.$el.querySelector('[data-new-customer]')) {
+        await this.openNewCustomer();
+      }
     },
 
     async loadXeroStatus() {

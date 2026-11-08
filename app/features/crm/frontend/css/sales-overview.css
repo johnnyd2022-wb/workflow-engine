@@ -43,12 +43,13 @@
   #page-content .sales-overview .crm-table td { padding-inline: 6px; overflow-wrap: anywhere; }
   #page-content #sales-operator-filter { min-width: 0; max-width: 100%; width: 100% !important; }
 }
-#page-content .sales-header-actions { display: flex; align-items: center; gap: 10px; }
+#page-content .sales-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 #page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--text-inverse); }
 #page-content .sales-header-actions .sales-primary:hover { background: var(--ui-accent-strong); }
 html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--ui-surface-subtle); }
 @container sechead (max-width: 1099px) {
   #page-content .sales-header-actions .sales-primary { order: -1; }
+  #page-content .sales-header-actions > button { order: 2; }
 }
 
 #page-content .sales-overview .crm-widget-card__header { padding: 0; }

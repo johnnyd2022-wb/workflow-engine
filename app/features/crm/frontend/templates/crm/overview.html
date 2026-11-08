@@ -7,7 +7,10 @@
 {% block section_actions %}
 <div class="sales-header-actions">
 <button type="button" class="workspace-button" x-data @click="$dispatch('sales-add-widget')">Add widget</button>
+{% if can('sales.record') %}
+<a href="/crm/customers?new=1" class="workspace-button">New customer</a>
 <a href="/crm/tasks?new=1" class="workspace-button workspace-button--primary sales-primary">New task</a>
+{% endif %}
 </div>
 {% endblock %}
 

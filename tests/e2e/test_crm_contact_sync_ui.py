@@ -88,6 +88,24 @@ def _shot(page, name):
         page.screenshot(path=os.path.join(SHOTS, name + ".png"), full_page=True)
 
 
+def test_sales_overview_creation_actions_open_existing_forms(xero, sales_page, db, org):
+    page = sales_page
+    page.goto("https://crm.test/crm")
+    actions = page.locator(".sales-header-actions")
+    expect(actions.get_by_role("link", name="New customer")).to_be_visible()
+    expect(actions.get_by_role("link", name="New task")).to_be_visible()
+    _shot(page, "sales-overview-actions-desktop")
+
+    actions.get_by_role("link", name="New customer").click()
+    expect(page.get_by_role("dialog", name="New customer")).to_be_visible()
+
+    page.goto("https://crm.test/crm")
+    page.set_viewport_size({"width": 390, "height": 844})
+    _shot(page, "sales-overview-actions-phone")
+    page.locator(".sales-header-actions").get_by_role("link", name="New task").click()
+    expect(page.get_by_role("dialog", name="New task")).to_be_visible()
+
+
 def test_add_a_customer_that_stays_in_bize(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
