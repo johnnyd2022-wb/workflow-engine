@@ -28,7 +28,11 @@ PUBLIC_REQUESTS = frozenset(
         ("core.static", "GET"),
         ("healthcheck", "GET"),
         ("favicon", "GET"),
+        ("legal.pricing", "GET"),
+        ("legal.terms", "GET"),
+        ("legal.privacy", "GET"),
         ("ingest_faro_telemetry", "POST"),
+        ("csp_report", "POST"),
         ("ingest_posthog_telemetry", "GET"),
         ("ingest_posthog_telemetry", "POST"),
     }

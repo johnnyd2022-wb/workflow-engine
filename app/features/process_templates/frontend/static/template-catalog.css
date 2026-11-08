@@ -20,12 +20,13 @@
 .pt-card {
   border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-lg, 12px); background: var(--bg-card, #fff);
   padding: 16px; display: flex; flex-direction: column; gap: 8px; text-align: left; cursor: pointer;
+  color: var(--ui-text, inherit); font: inherit; /* a <button>: it doesn't inherit text colour */
 }
 .pt-card:hover { border-color: var(--primary, #3b82f6); }
-.pt-card-family { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary, #9ca3af); }
+.pt-card-family { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ui-text-muted, #5d6778); }
 .pt-card-name { font-weight: 600; font-size: 0.9375rem; }
 .pt-card-shape { font-size: 0.8125rem; color: var(--text-secondary, #6b7280); }
-.pt-card-meta { font-size: 0.75rem; color: var(--text-tertiary, #9ca3af); }
+.pt-card-meta { font-size: 0.75rem; color: var(--ui-text-muted, #5d6778); }
 
 .pt-modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000;

@@ -1,6 +1,6 @@
 /**
- * Executions get the same light, card-based look as Compliant/NP3/CRM (white cards,
- * teal accent, Inter), independent of the app's site-wide dark/light toggle.
+ * Executions get the same card-based look as Compliant/NP3/CRM (cards, teal accent, Inter):
+ * light by default, and the dark workspace palette when the site is in dark mode (GL-U04).
  *
  * Scope: #execute-step-modal.exec-modal covers BOTH the popup (start-execution modal)
  * and the inline record-step page (.batch-start-spa) -- it's the same root element in
@@ -91,24 +91,67 @@
   border-color: #095856;
 }
 
-/* Record-step page chrome that hardcodes dark-mode colours outside this scope's tokens
-   (base_spa.html defaults the whole site to data-spa-theme="dark") -- force these back
-   to the light equivalents so the sticky bar / confirm sheet don't stay black. */
+/* GL-U04: in dark mode the page around the record-step surface is dark, so the light tokens
+   above left near-black headings on a black page. Dark mode gets the same tokens with the dark
+   workspace values (workspace-overviews.css), so the record-step page follows the site theme. */
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal {
+  --bg-app: #101a25;
+  --bg-card: #17232f;
+  --bg-secondary: #13202b;
+  --bg-elevated: #1b2a37;
+  --bg-primary: #101a25;
+
+  --text-primary: #e5eef6;
+  --text-secondary: #a4b4c5;
+  --text-tertiary: #8a9aab;
+
+  --border-default: #2c3d4b;
+  --border-light: #24323f;
+
+  --primary: #72dfce;
+  --primary-dark: #4fc7b5;
+  --success: #6ee7b7;
+  --warning: #fbbf24;
+  --error: #fca5a5;
+  --danger: #fca5a5;
+  --info: #72dfce;
+}
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal .flow-mode-segmented {
+  background: var(--bg-secondary);
+}
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal .flow-mode-segment--active {
+  background: #143e3a !important;
+}
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal .btn-primary,
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal .exec-picker-confirm-btn {
+  background: #0d6c6a;
+  border-color: #0d6c6a;
+  color: #ffffff;
+}
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal select,
+html[data-spa-theme="dark"] #execute-step-modal.exec-modal textarea {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  color-scheme: dark;
+}
+/* Page chrome outside the scope's tokens follows the same dark values. */
 html[data-spa-theme="dark"] .batch-start-spa .batch-start-record-bar {
-  background: var(--bg-app, #f7f9fa);
-  border-top-color: var(--border-default, #dce4e9);
+  background: #101a25;
+  border-top-color: #2c3d4b;
 }
 html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__backdrop {
-  background: rgba(15, 23, 42, 0.48);
+  background: rgba(0, 0, 0, 0.6);
 }
 html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__sheet {
-  background: var(--bg-card, #ffffff);
-  color: var(--text-primary, #172033);
-  box-shadow: 0 -12px 48px rgba(18, 46, 66, 0.14);
+  background: #17232f;
+  color: #e5eef6;
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.5);
 }
 html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__text {
-  color: var(--text-secondary, #5d6778);
+  color: #a4b4c5;
 }
 html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
-  border-bottom-color: var(--border-default, #dce4e9);
+  border-bottom-color: #2c3d4b;
 }

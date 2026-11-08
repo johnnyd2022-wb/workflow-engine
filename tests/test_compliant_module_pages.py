@@ -33,7 +33,21 @@ def test_nz_alcohol_module_has_a_dedicated_page():
     ).read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     assert 'route("/compliant/nz-alcohol"' in routes
-    assert "<h1>Compliance</h1>" in dashboard
+    # !515 moved the section title into the shared head; the overview opts in
+    # rather than rendering a duplicate title below its tabs. Browser coverage in
+    # test_compliance_design also checks the actual page has one Compliance h1.
+    assert "{% set section_head_is_page_title = true %}" in dashboard
+    assert "<h1" not in dashboard
+    from jinja2 import Environment, FileSystemLoader
+
+    shared = Environment(loader=FileSystemLoader(ROOT / "app" / "ui" / "templates" / "shared"))
+    rendered = shared.get_template("section_tabs.html").render(
+        section_head_is_page_title=True,
+        section_label="Compliance",
+        section_tabs=[SimpleNamespace(href="/compliant/nz-alcohol", key="overview", label="Overview", active=True)],
+    )
+    assert rendered.count("<h1 ") == 1
+    assert ">Compliance</h1>" in rendered
     assert 'data-compliant-surface="overview"' in dashboard
     assert "Food safety programme" in configuration
     assert "Liquor licence" in configuration
@@ -114,12 +128,10 @@ def test_complaint_spelling_redirects_to_the_compliant_workspace():
 def test_compliant_navigation_is_boosted_but_downloads_are_not():
     """Page links are boosted (a boosted response carries the page's own CSS/JS inside #page-content,
     see shared/base_spa.html); a file download must still bypass htmx."""
-    tabs = (
-        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
-    ).read_text(encoding="utf-8")
+    tabs = (ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html").read_text(encoding="utf-8")
     audit = (
-        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
-    ).read_text(encoding="utf-8")
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_np3_header.html"
+    ).read_text(encoding="utf-8")  # the downloads sit in the food safety pages' shared header
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
@@ -130,9 +142,7 @@ def test_compliant_navigation_is_boosted_but_downloads_are_not():
 
 
 def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
-    tabs = (
-        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
-    ).read_text(encoding="utf-8")
+    tabs = (ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html").read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
         encoding="utf-8"
@@ -143,7 +153,7 @@ def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     from app.ui.page_registry import SECTION_TABS
 
     paths = {tab.key: tab.path for tab in SECTION_TABS["compliance"]}
-    assert paths["np3"] == "/compliant/nz-alcohol/np3-audit"
+    assert paths["np3"] == "/compliant/nz-alcohol/food-safety"  # /np3-audit only redirects there
     assert paths["customs"] == "/compliant/nz-alcohol/customs"
     assert "data-food-safety-tab" in tabs  # configuration.js shows, hides and renames it live
     assert 'conditions["programme"].upper()' in (ROOT / "app" / "ui" / "navigation.py").read_text(encoding="utf-8")

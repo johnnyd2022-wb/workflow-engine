@@ -1,0 +1,61 @@
+# CSP migration: no inline or evaluated script (GL-S03)
+
+## Where it stands
+
+The enforced policy now runs script only from our own files or from an inline block
+carrying the response's nonce:
+
+```
+script-src 'self' 'nonce-…' https://static.cloudflareinsights.com; script-src-attr 'none'
+```
+
+`style-src 'unsafe-inline'` stays. About 1,100 `style=""` attributes depend on it, and inline
+style can't run script. Moving them is cosmetic work with little security return.
+
+## What blocks it (measured 2026-10-26)
+
+| Blocker | Count | Where |
+|---|---|---|
+| Inline `<script>` blocks | 28 | Done in step 1: all carry the nonce |
+| Inline `on*=""` handlers in templates | 80 | `core2.html` (16), `landing.html` (8), the process wizard and modals (≈35), sidebars, settings |
+| `onclick=` written by scripts | 8 | `app.js`, `common.js`, `process-flow-next-steps-steps.js`, `sourcemap.js` |
+| Alpine 3.15 standard build (evaluates attribute expressions) | ≈950 attributes in 16 templates | CRM pages (≈800), Tasks board, base shell, integrations, inventory add |
+| htmx `allowEval` (`hx-on`, `js:` values) | none in use | Set `allowEval: false` at the end |
+
+## Steps (one MR each)
+
+1. **Foundation** (this MR):
+   - per-response nonce on every inline script, and htmx's `inlineScriptNonce` for boosted swaps;
+   - the strict policy sent **report-only**, with reports logged by `/csp-report` (no query strings, no fragments);
+   - `object-src 'none'`, `base-uri 'self'` and `frame-ancestors` enforced now;
+   - the unused `unpkg.com` allowance dropped;
+   - a browser walk of every page, full load and boosted, proving nothing is blocked and every inline script passes the nonce policy.
+2. **Inline handlers** (done, !588):
+   - All 92 lines of `on*=""` handlers (templates and script-built markup) now use `data-action`, run by one delegated listener (`app/ui/shared/actions.js`) with an allowlist of callable names.
+   - Stop, dismiss and remove go through `data-action-stop`, `data-dismiss` and `data-remove-ancestor`; forms use `data-submit-action`.
+   - Hover styles moved to CSS.
+   - `script-src-attr 'none'` is now **enforced**.
+   - `tests/test_csp.py` ratchets new handler attributes out, and `tests/e2e/test_actions_dispatch.py` drives the dispatcher.
+3. **Alpine** (!590, done).
+   - Swapped to `@alpinejs/csp` 3.15.12.
+   - Inline `x-data="{…}"` objects stay: the CSP build's parser reads object literals. The 11 named components (`crmOverview()` and so on) are registered with `Alpine.data()` in `base_spa.html`, again before each boosted swap is initialised.
+   - The parser rejects template literals, `?.`, arrow functions, statement sequences, `+=` and browser globals. 94 expressions were rewritten as concatenation and ternaries; the rest moved into component methods.
+   - `tests/e2e/test_alpine_csp_expressions.py` runs all 1,342 expressions through the build's own parser, so a new one it can't read fails CI rather than a click in production.
+4. **Enforce** (this MR).
+   - Remove `'unsafe-inline'` and `'unsafe-eval'` from `script-src` and add `script-src-attr 'none'`.
+   - Set htmx `allowEval: false` and keep the report endpoint.
+   - The browser walk asserts zero enforced and report-only violations.
+   - General Playwright UI contexts use `bypass_csp=True` so its `wait_for_function`
+     helper can evaluate expressions. The separate `strict_csp_page` context keeps the
+     policy walk and inline-handler security test under the real CSP.
+
+## Checks
+
+- `tests/test_csp.py`:
+  - the nonce on every inline script and in the header;
+  - a fresh nonce per response;
+  - the enforced hardening;
+  - report parsing that drops query strings;
+  - a template scan for inline scripts without the nonce.
+- `tests/e2e/test_csp_browser.py`: every registry page, full load and boosted, with no enforced violation and no inline script failing the nonce policy.
+- Production: the `csp_violation` log lines are the remaining work list. Step 4 waits until they stop.

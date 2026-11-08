@@ -192,6 +192,11 @@ def app_url(e2e_preconditions) -> str:
 
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
+    # The werkzeug dev server closes TLS 1.3 connections with session tickets still unread,
+    # which Chromium sees as a reset; it retries, then fails a random stylesheet with
+    # net::ERR_TOO_MANY_RETRIES and the page reports unclean. TLS 1.2 has no such tickets.
+    # Production runs gunicorn behind its own TLS, so this only concerns the test server.
+    ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
 
     port = _free_port()
     server = make_server(BIND_HOST, port, app, threaded=True, ssl_context=ssl_context)
@@ -217,11 +222,12 @@ def app_url(e2e_preconditions) -> str:
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, app_url):
-    """Trust the self-signed cert and default navigation to the app."""
+    """Trust the test cert and let Playwright's script helpers run under strict app CSP."""
     return {
         **browser_context_args,
         "base_url": app_url,
         "ignore_https_errors": True,
+        "bypass_csp": True,
     }
 
 
@@ -308,21 +314,49 @@ def purge_org(session, org_id, user_id) -> None:
                     table.c[fk.parent.name].in_(select(parent.c[fk.column.name]).where(parent.c.user_id == user_id))
                 )
         if conditions:
-            statements.append((table.name, table.delete().where(or_(*conditions))))
+            statements.append((table.name, table.delete().where(or_(*conditions)), table, or_(*conditions)))
     # Some tables now reference each other (inventory_items <-> contract_material_receipts, the site
     # transfer tables), so sorted_tables cannot order them and one pass can hit a foreign key. Postpone
     # a delete the database refuses and retry after the rest; only give up when a pass makes no progress.
-    while statements:
-        postponed = []
-        for name, statement in statements:
-            try:
+    # Two things can leave a pass with no progress. Rows in a cycle point at each other (an item at
+    # its site, a site's stock back at the item), so clear the nullable links between the blocked
+    # tables. And the in-process server can still be finishing the test's last request, writing a
+    # child row after its table's delete already ran; so wait a moment and run every delete again.
+    import time
+
+    remaining = list(statements)
+    last_errors: dict[str, str] = {}
+    for attempt in range(4):
+        while remaining:
+            postponed = []
+            for entry in remaining:
+                try:
+                    with session.begin_nested():
+                        session.execute(entry[1])
+                except IntegrityError as exc:
+                    last_errors[entry[0]] = str(exc.orig).splitlines()[0]
+                    postponed.append(entry)
+            if len(postponed) == len(remaining):
+                break
+            remaining = postponed
+        if not remaining:
+            break
+        if attempt == 3:
+            # Name the constraint each table hit, so a new cycle is diagnosable from the CI log alone.
+            detail = "; ".join(f"{e[0]}: {last_errors.get(e[0], '?')}" for e in remaining)
+            raise RuntimeError(f"purge_org cannot delete in any order; blocked tables: {detail}")
+        blocked = {e[2] for e in remaining}
+        for _name, _statement, table, condition in remaining:
+            columns = {
+                fk.parent.name: None
+                for fk in table.foreign_keys
+                if fk.column.table in blocked and fk.column.table is not table and fk.parent.nullable
+            }
+            if columns:
                 with session.begin_nested():
-                    session.execute(statement)
-            except IntegrityError:
-                postponed.append((name, statement))
-        if len(postponed) == len(statements):
-            raise RuntimeError(f"purge_org cannot delete in any order; blocked tables: {[n for n, _ in postponed]}")
-        statements = postponed
+                    session.execute(table.update().where(condition).values(**columns))
+        time.sleep(1)
+        remaining = list(statements)
     session.commit()
 
 
@@ -455,7 +489,20 @@ def logged_in_page(browser, storage_state_path, app_url):
         base_url=app_url,
         ignore_https_errors=True,
         storage_state=storage_state_path,
+        bypass_csp=True,
     )
+    page = context.new_page()
+    attach_probe(page)
+    try:
+        yield page
+    finally:
+        context.close()
+
+
+@pytest.fixture()
+def strict_csp_page(browser, storage_state_path, app_url):
+    """Real CSP for the policy walk and security tests; no helper bypass."""
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True, storage_state=storage_state_path)
     page = context.new_page()
     attach_probe(page)
     try:

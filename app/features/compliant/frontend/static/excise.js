@@ -1,210 +1,427 @@
-// Excise workspace (plan 2.1). The server builds every figure from recorded removals and
-// validates every change; this script lays them out and posts the owner's actions.
+// Customs page: the excise entry for each period (plan 2.1). The server builds every figure
+// from recorded removals and validates every change; this script lays them out and posts
+// the owner's actions. The entry lines follow Trade Single Window's column order so they
+// can be copied across. Setup lives on Customs → Settings, stock on Customs → Stock.
 (function () {
   'use strict';
+
+  var TSW_LOGIN = 'https://www.tsw.govt.nz/external/application/login/app.html';
+  var SETTINGS = '/compliant/nz-alcohol/customs/settings';
+  var TRANSFERS = '/compliant/nz-alcohol/customs/transfers';
+  var WINDOW = 3; // periods shown before "Earlier": the current one and the two before it
 
   // The SPA shell can swap page content in with HTMX, replacing this section after the
   // script has run; bind whichever copy is on the page now, once.
   function init() {
   var root = document.querySelector('[data-excise-root]');
-  if (!root || root.dataset.bound === '1') return;
+  if (!root || root.dataset.bound === '1' || !window.CustomsUI) return;
   root.dataset.bound = '1';
+  var page = root.closest('[data-compliant-root]') || document.body;
+  var U = window.CustomsUI;
+  var el = U.el, api = U.api, fmtDate = U.fmtDate, shortDate = U.shortDate, money = U.money, num = U.num;
+  var fail = U.failer(page);
+  var periodsEl = root.querySelector('[data-excise-periods]');
+  var ccasEl = root.querySelector('[data-excise-ccas]');
+  var draftEl = root.querySelector('[data-excise-draft]');
+  var positionEl = page.querySelector('[data-customs-position]');
 
-  function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
-  async function api(method, url, body) {
-    var headers = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    if (method !== 'GET') headers['X-CSRFToken'] = csrf();
-    var res = await fetch(url, { method: method, credentials: 'include', headers: headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    var data = {}; try { data = await res.json(); } catch (_) {}
-    if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
-    return data;
-  }
-  function el(tag, attrs, kids) {
-    var n = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(function (k) { if (k === 'text') n.textContent = attrs[k]; else if (k === 'className') n.className = attrs[k]; else n.setAttribute(k, attrs[k]); });
-    (kids || []).forEach(function (k) { if (k) n.append(k); });
-    return n;
-  }
-  function fmtDate(iso) { if (!iso) return '—'; var d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }); }
-  function money(v) { return v == null ? '—' : '$' + Number(v).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  var errorEl = document.querySelector('[data-compliant-error]');
-  function fail(msg) { if (msg) console.error('[excise]', msg); if (errorEl) { errorEl.textContent = msg; errorEl.hidden = !msg; } }
+  // With several sites each CCA licence has its own entries (GL-P07 A5); cca is the one shown.
+  var state = { cca: new URLSearchParams(window.location.search).get('cca'), period: null, periods: [], draft: null, frequency: 'monthly', remindersFrom: null, showAll: false, showUntracked: false, position: null };
 
-  var state = { period: null };
+  function rateText(l) {
+    if (!l.rate) return 'no rate';
+    return '$' + l.rate + (l.basis === 'per_litre' ? ' /L' : ' /LAL');
+  }
+
+  // A period's status in words: never colour alone.
+  function periodStatus(p) {
+    if (p.status === 'lodged') return { key: 'lodged', text: p.nil_return ? 'Nil return lodged ' + shortDate(p.lodged_on) : 'Lodged ' + shortDate(p.lodged_on) };
+    if (p.open) return { key: 'open', text: 'In progress' };
+    // Before reminders began: nobody was asked to lodge it here, so it isn't "overdue".
+    if (state.remindersFrom && p.period_end && p.period_end < state.remindersFrom) return { key: 'untracked', text: 'Not tracked' };
+    var days = U.daysUntil(p.due);
+    if (days < 0) return { key: 'overdue', text: 'Overdue · was due ' + shortDate(p.due), short: 'Overdue' };
+    if (days === 0) return { key: 'due', text: 'Due today' };
+    return { key: 'due', text: 'Due ' + shortDate(p.due) + ' · ' + U.plural(days, 'day') + ' left', short: 'Due ' + shortDate(p.due) };
+  }
+  function shortLabel(p) {
+    // "October 2026" -> "Oct 2026"; six- and twelve-monthly labels are already short ranges.
+    return state.frequency === 'monthly' ? p.label.replace(/^(\w{3})\w* /, '$1 ') : p.label;
+  }
+
+  function periodButton(p) {
+    var st = periodStatus(p);
+    var active = p.period_start === state.period;
+    var chip = el('button', { type: 'button', role: 'listitem', className: 'excise-period excise-period--' + st.key + (active ? ' excise-period--active' : ''), 'data-period': p.period_start, 'data-period-status': st.key, 'aria-current': active ? 'true' : 'false' });
+    chip.append(el('strong', { className: 'excise-period__label', text: shortLabel(p) }), el('span', { className: 'excise-period__status', text: st.short || st.text }));
+    chip.addEventListener('click', function () { loadDraft(p.period_start); });
+    return chip;
+  }
+
+  function renderPeriods() {
+    periodsEl.replaceChildren();
+    if (!state.periods.length) return;
+    var untracked = function (p) { return periodStatus(p).key === 'untracked' && p.period_start !== state.period; };
+    var recent = state.periods.slice(0, WINDOW);
+    var older = state.periods.slice(WINDOW);
+    var shown = state.showAll ? state.periods : recent;
+    shown.forEach(function (p) {
+      if (untracked(p) && !state.showUntracked) return;
+      periodsEl.append(periodButton(p));
+    });
+    if (state.showAll) {
+      var notTracked = older.filter(untracked);
+      if (notTracked.length) {
+        var nt = el('button', { type: 'button', className: 'excise-period excise-period--more excise-period--untracked-toggle', 'aria-expanded': String(state.showUntracked) });
+        nt.append(el('strong', { text: state.showUntracked ? 'Hide months not tracked' : U.plural(notTracked.length, 'earlier month') }), el('span', { text: 'Not tracked' }));
+        nt.addEventListener('click', function () { state.showUntracked = !state.showUntracked; renderPeriods(); });
+        periodsEl.append(nt);
+      }
+    }
+    if (older.length) {
+      // Older periods fold into one control that says what is waiting in there. When the
+      // period on screen is one of them, the control stands in for it, so three boxes stay three.
+      var waiting = older.filter(function (p) { var k = periodStatus(p).key; return k === 'overdue' || k === 'due'; }).length;
+      var picked = !state.showAll && older.find(function (p) { return p.period_start === state.period; });
+      var more = el('button', { type: 'button', className: 'excise-period excise-period--more' + (picked ? ' excise-period--active excise-period--' + periodStatus(picked).key : ''), 'data-periods-earlier': '', 'aria-expanded': String(state.showAll) });
+      var moreLabel = state.showAll ? 'Fewer' : (picked ? shortLabel(picked) : 'Earlier');
+      var moreNote = state.showAll ? 'Back to the last ' + WINDOW : (picked ? 'Earlier · ' + (periodStatus(picked).short || periodStatus(picked).text) : (waiting ? U.plural(waiting, 'to lodge', 'to lodge') : older.length + ' more'));
+      more.append(el('strong', { text: moreLabel }), el('span', { className: !state.showAll && waiting ? 'excise-period__waiting' : '', text: moreNote }));
+      more.addEventListener('click', function () { state.showAll = !state.showAll; renderPeriods(); });
+      periodsEl.append(more);
+    }
+  }
 
   async function loadPeriods() {
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise/periods');
+    var data = await api('GET', '/api/compliant/nz-alcohol/excise/periods' + (state.cca ? '?cca=' + encodeURIComponent(state.cca) : ''));
     var s = data.settings || {};
-    document.getElementById('excise-frequency').value = s.frequency || 'monthly';
-    document.getElementById('excise-tracking-from').value = s.tracking_from || '';
-    var wrap = root.querySelector('[data-excise-periods]');
-    wrap.replaceChildren();
-    (data.periods || []).forEach(function (p) {
-      var chip = el('button', { type: 'button', role: 'listitem', className: 'excise-period' + (p.status === 'lodged' ? ' excise-period--lodged' : '') + (p.open ? ' excise-period--open' : '') });
-      chip.append(el('strong', { text: p.label }), el('span', { text: p.open ? 'In progress' : (p.status === 'lodged' ? ('Lodged ' + fmtDate(p.lodged_on)) : ('Due ' + fmtDate(p.due))) }));
-      chip.addEventListener('click', function () { loadDraft(p.period_start); });
-      wrap.append(chip);
-    });
-    if (!state.period && data.periods && data.periods.length) {
-      var firstClosed = data.periods.find(function (p) { return !p.open; }) || data.periods[0];
-      await loadDraft(firstClosed.period_start);
+    state.frequency = s.frequency || 'monthly';
+    state.remindersFrom = s.reminders_from || null;
+    state.periods = data.periods || [];
+    if (!state.period && state.periods.length) {
+      var wanted = new URLSearchParams(window.location.search).get('period');
+      var match = wanted && state.periods.find(function (p) { return p.period_start === wanted; });
+      // Land on what needs doing: the oldest finished period not yet lodged, else the latest finished one.
+      var todo = state.periods.filter(function (p) { return !p.open && p.status !== 'lodged' && periodStatus(p).key !== 'untracked'; });
+      var pick = match || todo[todo.length - 1] || state.periods.find(function (p) { return !p.open; }) || state.periods[0];
+      if (periodStatus(pick).key === 'untracked') state.showUntracked = true;
+      await loadDraft(pick.period_start);
+    } else {
+      renderPeriods();
     }
   }
 
   async function loadDraft(start) {
     state.period = start;
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise?period=' + encodeURIComponent(start));
+    renderPeriods();
+    var data = await api('GET', '/api/compliant/nz-alcohol/excise?period=' + encodeURIComponent(start) + (state.cca ? '&cca=' + encodeURIComponent(state.cca) : ''));
+    if (state.period !== start) return;
+    state.draft = data.draft;
+    if (data.draft.cca) state.cca = data.draft.cca.id;
+    renderCcas(data.draft);
     renderDraft(data.draft);
-    root.querySelectorAll('.excise-period').forEach(function (c) { c.classList.toggle('excise-period--active', c.textContent.indexOf(data.draft.label) === 0); });
+  }
+
+  // One tab per CCA licence, each saying whether its entry for this period is lodged.
+  function renderCcas(d) {
+    if (!ccasEl) return;
+    ccasEl.replaceChildren();
+    ccasEl.hidden = !(d.ccas || []).length;
+    (d.ccas || []).forEach(function (c) {
+      var active = d.cca && d.cca.id === c.id;
+      var tab = el('button', { type: 'button', className: 'excise-cca' + (active ? ' excise-cca--active' : ''), 'aria-pressed': active ? 'true' : 'false', 'data-cca': c.id });
+      tab.append(el('strong', { text: c.number }), el('span', { className: 'excise-cca__name', text: c.name }),
+        el('span', { className: 'excise-cca__state excise-cca__state--' + (c.lodged ? 'lodged' : 'todo'), text: c.lodged ? 'Lodged' : (d.open ? 'In progress' : 'To lodge') }));
+      tab.addEventListener('click', async function () {
+        if (state.cca === c.id) return;
+        state.cca = c.id;
+        try { await loadPeriods(); await loadDraft(state.period); } catch (err) { fail(err.message); }
+      });
+      ccasEl.append(tab);
+    });
+  }
+
+  // --- the pieces the entry is built from ----------------------------------------------
+
+  function isNil(d) { return !(d.lines || []).length && !(d.adjustments || []).length; }
+
+  function headPiece(d) {
+    var st = d.status === 'lodged' ? periodStatus({ status: 'lodged', lodged_on: d.lodged_on, nil_return: d.nil_return }) : periodStatus({ open: d.open, due: d.due, status: d.status, period_end: d.period_end });
+    var head = el('div', { className: 'customs-entry-head' });
+    var title = el('h3', { text: d.label + (d.open ? ' so far' : '') });
+    var pill = el('span', { className: 'customs-status customs-status--' + st.key, text: st.text });
+    var sub;
+    if (d.status === 'lodged') sub = 'Recorded as lodged' + (d.entry_reference ? ' (entry ' + d.entry_reference + ')' : '') + '. These figures are locked.';
+    else if (d.open) sub = 'Still running: the figures change as stock leaves the licensed area. Lodge after ' + fmtDate(d.period_end) + '.';
+    else sub = 'Lodge by ' + fmtDate(d.due) + ' (15th working day). Pay by the last working day of that month.';
+    // GL-P05: this is the filing draft (removals); Sales → Excise is only an estimate from invoices.
+    var kind = el('span', { className: 'customs-kind', title: 'Built from stock that left the licensed area. This is what you lodge.', text: d.status === 'lodged' ? 'Lodged return' : 'Filing draft' });
+    head.append(el('div', { className: 'customs-entry-head__title' }, [title, kind, pill]), el('p', { className: 'excise-hint', text: sub }));
+    if (st.key === 'overdue') {
+      head.append(el('p', { className: 'customs-late', text: 'Customs adds 1% to unpaid duty the day after it is due, and another 4% after 7 days. Lodge and pay as soon as you can.' }));
+    }
+    return head;
+  }
+
+  function problemsPiece(d) {
+    var items = [];
+    if (d.rates_guide && d.rates_guide.out_of_date) {
+      items.push({ text: 'Duty rates: Customs sets new rates every 1 July, and the built-in ones only cover removals before ' + fmtDate(d.rates_guide.next_review) + '. Check this period\'s rates against Customs\' table, or add them.', href: SETTINGS + '#customs-rates-title', link: 'Check rates' });
+    }
+    (d.problems || []).forEach(function (p) {
+      if (p.link === 'transfers') {
+        items.push({ text: U.plural(p.removals, 'sale') + ' to another CCA: ' + p.reason.charAt(0).toLowerCase() + p.reason.slice(1) + '.', href: TRANSFERS, link: 'Record the movement' });
+        return;
+      }
+      items.push({ text: p.product + ': ' + p.reason + (p.removals ? ' (' + U.plural(p.removals, 'removal') + ' left out)' : ''), href: SETTINGS + '#product-' + U.slug(p.product) });
+    });
+    if (!items.length) return null;
+    var box = el('div', { className: 'customs-attention', role: 'note' });
+    box.append(el('strong', { text: d.entry ? 'Fix before lodging' : 'Nothing to lodge yet' }));
+    var ul = el('ul');
+    items.forEach(function (t) {
+      var li = el('li', { text: t.text + ' ' });
+      if (t.href) li.append(el('a', { href: t.href, text: t.link || 'Fix in Settings' }));
+      ul.append(li);
+    });
+    box.append(ul);
+    return box;
+  }
+
+  function copyButton(value, label) {
+    var b = el('button', { type: 'button', className: 'customs-copy', 'aria-label': 'Copy ' + label, title: 'Copy', text: 'Copy' });
+    b.addEventListener('click', function () {
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); };
+      try { navigator.clipboard.writeText(String(value)).then(done, function () {}); } catch (_) {}
+    });
+    return b;
+  }
+
+  function figures(d) {
+    var e = d.entry;
+    if (!e || !e.lines.length) return null;
+    return [
+      { key: 'duty', label: 'Excise duty', value: e.total_duty },
+      { key: 'levy', label: 'Alcohol levy', value: e.total_levy },
+      { key: 'gst', label: 'GST on the levy', value: e.total_gst },
+      { key: 'total', label: 'Total to pay Customs', value: e.total },
+    ];
+  }
+
+  function tilesPiece(d) {
+    var f = figures(d);
+    if (!f) return null;
+    var wrap = el('div', { className: 'customs-tiles' });
+    f.forEach(function (x) {
+      var tile = el('div', { className: 'customs-tile customs-tile--' + x.key });
+      tile.append(el('span', { className: 'customs-tile__label', text: x.label }), el('span', { className: 'customs-tile__value', text: money(x.value) }));
+      tile.append(copyButton(Number(x.value).toFixed(2), x.label));
+      wrap.append(tile);
+    });
+    return wrap;
+  }
+
+  function summaryListPiece(d) {
+    var f = figures(d);
+    if (!f) return null;
+    var dl = el('dl', { className: 'customs-summary' });
+    f.forEach(function (x) {
+      var row = el('div', { className: 'customs-summary__row customs-summary__row--' + x.key });
+      row.append(el('dt', { text: x.label }), el('dd', { text: money(x.value) }), copyButton(Number(x.value).toFixed(2), x.label));
+      dl.append(row);
+    });
+    return dl;
+  }
+
+  // Lodged before the entry lines existed: show the saved per-product lines as they were.
+  function savedLinesPiece(d) {
+    var table = el('table', { className: 'customs-entry-table' });
+    table.append(el('caption', { text: 'As lodged (recorded before levy and GST were shown here)' }));
+    var hr = el('tr');
+    [['Excise item', ''], ['Product', ''], ['Units', 'num'], ['Litres', 'num'], ['LAL', 'num'], ['Rate', 'num'], ['Duty', 'num']].forEach(function (h) { hr.append(el('th', { scope: 'col', className: h[1], text: h[0] })); });
+    table.append(el('thead', {}, [hr]));
+    var body = el('tbody');
+    d.lines.forEach(function (l) {
+      var row = el('tr');
+      [[l.tariff_item, 'mono', 'Excise item'], [l.product, '', 'Product'], [U.qty(l.units) + ' ' + l.unit, 'num', 'Units'], [num(l.litres, 3), 'num', 'Litres'], [num(l.lal, 3), 'num', 'LAL'], [rateText(l), 'num', 'Rate'], [money(l.duty), 'num', 'Duty']].forEach(function (c) {
+        row.append(el('td', { className: c[1], text: String(c[0]), 'data-label': c[2] }));
+      });
+      body.append(row);
+    });
+    table.append(body);
+    return el('div', { className: 'customs-table-wrap customs-table-wrap--saved' }, [table]);
+  }
+
+  function entryTablePiece(d) {
+    var e = d.entry;
+    if (!e && (d.lines || []).length) return savedLinesPiece(d);
+    if (!e || !e.lines.length) {
+      if (!d.entry) return null;
+      if (d.open) return el('p', { className: 'customs-empty', text: 'Nothing has left the licensed area yet this period.' });
+      return el('div', { className: 'customs-empty customs-empty--nil' }, [
+        el('strong', { text: 'Nothing was removed this period.' }),
+        el('span', { text: ' Customs still needs a nil return: lodge 0.000 against your usual excise item, then record it here.' }),
+      ]);
+    }
+    var cols = [
+      ['Line', '', function (l) { return l.line; }],
+      ['Excise item', 'mono', function (l) { return l.excise_item; }],
+      ['Description', 'desc', function (l) { return l.description; }],
+      ['Units sold', 'num', function (l) { return l.units != null ? U.amount(l.units, l.unit) : '—'; }],
+      ['Litres', 'num', function (l) { return num(l.supplementary_litres, 3); }],
+      ['LAL', 'num', function (l) { return num(l.statistical_lal, 3); }],
+      ['Rate', 'num', function (l) { return rateText(l); }],
+      ['Duty', 'num', function (l) { return money(l.duty); }],
+      ['Levy', 'num', function (l) { return money(l.levy); }],
+      ['GST on levy', 'num', function (l) { return money(l.gst_on_levy); }],
+    ];
+    var table = el('table', { className: 'customs-entry-table' });
+    table.append(el('caption', { text: 'Entry lines, in Trade Single Window order' }));
+    var hr = el('tr');
+    cols.forEach(function (c) { hr.append(el('th', { scope: 'col', className: c[1], text: c[0] })); });
+    table.append(el('thead', {}, [hr]));
+    var body = el('tbody');
+    e.lines.forEach(function (l) {
+      var row = el('tr');
+      cols.forEach(function (c) { row.append(el('td', { className: c[1], text: String(c[2](l)), 'data-label': c[0] })); });
+      body.append(row);
+    });
+    table.append(body);
+    return el('div', { className: 'customs-table-wrap' }, [table]);
+  }
+
+  // GL-P08: sales to another business's CCA are transfers, not removals: say what was left out.
+  function transfersPiece(d) {
+    var moved = d.cca_transfers || [];
+    if (!moved.length) return null;
+    var sales = {};
+    moved.forEach(function (t) { sales[t.reference] = true; });
+    var lal = moved.reduce(function (n, t) { return n + Number(t.lal || 0); }, 0);
+    var p = el('p', { className: 'customs-note', 'data-excise-transfers': '' }, [
+      document.createTextNode('Left out of duty: ' + U.plural(Object.keys(sales).length, 'sale') + ' to another CCA' + (lal ? ' (' + num(lal, 3) + ' LAL)' : '') + ', moved excise-unpaid. '),
+      el('a', { href: TRANSFERS, text: 'Transfers →' }),
+    ]);
+    return p;
+  }
+
+  function creditPiece(d) {
+    if (!(d.returns || []).length) return null;
+    var what = d.returns.map(function (r) { return U.qty(r.quantity) + ' ' + r.unit + ' ' + r.product; }).join(', ');
+    return el('p', { className: 'customs-note', text: 'Stock came back into the licensed area this period (' + what + '). If duty was paid when it left, it may be a duty credit: Trade Single Window has a separate Duty credit field.' });
+  }
+
+  function breakdownPiece(d) {
+    if (!(d.lines || []).length && !(d.adjustments || []).length) return null;
+    var det = el('details', { className: 'customs-breakdown' });
+    var count = (d.lines || []).reduce(function (n, l) { return n + l.removals.length; }, 0);
+    det.append(el('summary', { text: 'Where these figures come from · ' + U.plural(count, 'removal') }));
+    var kinds = { sale: 'Sold', moved_out: 'Moved out', contract_dispatch: 'Contract dispatch' };
+    (d.lines || []).forEach(function (l) {
+      det.append(el('h4', { text: l.product + ' · ' + U.amount(l.units, l.unit) + ' · ' + l.lal + ' LAL' }));
+      var ul = el('ul');
+      l.removals.forEach(function (r) {
+        ul.append(el('li', { text: fmtDate(r.date) + ' · ' + (kinds[r.kind] || r.kind) + ' · ' + r.quantity + (r.batch ? ' from ' + r.batch : '') + ' at ' + r.abv_percent + '% · ' + r.reference + (r.customer ? ' · ' + r.customer : '') + ' · ' + r.lal + ' LAL' }));
+      });
+      det.append(ul);
+    });
+    if ((d.adjustments || []).length) {
+      det.append(el('h4', { text: 'Carried in from lodged periods' }));
+      var adj = el('ul');
+      d.adjustments.forEach(function (a) { adj.append(el('li', { text: a.product + ': ' + a.quantity + ' on ' + fmtDate(a.date) + ' (' + a.reference + '), ' + a.lal + ' LAL, belongs to ' + a.belongs_to_label + ' but was recorded after it was lodged' })); });
+      det.append(adj);
+    }
+    return det;
+  }
+
+  function linksPiece(d) {
+    var box = el('div', { className: 'customs-links-box' });
+    var wrap = el('p', { className: 'customs-links' });
+    wrap.append(el('a', { href: TSW_LOGIN, target: '_blank', rel: 'noopener', 'data-tsw-link': '', text: 'Open Trade Single Window ↗' }));
+    box.append(wrap);
+    if (state.frequency === 'monthly') {
+      wrap.append(document.createTextNode(' · '), el('a', {
+        href: '/crm/excise?month=' + d.period_start.slice(0, 7),
+        'aria-describedby': 'excise-estimate-why',
+        text: 'Compare with the sales estimate for ' + d.label,
+      }));
+      // GL-P05: visible text, not a tooltip, so phone and keyboard users see it too.
+      box.append(el('p', { id: 'excise-estimate-why', className: 'excise-hint', text: 'The sales estimate comes from invoices, so it can differ from this filing draft: stock poured at tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after the stock left.' }));
+    }
+    return box;
+  }
+
+  function lodgePiece(d) {
+    if (d.status === 'lodged' || d.open || !d.entry) return null;
+    var nil = isNil(d);
+    var form = el('form', { className: 'customs-lodge' });
+    var ref = el('input', { name: 'entry_reference', id: 'excise-entry-ref', placeholder: 'Customs entry number (optional)', maxlength: '100', 'aria-label': 'Customs entry number' });
+    var on = el('input', { name: 'lodged_on', id: 'excise-lodged-on', type: 'date', 'aria-label': 'Lodged on' });
+    on.value = U.todayIso();
+    var forCca = d.cca ? ' for ' + d.cca.number : '';
+    var btn = el('button', { type: 'submit', className: 'workspace-button workspace-button--primary', text: (nil ? 'Record nil return as lodged' : 'Record as lodged') + forCca });
+    form.append(ref, on, btn);
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault(); fail(''); btn.disabled = true;
+      try {
+        var body = { period_start: d.period_start, lodged_on: on.value, entry_reference: ref.value };
+        if (d.cca) body.cca = d.cca.id;
+        var res = await api('POST', '/api/compliant/nz-alcohol/excise/lodge', body);
+        state.draft = res.draft; await loadPeriods(); renderCcas(res.draft); renderDraft(res.draft); loadPosition();
+        page.dispatchEvent(new CustomEvent('customs:lodged'));
+      } catch (err) { fail(err.message); btn.disabled = false; }
+    });
+    return form;
   }
 
   function renderDraft(d) {
-    var wrap = root.querySelector('[data-excise-draft]');
-    wrap.replaceChildren();
-    var head = el('div', { className: 'excise-draft-head' });
-    var title = el('h3', { text: d.label + (d.status === 'lodged' ? ' · lodged' : (d.open ? ' · in progress' : ' · draft')) });
-    var sub = el('p', { className: 'excise-hint', text: d.status === 'lodged'
-      ? ('Recorded as lodged on ' + fmtDate(d.lodged_on) + (d.entry_reference ? ' (entry ' + d.entry_reference + ')' : '') + (d.nil_return ? ' as a nil return' : '') + '. These figures are locked.')
-      : ('Due by ' + fmtDate(d.due) + ' (15th working day; public holidays not counted). Payment is due by the last working day of that month.') });
-    var totals = el('p', { className: 'excise-totals', text: d.legacy_unavailable ? 'CCA totals unresolved' : d.total_lal + ' LAL · ' + money(d.total_duty) + ' duty' });
-    head.append(el('div', {}, [title, sub]), totals);
-    wrap.append(head);
-
-    if (d.legacy_unavailable) {
-      wrap.append(el('p', { className: 'excise-warning', text: 'Multiple-site excise needs a separate, complete entry for each source CCA. This legacy location-based draft is for review only and cannot establish a nil return or be recorded as lodged.' }));
-    }
-
-    if ((d.problems || []).length) {
-      var probs = el('ul', { className: 'excise-problems' });
-      d.problems.forEach(function (p) { probs.append(el('li', { text: p.product + ': ' + p.reason + (p.removals ? ' (' + p.removals + ' removal' + (p.removals === 1 ? '' : 's') + ' left out)' : '') })); });
-      wrap.append(el('p', { className: 'excise-warning', text: 'Some removals can\'t be counted yet. Fix these before lodging:' }), probs);
-    }
-
-    if (!(d.lines || []).length && !(d.adjustments || []).length) {
-      wrap.append(el('p', { text: d.legacy_unavailable ? 'No removals are shown by this legacy calculation; CCA activity is unresolved.' : (d.open ? 'Nothing removed yet this period.' : 'Nothing was removed this period: lodge a nil return.') }));
-    } else {
-      var table = el('table', { className: 'excise-table' });
-      var hr = el('tr'); ['Tariff item', 'Product', 'Units', 'Litres', 'LAL', 'Rate', 'Duty'].forEach(function (h) { hr.append(el('th', { text: h })); });
-      table.append(el('thead', {}, [hr]));
-      var body = el('tbody');
-      (d.lines || []).forEach(function (l) {
-        var row = el('tr');
-        [l.tariff_item, l.product, l.units + ' ' + l.unit, l.litres, l.lal, l.rate_per_lal ? money(l.rate_per_lal) : 'no rate', money(l.duty)].forEach(function (v) { row.append(el('td', { text: v })); });
-        body.append(row);
-        var detail = el('tr', { className: 'excise-detail' });
-        var cell = el('td', { colspan: '7' });
-        var det = el('details');
-        det.append(el('summary', { text: l.removals.length + ' removal' + (l.removals.length === 1 ? '' : 's') }));
-        var ul = el('ul');
-        l.removals.forEach(function (r) {
-          ul.append(el('li', { text: fmtDate(r.date) + ' · ' + (r.kind === 'sale' ? 'Sold' : 'Moved out') + ' · ' + r.quantity + (r.batch ? ' from ' + r.batch : '') + ' at ' + r.abv_percent + '% · ' + r.reference + (r.customer ? ' · ' + r.customer : '') + ' · ' + r.lal + ' LAL' }));
-        });
-        det.append(ul); cell.append(det); detail.append(cell); body.append(detail);
-      });
-      table.append(body);
-      wrap.append(el('div', { className: 'excise-table-wrap' }, [table]));
-      if ((d.adjustments || []).length) {
-        wrap.append(el('h4', { text: 'Carried in from lodged periods' }));
-        var adj = el('ul');
-        d.adjustments.forEach(function (a) { adj.append(el('li', { text: a.product + ': ' + a.quantity + ' on ' + fmtDate(a.date) + ' (' + a.reference + '), ' + a.lal + ' LAL, belongs to ' + a.belongs_to_label + ' but was recorded after it was lodged' })); });
-        wrap.append(adj);
-      }
-    }
-    if ((d.returns || []).length) {
-      wrap.append(el('p', { className: 'excise-hint', text: 'Stock came back into the licensed area this period (' + d.returns.map(function (r) { return r.quantity + ' ' + r.unit + ' ' + r.product; }).join(', ') + '). If duty was paid when it left, raise a possible credit with Customs; it isn\'t claimed here.' }));
-    }
-
-    if (d.status !== 'lodged' && !d.open && !d.legacy_unavailable) {
-      var form = el('form', { className: 'excise-inline-form excise-lodge' });
-      var ref = el('input', { name: 'entry_reference', id: 'excise-entry-ref', placeholder: 'Customs entry number (optional)', maxlength: '100', 'aria-label': 'Customs entry number' });
-      var on = el('input', { name: 'lodged_on', id: 'excise-lodged-on', type: 'date', 'aria-label': 'Lodged on' });
-      on.value = new Date().toISOString().slice(0, 10);
-      var btn = el('button', { type: 'submit', text: (d.lines || []).length || (d.adjustments || []).length ? 'Record as lodged' : 'Record nil return as lodged' });
-      form.append(ref, on, btn);
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault(); fail('');
-        try {
-          var res = await api('POST', '/api/compliant/nz-alcohol/excise/lodge', { period_start: d.period_start, lodged_on: on.value, entry_reference: ref.value });
-          renderDraft(res.draft); await loadPeriods();
-        } catch (err) { fail(err.message); }
-      });
-      wrap.append(form);
-    }
+    draftEl.replaceChildren();
+    // The entry sheet: the four figures to copy (tiles when wide, a list on a phone), the lines, then record it.
+    [headPiece(d), problemsPiece(d), tilesPiece(d), summaryListPiece(d), entryTablePiece(d), transfersPiece(d), creditPiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) draftEl.append(p); });
   }
 
-  async function loadProducts() {
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise/products');
-    var wrap = root.querySelector('[data-excise-products]'); wrap.replaceChildren();
-    if (!data.products.length) { wrap.append(el('p', { className: 'excise-hint', text: 'Add a workflow first; its final output appears here.' })); return; }
-    data.products.forEach(function (p) {
-      var f = el('form', { className: 'excise-inline-form excise-product' });
-      var id = 'excise-p-' + p.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      var vol = el('input', { name: 'pack_volume_ml', id: id + '-vol', type: 'number', min: '1', step: '1', placeholder: 'mL per ' + (p.unit || 'unit'), 'aria-label': 'Pack volume for ' + p.name });
-      var tar = el('input', { name: 'tariff_item', id: id + '-tariff', placeholder: 'Tariff item', maxlength: '100', 'aria-label': 'Tariff item for ' + p.name });
-      var abv = el('input', { name: 'abv_fallback', id: id + '-abv', type: 'number', min: '0', max: '100', step: '0.1', placeholder: 'ABV fallback %', 'aria-label': 'Fallback ABV for ' + p.name });
-      vol.value = p.pack_volume_ml || ''; tar.value = p.tariff_item || ''; abv.value = p.abv_fallback || '';
-      f.append(el('strong', { text: p.name }), vol, tar, abv, el('button', { type: 'submit', text: 'Save' }));
-      f.addEventListener('submit', async function (e) {
-        e.preventDefault(); fail('');
-        try { await api('PUT', '/api/compliant/nz-alcohol/excise/products', { name: p.name, pack_volume_ml: vol.value, tariff_item: tar.value, abv_fallback: abv.value }); await loadProducts(); if (state.period) await loadDraft(state.period); }
-        catch (err) { fail(err.message); }
-      });
-      wrap.append(f);
-    });
+  // --- where things stand -----------------------------------------------------------------
+
+  function renderPosition(p) {
+    if (!positionEl) return;
+    positionEl.replaceChildren();
+    var y = p.year || {}; var st = p.stocktake || {}; var setup = p.setup || {};
+    var toLodge = p.unlodged_periods || 0;
+    var lodgeFact = toLodge
+      ? U.fact('To lodge', U.plural(toLodge, 'entry', 'entries'), p.overdue_periods ? p.overdue_periods + ' overdue' : 'Next due ' + shortDate((state.periods.find(function (x) { return !x.open && x.status !== 'lodged'; }) || {}).due), p.overdue_periods ? 'bad' : 'warn')
+      : U.fact('To lodge', 'All lodged', 'Next: ' + (p.this_period || {}).label + ' after it ends', 'good');
+    var thisPeriod = p.this_period || {};
+    var periodFact = U.fact(thisPeriod.label ? thisPeriod.label + ' so far' + (thisPeriod.ccas > 1 ? ', ' + thisPeriod.ccas + ' CCAs' : '') : 'This period', thisPeriod.estimate != null ? money(thisPeriod.estimate) : num(thisPeriod.total_lal || 0, 3) + ' LAL', thisPeriod.estimate != null ? num(thisPeriod.total_lal || 0, 3) + ' LAL removed' : 'Estimate once every product is set up');
+    var stockFact = st.open_differences
+      ? U.fact('Stocktake', U.plural(st.open_differences, 'difference') + ' open', money(st.open_duty) + ' duty if removed', 'warn')
+      : U.fact('Stocktake', st.next_due ? (st.overdue ? 'Overdue' : 'Due ' + U.dayMonth(st.next_due)) : 'Not scheduled', st.last_completed_on ? 'Last counted ' + fmtDate(st.last_completed_on) : 'No stocktake yet', st.overdue ? 'bad' : '');
+    var yearFact = U.fact('Duty, last 12 months', U.wholeMoney(y.duty), y.estimated_duty && Number(y.estimated_duty) ? U.wholeMoney(y.lodged_duty) + ' lodged + ' + U.wholeMoney(y.estimated_duty) + ' to lodge' : U.plural(y.lodged_periods || 0, 'entry', 'entries') + ' lodged');
+    var facts = el('div', { className: 'customs-position__facts' }, [lodgeFact, periodFact, yearFact, stockFact]);
+    if ((setup.incomplete || []).length) facts.append(U.fact('Setup', U.plural(setup.incomplete.length, 'product') + ' to finish', setup.incomplete.slice(0, 2).join(', '), 'warn'));
+
+    positionEl.append(facts);
   }
 
-  async function loadRates() {
-    var data = await api('GET', '/api/compliant/nz-alcohol/excise/rates');
-    var wrap = root.querySelector('[data-excise-rates]'); wrap.replaceChildren();
-    if (!data.rates.length) { wrap.append(el('p', { className: 'excise-hint', text: 'No rates yet. Duty shows as "no rate" until you add one.' })); return; }
-    var ul = el('ul');
-    data.rates.forEach(function (r) { ul.append(el('li', { text: r.tariff_item + ': ' + money(r.rate_per_lal) + ' per LAL from ' + fmtDate(r.effective_from) })); });
-    wrap.append(ul);
-  }
-
-  async function loadLocations() {
-    var locs = await api('GET', '/api/core/stock-locations');
-    var wrap = root.querySelector('[data-excise-locations]'); wrap.replaceChildren();
-    var ul = el('ul');
-    [locs.default].concat(locs.locations).forEach(function (l) { ul.append(el('li', { text: l.name + (l.inside_licensed_area ? ' · inside the licensed area' : ' · outside (moving stock here is a removal)') })); });
-    wrap.append(ul);
-    var to = document.getElementById('excise-move-to'); to.replaceChildren();
-    [locs.default].concat(locs.locations).forEach(function (l) { to.append(el('option', { value: l.id || '', text: l.name })); });
-    var inv = await api('GET', '/api/core/inventory?type=final_product');
-    var items = inv.inventory_items || inv.items || [];
-    var sel = document.getElementById('excise-move-item'); sel.replaceChildren();
-    items.filter(function (i) { return Number(i.quantity) > 0; }).forEach(function (i) {
-      sel.append(el('option', { value: i.id, text: i.name + (i.supplier_batch_number ? ' · ' + i.supplier_batch_number : '') + ' · ' + Number(i.quantity) + ' ' + i.unit }));
-    });
-  }
-
-  root.querySelector('[data-excise-settings]').addEventListener('submit', async function (e) {
-    e.preventDefault(); fail('');
-    try { await api('PUT', '/api/compliant/nz-alcohol/excise/settings', { frequency: document.getElementById('excise-frequency').value, tracking_from: document.getElementById('excise-tracking-from').value || null }); state.period = null; await loadPeriods(); }
+  async function loadPosition() {
+    try { state.position = await api('GET', '/api/compliant/nz-alcohol/excise/position'); renderPosition(state.position); }
     catch (err) { fail(err.message); }
-  });
-  root.querySelector('[data-excise-rate-form]').addEventListener('submit', async function (e) {
-    e.preventDefault(); fail(''); var f = e.currentTarget;
-    try { await api('POST', '/api/compliant/nz-alcohol/excise/rates', { tariff_item: f.tariff_item.value, rate_per_lal: f.rate_per_lal.value, effective_from: f.effective_from.value }); f.reset(); await loadRates(); if (state.period) await loadDraft(state.period); }
-    catch (err) { fail(err.message); }
-  });
-  root.querySelector('[data-excise-location-form]').addEventListener('submit', async function (e) {
-    e.preventDefault(); fail(''); var f = e.currentTarget;
-    try { await api('POST', '/api/core/stock-locations', { name: f.name.value, inside_licensed_area: f.inside_licensed_area.checked }); f.reset(); await loadLocations(); }
-    catch (err) { fail(err.message); }
-  });
-  root.querySelector('[data-excise-move-form]').addEventListener('submit', async function (e) {
-    e.preventDefault(); fail(''); var f = e.currentTarget;
-    try {
-      var res = await api('POST', '/api/core/inventory/' + encodeURIComponent(f.item_id.value) + '/move', { quantity: f.quantity.value, to_location_id: f.to_location_id.value || null, occurred_on: f.occurred_on.value || null });
-      fail(''); f.quantity.value = '';
-      await loadLocations(); if (state.period) await loadDraft(state.period);
-      if (res.excise_removal && errorEl) { errorEl.hidden = true; }
-    } catch (err) { fail(err.message); }
-  });
+  }
 
-  Promise.all([loadPeriods(), loadProducts(), loadRates(), loadLocations()]).catch(function (err) { fail(err.message); });
+  // The one line about Records for Customs: how many of its checks have current proof.
+  async function loadRecordsHint() {
+    var hint = page.querySelector('[data-customs-records-hint]');
+    if (!hint) return;
+    var overview = await api('GET', '/api/compliant/overview');
+    var fw = (overview.frameworks || []).find(function (f) { return f.slug === 'customs-alcohol'; });
+    if (!fw) return;
+    var current = fw.controls.filter(function (c) { return c.state === 'compliant'; }).length;
+    hint.textContent = current + ' of ' + fw.controls.length + ' checks have current proof';
+  }
+
+  Promise.all([loadPeriods(), loadPosition(), loadRecordsHint()]).catch(function (err) { fail(err.message); }).finally(function () {
+    // The "next due" fact reads the periods, which may land after the position.
+    if (state.position) renderPosition(state.position);
+    page.setAttribute('aria-busy', 'false');
+  });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

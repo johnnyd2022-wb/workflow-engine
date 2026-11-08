@@ -1,6 +1,7 @@
 """Database models owned by the Compliant product area."""
 
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+from app.features.compliant.models.cca_transfers import CcaDeparture, CcaDestination
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.models.compliance_record import ComplianceRecord
 from app.features.compliant.models.compliance_record_file import ComplianceRecordFile
@@ -14,6 +15,8 @@ from app.features.compliant.models.verification import ComplianceVerification, C
 __all__ = [
     "FoodRegistration",
     "FoodRegistrationSite",
+    "CcaDeparture",
+    "CcaDestination",
     "CustomsCoverage",
     "CustomsLicence",
     "AlcoholProductProfile",

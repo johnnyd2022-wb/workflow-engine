@@ -55,6 +55,9 @@ def test_phone_board_settings_plan_pin_move_priority_and_month_day_views(board_c
         card = page.locator(".board-batch").first
         card.get_by_role("heading", name="Phone <script>alert(1)</script> · Batch 1", exact=True).wait_for()
         assert page.locator(".board-batch script").count() == 0
+        # Priority, moving, starting and cancelling sit behind the card's Details, which stays
+        # open while the board re-renders after each action.
+        card.locator(".board-batch__details > summary").click()
         assert card.get_by_role("button", name="Start batch").is_disabled()
         card.get_by_role("button", name="Pin batch", exact=True).click()
         card.get_by_role("button", name="Unpin batch", exact=True).wait_for()

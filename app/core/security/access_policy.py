@@ -42,8 +42,21 @@ PERMISSIONS: dict[str, str] = {
     "inventory.view": "See stock on hand, suppliers and traceability",
     "inventory.adjust": "Receive, edit, adjust and remove stock; manage suppliers",
     "sales.view": "See customers, invoices and revenue",
-    "sales.record": "Add customer notes and tasks; create and authorise invoices",
-    "sales.manage": "Connect Xero, map products, configure sales traceability",
+    # GL-S01 (founder, 2026-10-26): with FIFO matching, a sale always takes its stock off, so
+    # authorising an invoice reduces stock under sales.record alone. Choosing the batch by hand
+    # or re-running matching moves stock on purpose and also needs inventory.adjust.
+    "sales.record": (
+        "Add customers, notes and tasks; edit customer details; create and authorise invoices "
+        "(with FIFO matching, an authorised invoice takes its stock off the oldest batches)"
+    ),
+    # SALES-PERM (2026-11-06, follows GL-S01): connecting Xero and syncing only bring in sales
+    # Xero already holds, and a sync applies them to stock exactly as authorising does under
+    # sales.record. Changing the matching mode decides whether waiting sales take stock, so it
+    # also needs inventory.adjust (checked in the traceability-config route).
+    "sales.manage": (
+        "Connect Xero and sync, map products, configure sales traceability "
+        "(a sync applies authorised sales to stock; changing the matching mode also needs inventory.adjust)"
+    ),
     "compliance.view": "See compliance checks, evidence and reports",
     "compliance.record": "Log checks, attach evidence and sign off compliance records",
     "compliance.manage": "Configure compliance modules and their rules",
@@ -173,6 +186,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("index", None, PUBLIC),
     ("favicon", None, PUBLIC),
     ("landing_diagram", None, PUBLIC),
+    ("legal.*", None, PUBLIC),  # pricing, terms, privacy (GL-C01, GL-C02)
     ("healthcheck", None, PUBLIC),
     ("static", None, PUBLIC),
     ("*.static", None, PUBLIC),
@@ -180,10 +194,12 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("*.serve_*", None, PUBLIC),
     ("ingest_faro_telemetry", None, PUBLIC),
     ("ingest_posthog_telemetry", None, PUBLIC),
+    ("csp_report", None, PUBLIC),
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),
     ("auth.get_current_user", None, PUBLIC),
+    ("auth.get_csrf_token", frozenset({"GET"}), SIGNED_IN),
     ("auth.logout", None, PUBLIC),
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),
@@ -237,19 +253,28 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # --- people, organisation and maintenance
     ("sites.list_sites", _READ, ("inventory.view", "production.view", "settings.manage")),
     ("sites.site_position", _READ, "inventory.view"),
+    ("sites.site_choices", _READ, ("inventory.view", "inventory.adjust", "production.view")),
     ("sites.*", None, "settings.manage"),
     ("site_transfers.*", _READ, "inventory.view"),
     ("site_transfers.*", None, "inventory.adjust"),
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
+    ("data_export.*", None, "settings.manage"),  # GL-P10: every record, admins only
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
+    # --- quality holds (GL-P02): holding is the safe direction; release is signed off
+    ("lot_holds.release_lot_hold", None, "compliance.manage"),
+    ("lot_holds.*", _READ, "inventory.view"),
+    ("lot_holds.*", None, "inventory.adjust"),
     ("go_live.set_go_live_date", None, "settings.manage"),  # changes which sales are matched
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),
     ("go_live.get_go_live", None, ("inventory.view", "production.view")),
+    # --- getting started (GL-P09): a guide over pages that keep their own rules
+    ("getting_started.getting_started_page", None, SIGNED_IN),
+    ("getting_started.get_getting_started", None, SIGNED_IN),
     # --- process design
     ("core.create_process", None, "production.design"),
     ("core.update_process", None, "production.design"),
@@ -270,6 +295,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.complete_step", None, "production.record"),
     ("core.amend_execution_step_record", None, "production.record"),  # plan 1.5: correcting a completed step
     ("core.flows_batches_start", None, "production.record"),
+    ("record_step.record_page", None, "production.record"),
+    ("record_step.get_record_options", None, "production.record"),
     ("core.evidence_upload", None, "production.record"),
     ("core.evidence_delete", None, "production.record"),
     ("core.record_wastage", None, "production.record"),
@@ -277,6 +304,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.inventory_dispose*", None, "production.record"),
     ("core.*task*", _READ, "production.view"),
     ("core.*task*", None, "production.record"),
+    # GL-P03 recalls: opening one holds stock (compliance.manage); working the customer list is
+    # sales or compliance work; anyone who sees production, sales or compliance can read it.
+    ("recalls.open_recall", None, "compliance.manage"),
+    ("recalls.*", _READ, ("production.view", "sales.view", "compliance.view")),
+    ("recalls.*", None, ("compliance.manage", "sales.record")),
     ("operational_cases.*", _READ, "production.view"),
     ("operational_cases.*", None, "production.record"),
     # --- stock
@@ -286,6 +318,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.adjust_inventory_item_quantity", None, "inventory.adjust"),
     ("core.csv_validate", None, "inventory.adjust"),
     ("core.csv_commit", None, "inventory.adjust"),
+    ("core.csv_template", None, "inventory.adjust"),
+    ("core.csv_error_report", None, "inventory.adjust"),  # POST, but read-only
     ("core.consume_final_product_fifo", None, "inventory.adjust"),
     ("core.inventory_add*", None, "inventory.adjust"),
     ("core.get_matching_untracked_for_add", None, "inventory.adjust"),
@@ -313,6 +347,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Contract orders (7.2a): production sees order demand, never CRM contact details;
     # Sales sees commercial lines, with recipe/spec references removed by the DTO.
     ("contracts.list_customers", None, "sales.view"),
+    # GL-P08: a dispatch takes stock off; the receipt is the customer's acknowledgement for Customs.
+    ("contracts.list_dispatches", None, ("sales.view", "production.view", "inventory.view")),
+    ("contracts.dispatch_order", None, "inventory.adjust"),
+    ("contracts.record_dispatch_receipt", None, ("inventory.adjust", "compliance.record")),
     ("contracts.list_materials", None, "inventory.view"),
     ("contracts.materials_page", None, "inventory.view"),
     ("contracts.receive_customer_material", None, "inventory.adjust"),
@@ -342,8 +380,16 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.integrations", None, "sales.manage"),
     ("crm.crm_api.*mapping*", _READ, "sales.view"),
     ("crm.crm_api.*mapping*", None, "sales.manage"),
+    ("crm.crm_api.*contact_sync_settings", _READ, "sales.view"),
+    ("crm.crm_api.*contact_sync_settings", None, "sales.manage"),
     ("crm.crm_api.*traceability_config", _READ, "sales.view"),
     ("crm.crm_api.*traceability_config", None, "sales.manage"),
+    ("crm.crm_api.list_pending_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_credit_note_line_no_return", None, "sales.record"),
+    ("crm.crm_api.list_customer_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_customer_return", None, "sales.record"),  # GL-P01b: moves stock back
+    ("tastings.*", _READ, "sales.view"),
+    ("tastings.*", None, "sales.record"),
     ("crm.*", _READ, "sales.view"),
     ("crm.*", None, "sales.record"),
     # --- compliance
@@ -367,7 +413,12 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
+    ("compliant.compliant_pages.nz_alcohol_customs_settings", None, "compliance.manage"),
     ("compliant.compliant_cca_movements.*", _READ, "compliance.view"),
+    ("compliant.compliant_cca_transfers.*", _READ, "compliance.view"),
+    ("compliant.compliant_cca_transfers.add_destination", None, "compliance.manage"),
+    ("compliant.compliant_cca_transfers.update_destination", None, "compliance.manage"),
+    ("compliant.compliant_cca_transfers.*", None, "compliance.record"),
     ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
     ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
     ("compliant.compliant_premises.*", _READ, "compliance.view"),

@@ -1,0 +1,2768 @@
+#!/usr/bin/env python3
+"""Screenshot harness for page design work (the page-design skill).
+
+Looking at a page is the only way to judge it, and a design pass needs the same views
+re-shot after every change. This seeds a throwaway org with realistic stock, boots the
+app from the current checkout over TLS (the same in-process boot tests/e2e/conftest.py
+uses), signs in through the real login form, and runs screenshot scenarios you write.
+
+Run from the checkout whose code you want to see, with ENVIRONMENT unset (local.ini, the
+test database on :8401):
+
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py seed stock lineage [compliance]
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot OUT --scenarios FILE [NAME ...]
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py upload OUT/a.png OUT/b.png
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py purge
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py status [--json]
+
+The app logs every request to stdout; this script's own lines start with "ui-shots:", so
+pipe through `grep '^ui-shots:'` to read just the result.
+
+A scenario file is a Python module of functions taking (page, out). `shoot` runs the names
+given, or every public function in file order. See
+.claude/skills/page-design/scenarios.example.py.
+
+Exit codes: 0 ok; 1 a scenario failed or the page logged a console error; 2 usage or
+state problem (nothing seeded, already seeded, wrong environment).
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib
+import importlib.util
+import inspect
+import json
+import os
+import pkgutil
+import re
+import socket
+import ssl
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+import urllib.request
+import uuid
+from datetime import date, timedelta
+from decimal import Decimal
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
+STATE = HOME / "state.json"
+ORG_PREFIX = "UI Shots "
+SEED_KINDS = (
+    "stock",
+    "tastings",
+    "lineage",
+    "compliance",
+    "production",
+    "sales",
+    "planner",
+    "board",
+    "commitments",
+    "contracts",
+    "dispatch",
+    "stocktake",
+    "customers",
+    "suppliers",
+    "excise",
+    "transfers",
+    "np3",
+    "licensing",
+    "premises",
+    "moves",
+    "tasks",
+    "customer",
+    "people",
+)
+
+
+def say(*parts) -> None:
+    print("ui-shots:", *parts, flush=True)
+
+
+def _require_local() -> None:
+    """The seed writes rows and the purge deletes them: only ever against the local test database."""
+    env = os.getenv("ENVIRONMENT", "local")
+    if env != "local":
+        say(f"refusing to run with ENVIRONMENT={env}; unset it (env -u ENVIRONMENT ...)")
+        raise SystemExit(2)
+
+
+def _state() -> dict:
+    if not STATE.exists():
+        say("nothing seeded; run `seed` first")
+        raise SystemExit(2)
+    return json.loads(STATE.read_text())
+
+
+# ── Helpers for scenario files ──────────────────────────────────────────────────────────
+
+
+def settle(page, extra_ms: int = 400) -> None:
+    """Wait for the network to go quiet, then a beat for the last render."""
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(extra_ms)
+
+
+def shot(page, out: Path, name: str, *, full: bool = False) -> Path:
+    """Save OUT/<name>.png. `full` captures the whole scroll height (the fixed shell repeats in it).
+
+    At a mobile width this also fails the scenario if the page scrolls sideways. The shot is
+    saved first so you can see the overflow.
+    """
+    path = Path(out) / f"{name}.png"
+    page.screenshot(path=str(path), full_page=full)
+    viewport = page.viewport_size or {}
+    if viewport.get("width", DESKTOP["width"]) <= MOBILE_MAX_WIDTH:
+        assert_no_sideways_scroll(page, name)
+    return path
+
+
+# An inner region that scrolls on purpose (a wide table in an overflow-x: auto wrapper) is
+# fine; only the page itself scrolling sideways is a fault. The list names the widest
+# offenders so the fix starts in the right place.
+_SIDEWAYS_OVERFLOW_JS = """() => {
+    const width = window.innerWidth;
+    const scrollWidth = document.documentElement.scrollWidth;
+    if (scrollWidth <= width) return null;
+    const offenders = [];
+    for (const el of document.body.querySelectorAll("*")) {
+        const rect = el.getBoundingClientRect();
+        if (rect.right <= width + 1 || rect.width === 0) continue;
+        let clipped = false;
+        for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+            const overflowX = getComputedStyle(up).overflowX;
+            if (overflowX !== "visible" && up.getBoundingClientRect().right <= width + 1) {
+                clipped = true;
+                break;
+            }
+        }
+        if (clipped) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = typeof el.className === "string" && el.className.trim()
+            ? "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".")
+            : "";
+        offenders.push({el: el.tagName.toLowerCase() + id + cls, right: Math.round(rect.right)});
+    }
+    offenders.sort((a, b) => b.right - a.right);
+    return {width, scrollWidth, offenders: offenders.slice(0, 5)};
+}"""
+
+
+def assert_no_sideways_scroll(page, name: str = "page") -> None:
+    """Raise if the page is wider than a mobile viewport, naming the elements that stick out."""
+    overflow = page.evaluate(_SIDEWAYS_OVERFLOW_JS)
+    if overflow:
+        offenders = ", ".join(f"{o['el']} (right edge {o['right']}px)" for o in overflow["offenders"])
+        raise AssertionError(
+            f"{name}: page scrolls sideways at {overflow['width']}px "
+            f"(content is {overflow['scrollWidth']}px wide); widest: {offenders or 'unknown'}"
+        )
+
+
+def theme(page, mode: str) -> None:
+    """Switch the app shell between "light" and "dark" without a reload."""
+    page.evaluate("mode => document.documentElement.setAttribute('data-spa-theme', mode)", mode)
+    page.wait_for_timeout(300)
+
+
+DESKTOP = {"width": 1440, "height": 900}
+LAPTOP = {"width": 1280, "height": 800}
+TABLET = {"width": 1024, "height": 800}
+PHONE = {"width": 390, "height": 844}
+WALL = {"width": 1920, "height": 1080}  # a TV on the wall
+# At or below this width a shot is a mobile shot, and the page must not scroll sideways.
+MOBILE_MAX_WIDTH = 480
+
+
+# ── Seeding ─────────────────────────────────────────────────────────────────────────────
+
+
+def _seed_stock(db, org_id, inv) -> None:
+    """Raw, intermediate and finished lines with suppliers, batches, expiries and quantity history."""
+    today = date.today()
+
+    def day(offset):
+        return today + timedelta(days=offset) if offset is not None else None
+
+    raw = [
+        ("Juniper berries", "18.5", "kg", "Davis Trading", "JB-2291", 40, 320),
+        ("Juniper berries", "4.2", "kg", "Davis Trading", "JB-2104", 190, 21),
+        ("Coriander seed", "9", "kg", "Davis Trading", "CS-0931", 62, 410),
+        ("Angelica root", "2.75", "kg", "Moore Wilson", "AR-7710", 120, -6),
+        ("Orris root powder", "1.1", "kg", "Moore Wilson", "OR-5512", 88, 240),
+        ("Dried orange peel", "3.4", "kg", "Moore Wilson", "OP-1180", 30, 150),
+        ("Kawakawa leaf", "0.85", "kg", "Wairarapa Foragers", "KK-0044", 12, 9),
+        ("Cardamom pods", "0.6", "kg", "Moore Wilson", "CP-8801", 200, -31),
+        ("Lemon myrtle", "0.4", "kg", "Wairarapa Foragers", None, 20, 60),
+        ("Neutral grain spirit 96%", "820", "L", "Pure Spirits NZ", "NGS-240917", 22, None),
+        ("Demineralised water", "1200", "L", None, None, 5, None),
+        ("Glass bottle 700 mL", "2880", "units", "Glassworks Pacific", "GB-700-118", 48, None),
+        ("Natural cork stopper", "3400", "units", "Corticeira Imports", "NC-5521", 110, None),
+        ("Front label — Dry Gin", "2100", "units", "Print House Wellington", "LBL-DG-17", 34, None),
+        ("Shipping carton 6-pack", "410", "units", "Opal Packaging", "SC6-3301", 60, None),
+        ("Tamper seal", "5200", "units", "Opal Packaging", None, 60, None),
+    ]
+    made = [
+        ("Rested gin 42%", "412", "L", "work_in_progress", "Dry Gin", "Dilute and rest"),
+        ("Honey liqueur base", "64", "L", "work_in_progress", "Manuka Honey Liqueur", "Blend"),
+        ("Whistlebird Navy Strength 700 mL", "144", "units", "final_product", "Navy Strength Gin", "Bottle and label"),
+        ("Manuka Honey Liqueur 500 mL", "96", "units", "final_product", "Manuka Honey Liqueur", "Bottle and label"),
+    ]
+    created = []
+    for name, qty, unit, supplier, batch, bought, expires in raw:
+        created.append(
+            inv.create_inventory_item(
+                org_id,
+                name,
+                qty,
+                unit,
+                "raw_material",
+                supplier=supplier,
+                supplier_batch_number=batch,
+                purchase_date=day(-bought),
+                expiry_date=day(expires),
+            )
+        )
+    for name, qty, unit, kind, process, step in made:
+        created.append(
+            inv.create_inventory_item(
+                org_id,
+                name,
+                qty,
+                unit,
+                kind,
+                source_step_name=step,
+                extra_data={"producing_process_name": process, "producing_step_name": step},
+            )
+        )
+    # A few edits each, so trend lines have something to draw. Every third line is left flat.
+    for index, item in enumerate(created):
+        if index % 3 == 2:
+            continue
+        final = Decimal(str(item.quantity))
+        whole = item.unit == "units"
+        for factor in ("1.9", "1.6", "1.35", "1.1", "1"):
+            value = final * Decimal(factor)
+            inv.update_inventory_item(item.id, org_id, quantity=str(value.quantize(Decimal("1" if whole else "0.1"))))
+    db.commit()
+
+
+def _seed_lineage(db, org_id, inv) -> None:
+    """Two gin batches sharing a juniper lot, through three steps, sold on six invoices to four customers."""
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.features.crm.models.product_mapping import ProductMapping  # noqa: F401 -- FK target
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    today = date.today()
+    product = "Whistlebird Dry Gin 700 mL"
+
+    def raw(name, qty, unit, supplier, batch, bought, expires=None):
+        return inv.create_inventory_item(
+            org_id,
+            name,
+            qty,
+            unit,
+            "raw_material",
+            supplier=supplier,
+            supplier_batch_number=batch,
+            purchase_date=today - timedelta(days=bought),
+            expiry_date=(today + timedelta(days=expires)) if expires is not None else None,
+        )
+
+    juniper_fresh = raw("Juniper berries", "12", "kg", "Davis Trading", "JB-3301", 60, 320)
+    juniper_old = raw("Juniper berries", "3.5", "kg", "Davis Trading", "JB-3188", 190, -4)
+    coriander = raw("Coriander seed", "7", "kg", "Davis Trading", "CS-1042", 62, 410)
+    spirit = raw("Neutral grain spirit 96%", "640", "L", "Pure Spirits NZ", "NGS-241003", 45)
+    bottles = raw("Glass bottle 700 mL", "2400", "units", "Glassworks Pacific", "GB-700-131", 48)
+    labels = raw("Front label — Dry Gin", "1900", "units", "Print House Wellington", "LBL-DG-21", 34)
+
+    steps = [
+        ("Macerate botanicals", "Botanical maceration", 185, "L"),
+        ("Distil", "Gin distillate 78%", 120, "L"),
+        ("Bottle and label", product, 300, "units"),
+    ]
+    process = procs.create_process(
+        org_id, "Whistlebird Dry Gin", category=ProcessCategory.MANUFACTURING, is_draft=False
+    )
+    for number, (step_name, output, qty, unit) in enumerate(steps, start=1):
+        procs.add_step(
+            process_id=process.id,
+            org_id=org_id,
+            step_number=number,
+            position=number * 1000,
+            name=step_name,
+            inputs=[],
+            outputs=[{"name": output, "quantity": qty, "unit": unit}],
+        )
+    db.commit()
+
+    def ref(item, qty, unit):
+        return {"name": item.name, "quantity": qty, "unit": unit, "inventory_item_id": str(item.id)}
+
+    def batch(code, juniper, bottled):
+        execution = execs.create_execution(org_id, process.id)
+        rows = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+
+        def made(index, qty, kind, prefix):
+            _step, name, _qty, unit = steps[index]
+            return inv.create_inventory_item(
+                org_id,
+                name,
+                str(qty),
+                unit,
+                kind,
+                supplier_batch_number=f"{prefix}-{code}",
+                source_execution_id=execution.id,
+                source_execution_step_id=rows[index].id,
+                source_step_name=steps[index][0],
+            )
+
+        execs.complete_step(
+            rows[0].id,
+            org_id,
+            actual_inputs=[
+                ref(juniper, 4, "kg"),
+                ref(juniper_fresh, 1, "kg"),
+                ref(coriander, 2, "kg"),
+                ref(spirit, 180, "L"),
+            ],
+            actual_outputs=[{"name": steps[0][1], "quantity": 185, "unit": "L"}],
+        )
+        maceration = made(0, 185, "work_in_progress", "MAC")
+        execs.complete_step(
+            rows[1].id,
+            org_id,
+            actual_inputs=[ref(maceration, 185, "L")],
+            actual_outputs=[{"name": steps[1][1], "quantity": 120, "unit": "L"}],
+        )
+        distillate = made(1, 120, "work_in_progress", "DIS")
+        execs.complete_step(
+            rows[2].id,
+            org_id,
+            actual_inputs=[ref(distillate, 120, "L"), ref(bottles, bottled, "units"), ref(labels, bottled, "units")],
+            actual_outputs=[{"name": product, "quantity": bottled, "unit": "units"}],
+        )
+        made(2, bottled, "final_product", "WDG")
+        db.commit()
+
+    batch("2609", juniper_fresh, 300)
+    batch("2610", juniper_old, 288)
+
+    contacts = []
+    for name, email, phone in [
+        ("Regional Wines & Spirits", "orders@regionalwines.example", "04 385 6952"),
+        ("Hawthorn Lounge", "sam@hawthorn.example", "021 555 0142"),
+        ("Moore Wilson's Fresh", "priya@moorewilsons.example", None),
+        ("The Bottle-O Greytown", None, None),
+    ]:
+        contact = XeroContact(
+            org_id=org_id,
+            xero_contact_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            name=name,
+            email_address=email,
+            phone_number=phone,
+        )
+        db.add(contact)
+        contacts.append(contact)
+    db.commit()
+
+    sales = [(0, 120, 12), (1, 24, 9), (2, 60, 6), (0, 96, 4), (3, 36, 2), (1, 48, 1)]
+    for number, (who, qty, days_ago) in enumerate(sales, start=1):
+        invoice_number = f"INV-{1040 + number}"
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=contacts[who].id,
+            invoice_number=invoice_number,
+            invoice_type="ACCREC",
+            status="AUTHORISED",
+            date=today - timedelta(days=days_ago),
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            XeroInvoiceLineItem(
+                org_id=org_id, invoice_id=invoice.id, xero_line_item_id="L1", description=product, quantity=qty
+            )
+        )
+        for allocation in inv.consume_final_product_fifo(
+            org_id, product, str(qty), reference=invoice_number, commit=False
+        ):
+            db.add(
+                SalesFifoAllocation(
+                    org_id=org_id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    xero_line_key="L1",
+                    inventory_item_id=uuid.UUID(allocation["inventory_item_id"]),
+                    product_name=product,
+                    quantity=Decimal(allocation["quantity_consumed"]),
+                    unit="units",
+                )
+            )
+        db.commit()
+
+
+def _seed_sales(db, org_id, inv) -> None:
+    """Six months of local sales, receivables and realistic customer follow-ups."""
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not contacts:
+        raise ValueError("sales requires the lineage seed for realistic customer contacts")
+    today = date.today()
+    invoices = db.query(XeroInvoice).filter(XeroInvoice.org_id == org_id).all()
+    for number, invoice in enumerate(invoices):
+        invoice.sub_total = Decimal(900 + number * 225)
+        invoice.total_tax = invoice.sub_total * Decimal("0.15")
+        invoice.total = invoice.sub_total + invoice.total_tax
+        invoice.amount_due = invoice.total if number % 2 else Decimal(0)
+        invoice.amount_paid = invoice.total - invoice.amount_due
+        invoice.due_date = today + timedelta(days=7 - number * 2)
+        for line in db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice.id).all():
+            line.line_amount = invoice.sub_total
+            line.unit_amount = invoice.sub_total / line.quantity
+    for months_back in range(1, 6):
+        serial = today.year * 12 + today.month - 1 - months_back
+        month_date = date(serial // 12, serial % 12 + 1, 8)
+        db.add(
+            XeroInvoice(
+                org_id=org_id,
+                xero_invoice_id=str(uuid.uuid4()),
+                xero_tenant_id="ui-shots",
+                contact_id=contacts[months_back % len(contacts)].id,
+                invoice_type="ACCREC",
+                invoice_number=f"INV-{1030 - months_back}",
+                status="PAID",
+                date=month_date,
+                sub_total=Decimal(6500 + months_back * 850),
+                total=Decimal(6500 + months_back * 850),
+                amount_paid=Decimal(6500 + months_back * 850),
+                amount_due=Decimal(0),
+            )
+        )
+    for number, (title, status, priority, due) in enumerate(
+        [
+            ("Confirm summer gin order — Regional Wines", "pending", "high", -1),
+            ("Send cocktail range samples — Hawthorn Lounge", "pending", "medium", 2),
+            ("Follow up tasting — Moore Wilson’s", "pending", "medium", 4),
+            ("Agree delivery window — Bottle-O Greytown", "in_progress", "high", 0),
+            ("Review wholesale price list", "in_progress", "medium", 5),
+        ]
+    ):
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contacts[number % len(contacts)].id,
+                title=title,
+                description="Customer follow-up for the next wholesale order.",
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
+def _seed_suppliers(db, org_id, inv) -> None:
+    """Supplier records for the names `stock` puts on its lines, some with every detail and some
+    missing a phone, email or address, plus one with no stock yet. Corticeira Imports is left
+    off on purpose, so "Import from inventory" has a name to add. Seed after `stock`."""
+    from app.core.db.models.supplier import Supplier
+
+    rows = [
+        (
+            "Davis Trading",
+            "Priya Shah",
+            "04 384 2210",
+            "orders@davistrading.co.nz",
+            "12 Kingsford Smith St, Rongotai, Wellington 6022",
+            "Botanicals by the kilo. Order by Tuesday for Thursday delivery.",
+        ),
+        (
+            "Moore Wilson",
+            None,
+            "04 384 9906",
+            None,
+            "Corner Tory and College St, Te Aro, Wellington 6011",
+            "Cash-and-carry. Trade card under the company name.",
+        ),
+        (
+            "Wairarapa Foragers",
+            "Hemi Walker",
+            "027 455 0193",
+            "hemi@wairarapaforagers.nz",
+            None,
+            "Kawakawa and lemon myrtle in season. Text before you visit.",
+        ),
+        (
+            "Pure Spirits NZ",
+            "Accounts team",
+            "09 270 4410",
+            "trade@purespirits.co.nz",
+            "48 Kerwyn Ave, East Tamaki, Auckland 2013",
+            "Neutral spirit in 1000 L IBCs. Excise paid on dispatch.",
+        ),
+        (
+            "Glassworks Pacific",
+            "Daniel Ng",
+            None,
+            "daniel.ng@glassworkspacific.com",
+            "Unit 4, 9 Mahunga Dr, Mangere Bridge, Auckland 2022",
+            None,
+        ),
+        ("Print House Wellington", None, None, None, None, None),
+        (
+            "Opal Packaging",
+            "Sales desk",
+            "0800 676 251",
+            "sales@opalpackaging.co.nz",
+            "1 Opal Rd, Penrose, Auckland 1061",
+            "Cartons on a 10-day lead time.",
+        ),
+        (
+            "Southern Hops Ltd",
+            "Kate Moreau",
+            "03 545 1288",
+            "kate@southernhops.co.nz",
+            "220 Main Rd, Riwaka, Motueka 7198",
+            "Trial order for a hopped gin. Nothing bought yet.",
+        ),
+    ]
+    for name, contact, phone, email, address, notes in rows:
+        db.add(
+            Supplier(
+                org_id=org_id, name=name, contact_name=contact, phone=phone, email=email, address=address, notes=notes
+            )
+        )
+    db.commit()
+
+
+def _seed_customers(db, org_id, inv) -> None:
+    """A fictional trade directory with complete, missing, archived and unsent contacts.
+
+    Works alone; use lineage + sales first when customer activity is also needed.
+    Every address is reserved .example data. No Xero connection or API call is made.
+    """
+    from app.core.utils.time import utc_now
+    from app.features.crm.models.xero_contact import XeroContact
+
+    names = [
+        "Aro Valley Wine Bar",
+        "Beacon Bottle Shop",
+        "Coastal Kitchen",
+        "Dune Trading Co.",
+        "Elm & Harbour Hospitality",
+        "Fernhill Lodge",
+        "Golden Bay Grocer",
+        "Hilltop Cellar",
+        "Island Social Club",
+        "Juniper House",
+        "Kererū Botanicals",
+        "Laneway Drinks",
+        "Mānuka Restaurant",
+        "North Wharf Hotel",
+        "Orchard Lane",
+        "Portside Provisions",
+        "Quay Street Deli",
+        "Riverbend Retreat",
+        "Southern Table",
+        "The Long Afternoon",
+    ]
+    for index, name in enumerate(names):
+        local = index % 5 == 0
+        db.add(
+            XeroContact(
+                org_id=org_id,
+                name=name,
+                source="bize" if local else "xero",
+                xero_contact_id=None if local else str(uuid.uuid4()),
+                xero_tenant_id=None if local else "ui-shots",
+                email_address=None if index % 6 == 0 else f"orders@customer-{index + 1}.example",
+                phone_number=None if index % 7 == 0 else f"021 555 {1000 + index}",
+                contact_status="ARCHIVED" if index in (3, 12, 18) else "ACTIVE",
+                last_synced_at=None if local else utc_now() - timedelta(days=index % 9),
+                xero_push_status="failed" if index == 10 else None,
+                xero_push_error="Fixture: connection unavailable" if index == 10 else None,
+            )
+        )
+    db.commit()
+
+
+def _seed_compliance(db, org_id, inv) -> None:
+    """Subscribe the org to Compliance and put it on the NP3 food control programme, so pages
+    that summarise compliance (the dashboard) have a module with a score to show."""
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.features.compliant.models import ComplianceProfile
+
+    FeatureSubscriptionRepository(db).grant(org_id, "compliant")
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        profile = ComplianceProfile(org_id=org_id)
+        db.add(profile)
+    profile.enabled = True
+    profile.settings = {
+        **(profile.settings or {}),
+        "alcohol_product_types": ["spirits"],
+        "food_control_programme": "np3",
+    }
+    db.commit()
+
+
+def _seed_np3(db, org_id, inv) -> None:
+    """NP3 food safety evidence in the shape a working distillery has after a year: most
+    checks signed off (some overdue, some due within the month, a fifth never done), cleaning,
+    pest and receiving logs with one follow-up still open, a training register, and an
+    acceptable verification nine months ago with one corrective action outstanding."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.modules.nz_alcohol import verification
+    from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_AUDIT_CATEGORIES, np3_log_template
+
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        raise ValueError("np3 requires the compliance seed")
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"  # a name, not an email, on every record
+    today = date.today()
+
+    def at(day: date) -> datetime:
+        return datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=9)
+
+    def add(control_id, record_type, status, title, created, due=None, details=None, period=None):
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="np3-food-control",
+                control_id=control_id,
+                record_type=record_type,
+                status=status,
+                title=title,
+                period_start=period,
+                due_date=due,
+                source_refs=[],
+                details=details or {},
+                created_by_user_id=user.id,
+                owner_user_id=user.id if record_type != "attestation" else None,
+                created_at=at(created),
+                updated_at=at(created),
+            )
+        )
+
+    seen = []
+    for _section, controls in NP3_AUDIT_CATEGORIES:
+        for control_id, title in controls:
+            if control_id not in [c for c, _t in seen]:
+                seen.append((control_id, title))
+    for number, (control_id, title) in enumerate(seen):
+        kind = number % 5
+        if kind == 0:
+            continue  # never signed off
+        signed = today - timedelta(days={1: 215, 2: 160}.get(kind, 30 + number * 3))
+        due = {1: today - timedelta(days=20 + number), 2: today + timedelta(days=9 + number % 14)}.get(
+            kind, today + timedelta(days=120 + number * 2)
+        )
+        add(
+            control_id,
+            "attestation",
+            "complete",
+            f"NP3 review: {title}",
+            signed,
+            due,
+            {
+                "how_we_meet": f"{title}: checked against our written routine and the records kept on the shared drive.",
+                "review_interval_months": 6,
+                "np3_guidance_version": "2025-v2",
+                "attestation_confirmed": True,
+                "evidence_fields": {},
+            },
+        )
+
+    def log_fields(control_id, day, follow_up=False):
+        template = np3_log_template(control_id)
+        fields = {}
+        for field in template["fields"]:
+            kind = field.get("type")
+            if kind == "date":
+                fields[field["key"]] = day.isoformat()
+            elif kind == "select":
+                options = [o[0] for o in field.get("options", ())]
+                pick = "action-required" if follow_up and "action-required" in options else options[0]
+                fields[field["key"]] = pick
+            elif kind == "user":
+                fields[field["key"]] = str(user.id)
+            elif kind == "person":
+                fields[field["key"]] = ("Aroha Ngata", "Jordan Lee", "Sam Patel")[day.day % 3]
+            elif field.get("required") or field["key"] in ("corrective_action", "cause_and_action", "notes"):
+                key = field["key"]
+                fields[key] = {
+                    "corrective_action": "Bait station B2 replaced; floor drain resealed.",
+                    "cause_and_action": "Seal on the cold store door split; replacement ordered.",
+                }.get(key) or next(
+                    (
+                        value
+                        for word, value in (
+                            ("area", ("Bottling line", "Still room floor", "Botanicals store")[day.day % 3]),
+                            ("equipment", ("Bottling line", "Still room floor", "Botanicals store")[day.day % 3]),
+                            ("method", "Hot water rinse, then food-grade sanitiser at label strength"),
+                            ("supplier", ("Moore Wilson's", "Davis Trading", "Hawke's Bay Botanicals")[day.day % 3]),
+                            (
+                                "product",
+                                ("Juniper berries 5 kg", "Neutral spirit 200 L", "Glass 700 mL x 600")[day.day % 3],
+                            ),
+                            ("pest", "Rodent bait stations B1-B4 checked"),
+                            ("location", "Bait stations B1-B4"),
+                            ("finding", "No activity"),
+                            ("temperature", "4.2 °C"),
+                        )
+                        if word in key
+                    ),
+                    "Checked by the duty manager",
+                )
+        return template, fields
+
+    for control_id, days in (
+        ("cleaning-and-hygiene", (3, 10, 17, 24, 38, 52)),
+        ("pest-animal-control", (6, 36, 66)),
+        ("receiving-food", (2, 9, 23, 41)),
+        ("staff-competency", (14, 120)),
+    ):
+        for position, back in enumerate(days):
+            day = today - timedelta(days=back)
+            follow_up = control_id == "pest-animal-control" and position == 0
+            template, fields = log_fields(control_id, day, follow_up)
+            add(
+                control_id,
+                template["record_type"],
+                "open" if follow_up else "complete",
+                f"NP3 log: {template['title']}",
+                day,
+                day + timedelta(days=30) if follow_up else None,
+                {"np3_log_type": template["key"], "log_fields": fields, "np3_guidance_version": "2025-v2"},
+                day,
+            )
+    db.commit()
+
+    visited = today - timedelta(days=270)
+    verification.record(
+        db,
+        org_id,
+        profile,
+        {
+            "verified_on": visited.isoformat(),
+            "verifier_name": "Sam Rivers",
+            "verifier_agency": "Hutt City Council",
+            "report_reference": "FV-2026-0142",
+            "outcome": "acceptable",
+            "initial": True,
+            "actions": [
+                {
+                    "description": "Add the cold store to the daily temperature log",
+                    "due_on": (visited + timedelta(days=60)).isoformat(),
+                    "owner_user_id": str(user.id),
+                }
+            ],
+        },
+        user.id,
+        today,
+    )
+    db.commit()
+
+
+def _seed_licensing(db, org_id, inv) -> None:
+    """A distillery's liquor licensing a year in: an off-licence with remote sales whose
+    renewal falls due within the month, a special licence for a market with no manager named
+    yet, an on-licence that ended, three managers (one due to renew, one gone), checks with
+    evidence in every state, and an incident and refusal log."""
+    from datetime import UTC, datetime, time
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.models.licensing import LicensingLogEntry, LiquorLicence, ManagerCertificate
+    from app.features.compliant.modules.nz_alcohol.licensing import RENEWAL_WORKING_DAYS
+    from app.features.compliant.modules.nz_alcohol.nz_calendar import working_days_before
+
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        raise ValueError("licensing requires the compliance seed")
+    profile.settings = {**(profile.settings or {}), "liquor_licence_types": ["off", "special"]}
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"
+    today = date.today()
+    # Expiry placed so the last day to file the renewal is about three weeks away.
+    expires = today + timedelta(days=50)
+    while working_days_before(expires, RENEWAL_WORKING_DAYS) > today + timedelta(days=21):
+        expires -= timedelta(days=1)
+    db.add_all(
+        [
+            LiquorLicence(
+                org_id=org_id,
+                kind="off",
+                licence_number="31/OFF/112/2023",
+                issuing_dlc="Hutt City DLC",
+                premises="Unit 4, 12 Gracefield Road, Lower Hutt",
+                endorsements=["s40_remote_sales"],
+                issued_on=expires - timedelta(days=3 * 365),
+                expires_on=expires,
+                annual_fee_due_on=today + timedelta(days=64),
+                sale_hours="Mon-Sun 7am-11pm",
+                delivery_hours_start=time(7),
+                delivery_hours_end=time(23),
+                conditions="No sale or supply to anyone under 18. Drinking water available at tastings.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="special",
+                licence_number="31/SP/208/2026",
+                issuing_dlc="Wellington DLC",
+                event_name="Harbourside Market tasting stand",
+                event_starts_on=today + timedelta(days=12),
+                event_ends_on=today + timedelta(days=13),
+                sale_hours="Sat-Sun 9am-2pm",
+                conditions="Tastings of 15 ml or less; food available at the stand.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="on",
+                licence_number="31/ON/044/2021",
+                issuing_dlc="Hutt City DLC",
+                premises="Cellar door bar, 12 Gracefield Road",
+                issued_on=today - timedelta(days=4 * 365),
+                expires_on=today - timedelta(days=200),
+                status="ended",
+                created_by_user_id=user.id,
+            ),
+        ]
+    )
+    for name, number, expires_on, active, holder in (
+        ("Jordan Lee", "31/CERT/0912/2024", today + timedelta(days=430), True, user.id),
+        ("Sam Ngata", "31/CERT/1187/2023", today + timedelta(days=38), True, None),
+        ("Priya Shah", "31/CERT/0456/2022", today - timedelta(days=90), False, None),
+    ):
+        db.add(
+            ManagerCertificate(
+                org_id=org_id,
+                user_id=holder,
+                holder_name=name,
+                certificate_number=number,
+                issuing_dlc="Hutt City DLC",
+                issued_on=expires_on - timedelta(days=2 * 365),
+                expires_on=expires_on,
+                active=active,
+            )
+        )
+
+    def at(day: date, hour: int = 9) -> datetime:
+        return datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=hour)
+
+    for control_id, title, evidence, recorded, due in (
+        (
+            "licence-conditions",
+            "Licence conditions and how we meet them",
+            "Drive / Licensing / Conditions 2026.pdf",
+            today - timedelta(days=120),
+            today + timedelta(days=245),
+        ),
+        (
+            "licence-displayed",
+            "Licence and duty manager sign at the cellar door",
+            "Photo: cellar-door-sign.jpg",
+            today - timedelta(days=340),
+            today + timedelta(days=25),
+        ),
+        (
+            "responsibility-policy",
+            "Host responsibility policy, signed",
+            "Drive / Licensing / Host responsibility policy.pdf",
+            today - timedelta(days=200),
+            today + timedelta(days=165),
+        ),
+        (
+            "remote-seller-website",
+            "Website shows licence, R18 notice and age check",
+            "Screenshot: checkout-age-gate.png",
+            today - timedelta(days=400),
+            today - timedelta(days=35),
+        ),
+    ):
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="liquor-licence",
+                control_id=control_id,
+                record_type="attestation",
+                status="complete",
+                title=title,
+                evidence_reference=evidence,
+                due_date=due,
+                source_refs=[],
+                details={},
+                created_by_user_id=user.id,
+                created_at=at(recorded),
+                updated_at=at(recorded),
+            )
+        )
+    for kind, days_ago, where, staff, what, action, ref in (
+        (
+            "id_refusal",
+            3,
+            "Cellar door",
+            "Sam Ngata",
+            "Customer couldn't show ID; looked under 25.",
+            "Declined the sale and offered a tasting of the non-alcoholic tonic.",
+            None,
+        ),
+        (
+            "id_refusal",
+            11,
+            "Online order",
+            "Jordan Lee",
+            "Courier returned an R18 parcel: no ID at the door.",
+            "Parcel held at the depot; customer collected with ID.",
+            "Order 4471",
+        ),
+        (
+            "intoxication_refusal",
+            26,
+            "Harbourside Market",
+            "Sam Ngata",
+            "Visitor at the stand showed signs of intoxication.",
+            "Declined a tasting; pointed to water and food stalls.",
+            None,
+        ),
+        (
+            "incident",
+            58,
+            "Cellar door",
+            "Jordan Lee",
+            "A bottle broke on the shop floor during a tasting.",
+            "Area cleared and mopped; no one hurt.",
+            None,
+        ),
+        (
+            "controlled_purchase",
+            140,
+            "Cellar door",
+            "Priya Shah",
+            "Police controlled purchase operation: the minor was asked for ID and refused service.",
+            "Passed. Letter from Police filed.",
+            "CPO-2026-118",
+        ),
+        (
+            "id_refusal",
+            170,
+            "Cellar door",
+            "Sam Ngata",
+            "Group of four; one couldn't show ID.",
+            "Served the three with ID only after checking all four.",
+            None,
+        ),
+        (
+            "id_refusal",
+            205,
+            "Online order",
+            "Jordan Lee",
+            "Date of birth at checkout was under 18.",
+            "Order cancelled and refunded.",
+            "Order 3982",
+        ),
+        (
+            "incident",
+            240,
+            "Harbourside Market",
+            "Priya Shah",
+            "Stand gazebo blew over in the wind.",
+            "Packed down early; no one hurt.",
+            None,
+        ),
+        (
+            "intoxication_refusal",
+            300,
+            "Cellar door",
+            "Priya Shah",
+            "Customer arrived from a nearby bar, unsteady.",
+            "Declined service; called them a taxi.",
+            None,
+        ),
+    ):
+        db.add(
+            LicensingLogEntry(
+                org_id=org_id,
+                kind=kind,
+                occurred_at=at(today - timedelta(days=days_ago), 2),  # mid-afternoon in NZ
+                location=where,
+                description=what,
+                action_taken=action,
+                staff_name=staff,
+                reference=ref,
+                created_by_user_id=user.id,
+            )
+        )
+    db.commit()
+
+
+def _seed_excise(db, org_id, inv) -> None:
+    """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
+    Customs product type), mapped from Xero lines across the sales seed's months, with one
+    unmapped line so "Needs attention" shows."""
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.modules.nz_alcohol import excise
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+    gin, limoncello = "Whistlebird Dry Gin 700 mL", "Whistlebird Limoncello 500 mL"
+    lot = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin)
+        .order_by(InventoryItem.created_at.asc())
+        .first()
+    )
+    for name, ml, abv, category in ((gin, 700, 42, "gin"), (limoncello, 500, 25, "liqueur")):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=Decimal(ml),
+                abv_percent=Decimal(abv),
+                excise_category=category,
+            )
+        )
+        db.add(ProductMapping(org_id=org_id, biz_e_product_name=name, xero_description_pattern=name))
+    older = (
+        db.query(XeroInvoice)
+        .filter(XeroInvoice.org_id == org_id, XeroInvoice.invoice_number.like("INV-102%"))
+        .order_by(XeroInvoice.date.desc())
+        .all()
+    )
+    if not older:
+        raise ValueError("excise requires the lineage and sales seeds")
+    for number, invoice in enumerate(older):
+        lines = [(gin, 48 + number * 18), (limoncello, 12 + number * 6)]
+        if number == 0:
+            lines.append(("Distillery tour and tasting", 1))
+        for position, (description, qty) in enumerate(lines, start=1):
+            db.add(
+                XeroInvoiceLineItem(
+                    org_id=org_id,
+                    invoice_id=invoice.id,
+                    xero_line_item_id=f"X{position}",
+                    description=description,
+                    quantity=qty,
+                )
+            )
+        if lot is not None:  # the gin line came from a batch, so Customs counts it as removed
+            db.add(
+                SalesFifoAllocation(
+                    org_id=org_id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    xero_line_key="X1",
+                    inventory_item_id=lot.id,
+                    product_name=gin,
+                    quantity=Decimal(48 + number * 18),
+                    unit=lot.unit,
+                )
+            )
+    db.commit()
+
+    # Excise reminders on from four months back, the months before that lodged: a backlog of two.
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is not None:
+        today = date.today()
+        serial = today.year * 12 + today.month - 1 - 4
+        profile.settings = {
+            **(profile.settings or {}),
+            "excise_frequency": "monthly",
+            "excise_tracking_from": date(serial // 12, serial % 12 + 1, 1).isoformat(),
+        }
+        db.commit()
+        for back, reference in ((5, "EX-25-0811"), (4, "EX-25-0912")):
+            serial = today.year * 12 + today.month - 1 - back
+            start = date(serial // 12, serial % 12 + 1, 1)
+            excise.lodge(db, org_id, start, "monthly", start + timedelta(days=45), reference, None)
+        db.commit()
+    stocked = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin, InventoryItem.quantity > 20)
+        .order_by(InventoryItem.quantity.desc())
+        .first()
+    )
+    if stocked is not None:
+        _seed_customs_stock(db, org_id, stocked)
+    _seed_customs_records(db, org_id)
+
+
+def _seed_transfers(db, org_id, inv) -> None:
+    """Sales to other CCAs (GL-P08), on top of the excise seed: a duty free shop linked to its
+    customer, an export warehouse, and a contract customer's licensed area, with one sale in
+    each register state (needs details, awaiting receipt, receipt overdue, received)."""
+    from datetime import datetime
+    from datetime import time as clock
+    from zoneinfo import ZoneInfo
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliant.models.cca_transfers import CcaDeparture, CcaDestination
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    gin = "Whistlebird Dry Gin 700 mL"
+    lot = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin)
+        .order_by(InventoryItem.created_at.asc())
+        .first()
+    )
+    if lot is None:
+        raise ValueError("transfers requires the lineage and excise seeds")
+    nz = ZoneInfo("Pacific/Auckland")
+    today = date.today()
+    places = []
+    for name, code, address, kind, customer in (
+        (
+            "Auckland Airport duty free",
+            "DF-AKL-0142",
+            "Ray Emery Drive, Auckland Airport 2022",
+            "duty_free",
+            "Aelia Duty Free Auckland",
+        ),
+        (
+            "Wellington export warehouse",
+            "EW-WLG-0077",
+            "12 Hutt Road, Kaiwharawhara, Wellington 6035",
+            "export_warehouse",
+            "Harbour Export Logistics",
+        ),
+        ("Kapiti Craft Spirits licensed area", "LMA-KAP-0210", "4 Kapiti Road, Paraparaumu 5032", "manufacturer", None),
+    ):
+        contact = None
+        if customer:
+            contact = XeroContact(org_id=org_id, xero_contact_id=f"ui-{uuid.uuid4()}", name=customer)
+            db.add(contact)
+            db.flush()
+        dest = CcaDestination(
+            org_id=org_id,
+            name=name,
+            cca_code=code,
+            address=address,
+            kind=kind,
+            contact_id=contact.id if contact else None,
+        )
+        db.add(dest)
+        db.flush()
+        places.append((dest, contact))
+    bottle_store = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).first()
+    # (destination, customer, days ago, bottles, departure: None | (carrier, note, received days after or None))
+    sales = [
+        (0, None, 3, 120, None),
+        (0, None, 9, 96, ("Mainfreight", "MF-882310", None)),
+        (1, None, 24, 240, ("NZ Couriers", "NZC-55102", None)),
+        (0, None, 38, 144, ("Mainfreight", "MF-879904", 2)),
+        (1, None, 52, 180, ("Own van", None, 1)),
+        (2, bottle_store, 16, 60, ("Own van", None, 1)),
+    ]
+    for number, (place, customer, days, bottles, moved) in enumerate(sales):
+        dest, contact = places[place]
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=(customer or contact).id,
+            invoice_type="ACCREC",
+            invoice_number=f"INV-{1060 + number}",
+            status="AUTHORISED",
+            date=today - timedelta(days=days),
+            total=Decimal(bottles * 38),
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            SalesFifoAllocation(
+                org_id=org_id,
+                xero_invoice_id=invoice.xero_invoice_id,
+                xero_line_key="X1",
+                inventory_item_id=lot.id,
+                product_name=gin,
+                quantity=Decimal(bottles),
+                unit=lot.unit,
+            )
+        )
+        if moved:
+            carrier, note, received_after = moved
+            left = datetime.combine(invoice.date + timedelta(days=1), clock(9, 30), tzinfo=nz)
+            db.add(
+                CcaDeparture(
+                    org_id=org_id,
+                    destination_id=dest.id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    moved_at=left,
+                    carrier=carrier,
+                    consignment_note=note,
+                    received_on=left.date() + timedelta(days=received_after) if received_after is not None else None,
+                    receipt_reference="Signed delivery docket" if received_after is not None else None,
+                )
+            )
+    db.commit()
+
+
+def _seed_customs_records(db, org_id) -> None:
+    """Records for Customs beyond the lodgements: a monthly reconciliation, the retention
+    attestation, and a movement record still open."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    user = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+    serial = today.year * 12 + today.month - 1 - 5
+    start = date(serial // 12, serial % 12 + 1, 1)
+    end = date(start.year + (start.month == 12), start.month % 12 + 1, 1) - timedelta(days=1)
+    rows = (
+        (
+            "reconciliation",
+            "reading",
+            "complete",
+            f"Stock reconciled: {start:%B %Y}",
+            (start, end),
+            "Drive / Customs / Reconciliations",
+            {"declared_litres_of_alcohol": "35.280"},
+            40,
+        ),
+        (
+            "record-retention",
+            "attestation",
+            "complete",
+            "Records kept 7 years, backed up in NZ",
+            (None, None),
+            "Google Workspace (NZ) and nightly backup",
+            {},
+            60,
+        ),
+        (
+            "movement-evidence",
+            "attestation",
+            "open",
+            "Delivery dockets for Sam's car transfers",
+            (None, None),
+            None,
+            {},
+            6,
+        ),
+    )
+    for control, kind, status, title, period, ref, details, back in rows:
+        at = datetime.combine(today - timedelta(days=back), datetime.min.time(), tzinfo=UTC).replace(hour=10)
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="customs-alcohol",
+                control_id=control,
+                record_type=kind,
+                status=status,
+                title=title,
+                period_start=period[0],
+                period_end=period[1],
+                evidence_reference=ref,
+                source_refs=[],
+                details=details,
+                created_by_user_id=user.id if user else None,
+                created_at=at,
+                updated_at=at,
+            )
+        )
+    db.commit()
+
+
+def _seed_customs_stock(db, org_id, lot) -> None:
+    """Customs -> Stock: a rep's car outside the licensed area with gin in it, library stock
+    kept back from the batch, and a finished stocktake whose differences were a tasting
+    (on the entry), a dropped bottle (a remission) and bottles found in the car."""
+    from datetime import UTC, datetime
+
+    from flask import Flask
+
+    from app.core.backend import stocktake
+    from app.core.db.models.inventory_item import InventoryItem, InventoryType
+    from app.core.db.models.stock_location import StockLocation
+    from app.core.db.models.stocktake import StocktakeLine
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    repo = InventoryRepository(db)
+    today = date.today()
+    car = StockLocation(org_id=org_id, name="Sam's car", inside_licensed_area=False)
+    db.add(car)
+    db.commit()
+    abv = (lot.extra_data or {}).get("abv_percent")
+    repo.create_inventory_item(
+        org_id=org_id,
+        name=f"{lot.name} - Library stock",
+        quantity="1400",
+        unit="mL",
+        inventory_type=InventoryType.FINAL_PRODUCT.value,
+        supplier_batch_number=lot.supplier_batch_number,
+        extra_data={"library_stock": True, **({"abv_percent": abv} if abv else {})},
+    )
+    repo.move_lot(org_id, lot.id, "6", car.id, today - timedelta(days=12), "Tasting run, Wellington", None)
+    db.commit()
+    if Decimal(str(db.get(InventoryItem, lot.id).quantity)) < 12:
+        return
+    # resolve_line reads the signed-in user from flask.g for the wastage record.
+    with Flask(__name__).app_context():
+        counted_on = today - timedelta(days=9)
+        st = stocktake.start_stocktake(db, org_id, counted_on, "scheduled", None, None)
+        db.flush()
+        for line in db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == st.id).all():
+            item = db.get(InventoryItem, line.inventory_item_id)
+            on_hand = Decimal(str(item.quantity))
+            if item.id == lot.id:
+                stocktake.record_count(db, line, str(on_hand - 5))
+                parts = [
+                    {"reason": "removed_unrecorded", "quantity": "2", "note": "Cellar door tasting"},
+                    {"reason": "broken", "quantity": "1", "note": "Dropped on the bottling line"},
+                    {"reason": "found_elsewhere", "quantity": "2", "location_id": str(car.id)},
+                ]
+                stocktake.resolve_line(db, org_id, line, parts, None, counted_on)
+            else:
+                stocktake.record_count(db, line, str(on_hand))
+        st.status = "done"
+        st.completed_at = datetime.combine(counted_on, datetime.min.time(), tzinfo=UTC)
+        db.commit()
+
+
+def _seed_production(db, org_id, inv) -> None:
+    """A working week on the floor: three product workflows with seven batches under way, at
+    different steps and ages, one of them not yet started. For pages that show what is in
+    production right now."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    now = datetime.now(UTC)
+    gin = ["Macerate botanicals", "Distil", "Bottle and label"]
+    workflows = {
+        "Whistlebird Navy Strength Gin": gin,
+        "Whistlebird Pink Gin": gin[:2] + ["Infuse raspberry", "Bottle and label"],
+        "Limoncello": ["Infuse lemon peel", "Blend and sweeten", "Bottle and label"],
+    }
+    made = {}
+    for name, steps in workflows.items():
+        process = procs.create_process(org_id, name, category=ProcessCategory.MANUFACTURING, is_draft=False)
+        for number, step_name in enumerate(steps, start=1):
+            procs.add_step(
+                process_id=process.id,
+                org_id=org_id,
+                step_number=number,
+                position=number * 1000,
+                name=step_name,
+                inputs=[],
+                outputs=[{"name": f"{name}: {step_name.lower()}", "quantity": 100, "unit": "L"}],
+            )
+        made[name] = process
+    db.commit()
+
+    def start(name, done, hours):
+        execution = execs.create_execution(org_id, made[name].id)
+        rows = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+        started = now - timedelta(hours=hours)
+        for index in range(done):
+            execs.complete_step(
+                rows[index].id,
+                org_id,
+                actual_inputs=[],
+                actual_outputs=[],
+                completed_at_override=started + timedelta(hours=(index + 1) * max(1, hours // (done + 1))),
+            )
+        if hours:
+            db.query(Execution).filter(Execution.id == execution.id).update({"started_at": started})
+        db.commit()
+
+    # (workflow, steps already done, hours since it started)
+    start("Whistlebird Navy Strength Gin", 2, 76)
+    start("Whistlebird Navy Strength Gin", 1, 27)
+    start("Whistlebird Navy Strength Gin", 0, 2)
+    start("Whistlebird Pink Gin", 3, 120)
+    start("Whistlebird Pink Gin", 1, 20)
+    start("Limoncello", 1, 190)
+    start("Limoncello", 0, 0)
+
+
+def _seed_planner(db, org_id, inv) -> None:
+    """Demand for the Planner: orders and forecasts against the production workflows' outputs,
+    overdue, due this week, due later and cancelled. Needs `production` seeded first."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.core.db.models.step import Step
+    from app.features.planning import demand_service
+
+    # The planner only offers outputs that carry an id, as the workflow editor gives them.
+    for step in db.query(Step).filter(Step.org_id == org_id).all():
+        if any(isinstance(o, dict) and not o.get("id") for o in step.outputs or []):
+            step.outputs = [{**o, "id": o.get("id") or str(uuid.uuid4())} for o in step.outputs]
+            flag_modified(step, "outputs")
+    db.commit()
+    outputs = demand_service.output_catalog(db, org_id)
+    if not outputs:
+        raise SystemExit("ui-shots: `planner` needs the `production` seed before it (seed production planner)")
+    today = date.today()
+
+    def pick(word):
+        return next((row for row in outputs if word.lower() in row["name"].lower()), outputs[0])
+
+    # (reference, output it is for, quantity, days until due, priority)
+    orders = [
+        ("Regional Wines — summer order", "navy strength gin: bottle", 240, -2, 80),
+        ("Moore Wilson's — standing order", "pink gin: bottle", 120, 1, 60),
+        ("Hawthorn Lounge — cocktail range", "limoncello: bottle", 60, 3, 40),
+        ("Bottle-O Greytown — restock", "navy strength gin: bottle", 180, 6, 50),
+        ("Cellar door — December forecast", "pink gin: bottle", 300, 21, 20),
+        ("Christmas gift packs — forecast", "limoncello: bottle", 150, 35, 30),
+        ("Trade show samples", "navy strength gin: distil", 40, 12, 10),
+    ]
+    made = []
+    for reference, word, quantity, days, priority in orders:
+        output = pick(word)
+        row = demand_service.create_demand(
+            db,
+            org_id,
+            {
+                "reference": reference,
+                "source_output_id": output["id"],
+                "quantity": str(quantity),
+                "due_date": (today + timedelta(days=max(days, 0))).isoformat(),
+                "priority": priority,
+            },
+        )
+        if days < 0:  # the service refuses past dates on entry; an order goes overdue by time passing
+            row.due_date = today + timedelta(days=days)
+        made.append(row)
+    db.commit()
+    demand_service.cancel_demand(db, org_id, made[-1].id)
+
+
+def _seed_contracts(db, org_id, inv) -> None:
+    """Contract manufacturing: four brand customers (one inactive) with orders overdue, due this
+    week, later, completed and cancelled, across producer-, customer- and mixed-supplied lines."""
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+    from app.features.contract_manufacturing.services.orders import ContractOrderService
+
+    service = ContractOrderService(db, org_id)
+    customers = {}
+    for name, active in [
+        ("Harbour Spirits Co.", True),
+        ("Kererū Botanicals", True),
+        ("Southern Cross Liqueurs", True),
+        ("Old Mill Brewing (paused)", False),
+    ]:
+        row = service.save_customer({"name": name, "is_active": active})
+        customers[name] = row.id
+    db.commit()
+    today = date.today()
+
+    # (reference, customer, days until due, status, duty, [(product, quantity, unit, materials)])
+    orders = [
+        (
+            "HS-1042",
+            "Harbour Spirits Co.",
+            -3,
+            "confirmed",
+            "producer_licensee",
+            [("Harbour Navy Gin 700 mL", 600, "bottles", "producer")],
+        ),
+        (
+            "KB-0217",
+            "Kererū Botanicals",
+            2,
+            "confirmed",
+            "customer_licensee",
+            [
+                ("Kawakawa Bitters 200 mL", 240, "bottles", "customer"),
+                ("Horopito Tincture 50 mL", 480, "bottles", "mixed"),
+            ],
+        ),
+        (
+            "SC-0088",
+            "Southern Cross Liqueurs",
+            5,
+            "confirmed",
+            "customer_underbond",
+            [("Feijoa Liqueur bulk", 900, "L", "customer")],
+        ),
+        (
+            "HS-1043",
+            "Harbour Spirits Co.",
+            19,
+            "draft",
+            "producer_licensee",
+            [("Harbour Pink Gin 700 mL", 300, "bottles", "producer")],
+        ),
+        (
+            "KB-0216",
+            "Kererū Botanicals",
+            -20,
+            "completed",
+            "customer_licensee",
+            [("Kawakawa Bitters 200 mL", 240, "bottles", "customer")],
+        ),
+        (
+            "SC-0085",
+            "Southern Cross Liqueurs",
+            9,
+            "cancelled",
+            "customer_underbond",
+            [("Boysenberry Liqueur bulk", 400, "L", "customer")],
+        ),
+    ]
+    for reference, customer, days, status, duty, lines in orders:
+        created = service.create_order(
+            {
+                "customer_id": str(customers[customer]),
+                "reference": reference,
+                "due_date": (today + timedelta(days=max(days, 1))).isoformat(),
+                "status": "draft" if status in ("completed", "cancelled") else status,
+                "duty_responsibility": duty,
+                "customer_cca_reference": None if duty == "producer_licensee" else f"CCA-{reference}",
+                "lines": [
+                    {"product_name": product, "quantity": str(qty), "unit": unit, "materials_source": source}
+                    for product, qty, unit, source in lines
+                ],
+            }
+        )
+        row = (
+            created
+            if isinstance(created, ContractOrder)
+            else db.query(ContractOrder).filter_by(org_id=org_id, reference=reference).one()
+        )
+        row.due_date = today + timedelta(days=days)
+        if status in ("completed", "cancelled"):
+            row.status = status
+    db.commit()
+
+
+def _seed_contract_dispatch(db, org_id, inv) -> None:
+    """GL-P08 part 2, on top of the contracts seed: a batch and finished bottles for HS-1042
+    (producer liable, so a dispatch is a removal) and KB-0217 (customer liable, a transfer), and
+    one earlier KB-0217 dispatch still waiting for the customer's receipt."""
+    from datetime import datetime
+    from datetime import time as clock
+    from zoneinfo import ZoneInfo
+
+    from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
+    from app.features.contract_manufacturing.models.dispatch import ContractDispatch, ContractDispatchLine
+    from app.features.contract_manufacturing.models.orders import ContractOrder, ContractOrderExecution
+    from tests.factories import ExecutionFactory, ProcessFactory
+
+    process = ProcessFactory(org_id=org_id, name="Contract bottling")
+    today = date.today()
+    for reference, product, made, batch_code in (
+        ("HS-1042", "Harbour Navy Gin 700 mL", 600, "HNG-0412"),
+        ("KB-0217", "Kawakawa Bitters 200 mL", 240, "KWB-0219"),
+    ):
+        order = db.query(ContractOrder).filter_by(org_id=org_id, reference=reference).one()
+        line = order.lines[0]
+        batch = ExecutionFactory(org_id=org_id, process_id=process.id)
+        db.add(ContractOrderExecution(org_id=org_id, order_id=order.id, line_id=line.id, execution_id=batch.id))
+        lot = inv.create_inventory_item(
+            org_id=org_id,
+            name=product,
+            quantity=str(made),
+            unit="bottles",
+            inventory_type="final_product",
+            supplier_batch_number=batch_code,
+            source_execution_id=batch.id,
+            commit=False,
+        )
+        db.flush()
+        if reference == "KB-0217":
+            nz = ZoneInfo("Pacific/Auckland")
+            left = ContractDispatch(
+                org_id=org_id,
+                order_id=order.id,
+                treatment="cca_transfer",
+                destination_name="Kererū Botanicals",
+                destination_cca=order.customer_cca_reference,
+                moved_at=datetime.combine(today - timedelta(days=6), clock(14, 15), tzinfo=nz),
+                carrier="NZ Couriers",
+                consignment_note="NZC-88120",
+            )
+            db.add(left)
+            db.flush()
+            db.add(
+                ContractDispatchLine(
+                    org_id=org_id,
+                    dispatch_id=left.id,
+                    inventory_item_id=lot.id,
+                    product_name=product,
+                    quantity=Decimal(120),
+                    unit="bottles",
+                )
+            )
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.CONTRACT_DISPATCH):
+                lot.quantity = Decimal(made - 120)
+                db.flush()
+    db.commit()
+
+
+def _seed_stocktake(db, org_id, inv) -> None:
+    """Stocktakes over the stock seed's finished goods: one finished in July with every line
+    matching, and one under way today with a line short, one over, one under investigation and
+    the rest still to count. Needs `stock` first."""
+    from datetime import UTC, datetime
+
+    from app.core.backend import stocktake as stocktake_service
+    from app.core.db.models.stocktake import StocktakeLine
+    from app.core.db.models.user import User
+
+    def lines_of(stocktake):
+        return db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == stocktake.id).all()
+
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"  # a name, not an email, on every record
+    today = date.today()
+
+    earlier = stocktake_service.start_stocktake(db, org_id, today - timedelta(days=97), "scheduled", None, user.id)
+    for line in lines_of(earlier):
+        stocktake_service.record_count(db, line, line.expected_quantity)
+    earlier.status = "done"
+    earlier.completed_at = datetime.now(UTC) - timedelta(days=97)
+    db.commit()
+
+    current = stocktake_service.start_stocktake(db, org_id, today, "scheduled", None, user.id)
+    lines = sorted(lines_of(current), key=lambda line: str(line.inventory_item_id))
+    if len(lines) < 4:
+        raise SystemExit("ui-shots: `stocktake` needs the `stock` seed's finished goods first")
+    stocktake_service.record_count(db, lines[0], lines[0].expected_quantity)  # matches
+    stocktake_service.record_count(db, lines[1], lines[1].expected_quantity - 6)  # six short
+    stocktake_service.record_count(db, lines[2], lines[2].expected_quantity + 2)  # two over
+    stocktake_service.record_count(db, lines[3], lines[3].expected_quantity - 1)
+    stocktake_service.resolve_line(db, org_id, lines[3], [{"reason": "investigating", "quantity": "1"}], user.id, today)
+    db.commit()
+
+
+def _seed_commitments(db, org_id, inv) -> None:
+    """Material commitments on the Production board (GL-P07 B2): a lemon syrup workflow whose
+    sugar and lemons are met from stock, first-expiring first, three batches of it planned for
+    today, and enough stock for two of them. Run Check materials on the board to commit it."""
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.features.planning import batch_service, demand_service
+
+    repo = ProcessRepository(db)
+    process = repo.create_process(org_id, "Lemon syrup")
+    output_id = str(uuid.uuid4())
+    step = repo.add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        position=1000,
+        name="Cook syrup",
+        inputs=[
+            {"name": "Caster sugar", "quantity": "2", "unit": "kg", "requires_inventory_selection": True},
+            {"name": "Lemons", "quantity": "1500", "unit": "g", "requires_inventory_selection": True},
+        ],
+        outputs=[{"id": output_id, "name": "Lemon syrup", "quantity": "10", "unit": "L"}],
+        timing={"duration_minutes": 120, "wait_minutes": 0},
+    )
+    today = date.today()
+    for name, quantity, unit, days in [
+        ("Caster sugar", "1000", "g", 6),
+        ("Caster sugar", "4", "kg", 40),
+        ("Lemons", "5", "kg", 9),
+    ]:
+        inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity=quantity,
+            unit=unit,
+            inventory_type="raw_material",
+            supplier="Moore Wilson's",
+            expiry_date=today + timedelta(days=days),
+            commit=False,
+        )
+    db.commit()
+    batch_service.save_setting(
+        db,
+        org_id,
+        process.id,
+        {"source_output_id": output_id, "batch_quantity": "10", "expected_revision": 0},
+    )
+    demand = demand_service.create_demand(
+        db,
+        org_id,
+        {
+            "reference": "Cocktail bar order",
+            "source_output_id": output_id,
+            "quantity": "30",
+            "due_date": (today + timedelta(days=1)).isoformat(),
+            "priority": 50,
+        },
+    )
+    batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+    db.commit()
+    # GL-P07 B2b: the sugar supplier's lead time, and the materials check already run, so the
+    # board, the lot, the dispose page and Notifications all have something to show.
+    from app.core.db.models.supplier import Supplier
+    from app.features.planning import material_adapter
+
+    db.add(Supplier(org_id=org_id, name="Moore Wilson's", lead_time_days=3, phone="04 384 9906"))
+    db.commit()
+    material_adapter.assess(db, org_id, {}, today=today)
+    db.commit()
+    _ = step
+
+
+def _seed_board(db, org_id, inv) -> None:
+    """Planned batches for the Production board: batch sizes and timings for each output the
+    Planner's demand asks for, every open demand planned, the batches spread over this week and
+    next, one pinned, and a still with too few minutes so one day is overloaded. Needs
+    `production planner` seeded first."""
+    from app.core.db.models.organisation import Organisation
+    from app.features.planning import batch_service, capacity_service
+    from app.features.planning.batch_models import PlanningBatch
+    from app.features.planning.models import PlanningDemand
+
+    demands = (
+        db.query(PlanningDemand)
+        .filter(PlanningDemand.org_id == org_id, PlanningDemand.status == "open")
+        .order_by(PlanningDemand.due_date)
+        .all()
+    )
+    if not demands:
+        raise SystemExit("ui-shots: `board` needs `production planner` before it (seed production planner board)")
+    catalog = {row["id"]: row for row in batch_service.workflow_catalog(db, org_id)}
+    configured = set()
+    for demand in demands:
+        output = catalog.get(str(demand.source_output_id))
+        if output is None or output["id"] in configured:
+            continue
+        configured.add(output["id"])
+        batch_service.save_setting(
+            db,
+            org_id,
+            uuid.UUID(output["process_id"]),
+            {
+                "source_output_id": output["id"],
+                "batch_quantity": "120" if output["unit"] != "L" else "40",
+                "steps": [
+                    {"step_id": step["step_id"], "duration_minutes": 180, "waiting_minutes": 60}
+                    for step in output["steps"]
+                ],
+                "expected_revision": 0,
+            },
+        )
+    db.commit()
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    offset = 0
+    for demand in demands:
+        if str(demand.source_output_id) not in configured:
+            continue
+        rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+        for row in rows:  # one batch a working day, so the week reads as a schedule
+            day = monday + timedelta(days=offset % 10 + (offset % 10 >= 5) * 2)
+            shift = day - row.proposed_start_date
+            row.proposed_start_date = day
+            if row.theoretical_ready_date is not None:
+                row.theoretical_ready_date += shift
+            offset += 1
+    db.commit()
+    first = (
+        db.query(PlanningBatch)
+        .filter(PlanningBatch.org_id == org_id)
+        .order_by(PlanningBatch.proposed_start_date)
+        .first()
+    )
+    if first is not None:
+        first.pinned = True
+        db.commit()
+    org = db.query(Organisation).filter(Organisation.id == org_id).one()
+    site = batch_service.resolve_planning_site(db, org, None)
+    if site is not None:
+        still = str(uuid.uuid4())
+        steps = {step["step_id"] for row in catalog.values() for step in row["steps"][:1]}
+        capacity_service.save_setting(
+            db,
+            org_id,
+            site.id,
+            {
+                "groups": [{"id": still, "name": "Still", "minutes_per_day": 300}],
+                "assignments": [{"step_id": step, "group_id": still} for step in steps],
+                "expected_revision": 0,
+            },
+        )
+        db.commit()
+
+
+def _seed_premises(db, org_id, inv) -> None:
+    """Customs licences and the areas they cover, the way a distillery with a bond store has
+    them: a manufacturing-area licence over the still house and bottling room, an off-site
+    storage licence over the bond store, an older licence that has ended, and a cellar door
+    shop that sits outside any licensed area."""
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.features.compliant.modules.nz_alcohol import premises
+
+    today = date.today()
+    org = db.get(Organisation, org_id)
+    # The bond store is a second site: the plan includes multiple sites and the org switched it on.
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    FeatureSubscriptionRepository(db).grant(org_id, "multi_site")
+    org.multiple_sites_enabled = True
+    db.flush()
+    distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
+    if distillery is None:
+        distillery = Site(org_id=org_id, name="Gracefield distillery", is_default=True)
+        db.add(distillery)
+    distillery.name, distillery.address = "Gracefield distillery", "Unit 4, 12 Gracefield Road, Lower Hutt"
+    bond = Site(org_id=org_id, name="Seaview bond store", address="31 Hutt Park Road, Seaview", kind="storage")
+    db.add(bond)
+    db.flush()
+    places = {}
+    for site, name, inside in (
+        (distillery, "Still house", True),
+        (distillery, "Bottling room", True),
+        (distillery, "Cellar door shop", False),
+        (bond, "Bay 1", True),
+        (bond, "Bay 2", True),
+    ):
+        place = StockLocation(org_id=org_id, site_id=site.id, name=name, inside_licensed_area=inside)
+        db.add(place)
+        places[name] = place
+    db.flush()
+    lma = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-LMA-2291",
+            "name": "Gracefield distillery manufacturing area",
+            "kind": "lma",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=700)).isoformat(),
+            "valid_until": None,
+            "evidence_reference": "Customs approval letter, 3 Nov 2024",
+        },
+    )
+    oss = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0418",
+            "name": "Seaview off-site storage",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=200)).isoformat(),
+            "valid_until": (today + timedelta(days=45)).isoformat(),
+            "evidence_reference": "Customs approval letter, 18 Apr 2026",
+        },
+    )
+    old = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0112",
+            "name": "Petone shared bond (ended)",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=900)).isoformat(),
+            "valid_until": (today - timedelta(days=210)).isoformat(),
+            "evidence_reference": "Surrender acknowledgement, Mar 2026",
+        },
+    )
+    db.flush()
+    for licence, site, place, start, end, evidence in (
+        (lma, distillery, None, 700, None, "Approved site plan rev B: main floor"),
+        (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
+        (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
+        (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
+        (oss, bond, "Bay 2", 200, 45, "OSS plan, bays 1-2"),
+        (old, bond, None, 800, 210, "Shared bond floor plan"),
+    ):
+        premises.add_coverage(
+            db,
+            org_id,
+            {
+                "licence_id": str(licence.id),
+                "site_id": str(site.id),
+                "location_id": str(places[place].id) if place else None,
+                "valid_from": (today - timedelta(days=start)).isoformat(),
+                "valid_until": (today + timedelta(days=end) if end == 45 else today - timedelta(days=end)).isoformat()
+                if end
+                else None,
+                "evidence_reference": evidence,
+            },
+        )
+        db.flush()
+    # Stock at more than one place: cases under bond at Seaview, bottles at the cellar door.
+    for site, place, name, qty, unit, kind, batch, days in (
+        (bond, "Bay 1", "Navy Strength Gin 700ml", "180", "units", "final_product", "NSG-2609", 700),
+        (bond, "Bay 1", "London Dry Gin 700ml", "240", "units", "final_product", "LDG-2610", 700),
+        (bond, "Bay 2", "Gin base spirit", "420", "L", "work_in_progress", "GBS-2611", None),
+        (bond, "Bay 2", "Barrel-aged Gin 500ml", "60", "units", "final_product", "BAG-2604", 20),
+        (bond, None, "Shipping cartons (6 x 700ml)", "300", "units", "raw_material", "CT-1102", None),
+        (distillery, "Cellar door shop", "London Dry Gin 700ml", "36", "units", "final_product", "LDG-2610", 700),
+        (distillery, "Cellar door shop", "Gift boxes", "48", "units", "raw_material", "GB-0907", None),
+    ):
+        inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity=qty,
+            unit=unit,
+            inventory_type=kind,
+            supplier_batch_number=batch,
+            purchase_date=today - timedelta(days=20),
+            expiry_date=today + timedelta(days=days) if days else None,
+            location_id=places[place].id if place else None,
+            site_id=site.id,
+            commit=False,
+        )
+    db.commit()
+
+
+def _seed_moves(db, org_id, inv) -> None:
+    """Stock moving between the premises seed's two sites (GL-P07 A4), through the real
+    compliance policy: one delivery on the road, one part received and two received in full. Everything goes into a licensed area under the same legal
+    entity's licences, as a bond-to-bond move would."""
+    from uuid import uuid4
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.core.db.models.user import User
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.platform.stock_movements import evaluate_stock_movement, prepare_stock_movement
+    from app.features.site_transfers import service
+
+    sites = {s.name: s for s in db.query(Site).filter(Site.org_id == org_id)}
+    if "Seaview bond store" not in sites:
+        raise ValueError("moves requires the premises seed")
+    # The gins have a Customs classification, so moving them asks the real questions.
+    for gin, abv in (
+        ("Navy Strength Gin 700ml", "57"),
+        ("London Dry Gin 700ml", "42"),
+        ("Barrel-aged Gin 500ml", "45"),
+        ("Gin base spirit", "80"),
+    ):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=gin,
+                product_type="spirits",
+                abv_percent=abv,
+                pack_volume_ml=Decimal("500" if "500ml" in gin else "700"),
+                excise_category="gin",
+            )
+        )
+    db.flush()
+    places = {p.name: p for p in db.query(StockLocation).filter(StockLocation.org_id == org_id)}
+    actor = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+    approval = {
+        "destination_activity": "storage",
+        "authority": "same_legal_entity",
+        "evidence_reference": "Both sites under our CCA licences",
+    }
+
+    def lot(name, site):
+        return (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.name == name, InventoryItem.site_id == sites[site].id)
+            .filter(InventoryItem.quantity > 0)
+            .order_by(InventoryItem.created_at)
+            .first()
+        )
+
+    for name, to_place, qty, carrier, ref, days_ago, receipt in (
+        ("Navy Strength Gin 700ml", "Bottling room", "60", "Own van", "MV-0412", 1, None),
+        ("London Dry Gin 700ml", "Bottling room", "48", "Mainfreight", "MF-88213", 4, {"quantity": "40"}),
+        ("Gin base spirit", "Still house", "200", "Own van", "MV-0398", 9, {"quantity": "200"}),
+        ("Barrel-aged Gin 500ml", "Bottling room", "24", "Own van", "MV-0401", 6, {"quantity": "24"}),
+    ):
+        source = lot(name, "Seaview bond store")
+        if source is None:
+            continue
+        transfer, _ = service.dispatch(
+            db,
+            org_id,
+            actor.id,
+            str(uuid4()),
+            {
+                "source_item_id": str(source.id),
+                "destination_site_id": str(sites["Gracefield distillery"].id),
+                "destination_location_id": str(places[to_place].id),
+                "quantity": qty,
+                "carrier": carrier,
+                "consignment_reference": ref,
+                "occurred_on": (today - timedelta(days=days_ago)).isoformat(),
+                "approval": approval,
+            },
+            evaluate_stock_movement,
+            prepare_stock_movement,
+        )
+        db.flush()
+        if receipt:
+            body = {"occurred_on": (today - timedelta(days=max(days_ago - 1, 0))).isoformat(), **receipt}
+            service.receive(db, org_id, actor.id, transfer.id, str(uuid4()), body, evaluate_stock_movement)
+            db.flush()
+    db.commit()
+
+
+def _seed_tasks(db, org_id, inv) -> None:
+    """A sales team's task list on an ordinary week: two people, a dozen open follow-ups
+    (two overdue, three due today, some next week, some with no date), a custom lane for
+    tasks waiting on the customer, and what was finished or dropped in the last fortnight."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.task_board_lane import TaskBoardLane
+    from app.core.db.models.user import User, UserRole
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from tests.factories import UserFactory
+
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not contacts:
+        raise ValueError("tasks requires the lineage seed for customer contacts")
+    owner = db.query(User).filter(User.org_id == org_id).first()
+    owner.first_name, owner.last_name = "Jordan", "Lee"
+    sam = UserFactory(
+        org_id=org_id,
+        email=owner.email.replace("@", "-sam@"),
+        first_name="Sam",
+        last_name="Ngata",
+        role=UserRole.SALES,
+    )
+    db.flush()
+    waiting = TaskBoardLane(org_id=org_id, board="crm", title="Waiting on customer", position=0)
+    db.add(waiting)
+    db.flush()
+    today = date.today()
+    now = datetime.now(UTC)
+    rows = (
+        # title, status, priority, due (days from today, None = no date), who, lane, finished days ago
+        ("Call about the reorder that went quiet", "pending", "high", -3, owner, None, None),
+        ("Chase the unpaid October invoice", "pending", "high", -1, sam, None, None),
+        ("Drop off tasting kit", "pending", "medium", 0, sam, None, None),
+        ("Confirm Christmas order quantities", "in_progress", "high", 0, owner, None, None),
+        ("Send updated wholesale price list", "pending", "low", 0, None, None, None),
+        ("Book a staff tasting for the new gin", "pending", "medium", 2, owner, None, None),
+        ("Quote for corporate gift packs", "in_progress", "medium", 3, sam, None, None),
+        ("Follow up the cocktail menu listing", "pending", "medium", 6, None, None, None),
+        ("Check shelf placement after the reset", "pending", "low", 9, sam, None, None),
+        ("Ask for a Summer feature in the newsletter", "pending", "low", None, None, None, None),
+        ("Waiting on signed credit application", "pending", "medium", 4, owner, waiting, None),
+        ("Waiting on their December delivery dates", "in_progress", "medium", 1, sam, waiting, None),
+        ("Delivered the sample case", "completed", "medium", -2, sam, None, 2),
+        ("Agreed the summer promotion", "completed", "high", -4, owner, None, 4),
+        ("Set up the new account in Xero", "completed", "low", -6, owner, None, 6),
+        ("Old price list follow-up", "cancelled", "low", -5, None, None, 1),
+    )
+    for number, (title, status, priority, due, who, lane, finished) in enumerate(rows):
+        done_at = now - timedelta(days=finished) if finished is not None else None
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contacts[number % len(contacts)].id if number % 4 != 3 else None,
+                title=title,
+                description="Notes from the last call." if number % 3 == 0 else None,
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due) if due is not None else None,
+                assigned_to_user_id=who.id if who else None,
+                created_by_user_id=owner.id,
+                board_lane_id=lane.id if lane else None,
+                completed_at=done_at if status == "completed" else None,
+                created_at=now - timedelta(days=14 - number % 10),
+                updated_at=done_at or now - timedelta(days=number % 5),
+            )
+        )
+    db.commit()
+
+
+def _seed_customer(db, org_id, inv) -> None:
+    """One customer as a sales rep knows them after a year: contact details and addresses,
+    a 20th-of-the-month payment term, notes from calls and tastings, and follow-ups open
+    and done. Uses the customer with the most invoices from the lineage and sales seeds."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func
+
+    from app.core.db.models.user import User
+    from app.features.crm.models.crm_note import CRMNote
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    top = (
+        db.query(XeroInvoice.contact_id, func.count(XeroInvoice.id))
+        .filter(XeroInvoice.org_id == org_id)
+        .group_by(XeroInvoice.contact_id)
+        .order_by(func.count(XeroInvoice.id).desc())
+        .first()
+    )
+    if top is None:
+        raise ValueError("customer requires the lineage and sales seeds for invoices")
+    contact = db.get(XeroContact, top[0])
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"
+    contact.first_name, contact.last_name = "Aroha", "Wilson"
+    contact.email_address, contact.phone_number = "aroha@moorewilsons.example", "04 385 6952"
+    contact.contact_status = "ACTIVE"
+    contact.payment_terms = {"sales": {"day": 20, "type": "OFFOLLOWINGMONTH"}}
+    contact.addresses = [
+        {
+            "type": "POBOX",
+            "line1": "PO Box 3210",
+            "city": "Wellington",
+            "postal_code": "6140",
+            "country": "New Zealand",
+        },
+        {
+            "type": "STREET",
+            "line1": "15 Ellice Street",
+            "line2": "Mount Victoria",
+            "city": "Wellington",
+            "postal_code": "6011",
+            "country": "New Zealand",
+        },
+    ]
+    now = datetime.now(UTC)
+    for days, text in (
+        (2, "Called Aroha: summer order likely to double last year's. Wants the Navy Strength in 500 ml."),
+        (16, "Tasting with the shop team went well; they'll put the gin in the front fridge."),
+        (41, "Pays on the 20th of the month after. Prefers invoices emailed to accounts@."),
+        (90, "First order. Met at the Harbourside Market."),
+    ):
+        db.add(
+            CRMNote(
+                org_id=org_id,
+                contact_id=contact.id,
+                content=text,
+                created_by_user_id=user.id,
+                created_at=now - timedelta(days=days),
+                updated_at=now - timedelta(days=days),
+            )
+        )
+    today = date.today()
+    for title, status, priority, due, done in (
+        ("Send the summer price list", "pending", "high", 1, None),
+        ("Drop off a Navy Strength sample", "in_progress", "medium", 4, None),
+        ("Check the front-fridge placement", "pending", "low", 12, None),
+        ("Book the staff tasting", "completed", "medium", -14, 15),
+    ):
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contact.id,
+                title=title,
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due),
+                assigned_to_user_id=user.id,
+                created_by_user_id=user.id,
+                completed_at=now - timedelta(days=done) if done else None,
+            )
+        )
+    db.commit()
+
+
+def _seed_people(db, org_id, inv) -> None:
+    """A small team for People and roles: each built-in role, an auditor with an end date, an
+    invite waiting, someone who left, and a custom role two of them hold."""
+    from datetime import timedelta
+
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import UserRole
+    from app.core.security.people import issue_invite
+    from app.core.utils.time import utc_now
+    from tests.factories import UserFactory
+
+    cellar = OrgRole(
+        org_id=org_id,
+        name="Cellar door",
+        description="Sells at the cellar door and sees stock, nothing else.",
+        base_role="sales",
+        permissions=["sales.view", "inventory.view"],
+        site_access_mode="all",
+    )
+    db.add(cellar)
+    db.flush()
+    run = uuid.uuid4().hex[:6]
+    team = [
+        ("Aroha", "Wilson", UserRole.ADMIN, {"two_factor_enabled": True}),
+        ("Sam", "Ngata", UserRole.MEMBER, {"two_factor_enabled": True}),
+        ("Mere", "Tane", UserRole.PRODUCTION, {}),
+        ("Priya", "Shah", UserRole.COMPLIANCE, {"two_factor_enabled": True}),
+        ("Tom", "Baker", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Lena", "Ford", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Grace", "Hill", UserRole.AUDITOR, {"access_expires_at": utc_now() + timedelta(days=21)}),
+    ]
+    for first, last, role, extra in team:
+        user = UserFactory(org_id=org_id, email=f"{first.lower()}.{run}@example.test", role=role)
+        user.first_name, user.last_name = first, last
+        for key, value in extra.items():
+            setattr(user, key, value)
+    invited = UserFactory(org_id=org_id, email=f"kiri.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    invited.first_name, invited.last_name = "Kiri", "Moana"
+    issue_invite(invited)
+    left = UserFactory(org_id=org_id, email=f"dan.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    left.first_name, left.last_name = "Dan", "Cole"
+    db.commit()
+
+
+def _seed_tastings(db, org_id, inv) -> None:
+    """A realistic sampling week, with distinct stock and partial-bottle leftovers."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.models.excise import ExciseRate
+    from app.features.tastings.services import tasting_service
+
+    rep = db.query(User).filter(User.org_id == org_id).order_by(User.created_at).first()
+    today = datetime.now(ZoneInfo("Pacific/Auckland")).date()
+    from app.features.crm.models.crm_task import CRMTask
+
+    rep.first_name = "Alex"
+    rep.last_name = "Taylor"
+    for kind, title, status in [
+        ("call", "Confirm the Christmas order", "pending"),
+        ("email", "Send the spring product list", "in_progress"),
+        ("general", "Prepare the bottle display", "pending"),
+    ]:
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                task_type=kind,
+                title=title,
+                status=status,
+                due_date=today,
+                assigned_to_user_id=rep.id,
+                created_by_user_id=rep.id,
+            )
+        )
+    products = []
+    for index, (name, abv, batch) in enumerate(
+        [
+            ("Wildflower Gin", "44", "WB-26-041"),
+            ("Solstice Gin", "42", "WB-26-038"),
+            ("Green Gold Gin", "40", "WB-26-036"),
+        ]
+    ):
+        item = inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity="24",
+            unit="bottles",
+            inventory_type="final_product",
+            supplier_batch_number=batch,
+            extra_data={"opening_stock": True, "abv_percent": abv, "batch_number": batch},
+        )
+        profile = (
+            db.query(AlcoholProductProfile)
+            .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.inventory_name == name)
+            .first()
+        )
+        if profile is None:
+            profile = AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=700,
+                abv_percent=Decimal(abv),
+                customs_product_code="TASTINGS-SEED",
+                excise_category="gin",
+            )
+            db.add(profile)
+        products.append(item)
+    if (
+        not db.query(ExciseRate.id)
+        .filter(ExciseRate.org_id == org_id, ExciseRate.tariff_item == "TASTINGS-SEED")
+        .first()
+    ):
+        db.add(
+            ExciseRate(
+                org_id=org_id,
+                tariff_item="TASTINGS-SEED",
+                rate_per_lal=Decimal("50"),
+                effective_from=today.replace(month=1, day=1),
+            )
+        )
+    db.commit()
+
+    def event(title, venue, offset, product, count="1", own=False, hour=16, kind="tasting", contact=None):
+        start = datetime.combine(
+            today + timedelta(days=offset), datetime.min.time(), ZoneInfo("Pacific/Auckland")
+        ).replace(hour=hour)
+        row = tasting_service.save_event(
+            db,
+            org_id,
+            rep.id,
+            {
+                "title": title,
+                "venue_name": venue,
+                "venue_address": "Wellington, New Zealand",
+                "venue_type": "own" if own else "external",
+                "licence_reference": "Venue's recorded reference",
+                "starts_at": start.isoformat(),
+                "ends_at": (start + timedelta(hours=2)).isoformat(),
+                "rep_id": str(rep.id),
+                "notes": "Bring the bottle display and tasting notes. Confirm the setup with the venue manager.",
+                "allocations": [{"source_item_id": str(product.id), "quantity": count}],
+                "kind": kind,
+                "contact_id": str(contact.id) if contact else None,
+            },
+        )
+        db.commit()
+        return row
+
+    event("After-work tasting", "Glengarry Wellington", 0, products[0], "2")
+    event("New-release tasting", "Regional Wines & Spirits", 1, products[1])
+    event("Meet the distiller", "Moore Wilson's", 3, products[0], "2")
+    event("Sunday discovery", "The Bottle Store", 5, products[2])
+    out = event("Afternoon at the tasting room", "Whistlebird cellar door", 0, products[1], "2", True, 14)
+    tasting_service.dispatch(
+        db, org_id, rep.id, out.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(out.id)
+    )
+    db.commit()
+    complete = event("First pours of Green Gold", "The neighbourhood bottle store", 0, products[2], hour=0)
+    tasting_service.dispatch(
+        db, org_id, rep.id, complete.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(complete.id)
+    )
+    db.commit()
+    line = tasting_service.event_dict(db, complete)["allocations"][0]
+    tasting_service.finalise(
+        db,
+        org_id,
+        rep.id,
+        complete.id,
+        {
+            "usage": [{"allocation_id": line["id"], "used_volume_ml": "150"}],
+            "samples_count": 15,
+            "notes": "15 pours. Good response to the citrus; 550 mL ready for the next visit.",
+        },
+    )
+    db.commit()
+    cancelled = event("Venue rescheduled", "Bottle shop on Cuba", 2, products[2])
+    tasting_service.cancel(db, org_id, rep.id, cancelled.id)
+    db.commit()
+    _seed_event_sales(db, org_id, rep, today, products, event)
+
+
+def _seed_event_sales(db, org_id, rep, today, products, event) -> None:
+    """Events that sell bottles: one out at a market today with a Xero sale raised on the stall,
+    and one closed with bottles sold and brought back."""
+    import uuid
+
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.tastings.services import tasting_service
+
+    stall = XeroContact(
+        org_id=org_id, xero_contact_id=str(uuid.uuid4()), xero_tenant_id="ui-shots", name="Harbourside Market Trust"
+    )
+    db.add(stall)
+    db.add(
+        ProductMapping(org_id=org_id, biz_e_product_name=products[0].name, xero_description_pattern=products[0].name)
+    )
+    db.flush()
+    for number, contact, quantity in [("INV-2201", stall, 3), ("INV-2202", None, 1)]:
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=contact.id if contact else None,
+            invoice_number=number,
+            invoice_type="ACCREC",
+            status="AUTHORISED",
+            date=today,
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            XeroInvoiceLineItem(
+                org_id=org_id,
+                invoice_id=invoice.id,
+                xero_line_item_id=number + "-1",
+                description=products[0].name,
+                quantity=Decimal(quantity),
+            )
+        )
+    db.commit()
+    market = event(
+        "Harbourside night market", "Harbourside Market", 0, products[0], "10", hour=15, kind="event", contact=stall
+    )
+    tasting_service.dispatch(
+        db, org_id, rep.id, market.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(market.id)
+    )
+    db.commit()
+    fair = event("Craft spirits fair", "Shed 6", 0, products[1], "6", hour=1, kind="event")
+    tasting_service.dispatch(
+        db, org_id, rep.id, fair.id, {"actual_date": today.isoformat()}, "seed-dispatch-" + str(fair.id)
+    )
+    db.commit()
+    line = tasting_service.event_dict(db, fair)["allocations"][0]
+    tasting_service.finalise(
+        db,
+        org_id,
+        rep.id,
+        fair.id,
+        {
+            "usage": [{"allocation_id": line["id"], "used_volume_ml": "350", "sold_units": "3", "returned_units": "2"}],
+            "samples_count": 40,
+            "notes": "Busy stand. Half a bottle poured; two unopened back to the cellar door.",
+        },
+    )
+    db.commit()
+
+
+def cmd_seed(args) -> int:
+    _require_local()
+    if STATE.exists():
+        say(f"already seeded ({json.loads(STATE.read_text())['email']}); run `purge` first")
+        return 2
+    sys.path.insert(0, str(REPO))
+    from app.core.db import db_session
+    from app.core.db.models.user import UserRole
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+    from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory, UserFactory
+
+    run_id = uuid.uuid4().hex[:8]
+    db = db_session()
+    org = OrganisationFactory(name=f"{ORG_PREFIX}{run_id}")
+    user = UserFactory(org_id=org.id, email=f"ui-shots-{run_id}@example.test", role=UserRole.ADMIN)
+    db.commit()
+    # Written before any stock, so a seed that fails half way can still be purged.
+    HOME.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(
+        json.dumps(
+            {
+                "email": user.email,
+                "password": DEFAULT_TEST_PASSWORD,
+                "org_id": str(org.id),
+                "user_id": str(user.id),
+                "kinds": args.kinds,
+            }
+        )
+    )
+    inv = InventoryRepository(db)
+    for kind in args.kinds:
+        {
+            "stock": _seed_stock,
+            "lineage": _seed_lineage,
+            "compliance": _seed_compliance,
+            "tastings": _seed_tastings,
+            "production": _seed_production,
+            "sales": _seed_sales,
+            "excise": _seed_excise,
+            "transfers": _seed_transfers,
+            "np3": _seed_np3,
+            "people": _seed_people,
+            "customer": _seed_customer,
+            "tasks": _seed_tasks,
+            "premises": _seed_premises,
+            "moves": _seed_moves,
+            "licensing": _seed_licensing,
+            "stocktake": _seed_stocktake,
+            "planner": _seed_planner,
+            "board": _seed_board,
+            "commitments": _seed_commitments,
+            "contracts": _seed_contracts,
+            "dispatch": _seed_contract_dispatch,
+            "customers": _seed_customers,
+            "suppliers": _seed_suppliers,
+        }[kind](db, org.id, inv)
+        say(f"seeded {kind}")
+    say(f"org {org.name!r}, sign-in {user.email}")
+    return 0
+
+
+def import_all_models() -> None:
+    """purge_org walks Base.metadata, which only knows the tables whose models are imported."""
+    import app.features as features
+
+    for module in pkgutil.walk_packages(features.__path__, features.__name__ + "."):
+        if module.name.rsplit(".", 1)[-1].endswith("models") or ".models." in module.name:
+            try:
+                importlib.import_module(module.name)
+            except Exception:  # an optional feature that will not import has no rows here either
+                pass
+
+
+def purge_seeded_org(db, org_id, user_id) -> None:
+    """Delete a seeded org and everything in it (also used by scripts/demo_orgs.py)."""
+    from sqlalchemy import String, func
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_movement import InventoryMovement
+    from app.core.db.models.inventory_wastage import InventoryWastage
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.user import User
+    from tests.e2e.conftest import purge_org
+
+    import_all_models()
+    # Lots at a place reference it, and purge_org can't order that cycle: detach them first.
+    # A throwaway org: rename them so detaching can't collide on (name, batch, place).
+    placed = InventoryItem.org_id == org_id, InventoryItem.location_id.isnot(None)
+    db.query(InventoryItem).filter(*placed).update(
+        {InventoryItem.name: InventoryItem.name + " @" + func.cast(InventoryItem.id, String)},
+        synchronize_session=False,
+    )
+    db.query(InventoryItem).filter(InventoryItem.org_id == org_id).update(
+        {InventoryItem.location_id: None}, synchronize_session=False
+    )
+    # A stocktake's breakage is a wastage record plus its movement: clear those first too.
+    db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
+    db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
+    # Transfers between sites reference places and lots, and receipt proof is immutable outside
+    # migration mode (the same teardown tests/test_site_transfers.py uses).
+    from sqlalchemy import text
+
+    from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
+
+    db.execute(text("SELECT set_config('app.migration_mode','1',true)"))
+    db.execute(text("UPDATE inventory_items SET transfer_receipt_id = NULL WHERE org_id = :org"), {"org": org_id})
+    db.query(SiteStockReceipt).filter(SiteStockReceipt.org_id == org_id).delete(synchronize_session=False)
+    db.query(SiteStockTransfer).filter(SiteStockTransfer.org_id == org_id).delete(synchronize_session=False)
+    db.commit()
+    # Synthetic users may hold a seeded custom role; release it before purging.
+    db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)
+    db.commit()
+    purge_org(db, org_id, user_id)
+    db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
+    db.commit()
+
+
+def cmd_purge(_args) -> int:
+    _require_local()
+    state = _state()
+    sys.path.insert(0, str(REPO))
+    from app.core.db import db_session
+    from app.core.db.models.organisation import Organisation
+
+    org_id, user_id = uuid.UUID(state["org_id"]), uuid.UUID(state["user_id"])
+    db = db_session()
+    org = db.get(Organisation, org_id)
+    if org is not None:
+        if not org.name.startswith(ORG_PREFIX):
+            say(f"refusing to purge {org.name!r}: not an org this script created")
+            return 2
+        purge_seeded_org(db, org_id, user_id)
+    STATE.unlink()
+    say("purged")
+    return 0
+
+
+def cmd_status(args) -> int:
+    seeded = json.loads(STATE.read_text()) if STATE.exists() else None
+    report = {"home": str(HOME), "seeded": bool(seeded)}
+    if seeded:
+        report.update({"email": seeded["email"], "org_id": seeded["org_id"], "kinds": seeded.get("kinds", [])})
+    if args.json:
+        print(json.dumps(report))
+    else:
+        say(f"home {HOME}")
+        say(f"seeded as {seeded['email']} ({', '.join(seeded.get('kinds', []))})" if seeded else "nothing seeded")
+    return 0
+
+
+# ── Shooting ────────────────────────────────────────────────────────────────────────────
+
+
+def _boot():
+    from werkzeug.serving import make_server
+
+    from app.app import app  # the composed app, not create_app(): see tests/e2e/conftest.py
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(str(REPO / "app/tls/app_cert.pem"), str(REPO / "app/tls/app_cert.key"))
+    # As in tests/e2e/conftest.py: TLS 1.3 closes from the dev server fail random stylesheets.
+    context.maximum_version = ssl.TLSVersion.TLSv1_2
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = make_server("127.0.0.1", port, app, threaded=True, ssl_context=context)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    time.sleep(0.3)
+    return server, f"https://127.0.0.1:{port}"
+
+
+def _load_scenarios(path: Path, names: list[str]):
+    spec = importlib.util.spec_from_file_location("ui_shots_scenarios", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    available = {
+        name: fn
+        for name, fn in vars(module).items()
+        if inspect.isfunction(fn) and fn.__module__ == module.__name__ and not name.startswith("_")
+    }
+    missing = [name for name in names if name not in available]
+    if missing:
+        say(f"no such scenario: {', '.join(missing)}; have {', '.join(available)}")
+        raise SystemExit(2)
+    return [(name, available[name]) for name in (names or available)]
+
+
+def cmd_shoot(args) -> int:
+    _require_local()
+    state = _state()
+    sys.path.insert(0, str(REPO))
+    sys.path.insert(0, str(Path(__file__).parent))  # so a scenario file can `from ui_shots import ...`
+    scenarios = _load_scenarios(Path(args.scenarios).resolve(), args.names)
+    if args.list:
+        for name, _fn in scenarios:
+            say(name)
+        return 0
+
+    from playwright.sync_api import sync_playwright
+
+    out = Path(args.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    server, url = _boot()
+    failed, errors = [], []
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            context = browser.new_context(base_url=url, ignore_https_errors=True, locale="en-NZ", viewport=DESKTOP)
+            page = context.new_page()
+            page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+            page.on("pageerror", lambda error: errors.append(f"uncaught: {error}"))
+            page.goto("/")
+            page.get_by_role("button", name="Sign In").first.click()
+            page.locator("#login-email").fill(state["email"])
+            page.locator("#login-password").fill(state["password"])
+            page.locator("#login-submit-btn").click()
+            page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=20_000)
+            for name, scenario in scenarios:
+                page.set_viewport_size(DESKTOP)
+                try:
+                    scenario(page, out)
+                    say("ok", name)
+                except Exception as error:  # keep going: one broken view should not hide the rest
+                    failed.append(name)
+                    say("FAILED", name, repr(error)[:500])
+            browser.close()
+    finally:
+        server.shutdown()
+    # A 4xx fetch logs "Failed to load resource" too; that is a status, not a script fault.
+    errors = [e for e in dict.fromkeys(errors) if not re.search(r"Failed to load resource: .*status of \d{3}", e)]
+    for error in errors:
+        say("console error:", error[:300])
+    say(f"screenshots in {out}")
+    return 1 if failed or (errors and not args.allow_console_errors) else 0
+
+
+# ── Uploading to the merge request ──────────────────────────────────────────────────────
+
+
+def cmd_upload(args) -> int:
+    """Upload images to this project's GitLab uploads and print the markdown to paste into an MR."""
+
+    def glab(*argv):
+        return subprocess.run(["glab", *argv], capture_output=True, text=True, cwd=REPO).stdout.strip()
+
+    token = glab("config", "get", "token", "--host", "gitlab.com")
+    remote = subprocess.run(
+        ["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=REPO
+    ).stdout.strip()
+    match = re.search(r"gitlab\.com[:/](.+?)(?:\.git)?$", remote)
+    if not token or not match:
+        say("need a glab login for gitlab.com and a gitlab.com origin remote")
+        return 2
+    endpoint = f"https://gitlab.com/api/v4/projects/{urllib.parse.quote(match.group(1), safe='')}/uploads"
+    status = 0
+    for name in args.files:
+        path = Path(name)
+        boundary = uuid.uuid4().hex
+        body = (
+            (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{path.name}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n"
+            ).encode()
+            + path.read_bytes()
+            + f"\r\n--{boundary}--\r\n".encode()
+        )
+        # glab holds an OAuth token: it goes in Authorization, and PRIVATE-TOKEN answers 401.
+        request = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 -- fixed https host
+                say(json.load(response)["markdown"])
+        except Exception as error:
+            status = 1
+            say("FAILED", path.name, repr(error)[:200])
+    return status
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    seed = sub.add_parser("seed", help="create the throwaway org and its data")
+    seed.add_argument("kinds", nargs="+", choices=SEED_KINDS)
+    seed.set_defaults(run=cmd_seed)
+    shoot = sub.add_parser("shoot", help="boot the app from this checkout and run scenarios")
+    shoot.add_argument("out")
+    shoot.add_argument("names", nargs="*")
+    shoot.add_argument("--scenarios", required=True)
+    shoot.add_argument("--list", action="store_true", help="print the scenario names and exit")
+    shoot.add_argument("--allow-console-errors", action="store_true")
+    shoot.set_defaults(run=cmd_shoot)
+    upload = sub.add_parser("upload", help="upload images for a merge request description")
+    upload.add_argument("files", nargs="+")
+    upload.set_defaults(run=cmd_upload)
+    sub.add_parser("purge", help="delete the throwaway org").set_defaults(run=cmd_purge)
+    status = sub.add_parser("status", help="say whether an org is seeded")
+    status.add_argument("--json", action="store_true")
+    status.set_defaults(run=cmd_status)
+    args = parser.parse_args()
+    return args.run(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

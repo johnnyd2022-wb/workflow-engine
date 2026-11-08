@@ -1,0 +1,78 @@
+/* Planner. Layout and cards come from the shared workspace rules (workspace-overviews.css);
+   this file holds only what the planner adds. Style 1, the Board, is the base. */
+#page-content .planning-demand [hidden] { display: none !important; }
+#page-content .planning-demand .planner-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
+#page-content .planning-demand .planner-primary:hover { background: var(--ui-accent-strong); border-color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content.page-content .planning-demand .planner-primary,
+html[data-spa-theme="dark"] #page-content.page-content .planning-demand .planner-primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
+/* Nothing to plan yet, or nothing loaded: one card says so, without a row of zeros or dashes around it. */
+.planning-demand[data-state="empty"] .planner-glance, .planning-demand[data-state="empty"] .planner-make,
+.planning-demand[data-state="error"] .planner-glance, .planning-demand[data-state="error"] .planner-make,
+.planning-demand[data-state="error"] .planner-demand, .planning-demand[data-state="loading"] .planner-make { display: none !important; }
+.planning-demand[data-state="empty"] .planner-layout > .planner-demand { grid-column: 1 / -1 !important; }
+#page-content .planner-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 14px; }
+#page-content .planner-empty strong { font-size: 16px; font-weight: 600; color: var(--ui-text); }
+#page-content .planner-empty p { margin: 0 0 10px; }
+/* While the form is open its own Save is the one filled action. */
+#page-content .planning-demand .workspace-header .planner-primary[aria-expanded="true"] { background: var(--ui-surface); border-color: var(--ui-border); color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content.page-content .planning-demand .workspace-header .planner-primary[aria-expanded="true"] { background: var(--ui-surface); border-color: var(--ui-border); color: var(--ui-accent); }
+#page-content .planner-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+/* The page root is the container, so the layout inside it can answer to the room it has. */
+#page-content .planning-demand { container: planner / inline-size; }
+.planner-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.planner-figures > div { display: flex; flex-direction: column; gap: 4px; }
+.planner-figures dt { font-size: 13px; color: var(--ui-text-muted); }
+.planner-figures dd { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.planner-figures span { font-size: 13px; color: var(--ui-text-muted); }
+/* Late work is the one thing that takes the alert colour, and it says so in words beside it. */
+.planner-figures [data-state="overdue"] dd, .planner-figures [data-state="overdue"] span { color: #b42318; }
+html[data-spa-theme="dark"] .planner-figures [data-state="overdue"] dd,
+html[data-spa-theme="dark"] .planner-figures [data-state="overdue"] span { color: #fca5a5; }
+
+.planner-make__list { list-style: none; margin: 14px 0 0; padding: 0; }
+.planner-make__list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; padding: 12px 0; border-top: 1px solid var(--ui-border); }
+.planner-make__list li:first-child { border-top: 0; padding-top: 4px; }
+.planner-make__name { font-size: 14px; color: var(--ui-text); overflow-wrap: anywhere; }
+.planner-make__list strong { font-size: 15px; font-weight: 600; color: var(--ui-text); font-variant-numeric: tabular-nums; text-align: right; }
+.planner-make__count { grid-column: 1 / -1; font-size: 12px; color: var(--ui-text-muted); }
+
+.planner-count { font-size: 13px; color: var(--ui-text-muted); }
+.planner-rows { margin-top: 14px; }
+.planner-rows:empty { display: none; }
+.planner-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 90px 76px; gap: 6px 20px; align-items: center; padding: 14px 0; border-top: 1px solid var(--ui-border); }
+.planner-rows > .planner-row:first-child { border-top: 0; }
+.planner-row__main { min-width: 0; }
+#page-content .planner-row h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ui-text); overflow-wrap: anywhere; }
+#page-content .planner-row__what { margin: 2px 0 0; font-size: 13px; color: var(--ui-text-muted); overflow-wrap: anywhere; }
+.planner-due { font-size: 14px; font-weight: 500; color: var(--ui-text); white-space: nowrap; }
+.planner-due[data-state="later"], .planner-due[data-state="closed"] { font-weight: 400; color: var(--ui-text-muted); }
+.planner-due[data-state="overdue"] { font-weight: 600; color: #b42318; }
+html[data-spa-theme="dark"] .planner-due[data-state="overdue"] { color: #fca5a5; }
+.planner-row__priority { font-size: 13px; color: var(--ui-text-muted); white-space: nowrap; }
+#page-content .planner-cancel { justify-self: end; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--ui-text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+#page-content .planner-cancel:hover, #page-content .planner-cancel:focus-visible { border-color: var(--ui-border); color: var(--ui-text); background: var(--ui-surface-subtle); }
+.planner-row[data-status]:not([data-status="open"]) h3 { color: var(--ui-text-muted); font-weight: 500; }
+.planner-closed { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--ui-border); }
+.planner-closed > summary { cursor: pointer; font-size: 13px; color: var(--ui-text-muted); min-height: 32px; align-content: center; }
+
+/* The Board: figures beside what to make, then the demand itself full width. */
+@container planner (min-width: 1000px) {
+  #page-content .planning-demand .planner-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: stretch; }
+  .planning-demand .planner-layout > * { grid-column: 1 / -1; }
+  .planning-demand .planner-glance { grid-column: span 5; }
+  .planning-demand .planner-make { grid-column: span 7; }
+  .planning-demand .planner-figures { grid-template-columns: 1fr; }
+  .planning-demand .planner-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .planning-demand .planner-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+}
+
+/* Narrow: each demand becomes two lines, and nothing needs a sideways scroll. */
+@container planner (max-width: 760px) {
+  .planner-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .planner-row__main { grid-column: 1 / -1; }
+  .planner-row__priority { display: none; }
+  .planner-figures { grid-template-columns: 1fr; }
+  .planner-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .planner-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 24px; }
+}

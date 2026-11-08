@@ -32,6 +32,14 @@
         }
         return;
       }
+      const timingEl = document.querySelector('[data-step-timing]');
+      const timing = timingEl && window.StepTiming ? window.StepTiming.read(timingEl) : null;
+      if (timing && (isNaN(timing.duration_minutes) || isNaN(timing.wait_minutes))) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Check the timing', 'Enter a time from 0 up to a year, or leave it blank.');
+        }
+        return;
+      }
     }
     if (helpers.getCurrentStep() === 2) {
       const result = helpers.validateInventoryInputs();

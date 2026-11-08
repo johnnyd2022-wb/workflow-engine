@@ -24,8 +24,11 @@ def _updated_at_iso(dt) -> str:
     return dt.isoformat() if dt else ""
 
 
+STEP_TIMING_FIELDS = ("duration_minutes", "wait_minutes")
+
+
 def _step_snapshot(step: Step) -> dict:
-    return {
+    snapshot = {
         "id": str(step.id),
         "step_number": step.step_number,
         "position": str(step.position) if step.position is not None else None,
@@ -35,6 +38,11 @@ def _step_snapshot(step: Step) -> dict:
         "outputs": step.outputs or [],
         "execution_prompts": step.execution_prompts or [],
     }
+    # Only when set, so versions recorded before step timing keep their fingerprints.
+    for field in STEP_TIMING_FIELDS:
+        if getattr(step, field, None) is not None:
+            snapshot[field] = getattr(step, field)
+    return snapshot
 
 
 def _process_snapshot(process: Process, steps: list[Step]) -> dict:
@@ -286,8 +294,9 @@ class ProcessRepository:
         inputs: list | None = None,
         outputs: list | None = None,
         execution_prompts: list | None = None,
+        timing: dict | None = None,
     ) -> Step | None:
-        """Add a step to a process"""
+        """Add a step to a process. ``timing`` holds any of :data:`STEP_TIMING_FIELDS`."""
         with start_span(
             "process.step_add",
             attributes={"org_id": str(org_id), "process_id": str(process_id), "step_number": step_number},
@@ -306,6 +315,7 @@ class ProcessRepository:
                 inputs=inputs or [],
                 outputs=outputs or [],
                 execution_prompts=execution_prompts or [],
+                **(timing or {}),
             )
             self.db.add(step)
             self.db.flush()
@@ -341,6 +351,7 @@ class ProcessRepository:
         inputs: list | None = None,
         outputs: list | None = None,
         execution_prompts: list | None = None,
+        timing: dict | None = None,
         if_match: str | None = None,
     ) -> Step | str | None:
         """Update a step.
@@ -391,9 +402,16 @@ class ProcessRepository:
                 step.outputs = outputs
             if execution_prompts is not None:
                 step.execution_prompts = execution_prompts
+            # A key that is present is set, including to None to clear it.
+            for field, value in (timing or {}).items():
+                setattr(step, field, value)
 
             after = _step_snapshot(step)
-            diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
+            diff = {
+                k: {"before": before.get(k), "after": after.get(k)}
+                for k in {**before, **after}
+                if before.get(k) != after.get(k)
+            }
 
             if not diff:
                 if if_match is not None:

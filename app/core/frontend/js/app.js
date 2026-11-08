@@ -173,7 +173,7 @@ function addNewStep() {
               <path d="M12 5v14M5 12l7-7 7 7"/>
             </svg>
             Inputs
-            <button class="btn btn-ghost btn-sm" onclick="addInput(this)">+ Add</button>
+            <button class="btn btn-ghost btn-sm" data-action="addInput" data-action-args='["$el"]'>+ Add</button>
           </div>
           <div class="io-list"></div>
         </div>
@@ -183,7 +183,7 @@ function addNewStep() {
               <path d="M12 19V5M5 12l7 7 7-7"/>
             </svg>
             Outputs
-            <button class="btn btn-ghost btn-sm" onclick="addOutput(this)">+ Add</button>
+            <button class="btn btn-ghost btn-sm" data-action="addOutput" data-action-args='["$el"]'>+ Add</button>
           </div>
           <div class="io-list"></div>
         </div>

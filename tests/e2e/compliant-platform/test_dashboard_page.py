@@ -32,17 +32,22 @@ def test_dashboard_page_renders_for_logged_in_user(admin_page):
     response = page.goto("/compliant/nz-alcohol")
     assert response is not None and response.status == 200
     expect(page.locator('link[href="/compliant/static/compliant.css"]')).to_have_count(1)
-    expect(page.locator('script[src="/compliant/static/compliant.js"]')).to_have_count(1)
+    # The overview's own script since the Compliance overview redesign (61928a7b).
+    expect(page.locator('script[src="/compliant/static/compliance-overview.js"]')).to_have_count(1)
     expect(page.locator("[data-compliant-root]")).to_be_visible()
     expect(page.get_by_role("heading", name="Compliance", exact=True)).to_be_visible()
     expect(page.get_by_role("tab", name="Customs")).to_be_visible()
 
     response = page.goto("/compliant/nz-alcohol/customs")
     assert response is not None and response.status == 200
-    expect(page.locator("[data-record-form]")).to_be_visible()
-    # Product classification is now in the existing excise setup disclosure.
-    page.get_by_text("Products, pack sizes and duty rates", exact=True).click()
-    expect(page.get_by_role("heading", name="Excise products", exact=True)).to_be_visible()
+    # Records for Customs have their own view (each check has its own page and form).
+    page.locator("[data-customs-records-link]").click()
+    expect(page.get_by_role("heading", name="Records for Customs", exact=True)).to_be_visible()
+    expect(page.locator("[data-customs-records-root]")).to_have_attribute("aria-busy", "false")
+    # Product classification moved to Customs -> Settings.
+    page.locator('.customs-views a[href="/compliant/nz-alcohol/customs/settings"]').click()
+    expect(page.get_by_role("heading", name="Products", exact=True)).to_be_visible()
+    page.locator("[data-excise-rate-form]").locator("xpath=ancestor::details").locator("summary").click()
     expect(page.get_by_role("textbox", name="Tariff item", exact=True)).to_be_visible()
 
     assert_clean_page(page)

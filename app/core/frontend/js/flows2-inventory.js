@@ -34,8 +34,8 @@
       }
     }
 
-    const FLOWS2_JSON_DISPLAY_MAX_DEPTH = 12;
-    const FLOWS2_JSON_DISPLAY_MAX_ARRAY_ITEMS = 400;
+    var FLOWS2_JSON_DISPLAY_MAX_DEPTH = 12;
+    var FLOWS2_JSON_DISPLAY_MAX_ARRAY_ITEMS = 400;
 
     /** Same rules as execution-shared-utils.prettyLabel (batch/start picker Details). */
     function flows2PrettyLabel(s) {

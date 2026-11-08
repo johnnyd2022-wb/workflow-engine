@@ -72,7 +72,7 @@
     <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
-        <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <button class="modal-close" data-dismiss="finish-process-confirmation-modal" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -99,8 +99,8 @@
       </div>
       
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
-        <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="finish-process-confirmation-modal">Back</button>
+        <button type="button" class="btn btn-primary" data-action="confirmFinishProcess">Finish creating process</button>
       </div>
     </div>
   </div>
@@ -110,7 +110,7 @@
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Resume Draft Process</h2>
-        <button class="modal-close" onclick="window.cancelResumeDraft()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <button class="modal-close" data-action="cancelResumeDraft" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -128,8 +128,8 @@
       </div>
       
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
-        <button type="button" class="btn btn-primary" onclick="window.confirmResumeDraft()">Resume Draft</button>
+        <button type="button" class="btn btn-secondary" data-action="cancelResumeDraft">Start New</button>
+        <button type="button" class="btn btn-primary" data-action="confirmResumeDraft">Resume Draft</button>
       </div>
     </div>
   </div>

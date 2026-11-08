@@ -7,20 +7,32 @@
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
-{% block topbar %}
-  {% if not core2_focus %}{{ super() }}{% endif %}
+
+{# On the overview the section head is the page's title, and "Get to work" is its main buttons,
+   on the tab row. The pages behind the tabs keep their own header. #}
+{% set section_head_is_page_title = (not core2_focus) and request.path.rstrip('/') == '/core' %}
+{% block section_actions %}
+  {% if not core2_focus %}
+  <div class="prod-header-actions" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+    <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
+      <h2 id="production-actions-title">Get to work</h2>
+      <p class="workspace-caption">Your next step, with everyday actions close by.</p>
+      <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
+    </section>
+  </div>
+  {% endif %}
 {% endblock %}
 
-{# The overview places its own workspace links, under Get to work. #}
+{# The overview places its own workspace links, at the foot of the board. #}
 {% block workspace_links %}{% if core2_focus %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content workspace-overview workspace-page production-overview{% if core2_focus_mode %} production-overview--focus{% endif %}">
-          <header class="workspace-header" aria-labelledby="core2-hub-title">
+          <header class="workspace-header" aria-labelledby="core2-hub-title"{% if not core2_focus_mode %} data-core2-own-header{% if section_head_is_page_title %} hidden{% endif %}{% endif %}>
             <div>
               <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Batches{% else %}Production{% endif %}</h1>
-              <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch in production, by the step it is at.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
+              <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch under way, the step it is at, and how long it has waited.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
             </div>
             {% if core2_focus_mode == 'inventory_live' %}
             <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
@@ -34,68 +46,77 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
-          <div class="production-overview__start workspace-stack" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+          <div class="prod-v2" data-production-root>
+          <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
               <h2 id="production-health-title">Production health</h2>
               <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
-              {% if core2_focus_mode == '' %}
               <div class="production-health__details" data-core2-overview-only>
-                <div class="production-health__group" role="group" aria-labelledby="core2-overview-summary-title">
-                  <div class="workspace-subheading">
-                    <h3 id="core2-overview-summary-title">At a glance</h3>
-                  </div>
-                  <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Product workflows</div>
-                      <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Active Batches</div>
-                      <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Finished batches</div>
-                      <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Stock lines</div>
-                      <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
-                    </div>
-                  </div>
-                </div>
                 <div class="production-health__group" role="group" aria-labelledby="core2-overview-attention-title">
                   <div class="workspace-subheading">
                     <h3 id="core2-overview-attention-title">Operational status</h3>
                     <a href="/core/notifications" class="core2-text-link">View all alerts</a>
                   </div>
-                  <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
+                  <div id="core2-overview-attention" class="prod-checks" aria-live="polite">
                     <p class="core2-active-batches-empty">Loading operational priorities...</p>
                   </div>
                 </div>
               </div>
-              {% endif %}
             </section>
-            <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
-              <h2 id="production-actions-title">Get to work</h2>
-              <p class="workspace-caption">Your next step, with everyday actions close by.</p>
-              <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
+            <section class="workspace-card prod-glance" aria-labelledby="core2-overview-summary-title">
+              <h2 id="core2-overview-summary-title">At a glance</h2>
+              <div class="prod-figures" role="group" aria-label="Production metrics">
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Active batches</span>
+                  <strong class="prod-figure__value" id="metric-active-executions">0</strong>
+                  <span class="prod-figure__meta">in progress now</span>
+                </a>
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Longest running</span>
+                  <strong class="prod-figure__value" data-production-oldest>–</strong>
+                  <span class="prod-figure__meta" data-production-oldest-name>no batches under way</span>
+                </a>
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Finished this week</span>
+                  <strong class="prod-figure__value" data-production-finished-week>0</strong>
+                  <span class="prod-figure__meta"><span id="metric-completed">0</span> all time</span>
+                </a>
+                <a class="prod-figure" href="/core/processes">
+                  <span class="prod-figure__label">Product workflows</span>
+                  <strong class="prod-figure__value" id="metric-total-processes">0</strong>
+                  <span class="prod-figure__meta">ready to run</span>
+                </a>
+                <a class="prod-figure" href="/core/inventory/view">
+                  <span class="prod-figure__label">Stock lines</span>
+                  <strong class="prod-figure__value" id="metric-inventory">0</strong>
+                  <span class="prod-figure__meta">on hand</span>
+                </a>
+                <a class="prod-figure" href="/core/inventory/live">
+                  <span class="prod-figure__label">Stock movements</span>
+                  <strong class="prod-figure__value" data-production-movements>0</strong>
+                  <span class="prod-figure__meta">in the last 24 hours</span>
+                </a>
+              </div>
             </section>
-            {% if core2_focus_mode == '' %}
-            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
-            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
-            {% endif %}
           </div>
-          {% endif %}
 
-          {% if core2_focus_mode == '' %}
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
             <section class="workspace-card production-active" aria-labelledby="core2-overview-batches-title">
-              <h2 id="core2-overview-batches-title">Active production</h2>
-              <p class="workspace-caption">Select a batch to see where it is up to.</p>
-              <div id="core2-overview-active-batches" class="workspace-disclosure-list" aria-live="polite">
+              <div class="workspace-card__header">
+                <h2 id="core2-overview-batches-title">Active production</h2>
+                <a class="workspace-link" href="/core/executions/live">Production board</a>
+              </div>
+              <p class="workspace-caption" data-production-active-caption>Batches under way, longest running first.</p>
+              <div id="core2-overview-active-batches" class="prod-batches" aria-live="polite">
                 <p class="core2-active-batches-empty">Loading active batches...</p>
               </div>
             </section>
+          </div>
+          {# After the batches in the source, as on screen. #}
+          <div class="production-overview__end" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
+            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
+          </div>
           </div>
 
           <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="region" aria-label="Inventory workspace" hidden>
@@ -348,68 +369,60 @@
             </div>
           </div>
           {% elif core2_focus_mode == 'active_batches_live' %}
-          <div class="workspace-stack">
-          <section id="core2-active-batches-panel" class="workspace-card core2-active-batches-panel" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
-              <div class="core2-active-details-body">
-              <div class="core2-active-header-row">
-                <div class="core2-active-heading-wrap">
-                  <h2 id="core2-active-batches-title">Production board</h2>
-                  <p class="workspace-caption core2-active-subline">Select a batch to see its history.</p>
-                </div>
-                <div class="core2-active-controls">
-                  <label class="core2-active-control">
-                    <span class="sr-only">Process</span>
-                    <select id="core2-active-process-select" class="core2-active-select" aria-label="Select process">
-                      <option value="">Loading processes...</option>
-                    </select>
-                  </label>
-                  <div class="core2-active-view-toggle" role="tablist" aria-label="Active batch view mode">
-                    <button type="button" class="core2-active-view-btn core2-active-view-btn--active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Pipeline</button>
-                    <button type="button" class="core2-active-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
-                  </div>
-                </div>
+          <div class="workspace-stack batches-page" data-batches-root data-state="loading">
+          <section id="core2-active-batches-panel" class="workspace-card batches-card" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
+            <div class="batches-head">
+              <div class="batches-head__text">
+                <h2 id="core2-active-batches-title">Under way</h2>
+                <dl class="batches-figures" data-batches-figures>
+                  <div><dt>under way</dt><dd data-core2-inflight-count>–</dd></div>
+                  <div data-batches-waiting-figure><dt>waiting over 2 days</dt><dd data-batches-waiting-count>–</dd></div>
+                  <div><dt>finished in the last 7 days</dt><dd data-core2-completed7d-count>–</dd></div>
+                </dl>
               </div>
-              <div class="core2-active-filter-row" aria-label="Filter active batches">
-                <label class="core2-active-search-label" for="core2-active-search">Find a batch
-                  <input id="core2-active-search" type="search" class="spa-inp" placeholder="Batch ID, step or person" autocomplete="off">
-                </label>
-                <div class="core2-active-status-filter" role="group" aria-label="Batch status">
-                  <button type="button" class="core2-filter-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
-                  <button type="button" class="core2-filter-chip" data-core2-active-status="pending" aria-pressed="false">Ready to record</button>
-                  <button type="button" class="core2-filter-chip" data-core2-active-status="in_progress" aria-pressed="false">In progress</button>
-                </div>
+              <div class="batches-view-toggle" role="tablist" aria-label="Show batches as">
+                <button type="button" class="batches-view-btn is-active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Batches</button>
+                <button type="button" class="batches-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
               </div>
+            </div>
 
-              <div class="core2-active-status-row">
-                <div class="core2-active-status-metrics">
-                  <span><strong data-core2-inflight-count>0</strong> active</span>
-                  <span><strong data-core2-ready-count>0</strong> ready to record</span>
-                  <span><strong data-core2-completed7d-count>0</strong> finished in the last 7 days</span>
-                </div>
-                <div class="core2-active-status-note">
-                  <span data-core2-active-total-note>Showing 0 active batches</span>
-                </div>
+            <div class="batches-filters" role="search" aria-label="Filter batches" data-batches-filters>
+              <label class="batches-field batches-field--search">
+                <span class="batches-sr">Find a batch</span>
+                <input id="core2-active-search" type="search" placeholder="Find a batch, workflow, step or person" autocomplete="off" aria-label="Find a batch">
+              </label>
+              <label class="batches-field">
+                <span class="batches-sr">Workflow</span>
+                <select id="core2-active-process-select" aria-label="Workflow">
+                  <option value="">All workflows</option>
+                </select>
+              </label>
+              <div class="batches-chips" role="group" aria-label="Which batches">
+                <button type="button" class="batches-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
+                <button type="button" class="batches-chip" data-core2-active-status="waiting" aria-pressed="false">Waiting</button>
               </div>
+            </div>
 
-              <div class="core2-active-step-rail" id="core2-active-step-rail" aria-live="polite">
-                <p class="core2-active-batches-empty">Loading process steps...</p>
-              </div>
+            <div class="batches-message" data-batches-message role="status" hidden>
+              <p data-batches-message-text></p>
+              <button type="button" class="workspace-button" data-batches-clear hidden>Clear filters</button>
+              <button type="button" class="workspace-button" data-batches-retry hidden>Try again</button>
+              <a class="workspace-button" href="/core/processes" data-batches-start hidden>Start a batch from a workflow</a>
+            </div>
 
-              <div class="core2-active-view" id="core2-active-pipeline-view">
-                <div class="core2-active-pipeline-grid" id="core2-active-pipeline-grid">
-                  <p class="core2-active-batches-empty">Loading active batches...</p>
-                </div>
+            <div class="core2-active-view batches-view" id="core2-active-pipeline-view">
+              <div class="batches-board" id="core2-active-pipeline-grid" aria-live="polite">
+                <p class="batches-loading">Loading batches…</p>
               </div>
+            </div>
 
-              <div class="core2-active-view" id="core2-active-timeline-view" hidden>
-                <p class="core2-active-timeline-help">Each bar shows how long a batch spent in a production step. Select a row for the full batch record.</p>
-                <div class="core2-active-timeline" id="core2-active-timeline">
-                  <p class="core2-active-batches-empty">Loading timeline...</p>
-                </div>
-              </div>
-              </div>
+            <div class="core2-active-view batches-view" id="core2-active-timeline-view" hidden>
+              <p class="core2-active-timeline-help">Each bar is the time a batch spent at a step. Select a row for the full batch record.</p>
+              <div class="core2-active-timeline" id="core2-active-timeline"></div>
+            </div>
           </section>
           </div>
+          <script src="{{ url_for('core.serve_core_js', filename='batches.js') }}" defer></script>
           {% endif %}
 
           <div class="core2-health-sheet-overlay" id="core2-health-sheet-overlay" hidden>
@@ -428,23 +441,22 @@
           </div>
           {% if core2_focus_mode == 'active_batches_live' %}
           <div class="core2-active-detail-overlay" id="core2-active-detail-overlay" hidden>
-            <div class="core2-active-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-title">
+            <div class="core2-active-detail-sheet batches-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-id">
               <div class="core2-active-detail-head">
-                <h3 id="core2-active-detail-title">Batch details</h3>
+                <div>
+                  <h3 class="core2-active-detail-id" id="core2-active-detail-id">Batch</h3>
+                  <p class="core2-active-detail-meta" id="core2-active-detail-process">Workflow</p>
+                </div>
                 <button type="button" class="core2-active-detail-close" data-core2-detail-close aria-label="Close batch details">&times;</button>
               </div>
               <div class="core2-active-detail-body">
-                <p class="core2-active-detail-id" id="core2-active-detail-id">Execution</p>
-                <p class="core2-active-detail-meta" id="core2-active-detail-process">Process</p>
                 <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
                 <h4 class="core2-active-detail-heading">Steps</h4>
-                <div class="core2-active-detail-steps" id="core2-active-detail-steps">
-                  <p class="core2-active-batches-empty">No step metadata available.</p>
-                </div>
+                <div class="core2-active-detail-steps" id="core2-active-detail-steps"></div>
               </div>
               <div class="core2-active-detail-foot">
-                <button type="button" class="core2-active-detail-btn core2-active-detail-btn--ghost" data-core2-detail-close>Close</button>
-                <a class="core2-active-detail-btn core2-active-detail-btn--primary" id="core2-active-detail-next-step" href="/core/processes">Record next step</a>
+                <button type="button" class="workspace-button" data-core2-detail-close>Close</button>
+                <a class="workspace-button batches-primary" id="core2-active-detail-next-step" href="/core/processes">Record next step</a>
               </div>
             </div>
           </div>
@@ -459,7 +471,7 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Configure execution modal callbacks before loading shared script
     window.ExecutionModalConfig = {
       onStepCompleted: async function() {
@@ -470,7 +482,7 @@
   </script>
   {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     {
     // Global variable for notification timeout
     let notificationTimeout = null;
@@ -617,6 +629,14 @@
       const caption = document.getElementById('core2-hub-caption');
       if (caption) caption.textContent = { overview: 'Keep production moving, from stock to finished batches.', inventory: 'Stock on hand and what needs attention.', workflows: 'Product workflows and the batches running on them.', tasks: 'Plan operational work alongside Sales follow-ups.' }[safeTab];
       document.querySelectorAll('[data-core2-overview-only]').forEach(function (el) { el.hidden = safeTab !== 'overview'; });
+      // The overview's title is the section head. The other tabs show this page's own header, and
+      // the section's name then stops being announced as the page's heading.
+      document.querySelectorAll('[data-core2-own-header]').forEach(function (el) { el.hidden = safeTab === 'overview'; });
+      const sectionTitle = document.getElementById('section-head-title');
+      if (sectionTitle) {
+        if (safeTab === 'overview') sectionTitle.removeAttribute('role');
+        else sectionTitle.setAttribute('role', 'presentation');
+      }
 
       // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
       closeCore2HealthSheet();
@@ -735,6 +755,11 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // data-action-args for markup built as a string: JSON, escaped for a double-quoted attribute.
+    function actionArgs(...values) {
+      return JSON.stringify(values).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // Render inventory for V2 Modern design
@@ -1134,27 +1159,29 @@
       } else if (stage === 2) {
         primary = { label: 'Create product workflow', href: '/core/flows/create', icon: 'workflow' };
       } else if (stage === 3) {
-        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
       } else {
-        primary = { label: 'Trace and recall', href: '/core/sourcemap', icon: 'trace' };
+        // Set up and running: the everyday job on this page is recording production.
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
       }
 
       var addInv = { kind: 'addInventory' };
-      var recordExec = { label: 'Record production step', href: '/core/processes' };
+      var recordExec = { label: 'Record production step', href: '/core/record' };
+      var trace = { label: 'Trace and recall', href: '/core/sourcemap' };
       var secondaries = [];
       if (stage === 2) {
         secondaries.push(addInv, recordExec);
       } else if (stage === 3) {
         secondaries.push(addInv, recordExec, { label: 'Create product workflow', href: '/core/flows/create' });
       } else if (stage === 4) {
-        secondaries.push(addInv, recordExec);
+        secondaries.push(addInv, trace);
       }
 
       const permissions = actionsWrap ? actionsWrap.dataset : {};
       function actionAllowed(item) {
         if (item.kind === 'addInventory' || item.addInventoryDropdown) return permissions.canAdjust === 'true';
         if (item.href === '/core/flows/create') return permissions.canDesign === 'true';
-        if (item.href === '/core/processes') return permissions.canRecord === 'true';
+        if (item.href === '/core/record') return permissions.canRecord === 'true';
         if (item.href === '/core/sourcemap') return permissions.canTrace === 'true';
         return true;
       }
@@ -2214,23 +2241,23 @@
         : '';
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}">
             <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
+            <button class="btn-icon-small" data-action-stop data-action="openEditInventoryModal" data-action-args="${actionArgs(item.id)}" title="Edit inventory item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
-            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteInventoryConfirmation('${item.id}', '${escapeHtml(item.name)}')" title="Delete inventory item">
+            <button class="btn-icon-small" data-action-stop data-action="showDeleteInventoryConfirmation" data-action-args="${actionArgs(item.id, item.name)}" title="Delete inventory item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
             </button>
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetails('${item.id}')" id="arrow-${item.id}">
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}" id="arrow-${item.id}">
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
@@ -2239,7 +2266,7 @@
         ${item.source_execution_id ? `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
           <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
+          <button class="btn btn-primary btn-sm" data-action-stop data-action="executeNextStepFromInventory" data-action-args="${actionArgs(item.source_execution_id, item.producing_step_id || '')}" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
@@ -2556,49 +2583,97 @@
       var attentionHost = document.getElementById('core2-overview-attention');
       if (attentionHost) {
         attentionHost.innerHTML = attention.map(function (item) {
-          return '<a class="core2-attention-item core2-attention-item--' + item.tone + '" href="' + item.href + '">' +
-            '<span class="core2-attention-item__count">' + escapeHtml(String(item.count)) + '</span>' +
-            '<span class="core2-attention-item__label">' + escapeHtml(item.label) + '</span>' +
-            '<span class="core2-attention-item__hint">' + escapeHtml(item.hint) + '</span></a>';
+          var clear = !Number(item.count);
+          return '<a class="prod-check prod-check--' + (clear ? 'clear' : item.tone) + '" href="' + item.href + '">' +
+            '<span class="prod-check__count">' + escapeHtml(String(item.count)) + '</span>' +
+            '<span class="prod-check__label">' + escapeHtml(item.label) + '</span>' +
+            '<span class="prod-check__hint">' + escapeHtml(clear ? 'Nothing to do.' : item.hint) + '</span></a>';
         }).join('');
       }
 
-      core2RenderActiveProduction((wf.active_executions || []).slice(0, 6));
+      var movement = inv.movement_24h || {};
+      [['[data-production-finished-week]', wf.completed_7d], ['[data-production-movements]', movement.events]].forEach(function (pair) {
+        var el = document.querySelector(pair[0]);
+        if (el) el.textContent = String(Number(pair[1] || 0));
+      });
+
+      core2ActiveProduction = wf.active_executions || [];
+      var oldest = core2ActiveProduction.map(core2BatchView).filter(function (batch) { return batch.hours >= 0; }).sort(function (x, y) { return y.hours - x.hours; })[0];
+      var oldestEl = document.querySelector('[data-production-oldest]');
+      var oldestName = document.querySelector('[data-production-oldest-name]');
+      if (oldestEl) oldestEl.textContent = oldest ? oldest.age.replace(/^Started /, '').replace(/ ago$/, '').replace('just now', 'under an hour') : '–';
+      if (oldestName) oldestName.textContent = oldest ? oldest.name : 'no batches under way';
+      core2RenderActiveProduction();
     }
 
-    // Active production: one disclosure per batch, with a single way on to its next step.
-    function core2RenderActiveProduction(executions) {
+    // Active production. Every batch says where it is, how far through, and how long it has
+    // been going, with the one way on to its next step in view.
+    var core2ActiveProduction = [];
+
+    function core2BatchView(execution) {
+      var step = execution.current_step || null;
+      var total = Number(execution.total_steps || 0);
+      var steps = execution.steps || [];
+      var done = steps.filter(function (s) { return s && s.status === 'completed'; }).length;
+      var started = execution.started_at ? new Date(execution.started_at) : null;
+      if (started && isNaN(started)) started = null;
+      var hours = started ? Math.max(0, (Date.now() - started.getTime()) / 3600000) : null;
+      var age = hours === null ? 'Not started' :
+        hours < 1 ? 'Started just now' :
+        hours < 24 ? 'Started ' + Math.round(hours) + (Math.round(hours) === 1 ? ' hour ago' : ' hours ago') :
+        'Started ' + Math.round(hours / 24) + (Math.round(hours / 24) === 1 ? ' day ago' : ' days ago');
+      var stage = done === 0 ? 'new' : (total && done >= total - 1 ? 'last' : 'mid');
+      return {
+        id: String(execution.id || ''),
+        name: execution.process_name || 'Untitled workflow',
+        step: step && step.name ? step.name : 'No step is ready to record',
+        position: total ? 'Step ' + (step ? step.step_number : Math.min(done + 1, total)) + ' of ' + total : '',
+        done: done,
+        total: total,
+        age: age,
+        hours: hours === null ? -1 : hours,
+        stage: stage,
+        stageLabel: stage === 'new' ? 'Not started' : stage === 'last' ? 'Last step' : 'In progress',
+        href: '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(String(execution.id || '')),
+      };
+    }
+
+    function core2BatchProgress(batch) {
+      // A workflow with no steps has nothing to draw; say so instead of leaving a gap.
+      if (!batch.total) return '<span class="prod-progress prod-progress--none">No steps yet</span>';
+      var cells = '';
+      for (var i = 0; i < batch.total; i++) cells += '<span' + (i < batch.done ? ' class="is-done"' : '') + '></span>';
+      return '<span class="prod-progress" role="img" aria-label="' + escapeHtml(batch.total ? batch.done + ' of ' + batch.total + ' steps done' : 'No steps yet') + '">' + cells + '</span>';
+    }
+
+    function core2BatchAction(batch, canRecord) {
+      return canRecord ? '<a class="workspace-button prod-batch__action" href="' + escapeHtml(batch.href) + '">Record next step<span class="prod-visually-hidden"> for ' + escapeHtml(batch.name) + ', ' + escapeHtml(batch.step) + '</span></a>' : '';
+    }
+
+    function core2RenderActiveProduction() {
       var host = document.getElementById('core2-overview-active-batches');
       if (!host) return;
-      if (!executions.length) {
+      var caption = document.querySelector('[data-production-active-caption]');
+      var batches = core2ActiveProduction.map(core2BatchView).sort(function (x, y) { return y.hours - x.hours; });
+      if (!batches.length) {
+        host.className = 'prod-batches';
+        if (caption) caption.hidden = true;
         host.innerHTML = '<p class="core2-active-batches-empty">No batches are active right now. Start a batch from a product workflow when work begins.</p>';
         return;
       }
-      // A live refresh re-renders the list; keep whatever the user had open.
-      var open = Array.prototype.map.call(host.querySelectorAll('details[open]'), function (el) { return el.dataset.executionId; });
+      if (caption) {
+        caption.hidden = false;
+        caption.textContent = batches.length + (batches.length === 1 ? ' batch' : ' batches') + ' under way, longest running first.';
+      }
       var actions = document.getElementById('core2-journey-actions');
       var canRecord = !!actions && actions.dataset.canRecord === 'true';
-      host.innerHTML = executions.map(function (execution) {
-        var id = String(execution.id || '');
-        var step = execution.current_step || null;
-        var total = Number(execution.total_steps || 0);
-        var done = (execution.steps || []).filter(function (s) { return s && s.status === 'completed'; }).length;
-        var started = execution.started_at ? new Date(execution.started_at) : null;
-        var facts = [
-          ['Status', execution.status === 'pending' ? 'Ready to record' : 'In progress'],
-          ['Next step', step && step.name ? step.name + (total ? ' (step ' + step.step_number + ' of ' + total + ')' : '') : 'No step is ready to record'],
-          ['Progress', total ? done + ' of ' + total + ' steps done' : 'No steps recorded yet'],
-          ['Started', started && !isNaN(started) ? started.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded'],
-        ];
-        var href = '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(id);
-        return '<details class="workspace-disclosure" data-execution-id="' + escapeHtml(id) + '"' + (open.indexOf(id) !== -1 ? ' open' : '') + '>' +
-          '<summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">' +
-          escapeHtml(execution.process_name || 'Untitled workflow') + '</span><span class="workspace-disclosure__meta">' +
-          escapeHtml(step && step.name ? step.name : 'Ready to start') + '</span></span><span class="workspace-disclosure__value">' +
-          escapeHtml(facts[0][1]) + '</span></summary><div class="workspace-disclosure__body"><dl class="workspace-facts">' +
-          facts.map(function (fact) { return '<div><dt>' + escapeHtml(fact[0]) + '</dt><dd>' + escapeHtml(fact[1]) + '</dd></div>'; }).join('') +
-          '</dl>' + (canRecord ? '<a class="workspace-button workspace-button--primary" href="' + escapeHtml(href) + '">Record next step</a>' : '') +
-          '</div></details>';
+
+      host.className = 'prod-batches prod-rows';
+      host.innerHTML = batches.map(function (batch) {
+        return '<article class="prod-row" data-execution-id="' + escapeHtml(batch.id) + '"><div class="prod-row__text"><p class="prod-row__name">' + escapeHtml(batch.name) + '</p>' +
+          '<p class="prod-row__step">' + escapeHtml(batch.step) + '</p></div>' +
+          '<div class="prod-row__state">' + core2BatchProgress(batch) + '<p class="prod-row__meta">' + escapeHtml([batch.position, batch.age].filter(Boolean).join(' · ')) + '</p></div>' +
+          core2BatchAction(batch, canRecord) + '</article>';
       }).join('');
     }
 
@@ -2660,6 +2735,8 @@
           window.loadSystemFindingsBanner();
         }
       } catch (error) {
+        // Leaving the page mid-request is not a failure to report, and there is no page left to tell.
+        if (error && error.name === 'AbortError') return overview;
         console.error('Failed to load core overview:', error);
         const health = document.getElementById('core2-journey-bar');
         if (health) health.textContent = 'Production health could not be loaded. Refresh to try again.';
@@ -2689,6 +2766,7 @@
         renderInventoryV2(items);
       } catch (error) {
         core2LoadedTabPanels.inventory.delete(surface);
+        if (error && error.name === 'AbortError') return;
         console.error('Failed to load inventory tab:', error);
       }
     }
@@ -2739,7 +2817,7 @@
       // The dedicated /core/inventory/live page renders the live-inventory grid outside
       // the tabbed hub (it links back via ?back_tab=, not ?tab=), so core2CurrentMainTab()
       // never resolves to 'inventory' there. Detect it directly by its grid element,
-      // the same way core-active-batches-graph.js detects its own dedicated page.
+      // the same way batches.js finds the Batches page by its root.
       var isDedicatedInventoryPage = !!document.getElementById('core2-inv-items-grid');
       if (tab === 'inventory' || isDedicatedInventoryPage) loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
@@ -3189,7 +3267,7 @@
       currentDeleteInventoryName = itemName;
       const modal = document.getElementById('delete-inventory-confirmation-modal');
       const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
-      messageEl.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
+      messageEl.textContent = `Delete "${itemName}"? This can't be undone. Only stock with no history can be deleted: anything moved, sold, wasted or counted stays in the records (adjust it to zero instead).`;
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
@@ -3409,11 +3487,11 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return updateProcess(this)">
+      <form data-submit-action="updateProcess">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Gin distillation">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
@@ -3439,8 +3517,8 @@
   </div>
   
   <!-- Reset DB Confirmation Modal -->
-  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" onclick="closeResetDbModal()">
-    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" data-action="closeResetDbModal">
+    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" data-action-stop>
       <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
         <div style="flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px; background: var(--bg-hover, rgba(0,0,0,0.05)); display: flex; align-items: center; justify-content: center;">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-secondary);">
@@ -3452,7 +3530,7 @@
           <h2 style="font-size: 18px; font-weight: 600; color: var(--color-text-primary, #111827); margin: 0 0 8px 0;">Reset Demo Database</h2>
           <p style="color: #111827; font-size: 14px; line-height: 1.5; margin: 0;">This will replace all processes, executions, and inventory for the demo user with fresh distillery sample data. This cannot be undone.</p>
         </div>
-        <button type="button" onclick="closeResetDbModal()" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
+        <button type="button" data-action="closeResetDbModal" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -3460,8 +3538,8 @@
         </button>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
+        <button type="button" class="btn btn-secondary" data-action="closeResetDbModal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" data-action="confirmResetDb">Reset Database</button>
       </div>
     </div>
   </div>
@@ -3478,11 +3556,11 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return updateInventoryItem(this)">
+      <form data-submit-action="updateInventoryItem">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Juniper berries">
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
@@ -3541,7 +3619,7 @@
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Inventory Item</h2>
-        <button onclick="cancelDeleteInventory()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <button data-action="cancelDeleteInventory" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -3552,8 +3630,8 @@
         <p id="delete-inventory-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="cancelDeleteInventory()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmDeleteInventory()" style="background: var(--danger, #ef4444);">Delete</button>
+        <button type="button" class="btn btn-secondary" data-action="cancelDeleteInventory">Cancel</button>
+        <button type="button" class="btn btn-primary" data-action="confirmDeleteInventory" style="background: var(--danger, #ef4444);">Delete</button>
       </div>
     </div>
   </div>
@@ -3569,7 +3647,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+        <button data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>

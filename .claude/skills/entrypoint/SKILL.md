@@ -259,9 +259,15 @@ time, not a reason to serialize the work up front. This supersedes `herdr-multi-
 §6's "ask before building topology" default *for this one case*: the user already asked,
 once, by requesting this behavior — that consent doesn't need re-confirming per invocation.
 
-What happens after the worktree exists forks on one question, asked once per dispatch
-(`AskUserQuestion`, "Run now" first and marked recommended):
+How it is dispatched is one question, asked once per dispatch (`AskUserQuestion`,
+"Submit to Factory" first and marked recommended whenever Factory is up — see 4.0):
 
+- **Submit to Factory** — hand the ask to Event Factory (`~/event-factory`), which cuts
+  the worktree, launches the front door in its own herdr pane, and then *keeps owning the
+  MR*: it sends the same agent bounded repair instructions when the MR pipeline fails, and
+  records the merge when a human merges. Run now and Add to queue do none of that after
+  launch, and the legacy `mr-pipeline-watch` / `mr-conflict-watch` timers are disabled, so
+  an MR opened outside Factory gets no automatic pipeline help at all (4.0).
 - **Run now** — launch it live in its own herdr workspace/pane straight away (4.3).
 - **Add to queue** — defer the launch to `claude-nightwatch`, the systemd-supervised
   watcher (`~/.claude/tools/claude_nightwatch.py`, unit `claude-nightwatch.service`,
@@ -271,9 +277,10 @@ What happens after the worktree exists forks on one question, asked once per dis
   order — or for anything that doesn't need to be watched live. Works with or without
   Herdr, since the queued launch is headless and never touches a pane.
 
-Default to "Run now" when the user hasn't signalled a preference; take "queue this",
-"add it to the queue", "run these one after another", or "prep a few things" as an explicit
-pick of "Add to queue".
+Default to "Submit to Factory" when the user hasn't signalled a preference and 4.0's check
+passes; otherwise default to "Run now". Take "run it here", "I want to watch it", or "skip
+Factory" as an explicit pick of "Run now", and "queue this", "add it to the queue", "run
+these one after another", or "prep a few things" as an explicit pick of "Add to queue".
 
 **Applies to:** `new-feature`, `review-feature`, `fix-bug`, `dependency-update`, and the
 meta-skills below that patch code and open their own MR (`docs-truth`, `suite-warden`,
@@ -286,6 +293,47 @@ there — don't double up. **Does not apply to** `deploy-runner`: it ships an al
 Agent tool's own `isolation: "worktree"` (same fresh-branch-off-main guarantee, no visible
 pane) rather than silently skipping isolation — see 4.3. "Add to queue" has no such
 requirement; a queued item never needs a pane, so it works the same with or without Herdr.
+
+### 4.0 Submit to Factory
+
+Check Factory is up and owns work for this repo (one call, ~1s):
+
+```bash
+FACTORY=~/event-factory/.venv/bin/factory
+"$FACTORY" status | python3 -c "import json,sys; o=json.load(sys.stdin)['ownership']; \
+sys.exit(0 if any(r['event_family']=='work' and r['owner']=='factory' and not r['paused'] for r in o) else 1)"
+```
+
+Exit 0 → Factory is the default. Non-zero, or the binary is missing → say so in one line
+and fall back to Run now / Add to queue; don't try to start or repair Factory from here
+(`factory doctor` and `~/event-factory/docs/live-gitlab-events.md` are the operator's tools).
+
+Submit. Factory picks the front door from `--task-type` (`bug` → `fix-bug`, `feature` →
+`new-feature`, `review` → `review-feature`, `dependency` → `dependency-update`). For
+`docs-truth`, `suite-warden`, `skill-smith`, or `page-design`, keep the closest task type
+and add `--skill <name>`; Factory refuses any skill outside its dispatchable list.
+
+```bash
+"$FACTORY" work submit "<one-line title>" --repo workflow-engine \
+  --task-type <bug|feature|review|dependency> \
+  --description "<the ask + Step 1 handoff context>" \
+  --accept "<acceptance condition>" [--accept "<another>"] --json
+```
+
+Give at least one concrete `--accept` drawn from the ask (what is observably true when it's
+done), not a restatement of the title. Factory dedupes on the title/intent, so a repeat ask
+returns `linked_duplicate: true` with the existing work id — report that rather than
+resubmitting under a reworded title.
+
+**Skip 4.1–4.4 for this path.** Factory names its own branch (`factory/<id>/attempt-N`) and
+cuts its own worktree; a front door launched by Factory must not get a second worktree from
+this skill. Report the work id in one line, point the user at `factory work list --repo
+workflow-engine` or the herdr launcher's **Work** view to follow it, then return without
+waiting — the same "don't block on it" rule as 4.3.
+
+Work that starts as a GitLab issue goes in the other way: add the `factory::ready` label to
+the issue and Factory picks it up as `fix-bug` work. That label does nothing on an MR —
+Factory only follows MRs its own agents reported.
 
 ### 4.1 Name the branch
 

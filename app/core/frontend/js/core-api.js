@@ -15,6 +15,8 @@ function _getRumTraceHeaders(url, method) {
 // Full-page navigation cancels outstanding fetches. Mark that lifecycle so those
 // cancellations do not appear as application network failures in the old page.
 window.addEventListener('pagehide', function () { window.__coreApiPageUnloading = true; });
+// A page restored from the back-forward cache is live again.
+window.addEventListener('pageshow', function () { window.__coreApiPageUnloading = false; });
 
 window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
@@ -218,10 +220,13 @@ window.CoreAPI = window.CoreAPI || {
         return this.request(`/executions/${encodeURIComponent(executionId)}/with-process?minimal=1`);
     },
     
-    async createExecution(processId) {
+    async createExecution(processId, siteId) {
+        // siteId only with multiple sites on (site-picker.js); without it the batch is at the default site.
+        const body = { process_id: processId };
+        if (siteId) body.site_id = siteId;
         return this.request('/executions', {
             method: 'POST',
-            body: { process_id: processId },
+            body,
         });
     },
     
@@ -422,10 +427,12 @@ window.CoreAPI = window.CoreAPI || {
         return this.getExpiredMaterials();
     },
     
-    async createInventoryItem(data) {
+    /** opts.idempotencyKey (GL-U03): the same key on a retry replays the first save instead of adding twice. */
+    async createInventoryItem(data, opts = {}) {
         return this.request('/inventory', {
             method: 'POST',
             body: data,
+            headers: opts.idempotencyKey ? {'Idempotency-Key': opts.idempotencyKey} : undefined,
         });
     },
 
@@ -446,6 +453,24 @@ window.CoreAPI = window.CoreAPI || {
             method: 'POST',
             body: formData,
         });
+    },
+
+    /** The problem rows of a CSV as a CSV file (Blob). Same input as inventoryCsvValidate. */
+    async inventoryCsvErrorReport(formData) {
+        const url = `${this.baseURL}/inventory/csv-error-report`;
+        const csrfMeta = typeof document !== 'undefined' && document.querySelector
+            ? document.querySelector('meta[name="csrf-token"]')
+            : null;
+        const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const headers = { ...(_getRumTraceHeaders(url, 'POST') || {}) };
+        if (csrfTok) headers['X-CSRFToken'] = csrfTok;
+        const response = await fetch(url, { method: 'POST', body: formData, headers, credentials: 'same-origin' });
+        if (!response.ok) {
+            let message = `HTTP ${response.status}`;
+            try { message = (await response.json()).error || message; } catch (e) { /* not JSON */ }
+            throw new Error(message);
+        }
+        return response.blob();
     },
 
     async inventoryCsvCommit(payload) {

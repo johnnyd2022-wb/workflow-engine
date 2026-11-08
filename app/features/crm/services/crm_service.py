@@ -6,10 +6,12 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.step import Step
 from app.core.utils.time import utc_now
 from app.features.crm.repositories.crm_task_repo import CRMNoteRepository, CRMTaskRepository
 from app.features.crm.repositories.product_mapping_repo import ProductMappingRepository
@@ -24,6 +26,14 @@ from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroT
 from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)
+
+
+class MatchingModeChangeError(Exception):
+    """Changing the matching mode needs inventory.adjust (SALES-PERM)."""
+
+    def __init__(self, current: str, wanted: str):
+        super().__init__(f"matching mode {current} -> {wanted} needs inventory.adjust")
+        self.current, self.wanted = current, wanted
 
 
 class CRMService:
@@ -156,8 +166,13 @@ class CRMService:
         tasks = self.task_repo.list_for_org(org_id, contact_id=contact_id)
         mappings = self.mapping_repo.list_for_org(org_id)
         last_contact = self.contact_repo.last_contact_for_org(org_id, [contact.id])
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        sync = ContactSyncService(self.db)
         return {
             "customer": {**_serialise_contact(contact), **_serialise_last_contact(last_contact.get(contact.id))},
+            "xero_sync": {**sync.describe(contact), "default": sync.sync_default(org_id)},
+            "xero_connection": sync.connection(org_id),
             "recent_invoices": [_serialise_invoice(i, with_line_items=True, db=self.db) for i in invoices],
             "notes": [_serialise_note(n) for n in notes],
             "tasks": [_serialise_task(t, db=self.db) for t in tasks],
@@ -339,11 +354,22 @@ class CRMService:
             "obfuscate_sales_figures": bool(getattr(row, "obfuscate_sales_figures", False)),
         }
 
-    def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
+    def update_traceability_config(self, org_id: UUID, data: dict, *, may_change_mode: bool = True) -> dict:
+        """Save the sales-traceability settings.
+
+        ``may_change_mode`` is False for someone without inventory.adjust (SALES-PERM): the
+        matching mode decides whether waiting sales take stock. It is checked here, against the
+        mode as it is under the lock, in the same transaction that writes, so a change committed
+        by someone else in between can't be overwritten by a request that may not change it.
+        """
+        self.traceability_repo.lock_for_update(org_id)
         before = self.get_traceability_config(org_id)
-        strategy = (data.get("matching_strategy") or "fifo").strip().lower()
+        # A save that leaves the mode out keeps it; it used to fall back to fifo silently.
+        strategy = (data.get("matching_strategy") or before["matching_strategy"] or "fifo").strip().lower()
         if strategy not in {"fifo", "manual", "hybrid"}:
             raise ValueError("matching_strategy must be fifo, manual, or hybrid")
+        if strategy != before["matching_strategy"] and not may_change_mode:
+            raise MatchingModeChangeError(before["matching_strategy"], strategy)
         manual_review_days = int(data.get("manual_review_days") or 7)
         manual_review_days = min(90, max(1, manual_review_days))
         strict_mapping = bool(data.get("strict_mapping", True))
@@ -697,6 +723,9 @@ class CRMService:
     def create_task(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
         from datetime import date
 
+        task_type = data.get("task_type", "general")
+        if not isinstance(task_type, str) or task_type not in {"general", "call", "email"}:
+            raise ValueError("Use the tasting task form for tasting details, or choose General, Call or Email")
         due_date_raw = data.get("due_date")
         due_date = None
         if due_date_raw:
@@ -719,7 +748,8 @@ class CRMService:
             description=data.get("description"),
             due_date=due_date,
             priority=data.get("priority", "medium"),
-            assigned_to_user_id=UUID(assigned_raw) if assigned_raw else None,
+            task_type=task_type,
+            assigned_to_user_id=_assignee(self.db, org_id, assigned_raw),
             created_by_user_id=user_id,
         )
         self.db.flush()  # populate task.id (client-side default) before event emission
@@ -730,6 +760,7 @@ class CRMService:
             entity_id=task.id,
             payload={
                 "task_id": str(task.id),
+                "task_type": task.task_type,
                 "title": task.title,
                 "status": task.status,
                 "priority": task.priority,
@@ -747,8 +778,21 @@ class CRMService:
             self._log_access_denied(org_id=org_id, ref_kind="task_id", ref_id=task_id)
             return None
 
+        if "task_type" in data and (
+            not isinstance(data["task_type"], str) or data["task_type"] not in {"general", "call", "email"}
+        ):
+            raise ValueError("A tasting type cannot be attached or removed through ordinary task editing")
         before = _task_event_snapshot(task)
-        allowed = {"title", "description", "due_date", "status", "priority", "assigned_to_user_id", "contact_id"}
+        allowed = {
+            "title",
+            "description",
+            "due_date",
+            "status",
+            "priority",
+            "assigned_to_user_id",
+            "contact_id",
+            "task_type",
+        }
         updates = {k: v for k, v in data.items() if k in allowed}
 
         if "due_date" in updates and isinstance(updates["due_date"], str):
@@ -760,10 +804,7 @@ class CRMService:
             raw_assigned = updates["assigned_to_user_id"]
             if isinstance(raw_assigned, str) and raw_assigned.strip().lower() in {"", "null", "none"}:
                 raw_assigned = None
-            if raw_assigned:
-                updates["assigned_to_user_id"] = UUID(raw_assigned)
-            else:
-                updates["assigned_to_user_id"] = None
+            updates["assigned_to_user_id"] = _assignee(self.db, org_id, raw_assigned)
         if "contact_id" in updates:
             raw_contact = updates["contact_id"]
             if isinstance(raw_contact, str) and raw_contact.strip().lower() in {"", "null", "none"}:
@@ -818,6 +859,116 @@ class CRMService:
 
     def customer_breakdown(self, org_id: UUID, top_n: int = 20) -> list[dict]:
         return self.invoice_repo.customer_sales_breakdown(org_id, top_n=top_n)
+
+    def product_sales_by_store(self, org_id: UUID, start_date: date, end_date: date) -> dict:
+        """Sales line quantities in mapped stock units, grouped both ways.
+
+        Unmapped Xero lines cannot safely be mixed into bottle/unit rankings: a
+        quantity of one may be a case. Keep their value visible for reconciliation.
+        """
+        config = self.traceability_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        mappings = self.mapping_repo.list_for_org(org_id)
+        rows = self.invoice_repo.customer_product_breakdown(
+            org_id, limit=None, start_date=start_date, end_date=end_date
+        )
+        customers: dict[str, dict] = {}
+        products: dict[str, dict] = {}
+        unmapped_revenue = Decimal("0")
+        unmapped_rows: list[dict] = []
+        for row in rows:
+            mapping = SalesTraceabilityService._find_mapping(
+                SimpleNamespace(description=row["description"], item_code=row["item_code"]), mappings, strict
+            )
+            if mapping is None:
+                unmapped_revenue += Decimal(str(row["total_revenue"]))
+                unmapped_rows.append(
+                    {
+                        "contact_id": row["contact_id"],
+                        "contact_name": row["contact_name"],
+                        "item_code": row["item_code"],
+                        "description": row["description"],
+                        "xero_quantity": row["total_qty"],
+                        "line_revenue": row["total_revenue"],
+                    }
+                )
+                continue
+            quantity = Decimal(str(row["total_qty"])) * int(mapping.units_per_line or 1)
+            revenue = Decimal(str(row["total_revenue"]))
+            customer_id = row["contact_id"]
+            product_key = mapping.biz_e_product_name.casefold()
+            customer = customers.setdefault(
+                customer_id,
+                {
+                    "contact_id": customer_id,
+                    "contact_name": row["contact_name"],
+                    "total_units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                    "products": {},
+                },
+            )
+            product = products.setdefault(
+                product_key,
+                {
+                    "product_name": mapping.biz_e_product_name,
+                    "total_units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                    "customers": {},
+                },
+            )
+            customer["total_units"] += quantity
+            customer["line_revenue"] += revenue
+            product["total_units"] += quantity
+            product["line_revenue"] += revenue
+            customer_product = customer["products"].setdefault(
+                product_key,
+                {"product_name": mapping.biz_e_product_name, "units": Decimal("0"), "line_revenue": Decimal("0")},
+            )
+            product_customer = product["customers"].setdefault(
+                customer_id,
+                {
+                    "contact_id": customer_id,
+                    "contact_name": row["contact_name"],
+                    "units": Decimal("0"),
+                    "line_revenue": Decimal("0"),
+                },
+            )
+            for entry in (customer_product, product_customer):
+                entry["units"] += quantity
+                entry["line_revenue"] += revenue
+
+        def serialise(entry: dict) -> dict:
+            result = {
+                key: float(value) if isinstance(value, Decimal) else value
+                for key, value in entry.items()
+                if key not in {"products", "customers"}
+            }
+            for child_key in ("products", "customers"):
+                if child_key in entry:
+                    result[child_key] = sorted(
+                        (serialise(child) for child in entry[child_key].values()),
+                        key=lambda child: (
+                            -child["units"],
+                            child.get("product_name", child.get("contact_name", "")).casefold(),
+                        ),
+                    )
+            return result
+
+        return {
+            "customers": sorted(
+                (serialise(row) for row in customers.values()),
+                key=lambda row: (-row["total_units"], row["contact_name"].casefold()),
+            ),
+            "products": sorted(
+                (serialise(row) for row in products.values()),
+                key=lambda row: (-row["total_units"], row["product_name"].casefold()),
+            ),
+            "unmapped_xero_items": len(unmapped_rows),
+            "unmapped_line_revenue": float(unmapped_revenue),
+            "unmapped": sorted(
+                unmapped_rows, key=lambda row: (row["contact_name"].casefold(), (row["description"] or "").casefold())
+            ),
+        }
 
     def rankings(
         self,
@@ -959,6 +1110,33 @@ class CRMService:
         unmapped.sort(key=lambda item: item["total_revenue"], reverse=True)
         return ranked_products[:limit] if limit is not None else ranked_products, unmapped[:20], len(unmapped)
 
+    def get_dashboard_overview(self, org_id: UUID) -> dict:
+        """Home's live sales totals and open tasks, without Sales' analysis tables.
+
+        No product rankings, customer breakdowns, contact enrichment or archived tasks
+        belong on the initial Home request. Keep the full overview for Sales itself.
+        """
+        today = date.today()
+        month_start = today.replace(day=1)
+        previous_start = (
+            month_start.replace(year=month_start.year - 1, month=12)
+            if month_start.month == 1
+            else month_start.replace(month=month_start.month - 1)
+        )
+        next_start = (
+            month_start.replace(year=month_start.year + 1, month=1)
+            if month_start.month == 12
+            else month_start.replace(month=month_start.month + 1)
+        )
+        current = self.invoice_repo.sales_totals_for_period(org_id, month_start, next_start)["total"]
+        previous = self.invoice_repo.sales_totals_for_period(org_id, previous_start, month_start)["total"]
+        return {
+            "current_month_revenue": current,
+            "outstanding_receivables": self.invoice_repo.outstanding_receivables(org_id)["total"],
+            "revenue_vs_last_month_pct": round(((current - previous) / previous) * 100, 1) if previous else None,
+            "open_tasks": self.task_repo.dashboard_open_tasks(org_id),
+        }
+
     def get_overview(self, org_id: UUID) -> dict:
         from datetime import date, timedelta
 
@@ -1079,6 +1257,40 @@ class CRMService:
             )
         return options
 
+    def _require_known_source_outputs(self, org_id: UUID, output_ids: set[UUID]) -> None:
+        """Refuse a ``biz_e_source_output_id`` that is not one of this organisation's product outputs.
+
+        It is ``steps.outputs[].id`` inside JSONB with no foreign key, so nothing in the schema
+        stops a mapping naming another tenant's output, or one that exists nowhere (security audit
+        F2). An output is the organisation's own if one of its workflow steps declares it, or stock
+        it holds carries it: the Configuration picker lists the latter, and stock outlives edits to
+        the recipe that made it.
+        """
+        if not output_ids:
+            return
+        held = {
+            output_id
+            for (output_id,) in self.db.query(InventoryItem.source_output_id).filter(
+                InventoryItem.org_id == org_id, InventoryItem.source_output_id.in_(output_ids)
+            )
+        }
+        unverified = output_ids - held
+        if not unverified:
+            return
+        declared = {
+            str(output.get("id"))
+            for (outputs,) in self.db.query(Step.outputs).filter(
+                Step.org_id == org_id,
+                or_(*(Step.outputs.contains([{"id": str(output_id)}]) for output_id in unverified)),
+            )
+            for output in outputs or []
+            if isinstance(output, dict)
+        }
+        for output_id in sorted(unverified, key=str):
+            if str(output_id) not in declared:
+                self._log_access_denied(org_id=org_id, ref_kind="biz_e_source_output_id", ref_id=output_id)
+                raise ValueError("biz_e_source_output_id is not a product output in this organisation")
+
     def create_mapping(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
         return self.create_mappings(org_id, [data], user_id)[0]
 
@@ -1092,6 +1304,9 @@ class CRMService:
             raise ValueError("A maximum of 50 mappings may be saved at once")
 
         prepared = [_prepare_mapping_data(data) for data in mappings_data]
+        self._require_known_source_outputs(
+            org_id, {data["biz_e_source_output_id"] for data in prepared if data["biz_e_source_output_id"]}
+        )
         keys = {
             (data["biz_e_product_name"].casefold(), data["xero_description_pattern"].casefold()) for data in prepared
         }
@@ -1150,9 +1365,11 @@ class CRMService:
         if "units_per_line" in updates:
             updates["units_per_line"] = _parse_units_per_line(updates["units_per_line"])
         if "biz_e_source_output_id" in updates:
-            updates["biz_e_source_output_id"] = (
-                UUID(updates["biz_e_source_output_id"]) if updates["biz_e_source_output_id"] else None
-            )
+            updates["biz_e_source_output_id"] = _parse_source_output_id(updates["biz_e_source_output_id"])
+            # Only a changed id is looked up: resending the current one (whose recipe and stock may
+            # since be gone) must not block an unrelated edit.
+            if updates["biz_e_source_output_id"] and updates["biz_e_source_output_id"] != m.biz_e_source_output_id:
+                self._require_known_source_outputs(org_id, {updates["biz_e_source_output_id"]})
         self.mapping_repo.update(m, **updates)
         after = _mapping_event_snapshot(m)
         self._emit_event(
@@ -1189,6 +1406,13 @@ class CRMService:
 # ------------------------------------------------------------------
 
 
+def _assignee(db: Session, org_id: UUID, raw) -> UUID | None:
+    """The task's assignee: an active user of this organisation, as core tasks require."""
+    from app.core.backend.tasks import _parse_optional_user
+
+    return _parse_optional_user(db, org_id, raw)
+
+
 def _safe_event_uuid(raw: str | None, *, fallback: UUID) -> UUID:
     if raw:
         try:
@@ -1209,6 +1433,7 @@ def _dict_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, dict[
 def _task_event_snapshot(task) -> dict[str, Any]:
     return {
         "task_id": str(task.id),
+        "task_type": task.task_type,
         "title": task.title,
         "status": task.status,
         "priority": task.priority,
@@ -1245,6 +1470,13 @@ def _parse_units_per_line(value) -> int:
     return units
 
 
+def _parse_source_output_id(value: Any) -> UUID | None:
+    try:
+        return UUID(str(value)) if value else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
+
+
 def _prepare_mapping_data(data: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Each mapping must be an object")
@@ -1259,11 +1491,7 @@ def _prepare_mapping_data(data: dict) -> dict:
     if match_type not in {"exact", "contains", "alias"}:
         raise ValueError("match_type must be exact, contains, or alias")
 
-    source_output_id = data.get("biz_e_source_output_id")
-    try:
-        source_output_id = UUID(str(source_output_id)) if source_output_id else None
-    except (TypeError, ValueError) as exc:
-        raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
+    source_output_id = _parse_source_output_id(data.get("biz_e_source_output_id"))
     notes = data.get("notes")
     return {
         "units_per_line": _parse_units_per_line(data.get("units_per_line", 1)),
@@ -1308,6 +1536,9 @@ def _serialise_contact(c) -> dict:
         "is_supplier": c.is_supplier,
         "last_synced_at": c.last_synced_at.isoformat() if c.last_synced_at else None,
         "xero_updated_at": c.xero_updated_at.isoformat() if c.xero_updated_at else None,
+        "source": getattr(c, "source", None) or "xero",
+        "in_xero": bool(c.xero_contact_id),
+        "xero_push_status": getattr(c, "xero_push_status", None),
     }
 
 
@@ -1334,7 +1565,7 @@ def _serialise_invoice(inv, with_line_items: bool = False, db=None) -> dict:
     if with_line_items and db:
         from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 
-        line_items = XeroInvoiceRepository(db).get_line_items(inv.id)
+        line_items = XeroInvoiceRepository(db).get_line_items(inv.id, inv.org_id)
         result["line_items"] = [_serialise_line_item(li) for li in line_items]
     return result
 
@@ -1370,12 +1601,20 @@ def _serialise_task(t, db=None) -> dict:
     if db is not None and getattr(t, "contact_id", None):
         from app.features.crm.models.xero_contact import XeroContact
 
-        customer = db.query(XeroContact).filter(XeroContact.id == t.contact_id).first()
+        customer = db.query(XeroContact).filter(XeroContact.id == t.contact_id, XeroContact.org_id == t.org_id).first()
     return {
         "id": str(t.id),
         "contact_id": str(t.contact_id) if t.contact_id else None,
         "contact_name": customer.name if customer else None,
         "contact_email": customer.email_address if customer else None,
+        "task_type": t.task_type or "general",
+        "tasting_id": str(t.tasting[0].id) if t.tasting else None,
+        "tasting_status": t.tasting[0].status if t.tasting else None,
+        "tasting_kind": t.tasting[0].kind if t.tasting else None,
+        "tasting_starts_at": t.tasting[0].starts_at.isoformat() if t.tasting else None,
+        "tasting_venue": t.tasting[0].venue_name if t.tasting else None,
+        "href": "/crm/tasks?task_id=" + str(t.id) if t.tasting else None,
+        "editable": not bool(t.tasting),
         "contact_phone": customer.phone_number if customer else None,
         "title": t.title,
         "description": t.description,
@@ -1425,6 +1664,7 @@ def _serialise_sync_job(j) -> dict:
         "status": j.status,
         "contacts_synced": j.contacts_synced,
         "invoices_synced": j.invoices_synced,
+        "credit_notes_synced": j.credit_notes_synced,
         "started_at": j.started_at.isoformat() if j.started_at else None,
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
         "error_message": j.error_message,

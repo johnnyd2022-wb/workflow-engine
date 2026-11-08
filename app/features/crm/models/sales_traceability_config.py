@@ -27,6 +27,9 @@ class SalesTraceabilityConfig(TenantScoped, Base):
     # Tenant preference: obscures figures in the CRM overview without altering the
     # underlying operational/sales records used for traceability and reporting.
     obfuscate_sales_figures = Column(Boolean, nullable=False, default=False)
+    # Sales default for contacts created in Biz-E: send them (and later edits) to Xero.
+    # A contact's own sync_to_xero overrides it.
+    sync_contacts_to_xero = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 

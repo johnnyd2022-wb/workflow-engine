@@ -58,7 +58,10 @@ def prepare_stock_movement(session, org_id, source_item_id) -> dict:
 
 
 def movement_requirements(session, org_id):
-    """Generic form projection; installed modules own field names, copy and choices."""
+    """Generic form projection; installed modules own field names, copy and choices.
+
+    A field may carry ``show_when: {other_field: [values]}``: forms ask it only once that other
+    answer is one of the values (and send it only then)."""
     profile = session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
     if profile is None or not profile.enabled:
         return {"fields": [], "authority_permission": None}

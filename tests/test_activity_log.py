@@ -1071,3 +1071,39 @@ class TestActivityLogAccessDeniedLogging:
         assert resp.get_json()["events"] != []
         denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
         assert not denials, f"a real, own-org lookup must not log access_denied: {[r.getMessage() for r in denials]}"
+
+
+class TestInventoryQuantityHistory:
+    """The Inventory page draws each line's trend from `quantity_history` on its summary."""
+
+    @staticmethod
+    def _history(db, item_id):
+        db.expire_all()
+        summary = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == item_id).one().summary
+        return [point["qty"] for point in summary["quantity_history"]]
+
+    def test_an_update_that_changes_the_quantity_adds_a_history_point(self, db, org):
+        from decimal import Decimal
+
+        from app.core.db.repositories.inventory_repo import InventoryRepository
+
+        item = InventoryItemFactory(org_id=org.id, quantity="10")
+        db.commit()
+        repo = InventoryRepository(db)
+        repo.update_inventory_item(item.id, org.id, quantity="7.5")
+        repo.update_inventory_item(item.id, org.id, quantity="4")
+
+        assert [Decimal(q) for q in self._history(db, item.id)] == [Decimal("10"), Decimal("7.5"), Decimal("4")]
+
+    def test_an_update_that_leaves_the_quantity_alone_adds_no_history_point(self, db, org):
+        from decimal import Decimal
+
+        from app.core.db.repositories.inventory_repo import InventoryRepository
+
+        item = InventoryItemFactory(org_id=org.id, quantity="10")
+        db.commit()
+        repo = InventoryRepository(db)
+        repo.update_inventory_item(item.id, org.id, name="Renamed item")
+        repo.update_inventory_item(item.id, org.id, quantity="10")
+
+        assert [Decimal(q) for q in self._history(db, item.id)] == [Decimal("10")]

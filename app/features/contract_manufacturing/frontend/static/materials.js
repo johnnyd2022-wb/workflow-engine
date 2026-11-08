@@ -25,10 +25,13 @@
   }
   customer.addEventListener('change', () => { showError(''); load().catch(e => showError(e.message)); });
   const form = document.querySelector('[data-material-receipt]');
+  // Received where? Shown only with multiple sites on; its select is named site_id, so FormData sends it.
+  if (form && window.BizeSite) window.BizeSite.mount(form.querySelector('[data-site-pick]'), {label: 'Received at'});
   form?.addEventListener('submit', async event => {
     event.preventDefault(); showError('');
     if (!customer.value) return showError('Choose a customer');
     const body = Object.fromEntries(new FormData(form));
+    if (body.site_id && window.BizeSite) window.BizeSite.remember(body.site_id);
     const serialized = JSON.stringify({customer: customer.value, body});
     if (submittedBody !== serialized) { key = crypto.randomUUID(); submittedBody = serialized; }
     const button = form.querySelector('button[type="submit"]'); button.disabled = true;

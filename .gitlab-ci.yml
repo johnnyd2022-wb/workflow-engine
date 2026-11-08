@@ -30,7 +30,7 @@ variables:
   # jobs would otherwise install on every run. The tag is `scripts/ci_image_tag.py`'s hash
   # of the image's inputs; `ci_image_current` warns when it falls behind, and main builds
   # any tag that is missing. A stale tag only costs time: every job still runs `uv sync`.
-  CI_IMAGE_TAG: "1ec1fed1ea484a7e"
+  CI_IMAGE_TAG: "0d797b39ed235a8d"
 
 # Each step is skipped when the pre-built image already provides it (CI_PREBUILT is set
 # inside that image), and still works on a bare python image.
@@ -57,8 +57,14 @@ workflow:
 
 # A new push to a merge request cancels the superseded pipeline's running jobs instead of
 # letting them hold runner slots. main opts out through the workflow rule above.
+#
+# Every job also reports its end state to Event Factory (job ID and status only, no GitLab
+# credential), as a fallback to GitLab's own job webhook; Factory reacts to a failing job on
+# any MR or a red main (docs/ci-factory-events.md). A job with its own after_script keeps it.
 default:
   interruptible: true
+  after_script:
+    - sh ci/factory_event.sh || true
 
 include:
 - template: Security/SAST.gitlab-ci.yml
@@ -88,6 +94,9 @@ lockfile_consistency:
   only:
     - schedules
     - merge_requests
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Renovate: proposes dependency/Docker-base-image/pre-commit-hook version bumps as MRs
@@ -110,6 +119,9 @@ renovate:
     - renovate
   only:
     - schedules
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # Run ruff linter
@@ -238,8 +250,24 @@ relevant_tests:
         echo "No Python tests selected for this approved documentation-only change."
         exit 0
       fi
+      # The rules print their paths space-separated; tia.py (below) reads and writes one target per
+      # line. Normalise here, where a target is a path and cannot contain a space.
+      tr ' ' '\n' < /tmp/relevant-pytest-targets | sed '/^$/d' > /tmp/relevant-pytest-targets.tmp && mv /tmp/relevant-pytest-targets.tmp /tmp/relevant-pytest-targets
     - *install_uv
     - uv sync --extra dev
+    - |
+      # Test impact analysis (docs/test-impact-analysis.md): replace the rules' full-suite
+      # fallback with the tests that executed the changed lines in main's recorded run. Never
+      # fails the job; anything unavailable falls back to the rules' own targets.
+      if uv run python scripts/tia.py select --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" \
+          --rules-targets /tmp/relevant-pytest-targets --out /tmp/tia-pytest-targets --record \
+          --mr "$CI_MERGE_REQUEST_IID" --pipeline "$CI_PIPELINE_ID"; then
+        mv /tmp/tia-pytest-targets /tmp/relevant-pytest-targets
+      fi
+      if [ ! -s /tmp/relevant-pytest-targets ]; then
+        echo "Test impact analysis: no recorded test executes the changed code."
+        exit 0
+      fi
     - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-database; then
         test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
@@ -268,17 +296,24 @@ relevant_tests:
         ./ci/setup_server.sh
       fi
     - |
-      TEST_TARGETS="$(cat /tmp/relevant-pytest-targets)"
+      # One target per line; @file keeps parametrised test IDs with spaces intact. Do not split on
+      # spaces here: tia.py writes node IDs such as "...[wildflower-Whistlebird Gin 44% - ...]".
+      sed '/^$/d' < /tmp/relevant-pytest-targets > /tmp/pytest-args
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-e2e; then
-        E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest $TEST_TARGETS -v
+        E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v
       else
-        ENVIRONMENT=test uv run pytest $TEST_TARGETS -v
+        # A large selection (the full suite, or many targets) runs on 6 workers, each with its
+        # own cloned test database (tests/xdist_db.py); a small one runs in-process.
+        PARALLEL=""
+        if grep -qx 'tests/' /tmp/pytest-args || [ "$(wc -l < /tmp/pytest-args)" -gt 50 ]; then PARALLEL="-n 6"; fi
+        ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v $PARALLEL
       fi
   after_script:
     - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-server; then
         ./ci/cleanup_server.sh
       fi
+    - sh ci/factory_event.sh || true
   only:
     - merge_requests
   allow_failure: false
@@ -320,7 +355,7 @@ mr_e2e:
     - mkdir -p app/tls
     - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
   script:
-    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_smoke.py -v
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_smoke.py tests/e2e/test_mobile_page_audit.py tests/e2e/test_contract_portal.py tests/e2e/test_site_transfers.py -v
   only:
     - merge_requests
   allow_failure: false
@@ -361,6 +396,57 @@ perf_baseline:
     - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_perf_budgets.py -v
   only:
     - main
+
+# A broad relevant_tests fallback intentionally skips E2E. Keep Tastings' subscribed
+# stock/calendar/performance journeys blocking even when this feature changes shared
+# models, app registration or migrations. Reuse the established in-process smoke setup.
+tastings_e2e:
+  extends: mr_e2e
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_tastings_page.py -v
+  only:
+    refs:
+      - merge_requests
+    changes:
+      - .gitlab-ci.yml
+      - app/features/tastings/**/*
+      - app/features/crm/frontend/js/tastings.js
+      - app/features/crm/frontend/css/tastings.css
+      - app/features/crm/frontend/templates/crm/tasks.html
+      - app/features/crm/frontend/css/tasks.css
+      - app/features/crm/routes/page_routes.py
+      - app/features/crm/frontend/js/tasks-calendar.js
+      - app/features/crm/models/crm_task.py
+      - app/features/crm/repositories/crm_task_repo.py
+      - app/features/crm/routes/api_routes.py
+      - app/features/crm/services/crm_service.py
+      - app/features/compliant/modules/nz_alcohol/**/*
+      - app/core/backend/tasks.py
+      - app/core/security/**/*
+      - app/core/db/migrations/versions/*tastings*
+      - app/api/app_factory.py
+      - app/ui/page_registry.py
+      - tests/e2e/test_tastings_page.py
+  allow_failure: false
+
+# Nightly: every E2E file against main, not just the ones a diff touches. relevant_tests
+# only runs an E2E file when its inputs change and main's cd_e2e runs only the smoke file,
+# so the other ~75 files could rot unseen until an unrelated MR touched them and went red
+# (.agents/reports/ci/pipeline-health-2026-11.md). Started by the "nightly-e2e" pipeline
+# schedule (variable E2E_NIGHTLY=1); the deploy chain opts out of that pipeline above.
+# allow_failure for now: the schedule pipeline is main's head pipeline while it runs, so a red
+# one would make main_green block every MR on tests nobody has run in weeks. Flip to false
+# once a nightly run is green (board task SUITE-GREEN).
+nightly_e2e:
+  extends: mr_e2e
+  timeout: 2h
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/ -v -p no:cacheprovider
+  only:
+    refs:
+      - schedules
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
@@ -398,7 +484,24 @@ unit_tests:
     # ENVIRONMENT=test their conftest intentionally skips, so this complete Python
     # suite does not download Chromium or start an unused local server.
   script:
-    - ENVIRONMENT=test uv run pytest tests/ -v
+    # The full suite stays the release gate, on 6 workers with a cloned test database each
+    # (tests/xdist_db.py). It also records which lines each test executes (coverage contexts +
+    # scripts/tia_probe.py) so MR pipelines can run only affected tests.
+    # Recording never blocks: the job's result is pytest's alone.
+    - >
+      ENVIRONMENT=test PYTHONPATH=scripts TIA_PROBE_OUT=tia-probe.json
+      uv run pytest tests/ -v -n 6 -p tia_probe
+      --cov --cov-config=ci/tia.coveragerc --cov-context=test --cov-report=
+      || PYTEST_STATUS=$?
+    - >
+      uv run python scripts/tia.py record --coverage .coverage --probe tia-probe.json
+      --sha "$CI_COMMIT_SHA" --ref "$CI_COMMIT_BRANCH" --pipeline-id "$CI_PIPELINE_ID"
+      || echo "tia: recording failed; selection keeps using the previous run"
+    # Accuracy check: did any MR merged since the last run skip a test that fails here?
+    - >
+      uv run python scripts/tia.py escapes
+      || echo "tia: selection escapes above (see docs/test-impact-analysis.md)"
+    - exit "${PYTEST_STATUS:-0}"
   only:
     - main
   allow_failure: false
@@ -485,15 +588,20 @@ uv_audit:
   stage: security
   needs: []
   image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
+  variables:
+    GIT_DEPTH: 0  # the gate reads the target branch's lockfile at the MR's diff base
   script:
     - *install_uv
     - uv sync --extra dev
-    - mkdir -p .agents/reports/security
-    - >
-      uv audit --frozen --output-format json
-      --preview-features audit-command,json-output
-      > .agents/reports/security/uv-audit.json
-      || (cat .agents/reports/security/uv-audit.json; exit 1)
+    # On an MR, an advisory already on the target branch is a warning (exit 3), not a
+    # block; one the MR introduces still fails. On main every advisory fails as before.
+    - |
+      TARGET=""
+      if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ] && git fetch -q origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; then
+        TARGET="FETCH_HEAD"
+      fi
+      python3 scripts/uv_audit_gate.py --out .agents/reports/security/uv-audit.json \
+        --base "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" --target "$TARGET"
   artifacts:
     paths:
       - .agents/reports/security/uv-audit.json
@@ -502,7 +610,8 @@ uv_audit:
   only:
     - merge_requests
     - main
-  allow_failure: false
+  allow_failure:
+    exit_codes: [3]
 
 # Supply-chain BEHAVIOUR analysis (Socket) -- the proactive layer pip_audit/uv_audit
 # can't provide. Those scan for already-published CVEs (reactive, days-to-weeks lag from
@@ -649,6 +758,9 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
 
 # Builds the CI image for this checkout when the registry does not have it yet (see
 # ci/Dockerfile.ci). Runs here, not on merge requests, for the same reason as the app
@@ -683,6 +795,9 @@ ci_image_build:
       echo "Built $IMAGE. Set CI_IMAGE_TAG to $TAG in .gitlab-ci.yml to use it."
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   allow_failure: true
 
 # ============================================================================
@@ -718,13 +833,29 @@ deploy_test:
   image: docker:27
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+    # Exit 3 = the new app started but never passed /healthcheck. The old app is gone by then,
+    # and cd_e2e (which rollback_test_on_failure needs) won't run, so roll back here.
+    - |
+      status=0
+      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
+      if [ "$status" -eq 3 ]; then
+        echo "New app unhealthy -- rolling back to last known-good :test-stable"
+        if ! ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"; then
+          # Most likely the failed deploy added a migration :test-stable doesn't know
+          # ("Can't locate revision" above). Test is left without a healthy app.
+          echo "❌ Rollback to :test-stable failed too: the test environment needs a manual fix."
+        fi
+      fi
+      exit "$status"
   environment:
     name: test
     url: https://test-workflow-engine.whistlebird.co.nz
   needs: ["docker_build_publish"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
 
@@ -734,17 +865,20 @@ deploy_test:
 cd_e2e:
   stage: deploy
   # deploy-target is a shell executor, so GitLab ignores `image:`. Copy the checkout
-  # into a disposable Python container and use the host network to reach the deployed
-  # test service at localhost:8001. Streaming avoids assuming the runner's checkout
+  # into a disposable Python container on the deployed app's network (workflow-observability)
+  # and reach it as workflow-engine-test:8001. Streaming avoids assuming the runner's checkout
   # path is mounted at the same location on the Docker host.
   script:
     - |
       set -euo pipefail
       CD_E2E_CONTAINER="workflow-cd-e2e-${CI_JOB_ID}"
-      # On this host network `host.docker.internal` resolves to the Windows side; the test database is
-      # published by the Docker engine on this machine, so point the name at loopback for the job.
-      docker run --detach --name "$CD_E2E_CONTAINER" --network host \
-        --add-host host.docker.internal:127.0.0.1 \
+      # Not --network host: Chromium aborts in-flight requests with net::ERR_NETWORK_CHANGED
+      # whenever another job on this Docker engine creates or removes a network, because with
+      # the host's network namespace it sees every bridge come and go (reproduced: 1 in 60
+      # loads under network churn on host, 0 on a bridge; PH-NETCHANGE). On the app's own
+      # network it sees only its own interface. The app is reached by container name; the test
+      # database through Docker Desktop's host.docker.internal, as the app itself does.
+      docker run --detach --name "$CD_E2E_CONTAINER" --network workflow-observability \
         python:3.14-bookworm sleep infinity
       cleanup_cd_e2e() {
         docker rm --force "$CD_E2E_CONTAINER" >/dev/null 2>&1 || true
@@ -758,7 +892,7 @@ cd_e2e:
         --workdir /workspace \
         --env UV_VERSION="$UV_VERSION" \
         --env ENVIRONMENT=test \
-        --env E2E_BASE_URL="https://localhost:8001" \
+        --env E2E_BASE_URL="https://workflow-engine-test:8001" \
         --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
         --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
@@ -772,6 +906,9 @@ cd_e2e:
   needs: ["deploy_test"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target  # must be the SAME runner as deploy_test (hits localhost:8001)
 
@@ -790,6 +927,9 @@ promote_test_stable:
   needs: ["cd_e2e"]
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target
 
@@ -812,5 +952,8 @@ rollback_test_on_failure:
   when: on_failure
   only:
     - main
+  except:
+    variables:
+      - $E2E_NIGHTLY == "1"
   tags:
     - deploy-target

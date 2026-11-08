@@ -238,6 +238,67 @@ def test_decode_barcode_is_deprecated_and_returns_410(logged_in_page: Page):
     assert "browser" in error.lower(), f"expected an explanation that decoding happens client-side, got: {error!r}"
 
 
+def test_barcode_manual_entry_adds_an_item_the_lookup_then_finds(logged_in_page: Page):
+    """Barcode add by typed entry (findings-index 2cc8fc78): type the code, continue, fill the form.
+    This drives the lookup and the submit; it does not drive the camera/decode path, nor a
+    scanner's Enter key (see the next test)."""
+    page = logged_in_page
+    name = f"E2E Barcode {uuid.uuid4().hex[:8]}"
+    code = str(uuid.uuid4().int)[:13]
+
+    page.goto("/core/inventory/add/barcode")
+    expect(page.locator("#barcode-manual-input")).to_be_visible()
+
+    # Control: the code is unknown before the add, so the lookup answering `exists` afterwards
+    # can only be the write this test made.
+    before = page.request.get(f"/api/core/inventory/barcode/{code}")
+    assert before.status == 200, f"lookup failed: {before.status} {before.text()}"
+    assert before.json() == {"exists": False}
+
+    page.locator("#barcode-manual-input").fill(code)
+    expect(page.locator("#barcode-continue-btn")).to_be_enabled()
+    page.locator("#barcode-continue-btn").click()
+
+    expect(page.locator("#barcode-step-form")).to_be_visible()
+    expect(page.locator("#barcode-inv-barcode-display")).to_have_text(code)
+    page.locator("#barcode-inv-name").fill(name)
+    page.locator("#barcode-inv-quantity").fill("3")
+    page.locator("#barcode-inv-unit").select_option("kg")
+    page.get_by_role("button", name="Add Inventory Item").click()
+    page.wait_for_url(re.compile(r"/core$"), timeout=15_000)
+
+    after = page.request.get(f"/api/core/inventory/barcode/{code}")
+    assert after.status == 200, f"lookup failed: {after.status} {after.text()}"
+    body = after.json()
+    assert body["exists"] is True, f"the barcode {code} was not stored with the item: {body}"
+    assert body["product"]["name"] == name
+    assert body["product"]["quantity"] == "3"
+
+
+def test_barcode_enter_key_captures_the_code_and_continue_uses_it_without_the_field(logged_in_page: Page):
+    """A keyboard-wedge scanner types the code and presses Enter. Enter must surface the code in
+    the result preview, and Continue must then work from that captured code even once the
+    field is empty, which is how a code that arrived by scan (never typed into the field) is
+    carried to the form."""
+    page = logged_in_page
+    code = str(uuid.uuid4().int)[:13]
+
+    page.goto("/core/inventory/add/barcode")
+    expect(page.locator("#barcode-continue-btn")).to_be_disabled()
+    page.locator("#barcode-manual-input").fill(code)
+    page.locator("#barcode-manual-input").press("Enter")
+
+    expect(page.locator("#barcode-result-preview")).to_be_visible()
+    expect(page.locator("#barcode-result-value")).to_have_text(code)
+
+    page.locator("#barcode-manual-input").fill("")
+    expect(page.locator("#barcode-continue-btn")).to_be_enabled()
+    page.locator("#barcode-continue-btn").click()
+
+    expect(page.locator("#barcode-step-form")).to_be_visible()
+    expect(page.locator("#barcode-inv-barcode-display")).to_have_text(code)
+
+
 def _create_untracked_item(page, name: str, quantity=8, unit="kg") -> str:
     resp = page.request.post(
         "/api/core/inventory",

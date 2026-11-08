@@ -107,11 +107,7 @@ html[data-spa-theme="dark"] #page-content.page-content:has(.add-inventory-manual
 @media (min-width: 768px) {
   body.add-inventory-manual-spa .add-inv-manual-submit-bar,
   #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
-    left: 260px;
-  }
-  .app-layout:has(#sidebar.collapsed) body.add-inventory-manual-spa .add-inv-manual-submit-bar,
-  .app-layout:has(#sidebar.collapsed) #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
-    left: 72px;
+    left: var(--sidebar-w, 260px);
   }
 }
 @media (max-width: 767px) {

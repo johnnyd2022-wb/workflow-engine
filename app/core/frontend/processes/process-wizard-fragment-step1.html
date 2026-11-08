@@ -2,8 +2,8 @@
       <div class="create-process-step-body">
         <div class="flow-spa-stack flow-spa-stack--step" style="margin-bottom: 24px;">
           <div class="flow-spa-stack__item">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              Step Name <span style="color: var(--error, #ef4444);">*</span>
+            <label for="guided-step-name" style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Step name <span style="color: var(--error, #ef4444);">*</span>
             </label>
             <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
@@ -11,13 +11,30 @@
             </p>
           </div>
           <div class="flow-spa-stack__item">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            <label for="guided-step-description" style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               Description
             </label>
             <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;"></textarea>
             <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
-              Provide a high-level summary of what this process step involves. Example: Brief summary of what this step involves.
+A short summary of what happens in this step, in plain language.
             </p>
+          </div>
+          <div class="flow-spa-stack__item step-timing" data-step-timing role="group" aria-labelledby="step-timing-title">
+            <div class="step-timing__head">
+              <p class="step-timing__title" id="step-timing-title">Timing <span>· optional</span></p>
+            </div>
+            <div class="step-timing__bar" aria-hidden="true"><div data-timing-bar="duration"><span>Work</span></div><div data-timing-bar="wait"><span>Wait</span></div></div>
+            <div class="step-timing__fields">
+              <div class="step-timing__field">
+                <label class="step-timing__label" for="guided-step-duration-value">Takes</label>
+                <span class="step-timing__pair"><input type="number" id="guided-step-duration-value" data-timing-value="duration" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-duration-unit" data-timing-unit="duration" aria-label="Takes: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
+              </div>
+              <div class="step-timing__field">
+                <label class="step-timing__label" for="guided-step-wait-value">Then waits</label>
+                <span class="step-timing__pair"><input type="number" id="guided-step-wait-value" data-timing-value="wait" min="0" step="any" inputmode="decimal" placeholder="—"><select id="guided-step-wait-unit" data-timing-unit="wait" aria-label="Then waits: unit"><option value="minutes">minutes</option><option value="hours" selected>hours</option><option value="days">days</option><option value="weeks">weeks</option></select></span>
+              </div>
+            </div>
+            <p class="step-timing__total" data-timing-total aria-live="polite"></p>
           </div>
         </div>
       </div>

@@ -198,7 +198,7 @@ function openModal(modalId) {
           <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(title)}</div>
           <div style="font-size: 0.875rem; color: var(--muted-foreground);">${escapeHtml(description)}</div>
         </div>
-        <button onclick="this.parentElement.parentElement.remove()" style="
+        <button type="button" data-remove-ancestor="2" aria-label="Dismiss" style="
           background: none;
           border: none;
           cursor: pointer;

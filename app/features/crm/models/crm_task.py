@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, String, Text
+from sqlalchemy import TIMESTAMP, CheckConstraint, Column, Date, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 import app.core.db.models.task_board_lane  # noqa: F401 -- registers the "task_board_lanes" table this model points at
@@ -14,6 +14,8 @@ from app.core.utils.time import utc_now
 class CRMTask(TenantScoped, Base):
     __tablename__ = "crm_tasks"
     __table_args__ = (
+        CheckConstraint("task_type IN ('general', 'call', 'email', 'tasting')", name="ck_crm_tasks_task_type"),
+        UniqueConstraint("org_id", "id", name="uq_crm_tasks_org_id"),
         Index("ix_crm_tasks_org_due_date", "org_id", "due_date"),
         Index("ix_crm_tasks_org_assigned_status", "org_id", "assigned_to_user_id", "status"),
     )
@@ -22,6 +24,7 @@ class CRMTask(TenantScoped, Base):
     contact_id = Column(
         UUID(as_uuid=True), ForeignKey("xero_contacts.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    task_type = Column(String(20), nullable=False, default="general", server_default="general")
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(Date, nullable=True)

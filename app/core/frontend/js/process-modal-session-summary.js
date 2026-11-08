@@ -17,6 +17,8 @@
       step_number: null,
       name: (session.stepName || '').trim() || 'Untitled step',
       description: (session.stepDescription || '').trim(),
+      duration_minutes: session.durationMinutes != null ? session.durationMinutes : null,
+      wait_minutes: session.waitMinutes != null ? session.waitMinutes : null,
       inputs: inputsRaw.map(function(row) {
         return { name: row.name, quantity: row.quantity, unit: row.unit };
       }),

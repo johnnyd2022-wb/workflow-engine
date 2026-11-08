@@ -171,5 +171,18 @@
         "ceiling": 1000
       }
     }
+  },
+  "feature_measure": {
+    "tastings": {
+      "pages": [
+        "/crm/tasks"
+      ],
+      "api": [
+        "/api/crm/tastings",
+        "/api/crm/tastings/pool",
+        "/api/crm/tastings/choices",
+        "/api/crm/tastings/{event_id}"
+      ]
+    }
   }
 }

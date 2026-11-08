@@ -5,12 +5,13 @@
 #   PROD_HOST_PORT=8010 scripts/run_prod.sh
 #
 # What it does, in order, stopping at the first failure:
+#   0. requires clean tracked files at freshly fetched origin/main and takes a deploy lock
 #   1. loads production secrets from KeePassXC (scripts/prod_secrets.py); never from a file
-#   2. builds the `production` image
+#   2. builds the `production` image from an archive of that commit
 #   3. makes sure the database container is up (scripts/prod_db.sh)
-#   4. backs the database up, if it already has a schema -- a failed backup stops the deploy
+#   4. backs the database up (including on first deploy) -- a failed backup stops the deploy
 #   5. runs migrations with the new image
-#   6. replaces the app container and waits for its health check
+#   6. checks a candidate alongside the old app, then hands over the port with rollback
 #
 # The app listens on 127.0.0.1:${PROD_HOST_PORT} only; whatever fronts production (the
 # Cloudflare tunnel) connects to it there. Uploaded files live on named volumes, so a
@@ -18,17 +19,35 @@
 set -euo pipefail
 
 CONTAINER=workflow-engine-prod
-IMAGE=workflow-engine:prod
 NETWORK=workflow-engine-prod
-DB_CONTAINER=workflow-engine-prod-db
 HOST_PORT="${PROD_HOST_PORT:-8010}"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source=scripts/deploy_common.sh
+source "$repo_root/scripts/deploy_common.sh"
+DEPLOY_ENV=prod
+DEPLOY_NAME=Production
+APP_PORT=8000
+PUBLISH_ADDRESS="127.0.0.1:${HOST_PORT}:8000"
+acquire_deploy_lock
+
+echo "== Checkout"
+check_checkout
+source_sha="$(git rev-parse HEAD)"
+release="$(git rev-parse --short=12 HEAD)-$(date +%s)-$$"
+IMAGE="workflow-engine:prod-$release"
+CANDIDATE="$CONTAINER-candidate-$release"
+PREVIOUS="$CONTAINER-previous-$release"
+
 echo "== Secrets"
-eval "$(python3 scripts/prod_secrets.py export)"
-for name in POSTGRES_PASSWORD FLASK_SECRET_KEY BACKUP_CODE_ENCRYPTION_KEY XERO_TOKEN_ENCRYPTION_KEY; do
+# Keep the export's exit status: eval "$(...)" would hide a KeePass failure.
+secret_exports="$(python3 scripts/prod_secrets.py export)"
+eval "$secret_exports"
+unset secret_exports
+for name in POSTGRES_PASSWORD FLASK_SECRET_KEY BACKUP_CODE_ENCRYPTION_KEY XERO_TOKEN_ENCRYPTION_KEY \
+    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
     [ -n "${!name:-}" ] || { echo "Missing $name." >&2; exit 1; }
     export "${name?}"
 done
@@ -36,18 +55,18 @@ export XERO_CLIENT_ID="${XERO_CLIENT_ID:-}" XERO_CLIENT_SECRET="${XERO_CLIENT_SE
 [ -n "$XERO_CLIENT_ID" ] || echo "Note: no Xero credentials; Sales cannot connect to Xero until they are added."
 
 SECRET_ENV=(-e ENVIRONMENT=prod -e POSTGRES_PASSWORD -e FLASK_SECRET_KEY -e BACKUP_CODE_ENCRYPTION_KEY
-    -e XERO_TOKEN_ENCRYPTION_KEY -e XERO_CLIENT_ID -e XERO_CLIENT_SECRET)
+    -e XERO_TOKEN_ENCRYPTION_KEY -e XERO_CLIENT_ID -e XERO_CLIENT_SECRET
+    -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET)
 
 echo "== Build"
-docker build --target production -f Dockerfile.multi -t "$IMAGE" .
+build_image_from_head production "$IMAGE" "$source_sha"
+# Catch edits or a newer main arriving during the build before touching the database.
+check_checkout "$source_sha"
 
 echo "== Database"
 scripts/prod_db.sh up
-if docker exec "$DB_CONTAINER" psql -U workflow_rw -d workflow-engine -Atc "select 1 from alembic_version limit 1" >/dev/null 2>&1; then
-    echo "Backup: $(scripts/prod_db.sh backup)"
-else
-    echo "No schema yet, so nothing to back up."
-fi
+backup_file="$(scripts/prod_db.sh backup)"
+echo "Backup: $backup_file"
 
 echo "== Migrations"
 docker run --rm --network "$NETWORK" "${SECRET_ENV[@]}" "$IMAGE" uv run alembic upgrade head
@@ -55,25 +74,9 @@ docker run --rm --network "$NETWORK" "${SECRET_ENV[@]}" "$IMAGE" uv run alembic 
 echo "== App"
 docker volume create workflow-engine-prod-evidence >/dev/null
 docker volume create workflow-engine-prod-process-docs >/dev/null
-# Exact-name match: a plain "name=" filter is a substring match and would also hit the database.
-docker stop $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
-docker run -d --name "$CONTAINER" --restart unless-stopped \
-    --network "$NETWORK" -p "127.0.0.1:${HOST_PORT}:8000" \
-    "${SECRET_ENV[@]}" \
-    -v workflow-engine-prod-evidence:/data/evidence \
-    -v workflow-engine-prod-process-docs:/data/process_docs \
-    "$IMAGE" >/dev/null
 
-echo "== Health"
-for _ in $(seq 1 60); do
-    if curl -kfs "https://127.0.0.1:${HOST_PORT}/healthcheck" >/dev/null 2>&1; then
-        echo "Production is up at https://127.0.0.1:${HOST_PORT} (container $CONTAINER)."
-        echo "Logs: docker logs -f $CONTAINER"
-        exit 0
-    fi
-    sleep 2
-done
-echo "Production did not pass its health check. Last log lines:" >&2
-docker logs --tail 40 "$CONTAINER" >&2
-exit 1
+APP_ARGS=("${SECRET_ENV[@]}"
+    -v workflow-engine-prod-evidence:/data/evidence
+    -v workflow-engine-prod-process-docs:/data/process_docs
+)
+deploy_app

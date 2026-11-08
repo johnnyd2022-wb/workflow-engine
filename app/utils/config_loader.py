@@ -239,7 +239,14 @@ class Config:
 
     @property
     def db_name(self) -> str:
-        return self.get("database", "name", "workflow-engine-test-db")
+        name = self.get("database", "name", "workflow-engine-test-db")
+        # Each pytest-xdist worker gets its own copy of the test database (tests/conftest.py
+        # creates it), so parallel workers never see each other's rows. Never applies outside
+        # the local and test environments.
+        worker = os.getenv("PYTEST_XDIST_WORKER")
+        if worker and self.environment in {"local", "test"}:
+            return f"{name}_{worker}"
+        return name
 
     @property
     def db_user(self) -> str:
@@ -358,6 +365,10 @@ class Config:
         return self.get("email", "receiver_email", "")
 
     @property
+    def support_email(self) -> str:
+        return self.get("email", "support_email", "")
+
+    @property
     def invoice_button_enabled(self) -> bool:
         return self.getboolean("features", "invoice_button_enabled", False)
 
@@ -406,6 +417,15 @@ class Config:
         only product area with a per-organisation subscription gate.
         """
         return self.getboolean("features", "operational_cases_enabled", False)
+
+    @property
+    def multi_site_enabled(self) -> bool:
+        """Deployment gate for working at more than one site (GL-P07); off unless the ini says so.
+
+        Each organisation also needs the ``multi_site`` subscription and its own switch
+        (Settings, Sites): see app/core/db/site_entitlement.py.
+        """
+        return self.getboolean("features", "multi_site_enabled", False)
 
     @property
     def log_level(self) -> str:

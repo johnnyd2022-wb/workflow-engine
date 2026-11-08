@@ -1,4 +1,4 @@
-<section class="compliant-record-panel verification-panel" id="verification" data-verification-root
+<section class="workspace-card verification-panel" id="verification" data-verification-root
          data-can-manage="{{ '1' if can('compliance.manage') else '0' }}"
          data-can-record="{{ '1' if can('compliance.record') else '0' }}" aria-labelledby="verification-title">
   <div class="verification-head">
@@ -9,11 +9,14 @@
     </div>
     <span class="verification-chip" data-verification-chip hidden></span>
   </div>
-  <p><a href="/compliant/nz-alcohol/food-registrations">Food registrations and covered sites</a></p>
-  <label>Registration <select data-verification-registration-select><option value="">Unassigned history / organisation settings</option></select></label>
+  <details class="verification-scope">
+    <summary>Registration</summary>
+    <label>Registration <select data-verification-registration-select><option value="">Unassigned history / organisation settings</option></select></label>
+    <p><a href="/compliant/nz-alcohol/food-registrations">Food registrations and covered sites</a></p>
+  </details>
   <p class="compliant-error" data-verification-error role="alert" hidden></p>
 
-  <form class="verification-registration" data-verification-registration hidden>
+  <form class="verification-registration" data-verification-registration hx-boost="false" hidden>
     <p>When did you register your national programme? The initial verification is due within 6 weeks for a new business, or within a year (NP1, NP2) or 6 months (NP3) for an existing one.</p>
     <label>Registered on <input type="date" name="registered_on" required></label>
     <label>Registered as <select name="registered_as"><option value="new">A new business</option><option value="existing">An existing business</option></select></label>
@@ -27,7 +30,7 @@
 
   <details class="verification-record" data-verification-record-wrap hidden>
     <summary>Record a verification</summary>
-    <form data-verification-form novalidate>
+    <form data-verification-form novalidate hx-boost="false">
       <div class="verification-grid">
         <label>Date of the visit <input type="date" name="verified_on" required></label>
         <label>Verifier <input name="verifier_name" maxlength="255" required></label>

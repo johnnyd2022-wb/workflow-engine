@@ -12,6 +12,7 @@ from datetime import date
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
 from app.core.db.models.stock_location import StockLocation
@@ -32,6 +33,7 @@ def _serialise(loc: StockLocation) -> dict:
         "name": loc.name,
         "inside_licensed_area": bool(loc.inside_licensed_area),
         "is_active": bool(loc.is_active),
+        "site_id": str(loc.site_id) if loc.site_id else None,
     }
 
 
@@ -59,11 +61,6 @@ def create_location():
     name = str(data.get("name") or "").strip()
     if not name or len(name) > 120:
         return jsonify({"error": "name is required (up to 120 characters)"}), 400
-    exists = (
-        db_session.query(StockLocation).filter(StockLocation.org_id == _org_id(), StockLocation.name == name).first()
-    )
-    if exists:
-        return jsonify({"error": "A location with that name already exists"}), 409
     loc = StockLocation(
         org_id=_org_id(),
         name=name,
@@ -71,6 +68,12 @@ def create_location():
         site_id=getattr(g, "validated_site_id", None),
     )
     db_session.add(loc)
+    # The site guard fills in the default site on flush; the name is unique within that site.
+    try:
+        db_session.flush()
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "This site already has an area with that name"}), 409
     db_session.commit()
     log_action("create", "stock_location", loc.id, {"name": name, "inside_licensed_area": loc.inside_licensed_area})
     return jsonify(_serialise(loc)), 201

@@ -12,11 +12,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.step import Step
 from app.features.compliance_checks.routes.corechecks import CheckResult
 from app.observability import get_logger
 
@@ -152,11 +154,16 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
     Traverses completed execution steps, reads step.outputs[].extra_data.custom_expiry,
     matches items by source_execution_step_id and output name/unit, evaluates expiry date.
     """
-    # Completed execution steps with step (for outputs) and execution (for process_id)
+    # Filter in Postgres before loading execution history and its JSON. Like the
+    # ready-date check, only steps with an expiry rule can contribute findings.
+    # Test existence rather than boolean equality: the Python validator remains the
+    # authority on enabled/config validity, including legacy truthy enabled values.
     execution_steps = (
         session.query(ExecutionStep)
         .join(Execution, ExecutionStep.execution_id == Execution.id)
-        .filter(Execution.org_id == org_id)
+        .join(Step, ExecutionStep.step_id == Step.id)
+        .filter(Execution.org_id == org_id, ExecutionStep.org_id == org_id, Step.org_id == org_id)
+        .filter(func.jsonb_path_exists(Step.outputs, "$[*].extra_data.custom_expiry"))
         .filter(ExecutionStep.completed_at.isnot(None))
         .options(
             joinedload(ExecutionStep.step),
@@ -164,6 +171,9 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
         )
         .all()
     )
+
+    if not execution_steps:
+        return CheckResult(check_id="output_expiry", flagged=False, message=None, data={"output_expiry_items": []})
 
     output_expiry_items: list[dict[str, Any]] = []
     seen_item_ids: set[UUID] = set()

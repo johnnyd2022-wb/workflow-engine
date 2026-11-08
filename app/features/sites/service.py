@@ -1,14 +1,15 @@
-"""Site registration without exposing incomplete multi-site operations."""
+"""Sites: the register, the default, and what is at each place (GL-P07)."""
 
 from uuid import UUID
 
 from sqlalchemy import func, select
 
-from app.core.db.models.execution import Execution
+from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.site import Site
 from app.core.db.models.stock_location import StockLocation
+from app.core.db.site_entitlement import entitled, sites_on
 from app.core.db.site_guard import SiteScopeError
 
 KINDS = {
@@ -52,7 +53,9 @@ def configure(session, org_id, enabled):
     if not isinstance(enabled, bool):
         raise SiteScopeError("enabled must be true or false")
     org = locked_org(session, org_id)
-    if not enabled and org.multiple_site_operations_enabled:
+    if enabled and not entitled(session, org_id):
+        raise SiteScopeError("Multiple sites are not part of this organisation's plan")
+    if not enabled:
         session.query(Site).filter(Site.org_id == org_id).order_by(Site.id).with_for_update().populate_existing().all()
         additional = select(Site.id).where(Site.org_id == org_id, Site.is_default.is_(False))
 
@@ -138,7 +141,10 @@ def save_site(session, org_id, data, site=None):
             session.query(model.id).filter(model.org_id == org_id).first() is not None
             for model in (StockLocation, Execution, InventoryItem)
         )
-        if occupied:
+        # With every gate open, existing records simply stay where they are and only new
+        # records without a site follow the new default. Without them, records left on the
+        # old default would be stranded at a site nobody can work at.
+        if occupied and not sites_on(session, org_id, org.multiple_sites_enabled):
             raise SiteScopeError("The default cannot change after stock, locations or batches exist")
         default.is_default = False
         session.flush()
@@ -153,7 +159,7 @@ def save_site(session, org_id, data, site=None):
     return site
 
 
-def serialise(site):
+def serialise(site, operations=False):
     return {
         "id": str(site.id),
         "name": site.name,
@@ -161,16 +167,124 @@ def serialise(site):
         "kind": site.kind,
         "is_active": bool(site.is_active),
         "is_default": bool(site.is_default),
-        "operations_available": bool(site.is_default),
+        "operations_available": bool(site.is_default or operations),
     }
 
 
 def overview(session, org_id):
     org = session.query(Organisation).filter(Organisation.id == org_id).one()
     sites = session.query(Site).filter(Site.org_id == org_id).order_by(Site.is_default.desc(), Site.name).all()
+    operations = sites_on(session, org_id, org.multiple_sites_enabled)
+    shown = [serialise(site, operations) for site in sites] if org.multiple_sites_enabled else []
+    compliance = _add_whereabouts(session, org_id, sites, shown) if shown else None
     return {
+        "compliance": compliance,
+        "entitled": entitled(session, org_id),
         "enabled": bool(org.multiple_sites_enabled),
-        "sites": [serialise(site) for site in sites] if org.multiple_sites_enabled else [],
+        "sites": shown,
         "kinds": KINDS,
-        "additional_site_operations_available": bool(org.multiple_site_operations_enabled),
+        "additional_site_operations_available": operations,
     }
+
+
+def _add_whereabouts(session, org_id, sites, shown):
+    """What is at each site, for its card: stock lines, batches under way, its stock areas and
+    whatever the compliance module wants said about it (licensed or not). Returns the module's
+    column label and setup step, or None when it has nothing to say."""
+    from app.features.compliant.platform.site_notes import site_notes
+
+    stock = dict(
+        session.query(InventoryItem.site_id, func.count())
+        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity > 0)
+        .group_by(InventoryItem.site_id)
+        .all()
+    )
+    batches = dict(
+        session.query(Execution.site_id, func.count())
+        .filter(
+            Execution.org_id == org_id,
+            Execution.status.in_((ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS)),
+        )
+        .group_by(Execution.site_id)
+        .all()
+    )
+    areas = (
+        session.query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    notes = site_notes(session, org_id, sites, areas)
+    for site, row in zip(sites, shown, strict=True):
+        row["stock_lines"] = int(stock.get(site.id, 0))
+        row["batches_under_way"] = int(batches.get(site.id, 0))
+        row["notes"] = notes["sites"].get(str(site.id), [])
+        row["areas"] = [
+            {"id": str(area.id), "name": area.name, "note": notes["areas"].get(str(area.id))}
+            for area in areas
+            if area.site_id == site.id
+        ]
+    if notes["label"] is None:
+        return None
+    return {"label": notes["label"], "step": notes["step"]}
+
+
+def choices(session, org_id):
+    """Active sites and stock areas offered by a site picker or site lens."""
+    org = session.query(Organisation).filter(Organisation.id == org_id).one()
+    on = sites_on(session, org_id, org.multiple_sites_enabled)
+    if not on:
+        return {"on": False, "default_id": None, "sites": []}
+    sites = (
+        session.query(Site)
+        .filter(Site.org_id == org_id, Site.is_active.is_(True))
+        .order_by(Site.is_default.desc(), Site.name)
+        .all()
+    )
+    areas = (
+        session.query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    default = next((site for site in sites if site.is_default), None)
+    # Inside the licensed area or not: the compliance module's register when it has one,
+    # else each area's own flag (and stock not placed in an area counts as inside).
+    from app.features.compliant.platform.licensed_areas import licensed_map
+
+    licensed = licensed_map(session, org_id, sites, areas)
+
+    def area_licensed(area):
+        return licensed["areas"][str(area.id)] if licensed else bool(area.inside_licensed_area)
+
+    return {
+        "on": True,
+        "default_id": str(default.id) if default else None,
+        "sites": [
+            {
+                "id": str(site.id),
+                "name": site.name,
+                "kind": site.kind,
+                "is_default": bool(site.is_default),
+                "main_area_licensed": licensed["sites"][str(site.id)] if licensed else True,
+                "areas": [
+                    {"id": str(a.id), "name": a.name, "inside_licensed_area": area_licensed(a)}
+                    for a in areas
+                    if a.site_id == site.id
+                ],
+            }
+            for site in sites
+        ],
+    }
+
+
+def site_named(session, org_id, name):
+    """An active site by its name, ignoring case; None when there is no such site."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return None
+    return (
+        session.query(Site)
+        .filter(Site.org_id == org_id, Site.is_active.is_(True), func.lower(Site.name) == wanted)
+        .one_or_none()
+    )

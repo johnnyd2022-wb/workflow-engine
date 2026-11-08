@@ -37,12 +37,20 @@ class Step(TenantScoped, Base):
     # Execution prompts stored as JSONB array
     # Format: [{"label": "Botanical batch number", "type": "text", "unit": null, "required": true}, ...]
     execution_prompts = Column(JSONB, nullable=False, default=list)
+    # Planning defaults (GL-P07 B1): working time for one batch, then resting or ageing before
+    # the next step. Optional; the planner asks per workflow until every step has them.
+    duration_minutes = Column(Integer, nullable=True)
+    wait_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     process = relationship("Process", back_populates="steps")
-    execution_steps = relationship("ExecutionStep", back_populates="step", cascade="all, delete-orphan")
+    # As Process.executions: the execution_steps.step_id foreign key refuses to delete a step a
+    # batch has recorded; the ORM never deletes those records with it (GL-U02c).
+    execution_steps = relationship(
+        "ExecutionStep", back_populates="step", cascade="save-update, merge", passive_deletes="all"
+    )
 
     def __repr__(self):
         return f"<Step(id={self.id}, name={self.name}, step_number={self.step_number}, process_id={self.process_id})>"

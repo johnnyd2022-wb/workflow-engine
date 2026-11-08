@@ -33,6 +33,16 @@
     } catch (e) { return '—'; }
   }
 
+  function fmtUtcDate(iso) {
+    if (!iso) return '—';
+    var date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-NZ', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      timeZone: 'UTC', timeZoneName: 'short'
+    }).format(date);
+  }
+
   function setError(message) {
     var el = document.querySelector('[data-oc-error]');
     if (!el) return;
@@ -74,7 +84,7 @@
     document.querySelector('[data-oc-overdue-badge]').hidden = !isOverdue(data);
     document.querySelector('[data-oc-title]').textContent = data.title;
     document.querySelector('[data-oc-owner]').textContent = data.owner_email || data.owner_id;
-    document.querySelector('[data-oc-due-utc]').textContent = data.due_at ? data.due_at.replace('+00:00', 'Z') : '—';
+    document.querySelector('[data-oc-due-utc]').textContent = fmtUtcDate(data.due_at);
     document.querySelector('[data-oc-due-local]').textContent = fmtDate(data.due_at);
     document.querySelector('[data-oc-next-action]').textContent = data.next_action;
     var freshness = document.querySelector('[data-oc-freshness]');
@@ -86,6 +96,18 @@
   }
 
   function renderSource(data) {
+    // GL-P03: a recall has no finding to show; its customer checklist takes the source's place.
+    if (data.source_type === 'recall' && window.BizeRecall) {
+      var section = document.querySelector('[data-oc-source-section]');
+      if (section) section.hidden = true;
+      var recallEl = document.querySelector('[data-oc-recall]');
+      var root = document.querySelector('[data-oc-detail-root]');
+      if (recallEl && !recallEl.dataset.rendered) {
+        recallEl.dataset.rendered = '1';
+        window.BizeRecall.render(recallEl, data.id, root && root.dataset.canWorkRecall === 'true');
+      }
+      return;
+    }
     var obs = document.querySelector('[data-oc-source-observation]');
     var state = data.source_observation && data.source_observation.state;
     var observedAt = data.source_observation && data.source_observation.observed_at;

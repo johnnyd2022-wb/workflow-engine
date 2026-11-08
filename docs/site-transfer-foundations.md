@@ -7,11 +7,9 @@ movement authorities and field metadata. Core never imports NZ Alcohol.
 
 ## Staged release
 
-`multiple_sites_enabled` remains the single customer-facing opt-in. The internal
-`multiple_site_operations_enabled` release gate stays false. This MR does not activate
-additional-site operations for any organisation. Integration must first cover Customs
-loss/removal attribution, registrations and the remaining operation scopes. Tests enable
-the internal gate explicitly to exercise real production, FIFO, dispatch and receipt.
+Transfers are available wherever every multiple-sites gate is on: the deployment flag, the
+`multi_site` subscription and the organisation's own switch (see site-operations-guard.md,
+"Gates"). The internal `multiple_site_operations_enabled` flag that held them back is gone.
 
 The local tested migration chain is `multiple_sites_001 → site_operations_001 →
 customs_premises_001 → site_transfers_001`. Claude owns integration: drop duplicate

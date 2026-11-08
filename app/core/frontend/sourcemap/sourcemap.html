@@ -37,27 +37,20 @@
     </div>
   </div>
 
-  <!-- Controls bar: view toggle + wastage + legend (hidden in browse mode) -->
+  <!-- Controls bar: view toggle + replay date (hidden in browse mode) -->
   <div class="sm-controls" id="sm-controls" style="display:none;">
     <div class="sm-view-toggle" role="tablist" aria-label="View mode">
-      <button class="sm-view-btn sm-view-btn--active" data-view="timeline" role="tab" aria-selected="true">Timeline</button>
       <button class="sm-view-btn" data-view="map" role="tab" aria-selected="false">Map</button>
+      <button class="sm-view-btn" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
       <button class="sm-view-btn" data-view="table" role="tab" aria-selected="false">Table</button>
       <button class="sm-view-btn" data-view="recall" role="tab" aria-selected="false">Recall</button>
     </div>
 
     <div class="sm-temporal-bar" id="sm-temporal-bar" aria-label="Replay as of a past date">
-      <label class="sm-temporal-bar__label" for="sm-temporal-date">Replay as of</label>
+      <label class="sm-temporal-bar__label" for="sm-temporal-date">As of</label>
       <input type="date" id="sm-temporal-date" class="sm-temporal-date-input" aria-label="Replay date">
       <button id="sm-temporal-apply" class="sm-act-filter-btn sm-temporal-apply-btn">Apply</button>
       <button id="sm-temporal-clear" class="sm-act-clear-btn sm-temporal-clear-btn" style="display:none;">Live</button>
-    </div>
-
-    <div class="sm-legend" aria-label="Legend">
-      <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--raw"></span> Raw</span>
-      <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--wip"></span> WIP</span>
-      <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--final"></span> Final</span>
-      <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--check"></span> Check needed</span>
     </div>
   </div>
 
@@ -158,5 +151,5 @@
   re-executes it when the content is swapped in via boost navigation.
   core-api.js is already loaded globally by base_spa.html.
 #}
-<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=12"></script>
+<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}"></script>
 {% endblock %}

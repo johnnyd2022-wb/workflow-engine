@@ -486,7 +486,7 @@ do not introduce reverse imports into existing domain code.
     subscription: core (built = core tier; NOT a separate paid add-on)
     layer:        integration
     flag:         crm_enabled — a feature toggle, not a tier gate. True in local.ini.
-    reviewed:     2026-08-15 (see .agents/reports/crm/review.md)
+    reviewed:     2026-10-18 (see .agents/reports/crm/review.md)
 
     routes:
       - /crm
@@ -547,7 +547,7 @@ do not introduce reverse imports into existing domain code.
     subscription: core
     layer:        domain
     flag:         none (exposure is checked against the organisation's profile)
-    reviewed:     never
+    reviewed:     2026-08-22 (see .agents/reports/process_templates/review.md)
 
     routes:
       - /core/flows/create/template-catalog

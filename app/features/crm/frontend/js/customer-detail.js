@@ -1,12 +1,44 @@
 /* Customer detail Alpine.js component */
+// The address parts the edit form holds; lines 3 and 4 and "attention to" stay as Xero has them.
+var ADDRESS_EDIT_PARTS = ['line1', 'line2', 'city', 'region', 'postal_code', 'country'];
+function joinAddress(parts) { return ADDRESS_EDIT_PARTS.map((part) => (parts[part] || '').trim()).filter(Boolean).join(', '); }
+// The edit form is in the page (hidden) from the start, so it needs every field it binds to before it opens.
+function blankEditForm() {
+  const blankAddress = () => Object.fromEntries(ADDRESS_EDIT_PARTS.map((part) => [part, '']));
+  return { name: '', first_name: '', last_name: '', email_address: '', phone_number: '', addresses: { POBOX: blankAddress(), STREET: blankAddress() } };
+}
+
 function crmCustomerDetail(contactId) {
   return {
     contactId,
     activeTab: 'overview',
     customer: null,
     invoices: [],
+    recentInvoices: [],
     invoicePage: 1,
+    invoicePageSize: 25,
     invoiceTotal: 0,
+    get invoiceRangeLabel() {
+      const first = (this.invoicePage - 1) * this.invoicePageSize + 1;
+      const last = Math.min(this.invoicePage * this.invoicePageSize, this.invoiceTotal);
+      return `Showing ${first}–${last} of ${this.invoiceTotal} invoices`;
+    },
+    get invoicePageLabel() {
+      return `Page ${this.invoicePage} of ${Math.ceil(this.invoiceTotal / this.invoicePageSize)}`;
+    },
+    invoicesLoaded: false,
+    // GL-P01b: goods back from this customer.
+    canRecordReturns: false,
+    customerReturns: [],
+    returnPlaces: [],
+    returnInvoiceId: null,
+    returnLines: [],
+    returnLinesLoading: false,
+    returnDraft: { allocation_id: '', quantity: '', condition: 'resaleable', received_on: '', location_id: '', note: '' },
+    returnError: '',
+    returnSaving: false,
+    invoicesLoading: false,
+    invoiceError: '',
     openInvoiceId: null,
     notes: [],
     tasks: [],
@@ -29,6 +61,18 @@ function crmCustomerDetail(contactId) {
     },
     loading: true,
     error: null,
+
+    // Details and their sync to Xero
+    xeroSync: {},
+    xeroConnection: {},
+    editing: false,
+    confirming: false,
+    editSaving: false,
+    editError: '',
+    editForm: blankEditForm(),
+    pendingChanges: [],
+    syncSaving: false,
+    syncMessage: '',
 
     // Notes
     newNoteContent: '',
@@ -77,12 +121,15 @@ function crmCustomerDetail(contactId) {
     savingMapping: false,
 
     async init() {
+      this.canRecordReturns = this.$root.dataset.canRecordReturns === 'true';
       this.loading = true;
       this.error = null;
       try {
         const data = await CRMAPI.getCustomer(this.contactId);
         this.customer = data.customer;
-        this.invoices = data.recent_invoices || [];
+        this.xeroSync = data.xero_sync || {};
+        this.xeroConnection = data.xero_connection || {};
+        this.recentInvoices = data.recent_invoices || [];
         this.notes    = data.notes || [];
         this.tasks    = data.tasks || [];
         this.allMappings = data.product_mappings || [];
@@ -100,6 +147,60 @@ function crmCustomerDetail(contactId) {
       }
     },
 
+    // ── What the header and facts say ───────────────────────────
+    get contactPerson() {
+      const name = `${this.customer?.first_name || ''} ${this.customer?.last_name || ''}`.trim();
+      return name && name !== this.customer?.name ? name : '';
+    },
+
+    get lastOrder() {
+      return this.recentInvoices.find((inv) => inv.date && inv.status !== 'VOIDED' && inv.status !== 'DELETED') || null;
+    },
+
+    get openTasks() {
+      return this.tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
+    },
+
+    get overdueTasks() {
+      return this.openTasks.filter((t) => t.due_date && this.daysUntil(t.due_date) < 0).length;
+    },
+
+    get nextTaskWords() {
+      if (!this.openTasks.length) return 'Nothing to follow up';
+      if (this.overdueTasks) return `${this.overdueTasks} overdue`;
+      const next = this.openTasks.filter((t) => t.due_date).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
+      return next ? `Next: ${next.title} · ${this.dueWords(next).toLowerCase()}` : 'None has a due date';
+    },
+
+    get rangeWords() {
+      if (!this.analyticsDateFrom || !this.analyticsDateTo) return 'Choose dates';
+      return `${this.formatDate(this.analyticsDateFrom)} to ${this.formatDate(this.analyticsDateTo)}`;
+    },
+
+    daysUntil(iso) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return Math.round((new Date(`${String(iso).slice(0, 10)}T00:00:00`) - today) / 86400000);
+    },
+
+    agoWords(iso) {
+      const n = -this.daysUntil(iso);
+      if (n <= 0) return 'Today';
+      if (n === 1) return 'Yesterday';
+      if (n < 60) return `${n} days ago`;
+      return `${Math.round(n / 30)} months ago`;
+    },
+
+    dueWords(task) {
+      if (!task.due_date) return 'No date';
+      if (task.status === 'completed') return 'Done';
+      if (task.status === 'cancelled') return 'Cancelled';
+      const n = this.daysUntil(task.due_date);
+      if (n < 0) return n === -1 ? '1 day overdue' : `${-n} days overdue`;
+      if (n === 0) return 'Today';
+      if (n === 1) return 'Tomorrow';
+      return this.formatDate(task.due_date);
+    },
+
     get hasSalesTerms() {
       return !!this.customer?.payment_terms?.sales;
     },
@@ -109,18 +210,80 @@ function crmCustomerDetail(contactId) {
       this.activeTab = tab;
       if (tab === 'overview') {
         this.$nextTick(() => this.drawCustomerAnalyticsCharts());
+      } else if (tab === 'invoices' && !this.invoicesLoaded && !this.invoicesLoading) {
+        this.loadInvoices();
+        this.loadCustomerReturns();
       }
     },
 
     // ── Invoices ────────────────────────────────────────────────
     async loadInvoices(page = 1) {
+      this.invoicesLoading = true;
+      this.invoiceError = '';
       try {
-        const data = await CRMAPI.getCustomerInvoices(this.contactId, { page, page_size: 25 });
+        const data = await CRMAPI.getCustomerInvoices(this.contactId, { page, page_size: this.invoicePageSize });
         this.invoices = data.invoices || [];
         this.invoicePage = data.page || 1;
         this.invoiceTotal = data.total || 0;
+        this.invoicesLoaded = true;
+        this.openInvoiceId = null;
       } catch (e) {
-        this.error = e.message;
+        this.invoiceError = e.message || 'Failed to load invoices.';
+      } finally {
+        this.invoicesLoading = false;
+      }
+    },
+
+    // ── Returns (GL-P01b) ───────────────────────────────────────
+    // The page runs Alpine's CSP build: no globals in templates, so labels are built here.
+    async loadCustomerReturns() {
+      try { this.customerReturns = (await CRMAPI.getCustomerReturns(this.contactId)).returns || []; } catch (_) { this.customerReturns = []; }
+    },
+    returnSummary(r) { return `${Number(r.quantity)} × ${r.product_name}${r.note ? ` · ${r.note}` : ''}`; },
+    returnOutcome(r) {
+      if (r.written_off) return 'Destroyed · written off';
+      if (r.on_hold) return 'Damaged · on hold';
+      return 'Back in stock';
+    },
+    returnBadgeClass(r) { return r.written_off ? 'crm-badge--voided' : (r.on_hold ? 'crm-badge--draft' : 'crm-badge--paid'); },
+    returnLineLabel(line) { return `${line.product_name} · ${line.returnable} of ${line.sold} ${line.unit} can come back`; },
+    placeLabel(place) { return place.in_bond ? `${place.name} (in bond)` : `${place.name} (duty paid)`; },
+    async openReturn(inv) {
+      this.returnInvoiceId = inv.id;
+      this.returnError = '';
+      this.returnLines = [];
+      this.returnLinesLoading = true;
+      this.returnDraft = { allocation_id: '', quantity: '', condition: 'resaleable', received_on: new Date().toLocaleDateString('en-CA'), location_id: '', note: '' };
+      try {
+        const [lines, places] = await Promise.all([
+          CRMAPI.getReturnableSaleLines(inv.xero_invoice_id),
+          this.returnPlaces.length ? Promise.resolve({ places: this.returnPlaces }) : CRMAPI.getReturnPlaces(),
+        ]);
+        this.returnLines = (lines.lines || []).filter((l) => Number(l.returnable) > 0);
+        this.returnPlaces = places.places || [];
+        if (this.returnLines.length) {
+          this.returnDraft.allocation_id = this.returnLines[0].allocation_id;
+          this.returnDraft.quantity = this.returnLines[0].returnable;
+        }
+      } catch (e) {
+        this.returnError = e.message || 'Could not load what was sold on this invoice.';
+      } finally {
+        this.returnLinesLoading = false;
+      }
+    },
+    closeReturn() { this.returnInvoiceId = null; this.returnError = ''; },
+    async submitReturn(inv) {
+      if (!(Number(this.returnDraft.quantity) > 0)) { this.returnError = 'Enter how many came back.'; return; }
+      this.returnSaving = true;
+      this.returnError = '';
+      try {
+        await CRMAPI.recordCustomerReturn({ ...this.returnDraft, location_id: this.returnDraft.location_id || null });
+        this.closeReturn();
+        await this.loadCustomerReturns();
+      } catch (e) {
+        this.returnError = e.message || 'The return could not be saved.';
+      } finally {
+        this.returnSaving = false;
       }
     },
 
@@ -248,9 +411,11 @@ function crmCustomerDetail(contactId) {
     },
 
     // ── Tasks ────────────────────────────────────────────────────
+    // Open work first, soonest due first; finished work after it.
     get filteredTasks() {
-      if (!this.taskStatusFilter) return this.tasks;
-      return this.tasks.filter(t => t.status === this.taskStatusFilter);
+      const shown = this.taskStatusFilter ? this.tasks.filter(t => t.status === this.taskStatusFilter) : this.tasks;
+      const open = (t) => (t.status === 'pending' || t.status === 'in_progress' ? 0 : 1);
+      return shown.slice().sort((a, b) => open(a) - open(b) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
     },
 
     taskStatusClass(status) {
@@ -707,6 +872,120 @@ function crmCustomerDetail(contactId) {
       await this.loadCustomerAnalytics();
     },
 
+    get syncChoice() {
+      if (this.xeroSync.sync_to_xero === true) return 'on';
+      if (this.xeroSync.sync_to_xero === false) return 'off';
+      return 'default';
+    },
+
+    startEdit() {
+      const c = this.customer;
+      this.editForm = { name: c.name || '', first_name: c.first_name || '', last_name: c.last_name || '', email_address: c.email_address || '', phone_number: c.phone_number || '' };
+      this.editForm.addresses = { POBOX: this.addressParts('POBOX'), STREET: this.addressParts('STREET') };
+      this.editError = '';
+      this.confirming = false;
+      this.editing = true;
+      this.$nextTick(() => document.getElementById('edit-name')?.focus());
+    },
+
+    cancelEdit() { this.editing = false; this.confirming = false; this.editError = ''; },
+
+    editedFields() {
+      const labels = { name: 'Name', first_name: 'First name', last_name: 'Last name', email_address: 'Email', phone_number: 'Phone' };
+      const changes = Object.keys(labels)
+        .map((field) => ({ field, label: labels[field], before: this.customer[field] || '', after: (this.editForm[field] || '').trim() }))
+        .filter((change) => change.before !== change.after);
+      ['POBOX', 'STREET'].forEach((kind) => {
+        const before = this.addressParts(kind);
+        const after = {};
+        ADDRESS_EDIT_PARTS.forEach((part) => { after[part] = (this.editForm.addresses[kind][part] || '').trim(); });
+        if (ADDRESS_EDIT_PARTS.some((part) => before[part] !== after[part])) {
+          changes.push({ field: 'address:' + kind, kind, parts: after, label: this.addressLabel(kind), before: joinAddress(before), after: joinAddress(after) });
+        }
+      });
+      return changes;
+    },
+
+    addressLabel(kind) { return kind === 'POBOX' ? 'Postal address' : 'Street address'; },
+
+    addressParts(kind) {
+      const stored = (this.customer?.addresses || []).find((a) => (a.type || '').toUpperCase() === kind) || {};
+      const parts = {};
+      ADDRESS_EDIT_PARTS.forEach((part) => { parts[part] = stored[part] || ''; });
+      return parts;
+    },
+
+    addressLine(kind) { return joinAddress(this.addressParts(kind)); },
+
+    copyPostalToStreet() { this.editForm.addresses.STREET = { ...this.editForm.addresses.POBOX }; },
+
+    // Edits to a customer that is in Xero (or about to be) wait for an explicit confirmation.
+    reviewEdit() {
+      this.editError = '';
+      if (!(this.editForm.name || '').trim()) { this.editError = 'A customer needs a name.'; return; }
+      this.pendingChanges = this.editedFields();
+      if (!this.pendingChanges.length) { this.cancelEdit(); return; }
+      if (this.xeroSync.syncs) { this.confirming = true; return; }
+      this.saveEdit();
+    },
+
+    async saveEdit() {
+      this.editSaving = true;
+      this.editError = '';
+      const body = {};
+      this.pendingChanges.forEach((change) => {
+        if (change.kind) (body.addresses = body.addresses || []).push({ type: change.kind, ...change.parts });
+        else body[change.field] = change.after;
+      });
+      try {
+        const saved = await CRMAPI.updateCustomer(this.contactId, body);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        this.editing = false;
+        this.confirming = false;
+        const status = saved.xero_sync.push_status;
+        if (!this.xeroSync.syncs) this.syncMessage = 'Saved.';
+        else if (status === 'synced') this.syncMessage = 'Saved and sent to Xero.';
+        else this.syncMessage = 'Saved in Biz-E. Xero has not got these changes yet.';
+      } catch (e) {
+        this.confirming = false;
+        this.editError = e.message || 'Could not save the details.';
+      } finally {
+        this.editSaving = false;
+      }
+    },
+
+    async setXeroSync(value) {
+      const choice = value === 'on' ? true : value === 'off' ? false : null;
+      this.syncSaving = true;
+      this.syncMessage = '';
+      try {
+        const saved = await CRMAPI.setCustomerXeroSync(this.contactId, choice);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        if (this.xeroSync.syncs && this.xeroSync.push_status === 'synced') this.syncMessage = 'Sent to Xero. Later edits follow when you save them.';
+        else if (!this.xeroSync.syncs && this.xeroSync.in_xero) this.syncMessage = 'Edits now stay in Biz-E. The customer is not removed from Xero.';
+      } catch (e) {
+        this.error = e.message || 'Could not change the Xero setting.';
+      } finally {
+        this.syncSaving = false;
+      }
+    },
+
+    async retryXero() {
+      this.syncSaving = true;
+      try {
+        const saved = await CRMAPI.retryCustomerXeroSync(this.contactId);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        this.syncMessage = this.xeroSync.push_status === 'synced' ? 'Sent to Xero.' : '';
+      } catch (e) {
+        this.error = e.message || 'Could not send to Xero.';
+      } finally {
+        this.syncSaving = false;
+      }
+    },
+
     async loadCustomerAnalytics() {
       try {
         this.customerAnalytics = await CRMAPI.getCustomerAnalytics(this.contactId, {
@@ -738,6 +1017,13 @@ function crmCustomerDetail(contactId) {
     },
 
     drawSimpleBars(canvas, rows, opts = {}) {
+      // Colours from the page's tokens, so the labels stay readable in the dark theme.
+      const css = getComputedStyle(canvas);
+      const theme = {
+        accent: css.getPropertyValue('--ui-accent').trim() || '#0d9488',
+        text: css.getPropertyValue('--ui-text').trim() || '#0f172a',
+        muted: css.getPropertyValue('--ui-text-muted').trim() || '#6b7280',
+      };
       if (!canvas || !rows.length) return;
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.parentElement.getBoundingClientRect();
@@ -757,7 +1043,7 @@ function crmCustomerDetail(contactId) {
       const gap = rows.length > 6 ? 6 : 10;
       const barW = Math.max(10, (chartW - gap * (rows.length - 1)) / Math.max(rows.length, 1));
       ctx.font = '11px -apple-system, system-ui, sans-serif';
-      ctx.fillStyle = '#6b7280';
+      ctx.fillStyle = theme.muted;
       ctx.textAlign = 'right';
       for (let i = 0; i <= 4; i++) {
         const y = pad.top + chartH - (i / 4) * chartH;
@@ -773,9 +1059,9 @@ function crmCustomerDetail(contactId) {
         const x = pad.left + idx * (barW + gap);
         const barH = (row.value / maxVal) * chartH;
         const y = pad.top + chartH - barH;
-        ctx.fillStyle = '#2DD4BF';
+        ctx.fillStyle = theme.accent;
         ctx.fillRect(x, y, barW, barH);
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = theme.text;
         ctx.textAlign = 'center';
         ctx.font = '10px -apple-system, system-ui, sans-serif';
         this.drawWrappedXAxisLabel(
@@ -788,7 +1074,7 @@ function crmCustomerDetail(contactId) {
           Math.max(2, Number(opts.maxLabelLines || 2)),
         );
         if (opts.showValueLabels) {
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = theme.text;
           ctx.font = '10px -apple-system, system-ui, sans-serif';
           ctx.fillText(this.formatCurrency(row.value || 0, 'NZD'), x + (barW / 2), Math.max(pad.top + 10, y - 6));
         }

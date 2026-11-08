@@ -25,8 +25,8 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Inventory view | `/core/inventory/view` | 🟡 partial |
 | Inventory add (hub) | `/core/inventory/add` | 🔵 render |
 | Inventory add manual | `/core/inventory/add/manual` | ✅ flow (create + unhappy) |
-| Inventory add CSV | `/core/inventory/add/csv` | 🔵 render |
-| Inventory add barcode | `/core/inventory/add/barcode` | 🔵 render |
+| Inventory add CSV | `/core/inventory/add/csv` | ✅ flow (file input, Browse chooser and drop → review → add, and skip) |
+| Inventory add barcode | `/core/inventory/add/barcode` | 🟡 partial (typed code → lookup → add, Enter → form; camera scan not driven) |
 | Inventory dispose | `/core/inventory/dispose` | 🟡 partial (dispose flow via session API) |
 | Notifications | `/core/notifications` | 🔵 render |
 | Settings | `/core/settings` | ✅ flow (change + persist) |
@@ -58,8 +58,11 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Delete an item | ✅ | test_inventory_flow |
 | Adjust quantity (with reason) | ✅ | test_inventory_flow |
 | Dispose / wastage | ✅ | test_inventory_flow |
-| CSV upload | 🔵 render only (page loads; upload flow deferred — file-drop UI) |
-| Barcode add | 🔵 render only |
+| CSV upload (validate → commit, API) | ✅ | test_inventory_csv_flow |
+| CSV upload through the page (file input → review card → add / skip) | ✅ | test_inventory_csv_flow |
+| Barcode add: typed code → lookup → add | ✅ | test_inventory_flow |
+| Barcode scanner-style Enter → capture → form (stops before the add) | ✅ | test_inventory_flow |
+| Barcode camera scan | 🔵 not driven (see Known deferred) |
 | Cross-tenant read/update/delete/list/aggregate | ✅ | test_tenant_isolation |
 | **Settings** | | |
 | Change a setting and verify it persists | ✅ | test_settings_flow |
@@ -72,21 +75,27 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Pages render clean | ✅ | test_pages_render |
 | Xero auth redirect well-formed (state/CSRF) | ✅ | test_crm_flow |
 | Customers API auth-gated + org-scoped | ✅ | test_crm_flow |
-| Customer / invoice CRUD | 🟡 unit-covered (`tests/test_crm.py::TestCRMInvoiceCreation`); no e2e browser flow yet |
+| Add / edit a customer, send it to Xero | ✅ | test_crm_contact_sync_ui |
+| New Invoice form: draft, authorised, no-line check, Xero refusal and Xero unreachable | ✅ | test_crm_invoice_ui |
+| Invoice row: Authorise a draft (and not an authorised row), Authorise failing | ✅ | test_crm_invoice_ui |
+| Invoice row: View opens the online invoice in a `noopener,noreferrer` tab; View failing opens nothing | ✅ | test_crm_invoice_ui |
+| Invoice row: Download saves `<number>.pdf`; a draft is told to authorise first | ✅ | test_crm_invoice_ui |
 | **Cross-cutting** | | |
 | Security headers, cookie flags, CSRF rejection | ✅ | test_security_headers |
 | 21 authenticated pages render clean | ✅ | test_pages_render |
 
 ## Known deferred (with reason, not faked)
 
-- **CSV / barcode inventory add** — file-drop and hardware-scanner UIs; the add path is
-  covered via manual. Worth a follow-up with a fixture CSV.
-- **CRM customer / invoice CRUD (e2e)** — customers are sourced from Xero sync, not a
-  create endpoint, so the only write path is invoice creation. Now covered at the
-  unit/service level (`tests/test_crm.py::TestCRMInvoiceCreation`, stubbing
-  `XeroAPIClient.create_invoice` — never touches a real tenant), including the
-  cross-tenant case. A browser-driven e2e flow through `test_crm_flow.py` remains
-  deferred; this row tracks that narrower gap now.
+- **Barcode camera scan** — the typed and Enter paths are driven; the camera path is not.
+  A headless Chromium can be given a fake camera (`--use-fake-device-for-media-stream`), so
+  the camera itself is not what blocks this. Decoding is: it needs the browser's native
+  `BarcodeDetector`, which Linux Chromium does not have, or the ZXing fallback, which
+  `app/core/frontend/js/inventory-barcode-spa.js:647` imports from `cdn.jsdelivr.net`. The
+  CSP `script-src` (`app/api/app_factory.py:515`) allows `unpkg.com` and Cloudflare Insights
+  but not jsdelivr, so on a browser without `BarcodeDetector` that import looks blocked and a
+  scan could never decode (read from the code on 2026-10-13, not reproduced in a browser).
+  A test needs a stubbed `BarcodeDetector`; whether the fallback should be vendored or the CSP
+  widened is a product and security call.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-

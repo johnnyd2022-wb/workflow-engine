@@ -240,6 +240,7 @@ def register_routes(bp):
                     extra_data=extra,
                     commit=False,
                     write_reason=InventoryQuantityWriteReason.OPENING_BALANCE,
+                    site_id=getattr(g, "validated_site_id", None),
                 )
                 created.append(item)
             db_session.commit()

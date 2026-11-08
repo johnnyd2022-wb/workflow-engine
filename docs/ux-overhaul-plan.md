@@ -9,7 +9,7 @@
 1. **Pages load fully on in-app navigation.** htmx boost must give the same page as a full load, with no refresh needed.
 2. **Fix placement** of icons, buttons and sections. Some are poorly placed at a glance.
 3. **One consistent UI style** across every screen.
-4. **Five main tabs only:** Dashboard, Production, Compliance, Sales, Settings. Everything else lives inside one of them. Planner and contract orders belong inside Production.
+4. **Five main tabs only:** Home (called Dashboard until !512), Production, Compliance, Sales, Settings. Everything else lives inside one of them. Planner and contract orders belong inside Production.
 
 ## What the audit found
 
@@ -167,12 +167,12 @@ Go through the audit screenshots in this order; each item is a small MR or a bat
 - [x] **4.2** (!478) **Production overview:** standard header, one primary tab row,
   grouped rectangular action buttons, an in-page setup/health card with explicit status
   wording, and scan-friendly metric tiles. Desktop/mobile and light/dark screenshots inspected.
-- [ ] **4.3** **Planner board:**
+- [x] **4.3** (!526) **Planner board:**
    - controls (view, date, Today) in a toolbar row;
    - batch sizes and site capacity as styled disclosures or a side panel;
    - demand selection and "Plan batches" / "Check materials" as a clear action group;
    - a week grid with an empty state inside the grid.
-- [ ] **4.4** **Contract orders:**
+- [x] **4.4** (!525) **Contract orders:**
    - the list first, with the primary action "New order" top-right opening a form page or drawer;
    - customers as its own sub-tab or a panel with "Add customer";
    - the order form grouped into sections (Customer and reference, Product and quantity, Materials and specification, Duty and status).

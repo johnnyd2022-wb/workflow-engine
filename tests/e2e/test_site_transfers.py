@@ -4,7 +4,9 @@ The internal operations gate is enabled only in this isolated fixture. The modul
 provider and its generic field metadata are real; requests are not intercepted.
 """
 
+import os
 import threading
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -54,7 +56,7 @@ def transfer_server(transfers, db, flask_app, monkeypatch):  # noqa: F811
         thread.join(timeout=5)
 
 
-@pytest.mark.parametrize("width", [1440, 390])
+@pytest.mark.parametrize("width", [1440, 390, 320])
 def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, width):
     url, email, destination = transfer_server
     context = browser.new_context(ignore_https_errors=True, viewport={"width": width, "height": 1000})
@@ -65,28 +67,35 @@ def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, 
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url + "/core/site-transfers")
-        dispatch = page.locator("[data-transfer-dispatch]")
-        expect(dispatch).to_be_visible()
-        dispatch.locator('[name="quantity"]').fill("10")
-        dispatch.locator('[name="destination_site_id"]').select_option(destination)
-        dispatch.locator('[name="carrier"]').fill("Browser courier")
-        dispatch.locator('[name="consignment_reference"]').fill("BROWSER-DOCKET")
-        dispatch.locator('[name="approval.destination_activity"]').select_option("storage")
-        dispatch.locator('[name="approval.authority"]').select_option("same_legal_entity")
-        dispatch.locator('[name="approval.evidence_reference"]').fill("Registered licences")
-        dispatch.get_by_role("button", name="Dispatch", exact=True).click()
-        expect(page.locator("[data-transfers-list] article")).to_have_count(1)
-        expect(page.locator("[data-transfers-list]")).to_contain_text("Transit 10.0000")
-        page.locator("[data-transfers-list] summary").click()
-        receipt = page.locator("[data-transfers-list] form")
+        # Move stock: pick the line, then the shared Move dialog.
+        page.locator("[data-transfers-move]").click()
+        page.locator("#tr-pick-search").fill("House Gin")
+        page.locator(".tr-pick__row").first.click()
+        dialog = page.locator("[data-move-dialog]")
+        dialog.locator("#mv-quantity").fill("10")
+        dialog.locator("#mv-to").select_option(f"{destination}|")
+        dialog.locator("#mv-carrier").fill("Browser courier")
+        dialog.locator("#mv-reference").fill("BROWSER-DOCKET")
+        dialog.locator('[name="approval.destination_activity"]').select_option("storage")
+        dialog.locator('[name="approval.authority"]').select_option("same_legal_entity")
+        # Questions for other authorities are not asked.
+        expect(dialog.locator('[name="approval.measured_abv_percent"]')).to_be_hidden()
+        dialog.locator('[name="approval.evidence_reference"]').fill("Registered licences")
+        dialog.get_by_role("button", name="Dispatch", exact=True).click()
+        card = page.locator("[data-transfer-id]")
+        expect(card).to_have_count(1)
+        expect(card).to_contain_text("In transit")
+        expect(card).to_contain_text("10 bottles")
+        card.locator("[data-tr-different]").click()
+        receipt = card.locator(".tr-receipt")
         receipt.locator('[name="quantity"]').fill("4")
         receipt.get_by_role("button", name="Record receipt", exact=True).click()
-        expect(page.locator("[data-transfers-list]")).to_contain_text("Transit 6.0000")
-        expect(page.locator("[data-transfers-list]")).to_contain_text("Received 4.0000")
+        expect(card).to_contain_text("4 of 10 received")
+        expect(card.locator("[data-tr-full]")).to_have_text("Received the rest (6)")
         # Full navigation/script state survives JSON submit (hx-boost false).
         assert page.url.endswith("/core/site-transfers")
         assert not errors
-        page.locator("[data-transfers-list] summary").click()
+        card.locator("[data-tr-different]").click()
         bounds = page.locator("input:visible, select:visible, button:visible").evaluate_all(
             "nodes => nodes.map(n => {const r=n.getBoundingClientRect();return {left:r.left,right:r.right}})"
         )
@@ -99,5 +108,9 @@ def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, 
         expect(docket.locator("body")).to_contain_text("BROWSER-DOCKET")
         expect(docket.locator("body")).to_contain_text("BROWSER-0")
         expect(docket.locator("body")).to_contain_text("BROWSER-1")
+        assert docket.evaluate("document.documentElement.scrollWidth") <= width
+        if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            docket.screenshot(path=str(Path(directory) / f"core__site-transfers__docket-{width}.png"), full_page=True)
     finally:
         context.close()

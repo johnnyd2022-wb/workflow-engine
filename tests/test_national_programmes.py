@@ -84,11 +84,11 @@ def test_np2_workspace_register_and_sign_off(np2_org, db):
 
     page = client.get("/compliant/nz-alcohol/food-safety")
     assert (
-        page.status_code == 200 and b"NATIONAL PROGRAMME 2" in page.data and b'data-programme-short="NP2"' in page.data
+        page.status_code == 200 and b"National Programme 2: what to record next" in page.data and b'data-programme-short="NP2"' in page.data
     )
     assert b"data-verification-root" in page.data  # 2.2's verification panel serves NP2 too
     check = client.get("/compliant/nz-alcohol/np3-audit/check/water-activity-control")
-    assert check.status_code == 200 and b"NATIONAL PROGRAMME 2 / CHECK DETAIL" in check.data
+    assert check.status_code == 200 and b"National Programme 2 \xc2\xb7 check" in check.data
 
     summary = run_check(org.id, db).data["workspace_summary"]
     assert summary["module_name"] == "NP2" and summary["action_label"] == "Open NP2"

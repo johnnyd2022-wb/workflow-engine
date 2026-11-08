@@ -58,7 +58,7 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Page-level controller needs these IDs at runtime.
     window.ExecutionStepPageContext = {
       processId: {{ process_id|tojson }},

@@ -23,7 +23,7 @@ from app.features.contract_manufacturing.models import ContractMaterialReceipt
 from app.features.contract_manufacturing.services.materials import MaterialScopeError, validate_execution_materials
 from app.features.contract_manufacturing.services.orders import ContractOrderService
 from app.features.site_transfers import routes as transfer_routes
-from tests.factories import InventoryItemFactory, ProcessFactory, UserFactory
+from tests.factories import InventoryItemFactory, ProcessFactory, UserFactory, grant_multi_site
 from tests.test_compliant_routes import flask_app  # noqa: F401
 from tests.test_contract_orders import _customer, _login, _order, world  # noqa: F401
 
@@ -333,10 +333,9 @@ def test_transfer_conserves_customer_owner_and_receipt_origin(owned, db, monkeyp
     saved = receipt(owned)
     item = lot(db, owned, saved)
     client, org_id = owned["clients"][0], item.org_id
+    grant_multi_site(db, org_id)
     assert client.put("/api/core/sites/settings", json={"enabled": True}).status_code == 200
     remote = client.post("/api/core/sites", json={"name": "Remote", "kind": "warehouse"}).get_json()
-    db.query(Organisation).filter(Organisation.id == org_id).update({"multiple_site_operations_enabled": True})
-    db.commit()
 
     def permit(_db, _org, context):
         assert context.source_snapshot["contract_customer_id"] == str(item.contract_customer_id)

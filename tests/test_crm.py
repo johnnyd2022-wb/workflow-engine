@@ -626,6 +626,7 @@ class TestXeroSyncService:
         self._connect_tenant(db, org.id)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
         result = XeroSyncService(db).incremental_sync(org.id, triggered_by="test")
         assert result.success
@@ -644,6 +645,7 @@ class TestXeroSyncService:
         self._connect_tenant(db, org.id)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
 
         result = XeroSyncService(db).full_sync(org.id, triggered_by="test")
         assert result.success
@@ -701,6 +703,7 @@ class TestCRMInvoiceCreation:
         # bare try/except) -- stub it inert so the test doesn't depend on that side effect.
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
         return created
 
     def test_create_invoice_happy_path(self, db, org, monkeypatch):
@@ -1175,6 +1178,208 @@ class TestProductMappingAPI:
         assert del_resp.status_code in (200, 204)
 
 
+def _declared_product_output(db, org_id):
+    """A product output declared by a workflow step in ``org_id``; returns (output_id, step)."""
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from tests.factories import ProcessFactory
+
+    process = ProcessFactory(org_id=org_id, name=f"Mapping Process {uuid4()}")
+    db.commit()
+    output_id = uuid4()
+    step = ProcessRepository(db).add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        position=1000,
+        name="Bottle",
+        outputs=[{"id": str(output_id), "name": "Gin", "quantity": 1, "unit": "bottle"}],
+    )
+    db.commit()
+    return output_id, step
+
+
+def _stock_of_output(db, org_id, step, output_id):
+    """Final-product stock in ``org_id`` produced by an execution of ``step`` and carrying ``output_id``."""
+    from app.core.db.models.execution_step import ExecutionStep
+    from tests.factories import ExecutionFactory, InventoryItemFactory
+
+    execution = ExecutionFactory(org_id=org_id, process_id=step.process_id)
+    db.commit()
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).one()
+    item = InventoryItemFactory(
+        org_id=org_id,
+        name="Gin",
+        unit="bottle",
+        inventory_type="final_product",
+        source_execution_id=execution.id,
+        source_execution_step_id=execution_step.id,
+        source_output_id=output_id,
+    )
+    db.commit()
+    return item
+
+
+class TestProductMappingSourceOutput:
+    """``biz_e_source_output_id`` names a product output (``steps.outputs[].id`` in JSONB, no FK),
+    and matching later trusts it to find the caller's stock. Security audit F2
+    (``.agents/reports/crm/security-tenant-audit.md``): it accepted any well-formed UUID, so a
+    mapping could point at another tenant's output, or at nothing, and matching silently found no stock."""
+
+    @pytest.fixture()
+    def other_org(self, db):
+        from sqlalchemy import delete
+
+        from app.core.db import engine
+
+        org_b = OrganisationRepository(db).create_org(f"Mapping Org B {uuid4()}")
+        db.commit()
+        org_b_id = org_b.id
+        yield org_b
+        from tests.dag_traversal_helpers import clear_org_synthetic_data
+
+        clear_org_synthetic_data(db, org_b_id)
+        with engine.begin() as conn:
+            conn.execute(delete(Organisation).where(Organisation.id == org_b_id))
+
+    @pytest.fixture(autouse=True)
+    def purge_catalogue(self, db, org):
+        from tests.dag_traversal_helpers import clear_org_synthetic_data
+
+        org_id = org.id  # read now: a request in the test can leave ``org`` detached by teardown
+        yield
+        db.rollback()
+        clear_org_synthetic_data(db, org_id)
+
+    @staticmethod
+    def _payload(output_id, **extra):
+        return {
+            "biz_e_product_name": f"Mapped {uuid4()}",
+            "xero_description_pattern": f"Pattern {uuid4()}",
+            "match_type": "exact",
+            "biz_e_source_output_id": None if output_id is None else str(output_id),
+            **extra,
+        }
+
+    @staticmethod
+    def _saved_outputs(db, org_id):
+        """The output id of every mapping saved for ``org_id``, read as columns so the rows are fresh."""
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        rows = db.query(ProductMapping.biz_e_source_output_id).filter(ProductMapping.org_id == org_id).all()
+        return [None if output is None else str(output) for (output,) in rows]
+
+    def test_a_mapping_cannot_point_at_another_organisations_output(self, app_client, db, org, other_org):
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(foreign_output))
+
+        assert resp.status_code == 400, resp.data
+        assert "biz_e_source_output_id" in json.loads(resp.data)["error"]
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_a_mapping_cannot_point_at_an_output_that_exists_nowhere(self, app_client, db, org):
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(uuid4()))
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_a_mapping_can_point_at_an_output_the_organisation_declares(self, app_client, db, org):
+        """[CONTROL] the check does not refuse the caller's own outputs."""
+        own_output, _ = _declared_product_output(db, org.id)
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(own_output))
+
+        assert resp.status_code == 201, resp.data
+        assert json.loads(resp.data)["product_mapping"]["biz_e_source_output_id"] == str(own_output)
+
+    def test_every_product_the_picker_offers_can_be_mapped(self, app_client, db, org):
+        """[CONTROL] stock outlives edits to its recipe: the Configuration picker lists ids from the
+        caller's final-product stock, so one whose step no longer declares it must still be accepted."""
+        output_id, step = _declared_product_output(db, org.id)
+        _stock_of_output(db, org.id, step, output_id)
+        step.outputs = []
+        db.commit()
+        offered = [
+            p["source_output_id"] for p in json.loads(app_client.get("/api/crm/final-products").data)["final_products"]
+        ]
+        assert offered == [str(output_id)]
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(offered[0]))
+
+        assert resp.status_code == 201, resp.data
+
+    def test_a_mapping_without_an_output_is_still_allowed(self, app_client):
+        """[CONTROL] the output is optional; matching then falls back to the product name."""
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(None))
+
+        assert resp.status_code == 201, resp.data
+
+    def test_one_foreign_output_refuses_the_whole_bulk_save(self, app_client, db, org, other_org):
+        own_output, _ = _declared_product_output(db, org.id)
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+
+        resp = app_client.post(
+            "/api/crm/product-mappings/bulk",
+            json={"mappings": [self._payload(own_output), self._payload(foreign_output)]},
+        )
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_an_update_cannot_repoint_a_mapping_at_another_organisations_output(self, app_client, db, org, other_org):
+        own_output, _ = _declared_product_output(db, org.id)
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(
+            f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": str(foreign_output)}
+        )
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == [str(own_output)]
+
+    def test_an_update_can_still_clear_the_output(self, app_client, db, org):
+        """[CONTROL] unlinking a product is not a lookup, so it must not need one."""
+        own_output, _ = _declared_product_output(db, org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": None})
+
+        assert resp.status_code == 200, resp.data
+        assert self._saved_outputs(db, org.id) == [None]
+
+    def test_an_unrelated_edit_may_resend_an_output_that_has_gone_stale(self, app_client, db, org):
+        """[CONTROL] only a CHANGED id is looked up: its recipe and stock may be gone since the
+        mapping was made, and resending it must not block editing the mapping's notes."""
+        own_output, step = _declared_product_output(db, org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+        step.outputs = []
+        db.commit()
+
+        resp = app_client.put(
+            f"/api/crm/product-mappings/{created['id']}",
+            json={"biz_e_source_output_id": str(own_output), "notes": "renamed"},
+        )
+
+        assert resp.status_code == 200, resp.data
+        assert json.loads(resp.data)["product_mapping"]["notes"] == "renamed"
+
+    def test_an_update_with_a_malformed_output_id_is_a_400_not_a_500(self, app_client, db, org):
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(None)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": "nope"})
+
+        assert resp.status_code == 400, resp.data
+
+
 class TestCRMAnalyticsAPI:
     def test_monthly_sales_empty(self, app_client):
         resp = app_client.get("/api/crm/analytics/monthly-sales?months=3")
@@ -1368,6 +1573,112 @@ class TestCRMAnalyticsAPI:
 
     def _customer_analytics(self, app_client, contact, **params):
         return app_client.get(f"/api/crm/customers/{contact.id}/analytics", query_string=params)
+
+    def test_product_sales_by_store_counts_mapped_units_and_preserves_invoice_totals(self, app_client, db, org):
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        alpha = self._customer(db, org, "Alpha Store")
+        bravo = self._customer(db, org, "Bravo Store")
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin bottle",
+                match_type="exact",
+                units_per_line=1,
+            )
+        )
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin case",
+                match_type="exact",
+                units_per_line=6,
+            )
+        )
+        self._invoice(db, org, alpha, date(2025, 2, 10), [("Gin case", 2, 120), ("Gin bottle", 1, 20)])
+        self._invoice(db, org, bravo, date(2025, 2, 11), [("Gin bottle", 10, 200), ("Unmapped", 3, 30)])
+        self._invoice(db, org, alpha, date(2025, 2, 12), [("Gin case", 99, 999)], status="DRAFT")
+        self._invoice(db, org, alpha, date(2025, 2, 13), [("Gin case", 99, 999)], invoice_type="ACCPAY")
+        self._invoice(db, org, alpha, date(2025, 3, 1), [("Gin case", 99, 999)])
+        db.commit()
+
+        response = app_client.get(
+            "/api/crm/analytics/product-sales-by-store",
+            query_string={"start_date": "2025-02-10", "end_date": "2025-02-11"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [(r["contact_name"], r["total_units"], r["line_revenue"]) for r in data["customers"]] == [
+            ("Alpha Store", 13.0, 140.0),
+            ("Bravo Store", 10.0, 200.0),
+        ]
+        assert [(r["product_name"], r["total_units"], r["line_revenue"]) for r in data["products"]] == [
+            ("Gin", 23.0, 340.0)
+        ]
+        assert [(r["contact_name"], r["units"]) for r in data["products"][0]["customers"]] == [
+            ("Alpha Store", 13.0),
+            ("Bravo Store", 10.0),
+        ]
+        assert data["unmapped_xero_items"] == 1
+        assert data["unmapped_line_revenue"] == 30.0
+        assert [(r["contact_name"], r["description"], r["xero_quantity"]) for r in data["unmapped"]] == [
+            ("Bravo Store", "Unmapped", 3.0)
+        ]
+        # Invoice totals count all valid lines, whereas mapped-unit rankings exclude unmapped lines.
+        totals = self._rankings(app_client, entity="customers", start_date="2025-02-10", end_date="2025-02-11")
+        assert sum(row["total"] for row in totals.get_json()["rankings"]) == 370.0
+
+    @pytest.mark.parametrize(
+        "params",
+        [
+            {"start_date": "bad", "end_date": "2025-02-10"},
+            {"start_date": "2025-02-11", "end_date": "2025-02-10"},
+            {"start_date": "2025-02-10"},
+        ],
+    )
+    def test_product_sales_by_store_rejects_invalid_dates(self, app_client, params):
+        assert app_client.get("/api/crm/analytics/product-sales-by-store", query_string=params).status_code == 400
+
+    def test_customer_invoice_history_pages_past_the_five_recent_invoices(self, app_client, db, org):
+        contact = self._customer(db, org, "Many invoices")
+        for i in range(26):
+            self._invoice(db, org, contact, date(2025, 1, 1) + timedelta(days=i), [("Gin", 1, 10)])
+        db.commit()
+
+        overview = app_client.get(f"/api/crm/customers/{contact.id}").get_json()
+        first = app_client.get(f"/api/crm/customers/{contact.id}/invoices?page=1&page_size=25").get_json()
+        second = app_client.get(f"/api/crm/customers/{contact.id}/invoices?page=2&page_size=25").get_json()
+        assert len(overview["recent_invoices"]) == 5
+        assert (first["total"], len(first["invoices"]), len(second["invoices"])) == (26, 25, 1)
+        assert first["invoices"][0]["date"] == "2025-01-26"
+        assert second["invoices"][0]["date"] == "2025-01-01"
+
+    def test_product_sales_by_store_is_tenant_scoped(self, app_client, db, org, other_org):
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        db.add(
+            ProductMapping(
+                org_id=org.id,
+                biz_e_product_name="Gin",
+                xero_description_pattern="Gin",
+                match_type="exact",
+                units_per_line=1,
+            )
+        )
+        db.flush()
+        self._invoice(db, org, self._customer(db, org, "Our store"), date(2025, 2, 10), [("Gin", 2, 20)])
+        self._invoice(
+            db, other_org, self._customer(db, other_org, "Other store"), date(2025, 2, 10), [("Gin", 99, 990)]
+        )
+        db.commit()
+
+        data = app_client.get(
+            "/api/crm/analytics/product-sales-by-store",
+            query_string={"start_date": "2025-02-10", "end_date": "2025-02-10"},
+        ).get_json()
+        assert [(r["contact_name"], r["total_units"]) for r in data["customers"]] == [("Our store", 2.0)]
 
     @pytest.fixture()
     def other_org(self, db):
@@ -1846,3 +2157,318 @@ class TestXeroAPIClientHelpers:
         from app.features.crm.services.xero_api_client import _normalise_payment_terms
 
         assert _normalise_payment_terms(SimpleNamespace(sales=None, bills=None)) is None
+
+
+# ─────────────────────────────────────────────
+# Review 2026-10-18 (.agents/reports/crm/review.md): failures that reached users as the wrong answer
+# ─────────────────────────────────────────────
+
+
+def _connect_xero(db, org_id):
+    TestXeroSyncService()._connect_tenant(db, org_id)
+
+
+def _xero_customer(db, org_id, **fields):
+    from app.features.crm.models.xero_contact import XeroContact
+
+    contact = XeroContact(
+        org_id=org_id,
+        xero_contact_id=f"fake-xero-{uuid4()}",
+        xero_tenant_id="fake-tenant-id",
+        name=f"Review Customer {uuid4()}",
+        contact_status="ACTIVE",
+        **fields,
+    )
+    db.add(contact)
+    db.commit()
+    return contact
+
+
+def _draft_invoice(db, org_id, contact, status="DRAFT"):
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    invoice = XeroInvoice(
+        org_id=org_id,
+        xero_invoice_id=f"fake-inv-{uuid4()}",
+        xero_tenant_id="fake-tenant-id",
+        contact_id=contact.id,
+        invoice_type="ACCREC",
+        status=status,
+        date=date.today(),
+        total=Decimal("10"),
+    )
+    db.add(invoice)
+    db.commit()
+    return invoice
+
+
+def _xero_bad_request(message):
+    """What xero-python raises for a 400: an ApiException carrying Xero's JSON reply."""
+    from xero_python.exceptions import ApiException
+
+    body = {"Elements": [{"ValidationErrors": [{"Message": message}]}]}
+    return ApiException(
+        http_resp=SimpleNamespace(status=400, reason="Bad Request", data=json.dumps(body).encode(), getheaders=dict)
+    )
+
+
+class TestXeroFailuresOnInvoiceRoutes:
+    """A Xero refusal or an expired connection on the invoice routes raised out of the view as a
+    bare 500, so the page showed "HTTP 500" instead of what to fix."""
+
+    LINE = {"description": "Gin 700ml", "quantity": 1, "unit_amount": 50}
+
+    def test_xero_refusing_to_authorise_an_invoice_is_a_400_in_xeros_words(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        _connect_xero(db, org.id)
+        invoice = _draft_invoice(db, org.id, _xero_customer(db, org.id))
+
+        def refuse(self, **kwargs):
+            raise _xero_bad_request("Invoice not of valid status for modification")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "authorise_invoice", refuse)
+
+        resp = app_client.post(f"/api/crm/invoices/{invoice.id}/authorise")
+
+        assert resp.status_code == 400
+        assert "Invoice not of valid status for modification" in json.loads(resp.data)["error"]
+
+    def test_an_expired_xero_connection_on_invoice_create_asks_for_a_reconnect(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+        from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
+
+        contact = _xero_customer(db, org.id)
+
+        def expired(self, **kwargs):
+            raise XeroTokenExpiredError("Refresh token rejected")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "create_invoice", expired)
+
+        resp = app_client.post(
+            f"/api/crm/customers/{contact.id}/invoices",
+            json={"invoice_date": "2026-10-01", "line_items": [self.LINE]},
+        )
+
+        assert resp.status_code == 401
+        body = json.loads(resp.data)
+        assert body["action"] == "reconnect_xero"
+        assert "Reconnect Xero" in body["error"]
+
+    def test_xero_being_unreachable_for_a_view_link_is_a_named_502(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        invoice = _draft_invoice(db, org.id, _xero_customer(db, org.id), status="AUTHORISED")
+
+        def unreachable(self, **kwargs):
+            raise ConnectionError("Connection reset by peer")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_online_invoice_url", unreachable)
+
+        resp = app_client.get(f"/api/crm/invoices/{invoice.id}/view-url")
+
+        assert resp.status_code == 502
+        assert "Xero" in json.loads(resp.data)["error"]
+
+
+class TestCRMTaskAssignee:
+    """CRM tasks took any UUID as their assignee; core tasks (app/core/backend/tasks.py) only take
+    an active user of the same organisation. A foreign user id was stored, and an unknown one hit
+    the foreign key and answered 500."""
+
+    @pytest.fixture()
+    def other_org_user(self, db):
+        org_b = OrganisationRepository(db).create_org(f"Org B {uuid4()}")
+        db.commit()
+        other = UserRepository(db).create_user(
+            org_id=org_b.id, email=f"crm_other_{uuid4()}@test.com", password_hash=AuthService.hash_password("x" * 12)
+        )
+        db.commit()
+        yield other
+        db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
+        db.commit()
+
+    def test_a_task_cannot_be_assigned_to_another_organisations_user(self, app_client, other_org_user):
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(other_org_user.id)})
+
+        assert resp.status_code == 400
+        assert "active user in this organisation" in json.loads(resp.data)["error"]
+
+    def test_a_task_cannot_be_reassigned_to_another_organisations_user(self, app_client, other_org_user):
+        task = json.loads(app_client.post("/api/crm/tasks", json={"title": "Call"}).data)["task"]
+
+        resp = app_client.put(f"/api/crm/tasks/{task['id']}", json={"assigned_to_user_id": str(other_org_user.id)})
+
+        assert resp.status_code == 400
+        assert json.loads(app_client.get("/api/crm/tasks").data)["tasks"][0]["assigned_to_user_id"] is None
+
+    def test_an_unknown_assignee_is_a_400_not_a_500(self, app_client):
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(uuid4())})
+
+        assert resp.status_code == 400
+
+    def test_a_task_can_still_be_assigned_to_someone_in_the_organisation(self, app_client, db, org):
+        """[CONTROL] the check does not refuse the caller's colleagues (not just the caller)."""
+        colleague = UserRepository(db).create_user(
+            org_id=org.id, email=f"crm_colleague_{uuid4()}@test.com", password_hash=AuthService.hash_password("x" * 12)
+        )
+        db.commit()
+
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(colleague.id)})
+
+        assert resp.status_code == 201
+        assert json.loads(resp.data)["task"]["assigned_to_user_id"] == str(colleague.id)
+
+
+class TestCustomerStatusFilter:
+    """A customer created in Biz-E has no Xero contact status until Xero sends one, so choosing
+    "Active" on the customers list hid every customer just added in Biz-E."""
+
+    def test_the_active_filter_includes_customers_made_in_bize(self, app_client, db, org):
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        made_here, _ = ContactSyncService(db).create_contact(org.id, {"name": "Kererū Botanicals"})
+
+        resp = app_client.get("/api/crm/customers", query_string={"status": "ACTIVE"})
+
+        assert [c["id"] for c in json.loads(resp.data)["customers"]] == [str(made_here.id)]
+
+    def test_the_archived_filter_still_leaves_them_out(self, app_client, db, org):
+        """[CONTROL] they count as active, not as every status."""
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        ContactSyncService(db).create_contact(org.id, {"name": "Kererū Botanicals"})
+        archived = _xero_customer(db, org.id)
+        archived.contact_status = "ARCHIVED"
+        db.commit()
+
+        resp = app_client.get("/api/crm/customers", query_string={"status": "ARCHIVED"})
+
+        assert [c["id"] for c in json.loads(resp.data)["customers"]] == [str(archived.id)]
+
+
+class TestManualSyncFailures:
+    """POST /api/crm/xero/sync answered 200 ``ok: true`` whatever happened, and the three pages
+    that call it only look at the status, so a sync that failed looked like one that worked."""
+
+    def _fail(self, monkeypatch, *, contacts=None, invoices=None, contacts_reply=()):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        def outcome(error, reply=()):
+            def call(self, **kwargs):
+                if error:
+                    raise error
+                return list(reply)
+
+            return call
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", outcome(contacts, contacts_reply))
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", outcome(invoices))
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "fetch_all_credit_notes", outcome([]))
+
+    def test_a_sync_that_failed_outright_is_an_error_the_page_shows(self, app_client, db, org, monkeypatch):
+        _connect_xero(db, org.id)
+        self._fail(monkeypatch, contacts=RuntimeError("Xero is down"), invoices=RuntimeError("Xero is down"))
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        assert resp.status_code == 502
+        body = json.loads(resp.data)
+        assert body["ok"] is False
+        assert "Xero is down" in body["error"]
+
+    def test_a_partly_failed_sync_says_it_did_not_finish(self, app_client, db, org, monkeypatch):
+        _connect_xero(db, org.id)
+        xero_contact = SimpleNamespace(
+            contact_id=f"xero-{uuid4()}",
+            name="Harbour Spirits Co.",
+            first_name=None,
+            last_name=None,
+            email_address=None,
+            phones=[],
+            addresses=[],
+            payment_terms=None,
+            tax_number=None,
+            account_number=None,
+            contact_status="ACTIVE",
+            is_customer=True,
+            is_supplier=False,
+            updated_date_utc=datetime.now(UTC),
+        )
+        self._fail(monkeypatch, invoices=RuntimeError("Invoices timed out"), contacts_reply=[xero_contact])
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        # The contact came in, so this is a partial sync: kept, but reported as not finished.
+        assert resp.status_code == 200
+        body = json.loads(resp.data)
+        assert (body["ok"], body["contacts_synced"]) == (False, 1)
+        assert "Invoices timed out" in body["error"]
+
+    def test_a_clean_sync_is_still_ok(self, app_client, db, org, monkeypatch):
+        """[CONTROL]"""
+        _connect_xero(db, org.id)
+        self._fail(monkeypatch)
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        assert resp.status_code == 200
+        assert json.loads(resp.data)["ok"] is True
+
+
+class TestCustomersPageXeroButtons:
+    """/crm/customers showed Sync and Connect Xero to everyone who can see Sales, but both need
+    sales.manage (access_policy: crm.crm_oauth.*), so a Sales user's Sync answered "You don't have
+    permission to do this." and Connect Xero bounced them to the dashboard."""
+
+    def _client_as(self, db, org, role):
+        from app.api.app_factory import create_app
+        from app.core.db.models.user import UserRole
+
+        email = f"crm_{role}_{uuid4()}@test.com"
+        UserRepository(db).create_user(
+            org_id=org.id, email=email, password_hash=AuthService.hash_password("TestPass123!"), role=UserRole(role)
+        )
+        db.commit()
+        flask_app = create_app()
+        flask_app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+        client = flask_app.test_client()
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        assert client.post("/auth/login", json={"email": email, "password": "TestPass123!"}).status_code in (200, 201)
+        return client
+
+    def test_a_sales_user_is_not_offered_xero_buttons_they_cannot_use(self, db, org):
+        client = self._client_as(db, org, "sales")
+
+        page = client.get("/crm/customers").get_data(as_text=True)
+
+        assert client.post("/api/crm/xero/sync").status_code == 403  # why the button must not show
+        assert "data-new-customer" in page  # they can still add customers
+        assert "doSync()" not in page
+        assert "beginXeroConnect()" not in page
+
+    def test_a_sales_user_is_not_sent_to_the_configuration_page_they_cannot_open(self, db, org):
+        # Overview's "Map" / "Review product mappings" and Batch matching's "Change mode" all
+        # linked to /crm/configuration, which redirects a Sales user to the dashboard.
+        client = self._client_as(db, org, "sales")
+
+        assert client.get("/crm/configuration").status_code in (302, 403)  # dashboard redirect in a browser
+        for path, marker in (
+            ("/crm", "Xero products needing a mapping"),
+            ("/crm/matching", 'id="crm-page-title">Batch matching</h1>'),
+        ):
+            resp = client.get(path)
+            page = resp.get_data(as_text=True)
+            assert resp.status_code == 200 and marker in page, path  # the page itself rendered for them
+            assert "/crm/configuration" not in page, path
+
+    def test_someone_who_manages_sales_still_gets_them(self, db, org):
+        """[CONTROL]"""
+        client = self._client_as(db, org, "member")
+        page = client.get("/crm/customers").get_data(as_text=True)
+
+        assert "doSync()" in page
+        assert "beginXeroConnect()" in page
+        for path in ("/crm", "/crm/matching"):
+            assert "/crm/configuration" in client.get(path).get_data(as_text=True), path

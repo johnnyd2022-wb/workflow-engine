@@ -18,7 +18,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation, OrganisationStatus
 from app.core.db.models.user import User, UserRole
 from app.core.db.models.user_identity import UserIdentity
-from app.core.security.auth_service import AuthService
+from app.core.security.auth_service import AuthService, auth_stamp
 from app.core.security.people import issue_invite
 from app.features.google_sign_in import oidc, routes
 from app.features.google_sign_in.service import GoogleSignInError, authoritative_email, validate_verified_claims
@@ -101,7 +101,12 @@ def _sign_in(browser, claims, monkeypatch, endpoint="start", data=None):
 
 def _authenticate(browser, user):
     with browser.session_transaction() as s:
-        s.update(user_id=str(user.id), org_id=str(user.org_id), user_email=user.email)
+        s.update(
+            user_id=str(user.id),
+            org_id=str(user.org_id),
+            user_email=user.email,
+            auth_stamp=auth_stamp(user.password_hash),
+        )
 
 
 @pytest.mark.parametrize(
@@ -301,7 +306,10 @@ def test_link_aborts_if_account_or_password_changes(world, monkeypatch, change):
     else:
         _authenticate(browser, neighbor)
     monkeypatch.setattr(routes, "exchange_verified_identity", lambda nonce: _claims(user.email, nonce=nonce))
-    assert browser.get("/auth/google/callback", query_string={"state": q["state"][0], "code": "x"}).status_code == 400
+    # Refused either way: the link itself answers 400, and since GL-A02 a session whose password
+    # changed under it (or whose user was swapped without signing in) ends with a 401 first.
+    response = browser.get("/auth/google/callback", query_string={"state": q["state"][0], "code": "x"})
+    assert response.status_code in (400, 401)
     assert db.query(UserIdentity).filter_by(user_id=user.id).count() == 0
 
 

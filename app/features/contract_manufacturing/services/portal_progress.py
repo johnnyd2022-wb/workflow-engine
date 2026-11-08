@@ -2,14 +2,15 @@
 
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.step import Step
-from app.features.contract_manufacturing.services.orders import OrderError, identifier, text_value
+from app.features.contract_manufacturing.services.orders import OrderError, batch_view, identifier, text_value
 
 MAX_SHARED_STEPS = 100
 
 
 def step_candidates(db, org_id, order):
     """Return only steps belonging to batches currently linked to this tenant's order."""
-    batch_ids = {link.execution_id for line in order.lines for link in line.batches}
+    views = {link.execution_id: batch_view(link.execution) for line in order.lines for link in line.batches}
+    batch_ids = set(views)
     if not batch_ids:
         return []
     rows = (
@@ -27,6 +28,8 @@ def step_candidates(db, org_id, order):
         {
             "execution_step_id": str(execution_step.id),
             "batch_id": str(execution_step.execution_id),
+            "batch_text": views[execution_step.execution_id]["text"],
+            "batch_name": views[execution_step.execution_id]["customer_name"],
             "name": step.name,
             "status": execution_step.status.value,
         }
@@ -65,6 +68,7 @@ def derived_progress(db, org_id, order, shared_steps):
     milestones = [
         {
             "batch_id": candidates[item["execution_step_id"]]["batch_id"],
+            "batch_name": candidates[item["execution_step_id"]]["batch_name"],
             "label": item["label"],
             "status": candidates[item["execution_step_id"]]["status"],
         }

@@ -1,3 +1,4 @@
+from app.features.contract_manufacturing.models.dispatch import ContractDispatch, ContractDispatchLine
 from app.features.contract_manufacturing.models.material_receipt import ContractMaterialReceipt
 from app.features.contract_manufacturing.models.orders import (
     ContractCustomer,
@@ -17,6 +18,8 @@ from app.features.contract_manufacturing.models.portal import (
 )
 
 __all__ = [
+    "ContractDispatch",
+    "ContractDispatchLine",
     "ContractCustomer",
     "ContractOrder",
     "ContractOrderLine",

@@ -213,6 +213,13 @@
       metaOut.textContent = `${outputs.length} output${outputs.length !== 1 ? 's' : ''}`;
       meta.appendChild(metaIn);
       meta.appendChild(metaOut);
+      const timingText = window.StepTiming ? window.StepTiming.summary(step.duration_minutes, step.wait_minutes) : '';
+      if (timingText) {
+        const metaTime = document.createElement('span');
+        metaTime.className = 'flows2-step__timing';
+        metaTime.textContent = timingText;
+        meta.appendChild(metaTime);
+      }
 
       const expandBtn = document.createElement('button');
       expandBtn.type = 'button';
@@ -600,8 +607,8 @@
     // ============================================================
     // DRAG AND DROP FOR STEP REORDERING
     // ============================================================
-    let draggedStepCard = null;
-    let draggedStepIndex = -1;
+    var draggedStepCard = null;
+    var draggedStepIndex = -1;
     
     function initializeStepDragAndDrop() {
       const container = document.getElementById('steps-container');
@@ -981,7 +988,7 @@
       // Check if this is a new step (not saved yet)
       if (!stepId || stepId.startsWith('step-new-')) {
         // Just remove from DOM
-        if (confirm(`Are you sure you want to delete "${stepName}"?`)) {
+        if (confirm(`Remove the unsaved step "${stepName}"?`)) {
           stepCard.remove();
           updateStepCount();
         }
@@ -989,7 +996,7 @@
       }
       
       // Confirm deletion
-      if (!confirm(`Are you sure you want to delete "${stepName}"? This action cannot be undone.`)) {
+      if (!confirm(`Delete the step "${stepName}" from this workflow? This can't be undone. A step that batches have recorded can't be deleted.`)) {
         return;
       }
       

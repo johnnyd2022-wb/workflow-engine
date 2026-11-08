@@ -34,7 +34,9 @@ def workspace_user(fresh_user, db):
 
 
 def _page(browser, app_url, user, width):
-    context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": width, "height": 1000})
+    context = browser.new_context(
+        base_url=app_url, ignore_https_errors=True, bypass_csp=True, viewport={"width": width, "height": 1000}
+    )
     page = context.new_page()
     login_through_ui(page, user["email"], user["password"])
     return context, page
@@ -60,8 +62,8 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         assert saved.ok, saved.text()
         for name, path, labels, secondary in [
             ("production", "/core", ["Overview", "Planner", "Workflows", "Inventory"], "Contract orders"),
-            ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Premises"),
-            ("sales", "/crm", ["Overview", "Customers", "Tasks", "Analytics"], "Batch matching"),
+            ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Tools"),
+            ("sales", "/crm", ["Overview", "Customers", "Sales tasks", "Analytics"], "Batch matching"),
         ]:
             page.goto(path)
             nav = page.get_by_role("navigation", name=f"{name.title()} sections", exact=True)
@@ -192,55 +194,73 @@ def test_ac3_setup_and_pending_never_claim_healthy(browser, app_url, workspace_u
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_url, workspace_user, width):
+def test_production_overview_reads_health_first_and_offers_each_batch_its_next_step(
+    browser, app_url, workspace_user, width
+):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core")
         tabs = page.get_by_role("navigation", name="Production sections", exact=True).get_by_role("tab")
-        fills = tabs.evaluate_all("tabs => tabs.map(tab => getComputedStyle(tab).backgroundColor)")
-        assert fills[0] != "rgba(0, 0, 0, 0)" and set(fills[1:]) == {"rgba(0, 0, 0, 0)"}, (
-            "only the current page is filled"
-        )
-        widths = {round(tab.bounding_box()["width"]) for tab in tabs.all()}
-        assert len(widths) == 1, "the selector spans the column in equal segments"
+        # The section tabs sit under the title, and only the current page is marked.
+        expect(tabs).to_have_count(4)
+        expect(tabs.first).to_have_attribute("aria-selected", "true")
+        weights = tabs.evaluate_all("tabs => tabs.map(tab => Number(getComputedStyle(tab).fontWeight))")
+        assert weights[0] > max(weights[1:]), "only the current page is emphasised"
+        title = page.get_by_role("heading", name="Production", exact=True, level=1).bounding_box()
+        assert title["y"] < tabs.first.bounding_box()["y"]
 
         health = page.get_by_role("region", name="Production health", exact=True)
-        expect(health.get_by_role("group", name="At a glance")).to_be_visible()
         expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
+        glance = page.get_by_role("region", name="At a glance", exact=True)
+        expect(glance.get_by_role("link")).to_have_count(6)
         manage = page.get_by_role("region", name="Production workspace actions", exact=True)
         expect(manage.get_by_role("link")).to_have_count(5)
         board = manage.get_by_role("link", name="View production board", exact=True)
         expect(board).to_have_attribute("href", "/core/executions/live")
         active = page.get_by_role("region", name="Active production", exact=True)
-        stack = [
-            health,
-            page.get_by_role("region", name="Get to work", exact=True),
-            manage,
-            active,
-        ]
-        boxes = [item.bounding_box() for item in stack]
-        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        actions = page.get_by_role("region", name="Get to work", exact=True)
+        boxes = {
+            name: item.bounding_box()
+            for name, item in [("health", health), ("glance", glance), ("active", active), ("actions", actions)]
+        }
+        boxes["manage"] = manage.bounding_box()
+        # The actions sit in the page header, above everything else.
+        assert boxes["actions"]["y"] < boxes["health"]["y"]
+        if width >= 1440:
+            # With room the page is a board, as Home is: health beside the figures, level with
+            # each other, then the batches and the links the full width beneath.
+            assert boxes["health"]["y"] == boxes["glance"]["y"]
+            assert round(boxes["health"]["height"]) == round(boxes["glance"]["height"])
+            assert boxes["active"]["y"] > boxes["health"]["y"] + boxes["health"]["height"]
+            assert boxes["manage"]["y"] > boxes["active"]["y"] + boxes["active"]["height"]
+            assert round(boxes["active"]["width"]) == round(boxes["manage"]["width"])
+            assert round(boxes["active"]["width"]) == round(
+                boxes["glance"]["x"] + boxes["glance"]["width"] - boxes["health"]["x"]
+            )
+        else:
+            # Without it, one column in the page's source order, so what is seen is what is tabbed.
+            order = ["health", "glance", "active", "manage"]
+            assert [boxes[name]["y"] for name in order] == sorted(boxes[name]["y"] for name in order)
+            assert len({round(boxes[name]["width"]) for name in order}) == 1, "every block spans the content column"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
-        assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
+        if width >= 1440:
+            assert len({link["y"] for link in links[:4]}) == 1, "the four links share one row on the board"
+        else:
+            assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
         assert len({round(link["width"]) for link in links[:4]}) == 1
-        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 2
+        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 1.5
         plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
         expect(board).to_have_css("background-color", plain)
 
-        batch = active.locator("details").first
-        record = batch.get_by_role("link", name="Record next step", exact=True)
-        expect(record).not_to_be_visible()
-        batch.locator("summary").click()
-        for label in ["Status", "Next step", "Progress", "Started"]:
-            expect(batch.get_by_text(label, exact=True)).to_be_visible()
-        expect(batch.get_by_role("link")).to_have_count(1)
+        # A batch says where it is and offers its next step without being opened first.
+        batch = active.locator("[data-execution-id]").first
+        expect(batch).to_contain_text("Gin distillation")
+        expect(batch.locator(".prod-progress")).to_be_visible()
+        record = batch.get_by_role("link", name=re.compile("^Record next step"))
+        expect(record).to_be_visible()
         assert "/core/flows/batches/start?id=" in record.get_attribute("href")
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "production-layout", width)
-        batch.locator("summary").click()
-        expect(record).not_to_be_visible()
-        batch.locator("summary").click()
         record.click()
         expect(page).to_have_url(re.compile(r"/core/flows/batches/start\?.*execution_id="))
     finally:
@@ -269,7 +289,14 @@ def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, ap
             assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
         boxes = [item.bounding_box() for item in [readiness, obligations, manage]]
         assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        assert round(boxes[1]["width"]) == round(boxes[2]["width"]), "obligations and actions span the column"
+        if width >= 1440:
+            next_action = page.get_by_role("region", name="Next action", exact=True).bounding_box()
+            assert boxes[0]["y"] == next_action["y"]
+            assert boxes[0]["x"] + boxes[0]["width"] < next_action["x"]
+            assert round(next_action["x"] + next_action["width"]) == round(boxes[1]["x"] + boxes[1]["width"])
+        else:
+            assert len({round(box["width"]) for box in boxes}) == 1, "narrow screens stack every block"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
         assert len(links) >= 2 and links[0]["y"] == links[1]["y"]
         assert len({round(link["width"]) for link in links}) == 1
@@ -280,52 +307,63 @@ def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, ap
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, workspace_user, width):
+def test_sales_overview_keeps_figures_in_card_and_actions_in_header(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/crm")
         glance = page.get_by_role("region", name="At a glance", exact=True)
-        tools = page.get_by_role("region", name="Sales workspace actions", exact=True)
+        tools = page.locator(".sales-header-actions")
         expect(glance.get_by_role("button").first).to_be_visible()
+        expect(tools.get_by_role("button", name="Add widget", exact=True)).to_be_visible()
+        page.wait_for_load_state("networkidle")
         outer = glance.bounding_box()
         for figure in glance.get_by_role("button").all():
             if figure.is_visible():
                 box = figure.bounding_box()
                 assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
-        assert glance.bounding_box()["y"] < tools.bounding_box()["y"]
-        assert round(glance.bounding_box()["width"]) == round(tools.bounding_box()["width"])
-        links = [link.bounding_box() for link in tools.get_by_role("link").all()]
-        assert len(links) == 2 and links[0]["y"] == links[1]["y"]
-        assert round(links[0]["width"]) == round(links[1]["width"])
+        assert tools.bounding_box()["y"] < glance.bounding_box()["y"]
+        primary = tools.get_by_role("link", name="New task", exact=True).bounding_box()
+        secondary = tools.get_by_role("button", name="Add widget", exact=True).bounding_box()
+        assert abs(primary["y"] - secondary["y"]) < 2
+        if width >= 1280:
+            assert primary["x"] > secondary["x"]
+            # Figures run across the top; the trend then shares its row with the task board.
+            trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
+            tasks = page.locator('[data-widget-type="task_board"]').bounding_box()
+            assert glance.bounding_box()["y"] + glance.bounding_box()["height"] <= trend["y"]
+            assert abs(trend["y"] - tasks["y"]) < 2
+        else:
+            assert primary["x"] < secondary["x"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "sales-layout", width)
     finally:
         context.close()
 
 
-@pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, app_url, workspace_user, width):
+# Phone and narrow-laptop widths. With more room the page is a board, covered by
+# tests/e2e/dashboard/test_dashboard_today.py.
+@pytest.mark.parametrize("width", [390, 1024])
+def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/dashboard")
         expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-        names = ["Needs attention", "Today's planned production", "Workspaces", "Business signals"]
-        names += ["Production flow this week", "Logged events"]
-        regions = [page.get_by_role("region", name=name, exact=True) for name in names]
-        boxes = [region.bounding_box() for region in regions]
-        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        full = [box for name, box in zip(names, boxes) if name != "Production flow this week"]
-        assert len({round(box["width"]) for box in full}) == 1, "every block spans the content column"
-        for name, tiles in [("Workspaces", "a, article"), ("Business signals", "article")]:
-            region = page.get_by_role("region", name=name, exact=True)
-            outer = region.bounding_box()
-            visible = [tile.bounding_box() for tile in region.locator(tiles).all() if tile.is_visible()]
+        names = ["Compliance score", "This week", "Needs attention", "Today's planned production"]
+        names += ["Workspaces", "Recent activity"]
+        regions = {name: page.get_by_role("region", name=name, exact=True) for name in names}
+        boxes = {name: region.bounding_box() for name, region in regions.items()}
+        assert [boxes[name]["y"] for name in names] == sorted(boxes[name]["y"] for name in names)
+        # Every block spans the content column: nothing sits beside a taller neighbour.
+        assert len({round(box["x"]) for box in boxes.values()}) == 1
+        assert len({round(box["width"]) for box in boxes.values()}) == 1
+        for name, tiles in [("Workspaces", "a, article"), ("This week", "a.dash-figure")]:
+            outer = boxes[name]
+            visible = [tile.bounding_box() for tile in regions[name].locator(tiles).all() if tile.is_visible()]
             assert len(visible) >= 3
             for box in visible:
                 assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
-        flow = page.get_by_role("region", name="Production flow this week", exact=True)
-        expect(flow.locator("[data-ops-active]")).to_have_text("1")
-        for hidden in page.locator(".dash-stat-row[hidden], .dash-kpi-card[hidden]").all():
+        expect(regions["This week"].locator("[data-kpi-active-batches]")).to_have_text("1")
+        for hidden in page.locator(".dash-figure__meta[hidden], .dash-figure__spark[hidden]").all():
             expect(hidden).not_to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "dashboard-layout", width)
@@ -338,29 +376,42 @@ def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, ap
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width):
+def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width, db):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/settings")
         expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
-        sites = page.get_by_role("region", name="Manage sites", exact=True)
-        people = page.get_by_role("region", name="People and roles", exact=True)
-        expect(sites.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
-        expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
-        side_by_side = sites.bounding_box()["y"] == people.bounding_box()["y"]
-        assert side_by_side == (width >= 1024)
+        # Plan 2.5: sites and people are Settings tabs now, not cards in an Organisation category.
+        # GL-P07 A1 (!597): Sites shows only for a business with the multi_site subscription.
+        row = page.get_by_role("tablist", name="Settings pages")
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Integrations", "Task settings"])
+        FeatureSubscriptionRepository(db).grant(UUID(workspace_user["org_id"]), "multi_site")
+        db.commit()
+        page.reload()
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Task settings"])
+        expect(row.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
+        expect(row.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
-        expected = ["Account information", "Manage sites", "People and roles", "Security"]
-        expected += ["Two-factor authentication", "Session settings"]
+        expected = ["Account information", "Password", "Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
-        assert headings[-2:] == ["Notification preferences", "Appearance"]
-        lefts = {round(card.bounding_box()["x"]) for card in page.locator(".settings-overview .workspace-card").all()}
-        assert len(lefts) == (2 if side_by_side else 1)
+        assert "Appearance" in headings
+        assert headings[-1] == "Download all your records"
+        assert "Notification preferences" not in headings
+        assert "Manage sites" not in headings
+        # One category at a time, under the Settings tab row.
+        categories = page.get_by_role("navigation", name="Account sections", exact=True)
+        expect(categories.get_by_role("link")).to_have_text(
+            ["Profile", "Security and sign-in", "Preferences", "Your records"]
+        )
+        expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
+        account = page.locator('[data-settings-group="account"]').bounding_box()
+        assert row.bounding_box()["y"] + row.bounding_box()["height"] <= categories.bounding_box()["y"]
+        assert categories.bounding_box()["y"] + categories.bounding_box()["height"] <= account["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "settings-layout", width)
         page.evaluate("localStorage.setItem('spa-theme', 'dark')")
-        page.goto("/core/settings")
-        expect(sites).to_be_visible()
+        page.goto("/core/settings#settings-security")
+        expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
         _capture(page, "settings-layout-dark", width)
         page.evaluate("localStorage.removeItem('spa-theme')")
     finally:

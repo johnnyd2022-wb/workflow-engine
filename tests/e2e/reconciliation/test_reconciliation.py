@@ -219,9 +219,7 @@ def test_ac3_via_execution_idempotency_guard_rejects_second_identical_reconcile(
 
     second = page.request.post("/api/core/inventory/reconcile/via-execution", headers=csrf_headers(page), data=payload)
     assert second.status == 400, f"re-submitting the same process/step must be rejected, got {second.status}"
-    assert second.json() == {
-        "error": "This untracked item has already been reconciled against this process step."
-    }
+    assert second.json() == {"error": "This untracked item has already been reconciled against this process step."}
 
     # The balance was only reduced once: a silent double-spend on the rejected resubmit
     # would show 1, not 3.

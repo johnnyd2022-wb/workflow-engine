@@ -30,7 +30,11 @@
     delete record.product_mapping;
     return record;
   };
+  // Bound once per form element, so a boosted return (which runs this script again) does not
+  // submit twice.
   document.querySelectorAll('form[data-contract-api]').forEach((form) => {
+    if (form.dataset.contractBound) return;
+    form.dataset.contractBound = 'true';
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = form.querySelector('button[type="submit"]');
@@ -56,6 +60,8 @@
     });
   });
   document.querySelectorAll('[data-contract-delete]').forEach((button) => {
+    if (button.dataset.contractBound) return;
+    button.dataset.contractBound = 'true';
     button.addEventListener('click', async () => {
       button.disabled = true;
       try {
@@ -67,4 +73,68 @@
       }
     });
   });
+
+  // Contract orders home: due dates and quantities in words, the figures, and the forms that
+  // open from their buttons.
+  const DAY = 86400000;
+  function daysUntil(iso) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    if (!match) return null;
+    const due = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    const now = new Date();
+    return Math.round((due - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DAY);
+  }
+  function dueWords(iso, open) {
+    const days = daysUntil(iso);
+    if (days === null) return { label: iso, state: 'later' };
+    if (open && days < 0) return { label: -days + ' day' + (days === -1 ? '' : 's') + ' overdue', state: 'overdue' };
+    if (open && days === 0) return { label: 'Due today', state: 'soon' };
+    if (open && days === 1) return { label: 'Due tomorrow', state: 'soon' };
+    if (open && days <= 7 && days > 0) return { label: 'Due in ' + days + ' days', state: 'soon' };
+    const date = new Date(iso + 'T00:00:00');
+    return { label: date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: days < -300 || days > 300 ? 'numeric' : undefined }), state: 'later' };
+  }
+  function init(root) {
+    let overdue = 0;
+    let week = 0;
+    root.querySelectorAll('tr[data-order-status]').forEach((row) => {
+      const open = row.dataset.orderStatus === 'draft' || row.dataset.orderStatus === 'confirmed';
+      const due = row.querySelector('[data-due]');
+      const words = dueWords(due.dataset.due, open);
+      due.textContent = words.label;
+      due.dataset.state = words.state;
+      if (open) {
+        const days = daysUntil(due.dataset.due);
+        if (days < 0) overdue += 1;
+        else if (days <= 7) week += 1;
+      }
+      row.querySelectorAll('[data-quantity]').forEach((amount) => {
+        const value = Number(amount.dataset.quantity);
+        if (Number.isFinite(value)) amount.textContent = value.toLocaleString('en-NZ', { maximumFractionDigits: 4 }) + ' ' + amount.dataset.unit;
+      });
+    });
+    const set = (selector, text) => { const target = root.querySelector(selector); if (target) target.textContent = text; };
+    set('[data-figure="overdue"]', String(overdue));
+    set('[data-figure="week"]', String(week));
+    set('[data-figure-note="overdue"]', overdue ? 'past their due date' : 'nothing is late');
+    const overdueTile = root.querySelector('[data-figure-tile="overdue"]');
+    if (overdueTile) overdueTile.dataset.state = overdue ? 'overdue' : 'clear';
+
+    function toggle(id, show) {
+      const target = root.querySelector('#' + id);
+      if (!target) return;
+      const opening = show === undefined ? target.hidden : show;
+      target.hidden = !opening;
+      root.querySelectorAll('[aria-controls="' + id + '"]').forEach((button) => button.setAttribute('aria-expanded', String(opening)));
+      if (opening) target.querySelector('input, select')?.focus();
+      else root.querySelector('[aria-controls="' + id + '"]')?.focus();
+    }
+    function onClick(event) {
+      const toggleButton = event.target.closest('[data-toggle-form]');
+      if (toggleButton) toggle(toggleButton.dataset.toggleForm);
+    }
+    root.addEventListener('click', onClick);
+    return () => root.removeEventListener('click', onClick);
+  }
+  if (window.bize && window.bize.onPage) window.bize.onPage('[data-contracts-root]', init);
 })();

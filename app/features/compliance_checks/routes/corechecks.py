@@ -87,6 +87,14 @@ class CoreChecksRunner:
         self.register_check("output_expiry", run_output_expiry_check)
         self.register_check(OUTPUT_READY_DATE_CHECK_ID, run_output_ready_date_check)
         self.register_check("tasks_due", run_tasks_due_check)
+        from app.features.compliance_checks.checks.planned_material_shortages import (
+            CHECK_ID as SHORTAGES_CHECK_ID,
+        )
+        from app.features.compliance_checks.checks.planned_material_shortages import (
+            run_planned_material_shortages_check,
+        )
+
+        self.register_check(SHORTAGES_CHECK_ID, run_planned_material_shortages_check)
 
         # Product modules register through this public composition seam.  The runner
         # deliberately knows no industry-specific IDs or data shapes.

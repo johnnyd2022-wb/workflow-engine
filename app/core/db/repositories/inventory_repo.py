@@ -426,6 +426,7 @@ class InventoryRepository:
         if needed is None or not needed.is_finite() or needed <= 0:
             raise ValueError("quantity must be a positive finite number")
         from app.core.db.site_operations import resolve_site
+        from app.core.services.lot_holds import held_lot_ids_subquery
 
         selected_site = resolve_site(self.db, org_id, site_id)
 
@@ -446,6 +447,8 @@ class InventoryRepository:
                     InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
                     producer_stock_predicate(),
                     InventoryItem.quantity > 0,
+                    # GL-P02: a lot on quality hold is never matched to a sale; the next lot is.
+                    InventoryItem.id.not_in(held_lot_ids_subquery(org_id)),
                 )
                 .order_by(
                     batch_number_sort.asc(),
@@ -607,16 +610,12 @@ class InventoryRepository:
         """
         from app.core.db.models.organisation import Organisation
         from app.core.db.models.stock_location import StockLocation, StockTransfer
+        from app.core.db.site_entitlement import sites_on
         from app.core.db.site_operations import resolve_site
 
         resolve_site(self.db, org_id)  # Hold organisation settings before stock locks.
-        mode = (
-            self.db.query(Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled)
-            .filter(Organisation.id == org_id)
-            .one()
-        )
-        if mode.multiple_sites_enabled and mode.multiple_site_operations_enabled:
-            raise ValueError("Moving between sites or places requires a recorded dispatch and receipt")
+        mode = self.db.query(Organisation.multiple_sites_enabled).filter(Organisation.id == org_id).one()
+        multi_site = sites_on(self.db, org_id, mode.multiple_sites_enabled)
 
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
@@ -638,21 +637,32 @@ class InventoryRepository:
             raise ValueError("The stock is already there")
 
         def licensed(location_id) -> bool:
-            if location_id is None:
-                return True
-            loc = (
-                self.db.query(StockLocation)
-                .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
-                .one_or_none()
-            )
-            if loc is None:
-                raise ValueError("Location not found")
-            if loc.site_id != item.site_id:
-                raise ValueError("Moving between sites requires a recorded dispatch and receipt")
-            return bool(loc.inside_licensed_area)
+            if location_id is not None:
+                loc = (
+                    self.db.query(StockLocation)
+                    .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
+                    .one_or_none()
+                )
+                if loc is None:
+                    raise ValueError("Location not found")
+                if loc.site_id != item.site_id:
+                    raise ValueError("Moving between sites requires a recorded dispatch and receipt")
+            # The compliance module's register decides when it has one (GL-P07 A5); otherwise
+            # unplaced stock is inside the licensed area and an area says so with its flag.
+            from app.features.compliant.platform.licensed_areas import licensed_place
+
+            decided = licensed_place(self.db, org_id, item.site_id, location_id, occurred_on)
+            if decided is not None:
+                return decided
+            return True if location_id is None else bool(loc.inside_licensed_area)
 
         was_in, now_in = licensed(item.location_id), licensed(to_location_id)
         direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
+        # Moving between places at one site is a single step. With sites on, crossing the
+        # licensed-area boundary is a movement the compliance module rules on: it goes through
+        # a recorded dispatch and receipt instead.
+        if multi_site and direction != "internal":
+            raise ValueError("Moving into or out of the licensed area requires a recorded dispatch and receipt")
 
         quantity_before = str(current)
         # Same batch already at the destination (e.g. moving stock back): add to it.
@@ -916,16 +926,24 @@ class InventoryRepository:
         cursor: tuple | None = None,
         site_id: UUID | None = None,
         producer_owned_only: bool = False,
+        non_empty_only: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
         ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
         is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
         previous page returned; the sort is (created_at DESC, id DESC).
+
+        ``non_empty_only`` drops lines with nothing left in the query itself, so a page
+        holds ``limit`` display rows rather than ``limit`` fetched rows minus however many
+        a caller then discards. It is the SQL form of the list route's display filter
+        (skip ``quantity <= 0`` and ``abs(quantity) < 0.0001``).
         """
         from sqlalchemy import tuple_ as _tuple
 
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if non_empty_only:
+            query = query.filter(InventoryItem.quantity >= self._NONZERO_QTY)
         if producer_owned_only:
             query = query.filter(producer_stock_predicate())
         if site_id is not None:

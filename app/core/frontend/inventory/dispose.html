@@ -42,7 +42,7 @@
               maxlength="500"
               placeholder="e.g. Damaged in transit, failed quality check, expired stock…"
               required
-            ></textarea>
+            >{{ prefill_reason }}</textarea>
           </label>
           <div class="workspace-form__actions workspace-form__wide">
             <button type="submit" id="dispose-inventory-submit" class="workspace-button workspace-button--primary">Dispose of selected quantity of inventory items</button>
@@ -52,12 +52,16 @@
     </section>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
-      if (window.__disposeInventoryPageInit) return;
-      window.__disposeInventoryPageInit = true;
+      // Guard on the page's own root, not on window: window survives a boosted swap, so a
+      // window flag kept the second visit stuck on "Loading inventory...".
+      var pageRoot = document.getElementById('dispose-inventory-page');
+      if (!pageRoot || pageRoot.dataset.bound === '1') return;
+      pageRoot.dataset.bound = '1';
 
       var initialItemIds = {{ initial_item_ids|tojson }};
+      var prefillWhole = {{ prefill_whole|tojson }};
       var cardsContainer = document.getElementById('dispose-inventory-cards-container');
       var form = document.getElementById('dispose-inventory-form');
       var submitBtn = document.getElementById('dispose-inventory-submit');
@@ -111,6 +115,7 @@
               '<button type="button" class="dispose-item-action dispose-selected-btn">Dispose of selected quantity</button>' +
             '</div>';
           var qtyInput = row.querySelector('.wastage-qty-input');
+          if (prefillWhole && qtyInput) qtyInput.value = String(qtyNum);
           var disposeSelectedBtn = row.querySelector('.dispose-selected-btn');
           if (disposeSelectedBtn && qtyInput) {
             disposeSelectedBtn.addEventListener('click', function () {
@@ -199,6 +204,7 @@
           syncTabActiveUi();
           renderFromState();
         } catch (e) {
+          if (e && e.name === 'AbortError') return;
           console.error('Failed to load inventory for wastage', e);
           setLoading('Failed to load inventory.');
         }

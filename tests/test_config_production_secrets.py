@@ -10,6 +10,7 @@ behaviour so a tracked-file fallback can never quietly return.
 from __future__ import annotations
 
 import configparser
+import re
 from pathlib import Path
 
 import pytest
@@ -123,7 +124,8 @@ def test_both_production_spellings_count_as_production(environment, expected):
 def test_production_image_and_run_script_use_the_config_file_name():
     """``ENVIRONMENT`` picks ``app/config/<name>.ini``; only ``prod.ini`` exists."""
     dockerfile = (REPO_ROOT / "Dockerfile.multi").read_text()
-    production_stage = dockerfile.split("as production", 1)[1]
+    # Docker accepts the stage keyword in any case ("as" or "AS").
+    production_stage = re.split(r"(?im)^FROM\s+base\s+AS\s+production\s*$", dockerfile, maxsplit=1)[1]
     assert "ENV ENVIRONMENT=prod\n" in production_stage
     assert "ENVIRONMENT=prod" in (REPO_ROOT / "scripts" / "run_prod.sh").read_text()
     assert (REPO_ROOT / "app" / "config" / "prod.ini").is_file()

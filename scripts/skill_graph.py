@@ -50,6 +50,7 @@ ROOTS = {
     "fix-bug",
     "deploy-runner",
     "dependency-update",
+    "page-design",
     # autonomous watchers — a schedule invokes these
     "prod-sentinel",
     "security-audit",

@@ -14,6 +14,9 @@
 #   test     workflow-engine-admin-test   8020   workflow-engine-test (:8401)   workflow-engine-admin-test-documents
 #   prod     workflow-engine-admin        8021   workflow-engine-prod-db        workflow-engine-admin-documents
 #
+# Like run_prod.sh, it deploys only clean tracked files at freshly fetched origin/main, and builds
+# the image from a `git archive` of that commit, so untracked local files never enter it.
+#
 # Secrets come from KeePassXC, never from a file. Each site gets its database password, its
 # own session key and the admin Google client; production also gets the 2FA backup-code key
 # (test uses the same built-in development key the test app does).
@@ -23,6 +26,17 @@ TARGET="${1:-test}"
 IMAGE=workflow-engine:admin
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+case "$TARGET" in test|prod) ;; *) echo "Usage: scripts/run_admin.sh [test|prod]" >&2; exit 2 ;; esac
+
+# shellcheck source=scripts/deploy_common.sh
+source "$repo_root/scripts/deploy_common.sh"
+DEPLOY_ENV="admin-$TARGET"
+DEPLOY_NAME="The $TARGET admin site deploy"
+acquire_deploy_lock
+
+echo "== Checkout"
+check_checkout
+source_sha="$(git rev-parse HEAD)"
 
 keepass() { # keepass ENTRY -> its password on stdout
     python3 -c 'import sys; sys.path.insert(0, "scripts"); from local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name=sys.argv[1]).get("Password", "").strip())' "$1"
@@ -71,10 +85,12 @@ done
 # registered on the Google client.
 export ADMIN_GOOGLE_REDIRECT_URI="${PUBLIC_URL}/auth/google/callback"
 echo "Google redirect URI: $ADMIN_GOOGLE_REDIRECT_URI"
-export APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+export APP_VERSION="$(git rev-parse --short "$source_sha")"
 
 echo "== Build"
-docker build --target admin -f Dockerfile.multi -t "$IMAGE" .
+build_image_from_head admin "$IMAGE" "$source_sha"
+# Catch edits or a newer main arriving during the build before replacing the site.
+check_checkout "$source_sha"
 
 echo "== Admin site ($TARGET)"
 docker volume create "$DOCUMENTS_VOLUME" >/dev/null

@@ -494,3 +494,46 @@ def test_json_writes_require_the_flask_wtf_csrf_header(world, db):
         assert accepted.status_code == 201, accepted.get_data(as_text=True)
     finally:
         app.config["WTF_CSRF_ENABLED"] = False
+
+
+def test_the_order_page_names_batches_for_people_not_by_id(world, db):
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+
+    org_a, _ = world["orgs"]
+    client = world["clients"][0]
+    customer = _customer(client)
+    process, version, output = _recipe(db, org_a.id, "Navy strength gin")
+    linked = ExecutionRepository(db).create_execution(org_id=org_a.id, process_id=process.id)
+    step = db.query(ExecutionStep).filter_by(org_id=org_a.id, execution_id=linked.id).first()
+    step.execution_data = {"Batch number": "G-0412"}
+    unlinked = ExecutionRepository(db).create_execution(org_id=org_a.id, process_id=process.id)
+    db.commit()
+    order = _order(
+        client,
+        customer["id"],
+        lines=[
+            {
+                "product_name": "Gin",
+                "quantity": "600",
+                "unit": "bottles",
+                "materials_source": "producer",
+                "process_version_id": str(version.id),
+                "source_output_id": str(output),
+            }
+        ],
+    )
+    url = f"{API}/{order['id']}/lines/{order['lines'][0]['id']}/batches"
+    assert client.post(url, json={"execution_id": str(linked.id)}).status_code == 201
+    assert client.patch(f"{API}/{order['id']}", json={"status": "confirmed"}).status_code == 200
+
+    page = client.get(f"/core/contracts/{order['id']}").get_data(as_text=True)
+    # The linked batch: its recorded number, workflow and start, linked to the batch itself.
+    assert "Batch G-0412 · Navy strength gin · started " in page
+    assert "600 bottles" in page and "600.0000 bottles" not in page
+    assert f'href="/core/flows/batches/start?id={process.id}&amp;execution_id={linked.id}"' in page
+    # The picker names the unlinked batch the same way; neither id is shown as text.
+    assert "Navy strength gin · started " in page
+    for batch in (linked, unlinked):
+        assert f">{batch.id}" not in page and str(batch.id)[:8] + "<" not in page
+        assert f"{str(batch.id)[:8]}</option>" not in page

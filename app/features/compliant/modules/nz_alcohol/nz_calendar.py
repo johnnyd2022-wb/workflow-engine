@@ -80,6 +80,26 @@ def is_working_day(day: date) -> bool:
     return day not in non_working_days(day.year)
 
 
+def is_statutory_working_day(day: date) -> bool:
+    """A working day as the Legislation Act 2019 (s 13) counts it, which Customs deadlines use.
+
+    The same public holidays as above, but the summer break is 25 December to 2 January, and
+    when 1 January falls on a Friday the next Monday is off; on a weekend, the next Monday and
+    Tuesday.
+    """
+    if day.weekday() >= 5 or day in non_working_days(day.year):
+        return False
+    if (day.month == 12 and day.day >= 25) or (day.month == 1 and day.day <= 2):
+        return False
+    if day.month == 1:
+        new_year = date(day.year, 1, 1).weekday()
+        if new_year == 4 and day == date(day.year, 1, 4):
+            return False
+        if new_year >= 5 and day in {date(day.year, 1, 1) + timedelta(days=7 - new_year + k) for k in (0, 1)}:
+            return False
+    return True
+
+
 def working_days_before(day: date, n: int) -> date:
     """The latest date that is at least ``n`` working days before ``day``.
 

@@ -31,6 +31,10 @@ And it is self-healing in both directions, which is what makes it safe to run un
     (`done` if this loop had an MR open for it, `gone` if it vanished some other way).
   - A `Findings-Index:` trailer in a merged MR description closes the items that MR
     fixed, so the loop learns its own work landed without anyone telling it.
+  - A `Findings-Index:` trailer in an *open* MR marks its items `mr-open`, and `next` skips
+    them: the daily run starts from `origin/main`, which lacks an unmerged fix, so without
+    this it re-picked the same finding every day and left another MR open for it. The mark is
+    taken back (`outstanding`) if that MR closes unmerged, and never on a glab failure.
   - An item that reappears after being closed is reopened and flagged `regressed`, the
     same regression signal `finding_history.py` provides for review findings.
   - Verdicts a human already recorded in `finding_history.py` (false-positive,
@@ -138,6 +142,12 @@ EXCLUDE_GLOBS = (
     # swept three descriptive convention bullets ("href is always a same-origin path",
     # etc.) as P0 security findings in the first real sweep of this file.
     "!docs/compliant-core-contract.md",
+    # A page-design plan is a record of what a redesign decided and shipped. Its "Review
+    # round: figures band, trend beside follow-ups" heading names the CRM task feature
+    # ("follow-ups" is the product's own noun for tasks), so `\bfollow[- ]?ups?\b` opened a
+    # section and five bullets describing the shipped Board ("New task opens the Tasks page",
+    # "Due dates read '2 days overdue'") were swept in as open follow-ups.
+    "!docs/sales-redesign-plan.md",
 )
 
 # ---------------------------------------------------------------------------
@@ -169,6 +179,34 @@ FINDING_HEADINGS = (
 # pure noise.
 CODE_MARKER_RE = re.compile(r"(?:^|[^\w])(?P<marker>TODO|FIXME|HACK|XXX|BUG)\b[:\s(]*(?P<text>.*)$")
 CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
+# The scanner's own source and tests hold marker words as patterns and sample code, not as
+# work owed, so they are never indexed.
+CODE_MARKER_SELF_PATHS = ("scripts/findings_index.py", "tests/test_findings_index.py")
+# What may precede a marker for it to be a note rather than an identifier or a string:
+# a comment leader (`#`, `//`, `/*`, a block comment's leading `*`, `<!--`, `{#`).
+CODE_MARKER_LEAD_RE = re.compile(r"#|//|/\*|<!--|\{#|^\s*\*")
+
+
+def _is_code_note(content: str, m: re.Match[str]) -> bool:
+    """True when the marker `m` found in `content` is a note, not an identifier.
+
+    Either a comment leader precedes it, or it opens its line in the `TODO:` / `TODO(who):`
+    form a docstring uses -- but not `TODO = "..."`, which is a constant.
+    """
+    lead = content[: m.start("marker")]
+    if CODE_MARKER_LEAD_RE.search(lead):
+        return True
+    return not lead.strip() and content[m.end("marker") : m.end("marker") + 1] in (":", "(")
+
+
+# The bare word is not enough: `DONE, TODO, BLOCKED = "done", "todo", "blocked"` is a status
+# enum, and it was indexed as an unfixable code-marker finding (id de586e6f). A marker is the
+# word inside a comment (`#`, which also opens Jinja's `{#`; `//`; `/*`; `<!--`; or a ` * `
+# block-comment line) or in the explicit `TODO:` / `TODO(who)` syntax, which also covers a
+# docstring. An identifier is neither.
+# Trade-off, stated so it is not discovered later: a marker with no colon outside those comment
+# styles (a docstring line `TODO fix this`, a SQL `-- TODO`, an ini `; TODO`) is not indexed.
+COMMENT_OPENER_RE = re.compile(r"#|//|/\*|<!--|^\s*\*")
 
 # Text that means an item is already dealt with, so it should not enter the worklist.
 #
@@ -254,13 +292,28 @@ RESOLVED_MARKERS = re.compile(
 # down" is active third person ("this section closes it"). Deliberately not matched: the
 # imperative "pin down before build" and the passive "to be pinned down" (both still owe
 # work), and "never pins down X" is negated below.
+#
+# Three more cues, each found in a real sweep (2026-10-20), each saying in the title that the
+# bullets below are not open defects. "Checks and positive findings" lists what a review
+# confirmed is right (8 items, two of them P0 on a "csrf"/"secret" keyword hit). "Non-goals /
+# explicitly deferred" lists what a design chose NOT to build -- `\bdeferred\b` opened it, but
+# a declared non-goal is not owed work (3 items). "Findings and corrections" is a review pass
+# that records each finding together with the correction it then confirmed (8 items).
+# Unlike the cues above, these three are anchored to the WHOLE title: a phrase that merely
+# appears inside a heading ("Findings and corrections: two still open", "Positive findings and
+# open gaps", "Follow-ups (non-goals excluded)") says nothing about the bullets under it, and
+# closing on it would hide owed work. Deliberately NOT matched: "Findings handed back for
+# correction" (still owed) and a bare "corrections".
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
     r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
     r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
-    r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b",
+    r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b"
+    r"|^(?:checks\s+and\s+)?positive\s+findings?:?$"
+    r"|^(?:explicit(?:ly)?\s+)?non[- ]?goals?(?:\s*/\s*(?:explicitly\s+)?(?:deferred|out of scope))?:?$"
+    r"|^findings?\s+(?:and|&)\s+corrections?:?$",
     re.I,
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
@@ -317,6 +370,17 @@ HANDOFF_RE = re.compile(r"(?:(?:→|->)|\broute:)\s*\*\*(?P<skill>[a-z][\w -]*)\
 # this repo bold the verdict, and without this the word never reaches `[a-z-]+`, so the
 # whole report (already-closed findings included) gets rescanned as open forever.
 VERDICT_RE = re.compile(r"^\s*(?:##\s*)?verdict:\s*\**(?P<verdict>[a-z-]+)", re.I | re.M)
+# A verdict that LEADS with emphasis -- page-design's reviews write one per section, e.g.
+# `**Verdict: clean. No unresolved actionable findings.**` then, later, `**Verdict: valid.**`
+# for each test update. These are section verdicts, not a header, so "first one wins" (right
+# for the plain header above) would let a clean first section close a report whose later
+# section says `**Verdict: invalid.**`. So the report counts as closed only when there is such
+# a bold-lead verdict AND *every* mention of "verdict" anywhere in the file -- however it is
+# spelled (`**Verdict:** invalid`, `**VERDICT -- invalid**`, `> **Verdict**: invalid`, mid-line,
+# in a heading) -- is followed by a closed word. Anything that reads otherwise (a word that is
+# not a closed verdict, e.g. prose "no verdict yet") keeps the report open: the safe direction.
+BOLD_VERDICT_RE = re.compile(r"^\s*\*+verdict\b", re.I | re.M)
+ANY_VERDICT_RE = re.compile(r"\bverdict\b\W*(?P<word>[a-z-]+)?", re.I)
 # `within-budget` is perf-guardrails' own spelling of "closed, nothing owed" (its reports
 # restate it as a plain `patched` in the trailing footer -- see the comment above `verdict`
 # in `parse_doc`, which explains why the header word, not the footer's, is authoritative).
@@ -360,6 +424,11 @@ TEMPLATE_RE = re.compile(r"<[a-z][\w :|-]*>|\[[a-z-]+\|[a-z-]+(?:\|[a-z-]+)*\]",
 # `.agents/reports/<slug>/review.md` do not start with `/`, so they are still rejected.
 ROUTE_SPAN_RE = re.compile(r"`/[^`\s]*`")
 
+# A bullet made only of `[file.py:12](path/file.py:12)` links is the "Evidence:" list under a
+# finding, not a finding: the claim is the paragraph above it. Indexed on their own, four
+# such lines from one audit's F1 became worklist items titled with a bare file name.
+LOCATION_LINK_RE = re.compile(r"\[[\w./-]+\.\w+(?::\d+(?:-\d+)?)?\]\([^)\s]+\)")
+
 # `patch: not applied` keeps an item open; `patch: <commit sha / diff summary>` means it
 # already shipped. Read only when a disposition line is present, so ordinary prose using
 # the word "patch" cannot accidentally close an item.
@@ -369,6 +438,8 @@ PATCH_APPLIED_RE = re.compile(r"\bpatch:\s*(?!not applied|none|n/a|not yet|pendi
 # script reads it back on the next sweep. That round trip is how the loop learns its own
 # work landed without anyone updating the index by hand.
 TRAILER_RE = re.compile(r"^\s*Findings-Index:\s*(?P<ids>[0-9a-f, ]+)\s*$", re.I | re.M)
+# What `git revert` writes into the body of the commit it makes: the full sha of each commit it undoes.
+REVERTS_COMMIT_RE = re.compile(r"^This reverts commit ([0-9a-f]{40})\b", re.M)
 
 # ---------------------------------------------------------------------------
 # priority
@@ -693,6 +764,10 @@ def parse_doc(path: Path) -> list[Item]:
     verdict = VERDICT_RE.search(text)
     if verdict and verdict.group("verdict").lower() in VERDICT_CLOSED:
         return []
+    if not verdict and BOLD_VERDICT_RE.search(text):
+        mentions = [(m.group("word") or "").lower() for m in ANY_VERDICT_RE.finditer(text)]
+        if all(word in VERDICT_CLOSED for word in mentions):
+            return []
 
     lines = text.splitlines()
     items: list[Item] = []
@@ -794,6 +869,9 @@ def _item_from_bullet(body: str, rel: str, line_no: int, kind: str) -> Item | No
     if RESOLVED_MARKERS.search(body):
         return None
 
+    if not LOCATION_LINK_RE.sub("", body).strip(" ,;&.-—"):
+        return None
+
     # Format-spec placeholder, not a finding.
     if TEMPLATE_RE.search(ROUTE_SPAN_RE.sub("", body)):
         return None
@@ -859,10 +937,16 @@ def scan_code_markers() -> list[Item] | None:
         m = CODE_MARKER_RE.search(content)
         if not m:
             continue
+        explicit = content[m.end("marker") :].startswith((":", "("))
+        if not explicit and not COMMENT_OPENER_RE.search(content[: m.start("marker")]):
+            continue  # an identifier or string that happens to be spelled TODO
         marker, text = m.group("marker"), m.group("text").strip()
+        # `DONE, TODO, BLOCKED = ...` names a constant, not work owed.
+        if not _is_code_note(content, m):
+            continue
         # A bare marker with no following text says nothing actionable, and a marker
-        # inside this file's own patterns is self-reference.
-        if not text or len(text) < 10 or rel == "scripts/findings_index.py":
+        # inside this file's own patterns or its tests' sample code is self-reference.
+        if not text or len(text) < 10 or rel in CODE_MARKER_SELF_PATHS:
             continue
         if RESOLVED_MARKERS.search(text):
             continue
@@ -1038,6 +1122,130 @@ def merged_mr_closures(since_days: int) -> tuple[dict[str, str], list[str]]:
                 if item_id:
                     closures[item_id] = ref
     return closures, seen
+
+
+def open_mr_claims() -> dict[str, str] | None:
+    """Map item-id -> "!N" for items an *open* MR says it fixes (its `Findings-Index:` trailer).
+
+    The other half of the trailer loop. `merged_mr_closures` learns an item is done once its MR
+    merges, and `scan_open_mrs` skips a closure MR's description so the writeup is not re-indexed.
+    Between those two, an item fixed in an MR that is still waiting for review looked exactly like
+    untouched work: it stayed at the top of the worklist, and the next daily run re-picked it,
+    leaving a second MR open for the same finding (two sweep MRs for the same Tastings
+    findings sat open together in November 2026).
+
+    None -- not {} -- when `glab` cannot answer, exactly like `scan_open_mrs`. "No open MR claims
+    anything" and "could not look" must stay distinguishable: the sweep releases items whose claim
+    has gone, and it must not do that because GitLab was briefly unreachable.
+    """
+    data = _glab_json(["mr", "list", "--output", "json", "--per-page", "50"])
+    if not isinstance(data, list):
+        return None
+    claims: dict[str, str] = {}
+    for mr in data:
+        if not mr.get("iid"):
+            continue
+        for match in TRAILER_RE.finditer(mr.get("description") or ""):
+            for raw_id in match.group("ids").split(","):
+                item_id = raw_id.strip().lower()
+                if item_id:
+                    claims.setdefault(item_id, f"!{mr['iid']}")  # the first MR listed to claim an id keeps it
+    return claims
+
+
+def _commits_brought_in_by(commit: str) -> set[str]:
+    """``commit`` itself and, when it is a merge, the commits it merged in.
+
+    A trailer sits on the fix commit on its branch, not on the merge commit that landed it,
+    and `git revert -m 1 <merge>` names only the merge. A plain commit, a root commit, or a
+    failed lookup yields just ``commit``.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-list", f"{commit}^1..{commit}"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {commit}
+    return {commit, *(proc.stdout.split() if proc.returncode == 0 else [])}
+
+
+def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
+    """Map item-id -> "commit <sha>" for every `Findings-Index:` trailer reachable from ``ref``.
+
+    The second source of merge closures, beside the MR descriptions. The index is a
+    gitignored per-worktree file and the daily run starts in a fresh worktree, so nothing
+    remembers what already shipped, and the MR window (`merged_lookback_days`) forgets
+    after two days: an item fixed last week, whose audit-report bullet nobody edited,
+    would be listed as outstanding in every run from then on. Commit history is
+    permanent, local, and needs no glab.
+
+    Only ``ref`` counts, never HEAD. A trailer on this run's own unmerged commit is a
+    claim about a merge that has not happened, and `done` is reserved for the merge.
+    A missing ref (no remote, a bare checkout) is "no evidence", not an error.
+
+    History never ages out and a revert does not remove a trailer, so `sweep()` applies
+    these closures to an item only when it first sees it, never to a record it already
+    holds -- the one exception is a record the open-MR claim logic marked `mr-open` whose
+    claim has since gone: if its fix is in history it is closed rather than released. That
+    protects a record the store holds; the daily run starts with an empty
+    store, so it does not protect a human's reopen or `wont-fix` across days (that needs a
+    disposition in the tree, see the findings-sweep skill). A commit that a later
+    `git revert` undid ("This reverts commit <sha>.") is dropped, so its items are listed
+    again, and so is every commit a reverted merge brought in (`git revert -m 1 <merge>`
+    names the merge, whose own message carries no trailer). A revert of that revert counts
+    the fix again. A revert made some other way is not seen: the GitLab "Revert" button
+    writes "This reverts merge request !N", which names no commit. The trailer belongs on
+    the commit that fixes the item, and only for items that commit really fixes.
+    """
+    log = ["git", "-C", str(REPO_ROOT), "log", ref, "--topo-order"]
+    try:
+        proc = subprocess.run(
+            [*log, "--regexp-ignore-case", "--grep=^[[:space:]]*Findings-Index:", "--format=%H%x1f%B%x1e"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        reverts = subprocess.run(
+            # --basic-regexp: `\{40\}` is a literal under grep.patternType=extended or perl.
+            [*log, "--basic-regexp", "--grep=^This reverts commit [0-9a-f]\\{40\\}", "--format=%H%x1f%B%x1e"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    if proc.returncode != 0:
+        return {}
+
+    # Newest first (--topo-order: a child before its parents, whatever the clocks say), so a
+    # revert is met before the revert that undoes it: a revert that has itself been reverted
+    # no longer cancels anything.
+    reverted: set[str] = set()
+    if reverts.returncode == 0:
+        for entry in reverts.stdout.split("\x1e"):
+            revert_sha, _, body = entry.strip().partition("\x1f")
+            if not revert_sha or revert_sha in reverted:
+                continue
+            for target in REVERTS_COMMIT_RE.findall(body):
+                reverted |= _commits_brought_in_by(target)
+
+    closures: dict[str, str] = {}
+    for entry in proc.stdout.split("\x1e"):
+        sha, _, body = entry.strip().partition("\x1f")
+        if not sha or sha in reverted:
+            continue
+        for match in TRAILER_RE.finditer(body):
+            for raw_id in match.group("ids").split(","):
+                item_id = raw_id.strip().lower()
+                if item_id:
+                    closures.setdefault(item_id, f"commit {sha[:8]}")  # newest commit first
+    return closures
 
 
 # ---------------------------------------------------------------------------
@@ -1241,6 +1449,7 @@ def _note(record: dict[str, Any], status: str, why: str, *, explicit: bool = Fal
     then-reappear case the regression check exists to catch.
     """
     record["status"] = status
+    record.pop("claimed_by_open_mr", None)  # any status change ends a claim; 2b re-tags its own
     record["status_reason"] = why
     record.setdefault("history", []).append({"at": utc_now(), "status": status, "why": why})
     if explicit and status in ("gone", "done"):
@@ -1274,7 +1483,11 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item in [*(i for p in (docs or []) for i in parse_doc(p)), *(markers or [])]:
         found.setdefault(item.id, item)
 
+    # History is local, so it is read even under --no-remote. It only ever closes an item
+    # at birth (step 2), never one the store already holds: see merged_commit_closures.
+    history_closures = merged_commit_closures()
     closures: dict[str, str] = {}
+    claims: dict[str, str] | None = None  # None = not looked at (--no-remote) or glab could not answer
     merged_seen: list[str] = []
     if not skip_remote:
         mr_items = scan_open_mrs()
@@ -1283,14 +1496,22 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         for item in mr_items or []:
             found.setdefault(item.id, item)
         closures, merged_seen = merged_mr_closures(int(cfg.get("merged_lookback_days", 2)))
+        claims = open_mr_claims()
 
     stats = {
         "new": 0,
         "reopened": 0,
         "closed_by_merge": 0,
+        # Items first seen already shipped: this worktree never held them, so closing them
+        # is not news. Kept apart from closed_by_merge, which means "merged since last seen".
+        "already_shipped": 0,
         "gone": 0,
         "suppressed": 0,
         "unchanged": 0,
+        # Items an open MR currently claims to fix (see open_mr_claims): listed, not offered by `next`.
+        "in_open_mr": 0,
+        # Items that were claimed and no longer are (the MR closed unmerged), owed work again.
+        "released_from_open_mr": 0,
         # Items left untouched because their source wasn't scanned this run. Surfaced so
         # a degraded sweep reads as degraded rather than as a clean one that found less.
         "unverified": 0,
@@ -1315,8 +1536,17 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item_id, item in found.items():
         record = records.get(item_id)
         if record is None:
-            records[item_id] = item.to_new_record()
-            stats["new"] += 1
+            record = records[item_id] = item.to_new_record()
+            # The store is per-worktree and the daily run starts with it empty, so step 1
+            # never sees a record for something that shipped before this worktree existed.
+            # Close it at birth, or yesterday's merged fix is listed as today's new work.
+            ref = closures.get(item_id) or history_closures.get(item_id)  # the MR's "!N" is the better pointer
+            if ref:
+                record["mr"] = ref
+                _note(record, "done", f"merged in {ref}", explicit=True)
+                stats["already_shipped"] += 1
+            else:
+                stats["new"] += 1
             continue
 
         record["last_seen"] = today()
@@ -1339,6 +1569,43 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         else:
             stats["unchanged"] += 1
 
+    # 2b. Items an open MR already fixes are in flight, not owed: mark them so `next` does not
+    #     hand them to a run that would only redo the work. Only `outstanding` ones move -- an
+    #     item this run is working (`in-progress`) or already settled keeps its own status.
+    #     The mark is tagged (`claimed_by_open_mr`) so that only an item some open MR has claimed
+    #     can be taken back: a hand-recorded `mr-open` that no open MR ever claimed (it merged
+    #     without a trailer, say) has no claim to lose and is left alone.
+    if claims is not None:
+        for item_id, ref in claims.items():
+            record = records.get(item_id)
+            if not record or item_id not in found:
+                continue
+            if record.get("status") == "outstanding":
+                _note(record, "mr-open", f"claimed by the `Findings-Index:` trailer of open MR {ref}")
+                record["claimed_by_open_mr"] = True
+            elif record.get("status") == "mr-open":
+                # Adopt a hand-recorded `mr-open` (the skill's Step 4 writes one after opening the MR)
+                # as soon as an open MR claims it, so the release below stays tied to the claim.
+                record["claimed_by_open_mr"] = True
+            if record.get("claimed_by_open_mr") and record.get("status") == "mr-open":
+                record["mr"] = ref  # the claim may have moved to another MR since yesterday
+        # The store outlives a day on the scheduled runner (its own checkout), so a claim can
+        # also go away: the MR was closed unmerged, or its trailer was edited out. Without
+        # this the item would stay `mr-open`, and `next` would skip it, forever.
+        for item_id, record in records.items():
+            if not (record.get("claimed_by_open_mr") and record.get("status") == "mr-open"):
+                continue
+            if item_id in claims:
+                continue
+            # Step 1 already closed anything in `closures`; history covers a merge past the MR window.
+            shipped = history_closures.get(item_id)
+            if shipped:  # the MR merged after all: done, not owed
+                record["mr"] = shipped
+                _note(record, "done", f"merged in {shipped}", explicit=True)
+                stats["closed_by_merge"] += 1
+            else:
+                _note(record, "outstanding", f"no longer claimed: {record.get('mr') or 'its MR'} is not open")
+                stats["released_from_open_mr"] += 1
     # 3. Anything the index knows that the sweep no longer finds -- but ONLY for sources
     #    this run actually scanned. Absence is evidence of resolution only if we looked.
     for item_id, record in records.items():
@@ -1361,6 +1628,11 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         if record and record.get("status") != "suppressed":
             _note(record, "suppressed", why)
             stats["suppressed"] += 1
+
+    # Counted last, so an item that step 3 closed or step 4 suppressed in this same sweep is not reported.
+    stats["in_open_mr"] = sum(
+        1 for r in records.values() if r.get("claimed_by_open_mr") and r.get("status") == "mr-open"
+    )
 
     store["last_sweep"] = utc_now()
     store["last_merged_refs"] = merged_seen
@@ -1492,8 +1764,10 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     stats, budget = result["stats"], result["budget"]
     print(f"swept {result['total']} tracked item(s), {result['open']} open")
     print(
-        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, "
-        "gone {gone}, suppressed {suppressed}, unchanged {unchanged}".format(**stats)
+        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, already-shipped {already_shipped}, "
+        "gone {gone}, suppressed {suppressed}, unchanged {unchanged}, in-open-MR {in_open_mr}, released {released_from_open_mr}".format(
+            **stats
+        )
     )
     unscanned = [name for name, ok in result["sources_scanned"].items() if not ok]
     if unscanned:
@@ -1512,7 +1786,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
 def cmd_next(args: argparse.Namespace) -> int:
     store = load_store()
     limit = args.limit if args.limit is not None else compute_budget()["items"]
-    picks = rank(store["items"])[: max(0, limit)]
+    # An item whose fix is already in an open MR is waiting on a human, not on this loop.
+    picks = [r for r in rank(store["items"]) if r.get("status") != "mr-open"][: max(0, limit)]
     if args.json:
         print(json.dumps({"limit": limit, "items": picks}, indent=2))
         return 0

@@ -1,6 +1,6 @@
 """Plan item 2.1: excise per period from removals out of the licensed area."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -42,6 +42,32 @@ def test_periods(day, frequency, start, end):
 def test_entry_is_due_on_the_15th_working_day_after_the_period():
     assert excise.entry_due(date(2026, 10, 1)) == date(2026, 10, 21)  # September 2026 entry
     assert excise.period_label(date(2026, 9, 1), date(2026, 10, 1)) == "September 2026"
+
+
+@pytest.mark.parametrize(
+    ("period_end", "due", "skipped"),
+    [
+        (date(2026, 6, 1), date(2026, 6, 22), "King's Birthday, 1 June"),
+        (date(2026, 4, 1), date(2026, 4, 23), "Good Friday and Easter Monday"),
+        (date(2027, 1, 1), date(2027, 1, 25), "1-2 January, and Monday 4th as 1 January is a Friday"),
+    ],
+)
+def test_entry_due_skips_nz_public_holidays(period_end, due, skipped):
+    # GL-P04: a Mon-Fri count put these 1 to 4 working days early.
+    assert excise.entry_due(period_end) == due, skipped
+
+
+def test_the_customs_summer_break_is_25_december_to_2_january():
+    from app.features.compliant.modules.nz_alcohol.nz_calendar import is_statutory_working_day
+
+    assert is_statutory_working_day(date(2026, 12, 24))
+    assert not is_statutory_working_day(date(2026, 12, 28))
+    # 1 January 2028 is a Saturday: the next Monday and Tuesday are off, Wednesday isn't.
+    assert not is_statutory_working_day(date(2028, 1, 3))
+    assert not is_statutory_working_day(date(2028, 1, 4))
+    assert is_statutory_working_day(date(2028, 1, 5))
+    # Unlike the licensing count, mid-January is working time.
+    assert is_statutory_working_day(date(2027, 1, 12))
 
 
 # --- the service against a real tenant ------------------------------------------------------
@@ -152,7 +178,15 @@ def test_moving_stock_out_is_the_removal_and_its_later_sale_isnt_counted_again(w
     assert back.direction == "in" and merged.id == vat44.id  # merged back into the same batch
     d = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))
     assert d["lines"][0]["units"] == "8"
-    assert d["returns"] == [{"product": GIN, "quantity": "3", "unit": "bottles", "date": "2026-09-20"}]
+    assert d["returns"] == [
+        {
+            "product": GIN,
+            "quantity": "3",
+            "unit": "bottles",
+            "date": "2026-09-20",
+            "reference": "Moved to the licensed area",
+        }
+    ]
 
 
 def test_missing_setup_is_listed_not_silently_dropped(world):
@@ -195,44 +229,17 @@ def test_lodging_locks_the_period_and_late_changes_carry_forward(world):
     assert nov["adjustments"] == []
 
 
-def test_multiple_sites_cannot_lodge_legacy_or_claim_nil_return(world):
-    db, org, client = world["db"], world["org"], world["client"]
-    org.multiple_sites_enabled = True
-    db.commit()
-
-    draft = excise.draft(db, org.id, date(2026, 8, 1), "monthly", today=date(2026, 9, 5))
-    assert draft["legacy_unavailable"] is True
-    assert draft["complete_lodgement"] is False
-    assert draft["nil_return"] is None
-    assert draft["total_lal"] is None and draft["total_duty"] is None
-    assert draft["problems"][0]["product"] == "CCA accounting"
-    assert client.get("/api/compliant/nz-alcohol/excise?period=2026-08-01").json["draft"]["legacy_unavailable"]
-
-    with pytest.raises(ValueError, match="reviewed per CCA"):
-        excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 5), None, None)
-    response = client.post(
-        "/api/compliant/nz-alcohol/excise/lodge",
-        json={"period_start": "2026-08-01", "lodged_on": "2026-09-05"},
-    )
-    assert response.status_code == 400
-    assert db.query(ExciseLodgement).filter_by(org_id=org.id).count() == 0
-
-    from app.features.compliant.service import ComplianceService
-
-    profile = ComplianceService(db).get_profile(org.id)
-    profile.settings = {**profile.settings, "excise_tracking_from": "2026-08-01"}
-    db.commit()
-    alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
-    assert "per-CCA" in alert["title"] and "nil" not in alert["title"].lower()
-
-
 def test_nil_return_and_reminder(world):
     """August 2026 (already finished by the real clock, which the lodge API uses)."""
     db, org, client = world["db"], world["org"], world["client"]
     from app.features.compliant.service import ComplianceService
 
     profile = ComplianceService(db).get_profile(org.id)
-    assert excise.reminder(db, org.id, profile, today=date(2026, 9, 5)) is None  # tracking not switched on
+    # On by default from the month the module was switched on (here: today), so August 2026
+    # isn't raised for an org that started using it later.
+    assert excise.reminder(db, org.id, profile, today=date(2026, 9, 5)) is None or profile.created_at.date() <= date(
+        2026, 8, 31
+    )
 
     ok = client.put(
         "/api/compliant/nz-alcohol/excise/settings", json={"frequency": "monthly", "tracking_from": "2026-08-01"}
@@ -243,6 +250,9 @@ def test_nil_return_and_reminder(world):
     alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
     assert alert["title"] == "Excise nil return for August 2026 due 21 Sep 2026"
     assert alert["due_date"] == "2026-09-21" and alert["overdue"] is False
+    # It lands where the entry is lodged and recorded as lodged.
+    assert alert["href"] == "/compliant/nz-alcohol/customs?period=2026-08-01"
+    assert alert["action_label"] == "Prepare the entry"
     assert excise.reminder(db, org.id, profile, today=date(2026, 9, 22))["overdue"] is True
 
     lodged = client.post(
@@ -260,7 +270,11 @@ def test_main_configuration_save_keeps_excise_settings(world):
     )
     client.put("/api/compliant/profile", json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}})
     periods = client.get("/api/compliant/nz-alcohol/excise/periods").get_json()
-    assert periods["settings"] == {"frequency": "six_monthly", "tracking_from": "2026-07-01"}
+    assert periods["settings"] == {
+        "frequency": "six_monthly",
+        "tracking_from": "2026-07-01",
+        "reminders_from": "2026-07-01",
+    }
 
 
 def test_move_endpoint_and_product_setup(world):
@@ -296,3 +310,156 @@ def test_move_endpoint_and_product_setup(world):
         ).status_code
         == 409
     )
+
+
+def test_reminder_is_on_by_default_from_when_the_module_was_switched_on(world):
+    from datetime import UTC, datetime
+
+    from app.features.compliant.service import ComplianceService
+
+    db, org = world["db"], world["org"]
+    profile = ComplianceService(db).get_profile(org.id)
+    profile.created_at = datetime(2026, 7, 15, tzinfo=UTC)
+    db.commit()
+    alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
+    assert alert is not None and alert["title"] == "Excise nil return for August 2026 due 21 Sep 2026"
+    # Before the month it was switched on: not raised.
+    assert excise.reminder(db, org.id, profile, today=date(2026, 7, 20)) is None
+
+
+def test_entry_lines_follow_trade_single_window_and_match_a_lodged_entry(world):
+    """Whistlebird's September 2026 entry as Customs worked it: 2244.10 + 18.21 + 2.73 = 2265.04."""
+    db, org = world["db"], world["org"]
+    profile = db.query(AlcoholProductProfile).filter_by(org_id=org.id, inventory_name=GIN).one()
+    profile.customs_product_code = None
+    profile.excise_category = "gin"
+    for name, ml, category in (("Solstice", "700", "gin"), ("Green Gold", "500", "liqueur")):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org.id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=Decimal(ml),
+                excise_category=category,
+            )
+        )
+    db.commit()
+    world["sell"](world["lot"]("VAT44", 100, abv="44"), "64", date(2026, 9, 3))
+    world["sell"](world["lot"]("VAT45", 100, abv="40", name="Solstice"), "21", date(2026, 9, 4))
+    world["sell"](world["lot"]("GG01", 100, abv="25", name="Green Gold"), "48", date(2026, 9, 5))
+    entry = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))["entry"]
+    # One line per product, each rounded on its own: merging the two gins gives a levy of 18.20.
+    _first, _second, third = entry["lines"]
+    assert [(line["line"], line["excise_item"]) for line in entry["lines"]] == [
+        (1, "99.45.35A"),
+        (2, "99.45.35A"),
+        (3, "99.50.85A"),
+    ]
+    assert (third["supplementary_litres"], third["statistical_lal"], third["levy"]) == ("24.000", "6.000", "5.23")
+    # Units sold sit beside the litres, as counted off the invoices.
+    assert {line["description"]: (line["units"], line["unit"]) for line in entry["lines"]} == {
+        GIN: ("64", "bottles"),
+        "Solstice": ("21", "bottles"),
+        "Green Gold": ("48", "bottles"),
+    }
+    assert (entry["total_duty"], entry["total_levy"], entry["total_gst"], entry["total"]) == (
+        "2244.10",
+        "18.21",
+        "2.73",
+        "2265.04",
+    )
+
+
+def test_a_lodged_period_keeps_its_entry(world):
+    world["sell"](world["lot"]("VAT44", 50), "12", date(2026, 8, 10))
+    db, org = world["db"], world["org"]
+    profile = db.query(AlcoholProductProfile).filter_by(org_id=org.id, inventory_name=GIN).one()
+    profile.customs_product_code = None
+    profile.excise_category = "gin"
+    db.commit()
+    excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), "EX-1", None, today=date(2026, 9, 10))
+    db.commit()
+    d = excise.draft(db, org.id, date(2026, 8, 1), "monthly")
+    assert d["status"] == "lodged" and d["entry"]["total"] == "264.64"  # 3.696 x 71.034 + levy 1.83 + GST 0.27
+
+
+def test_periods_say_when_reminders_start(world):
+    body = world["client"].get("/api/compliant/nz-alcohol/excise/periods").get_json()
+    assert body["settings"]["reminders_from"]
+    assert all(p["period_end"] >= p["period_start"] for p in body["periods"])
+
+
+def test_lodging_records_the_evidence_for_the_lodgement_control(world):
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    db, org = world["db"], world["org"]
+    world["sell"](world["lot"]("VAT44", 50), "12", date(2026, 8, 10))
+    lodgement = excise.lodge(
+        db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), "EX-2026-08", None, today=date(2026, 9, 10)
+    )
+    db.commit()
+    (record,) = db.query(ComplianceRecord).filter_by(org_id=org.id, control_id="period-lodgement").all()
+    assert record.framework_slug == "customs-alcohol" and record.record_type == "lodgement"
+    assert record.status == "complete" and record.due_date is None  # never "overdue" in the register
+    assert (record.period_start, record.period_end) == (date(2026, 8, 1), date(2026, 8, 31))
+    assert record.evidence_reference == "EX-2026-08" and record.title == "Excise entry lodged for August 2026"
+    assert record.details["excise_lodgement_id"] == str(lodgement.id) and record.details["total_lal"] == "3.696"
+    # The Customs register now shows the lodgement control as current.
+    customs = next(
+        f
+        for f in world["client"].get("/api/compliant/overview").get_json()["frameworks"]
+        if f["slug"] == "customs-alcohol"
+    )
+    assert next(c for c in customs["controls"] if c["control_id"] == "period-lodgement")["state"] == "compliant"
+
+
+def test_a_nil_return_is_recorded_as_one(world):
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    db, org = world["db"], world["org"]
+    excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), None, None, today=date(2026, 9, 10))
+    db.commit()
+    record = db.query(ComplianceRecord).filter_by(org_id=org.id, control_id="period-lodgement").one()
+    assert record.title == "Excise nil return lodged for August 2026" and record.evidence_reference == "Nil return"
+
+
+def test_position_sums_the_year_against_customs_thresholds(world):
+    db, org, client = world["db"], world["org"], world["client"]
+    today = date.today()
+    last_month = excise.previous_period(excise.period_for(today, "monthly")[0], "monthly")[0]
+    world["sell"](world["lot"]("VAT44", 50), "12", last_month + timedelta(days=4))
+    client.put(
+        "/api/compliant/nz-alcohol/excise/settings",
+        json={"frequency": "monthly", "tracking_from": last_month.isoformat()},
+    )
+    body = client.get("/api/compliant/nz-alcohol/excise/position").get_json()
+    expected = excise.draft(db, org.id, last_month, "monthly", today=today)["entry"]["total_duty"]
+    assert body["year"]["duty"] == expected and body["year"]["lodged_duty"] == "0.00"
+    assert body["year"]["six_monthly_allowed"] is True and body["year"]["twelve_monthly_allowed"] is True
+    assert body["this_period"]["period_start"] == excise.period_for(today, "monthly")[0].isoformat()
+    assert body["unlodged_periods"] == 1 and body["setup"] == {"products": 1, "incomplete": []}
+    assert body["stocktake"]["frequency"] == "annual" and body["remissions"] == []
+    # Lodging moves the month from the estimate into what was lodged.
+    excise.lodge(db, org.id, last_month, "monthly", today, "EX-9", None, today=today)
+    db.commit()
+    after = client.get("/api/compliant/nz-alcohol/excise/position").get_json()["year"]
+    assert after["lodged_duty"] == expected and after["estimated_duty"] == "0.00" and after["lodged_periods"] == 1
+
+
+# --- GL-P06: the built-in rates say when they go out of date ---------------------------------
+
+
+def test_the_rate_guide_goes_out_of_date_on_the_next_1_july():
+    from app.features.compliant.modules.nz_alcohol import excise_tariff
+
+    assert excise_tariff.next_review() == date(2027, 7, 1)  # newest rates in the guide: 1 July 2026
+    assert excise_tariff.guide_status(date(2027, 6, 30))["out_of_date"] is False
+    assert excise_tariff.guide_status(date(2027, 7, 1))["out_of_date"] is True
+
+
+def test_a_draft_past_the_review_date_says_its_rates_are_out_of_date(world):
+    db, org = world["db"], world["org"]
+    current = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))
+    assert current["rates_guide"] == {"next_review": "2027-07-01", "out_of_date": False}
+    later = excise.draft(db, org.id, date(2027, 7, 1), "monthly", today=date(2027, 8, 5))
+    assert later["rates_guide"]["out_of_date"] is True

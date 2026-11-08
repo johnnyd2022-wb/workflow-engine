@@ -8,7 +8,7 @@
 
 
 {% block content %}
-<div class="max-content crm-root crm-analytics-page workspace-overview sales-analytics" x-data="crmAnalytics()" x-init="init()">
+<div class="max-content crm-root crm-analytics-page workspace-overview sales-analytics" x-data="crmAnalytics()">
 
   <header class="workspace-header">
     <div><h1>Analytics</h1><p>Sales performance and customer insights.</p></div>
@@ -25,7 +25,7 @@
 
   <div x-show="error" class="crm-error-banner" x-cloak>
     <span x-text="error"></span>
-    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+    <button aria-label="Close" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
   </div>
 
   <div class="workspace-stack">
@@ -47,6 +47,72 @@
       </div>
     </section>
 
+    <section class="workspace-card" aria-labelledby="analytics-product-sales-title">
+      <div class="workspace-card__header">
+        <div><h2 id="analytics-product-sales-title">Products by customer and store</h2><p class="workspace-caption">Mapped stock units on paid and authorised Xero invoices. Each Xero contact is one customer or store; shared contacts combine branches.</p></div>
+      </div>
+      <div class="sales-analytics__body">
+        <div class="sales-analytics__product-filters">
+          <label class="sales-analytics__product-search"><span class="crm-form-label">Search customers / stores</span><input class="crm-form-input" type="search" x-model="productCustomerSearch" placeholder="Search by name" autocomplete="off"></label>
+          <div class="sales-analytics__product-dates" role="group" aria-label="Invoice date range">
+            <label><span class="crm-form-label">From</span><input class="crm-form-input" type="date" x-model="productStartDate"></label>
+            <label><span class="crm-form-label">To</span><input class="crm-form-input" type="date" x-model="productEndDate"></label>
+            <button type="button" class="workspace-button" @click="loadProductSales()" :disabled="loadingProductSales">Apply</button>
+          </div>
+        </div>
+        <p class="sales-analytics__empty" role="status" x-show="loadingProductSales">Loading product sales…</p>
+        <p class="crm-error-banner" role="alert" x-show="productSalesError" x-text="productSalesError" x-cloak></p>
+        <template x-if="productSales && !loadingProductSales">
+          <div>
+            <div class="sales-analytics__mapping-notice" x-show="productSales.unmapped_xero_items > 0" x-cloak>
+              <div><strong><span x-text="productSales.unmapped_xero_items"></span> Xero item groups need mapping</strong><p>Excluded from unit rankings · <span x-text="formatCurrency(productSales.unmapped_line_revenue)"></span> before tax</p></div>
+              <div class="sales-analytics__mapping-actions">
+                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :aria-expanded="showUnmappedProductSales" aria-controls="analytics-unmapped-sales" @click="showUnmappedProductSales = !showUnmappedProductSales" x-text="showUnmappedProductSales ? 'Hide details' : 'View details'"></button>
+                <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/matching">Review mappings</a>
+              </div>
+            </div>
+            <div id="analytics-unmapped-sales" class="sales-analytics__unmapped-table sales-analytics__product-table-wrap" x-show="productSales.unmapped_xero_items > 0 && showUnmappedProductSales" x-cloak>
+              <table class="crm-table crm-table--compact sales-analytics__table">
+                <thead><tr><th>Customer / store</th><th>Xero item</th><th class="sales-analytics__num">Xero line quantity</th><th class="sales-analytics__num">Line revenue</th></tr></thead>
+                <tbody><template x-for="(row, index) in productSales.unmapped" :key="index"><tr><td x-text="row.contact_name"></td><td x-text="row.description || row.item_code || 'Unnamed item'"></td><td class="sales-analytics__num" x-text="formatUnits(row.xero_quantity)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td></tr></template></tbody>
+              </table>
+            </div>
+            <section class="sales-analytics__product-section" aria-labelledby="analytics-top-products-customers-title">
+              <div class="workspace-subheading sales-analytics__product-heading">
+                <div><h3 id="analytics-top-products-customers-title">Top customers by units</h3><p class="workspace-caption" x-show="filteredProductCustomerRows.length > 0" x-text="productCustomerCountLabel"></p></div>
+                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openProductTopNModal()">Top <span x-text="productTopLabel"></span></button>
+              </div>
+              <p class="sales-analytics__empty" x-show="filteredProductCustomerRows.length === 0">No mapped sales for these dates and this customer filter.</p>
+              <div class="sales-analytics__product-table-wrap" x-show="filteredProductCustomerRows.length > 0">
+              <table class="crm-table crm-table--compact sales-analytics__table">
+                <thead><tr><th>Customer / store</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Products</th></tr></thead>
+                <tbody>
+                  <template x-for="row in filteredProductCustomers" :key="row.contact_id">
+                    <tr><td class="sales-analytics__product-name" x-text="row.contact_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.products.length + (row.products.length === 1 ? ' product' : ' products')"></summary><ul><template x-for="item in row.products" :key="item.product_name"><li x-text="formatProductBreakdown(item)"></li></template></ul></details></td></tr>
+                  </template>
+                </tbody>
+              </table>
+              </div>
+            </section>
+            <section class="sales-analytics__product-section" aria-labelledby="analytics-products-by-store-title">
+              <div class="workspace-subheading"><h3 id="analytics-products-by-store-title">Products by customer / store</h3></div>
+              <p class="sales-analytics__empty" x-show="productSales.products.length === 0">No mapped product sales in this period.</p>
+              <div class="sales-analytics__product-table-wrap" x-show="productSales.products.length > 0">
+              <table class="crm-table crm-table--compact sales-analytics__table">
+                <thead><tr><th>Product</th><th class="sales-analytics__num">Stock units</th><th class="sales-analytics__num">Line revenue</th><th>Stores</th></tr></thead>
+                <tbody>
+                  <template x-for="row in productSales.products" :key="row.product_name">
+                    <tr><td class="sales-analytics__product-name" x-text="row.product_name"></td><td class="sales-analytics__num" x-text="formatUnits(row.total_units)"></td><td class="sales-analytics__num" x-text="formatCurrency(row.line_revenue)"></td><td><details class="sales-analytics__row-details"><summary x-text="row.customers.length + (row.customers.length === 1 ? ' customer / store' : ' customers / stores')"></summary><ul><template x-for="store in row.customers" :key="store.contact_id"><li><span x-text="store.contact_name"></span>: <span x-text="formatStoreBreakdown(store)"></span></li></template></ul></details></td></tr>
+                  </template>
+                </tbody>
+              </table>
+              </div>
+            </section>
+          </div>
+        </template>
+      </div>
+    </section>
+
     <div class="workspace-columns">
       <section class="workspace-card" aria-labelledby="analytics-top-title">
         <h2 id="analytics-top-title">Top customers</h2>
@@ -61,14 +127,14 @@
                 <template x-for="(row, idx) in visible(breakdown, showAllTop)" :key="row.contact_id">
                   <tr>
                     <td class="sales-analytics__rank" x-text="idx + 1"></td>
-                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                     <td class="sales-analytics__num sales-analytics__money" x-text="formatCurrency(row.total)"></td>
                     <td class="sales-analytics__num sales-analytics__optional" x-text="row.invoice_count"></td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <button type="button" class="workspace-button sales-analytics__more" x-show="breakdown.length > pageSize" :aria-expanded="showAllTop ? 'true' : 'false'" @click="showAllTop = !showAllTop" x-text="showAllTop ? `Show top ${pageSize}` : `Show all ${breakdown.length}`"></button>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="breakdown.length > pageSize" :aria-expanded="showAllTop ? 'true' : 'false'" @click="showAllTop = !showAllTop" x-text="showAllTop ? ('Show top ' + (pageSize)) : ('Show all ' + (breakdown.length))"></button>
           </div>
         </div>
       </section>
@@ -85,15 +151,15 @@
               <tbody>
                 <template x-for="row in visible(churnData, showAllChurn)" :key="row.contact_id">
                   <tr>
-                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                     <td class="sales-analytics__num" x-text="daysAgo(row.days_since_last_invoice)"></td>
-                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.avg_days_between_purchases != null ? `${row.avg_days_between_purchases}d` : '—'"></td>
+                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.avg_days_between_purchases != null ? ('' + (row.avg_days_between_purchases) + 'd') : '—'"></td>
                     <td class="sales-analytics__num"><span class="crm-badge" :class="riskClass(row.risk_tier)" x-text="row.risk_tier || '—'"></span></td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <button type="button" class="workspace-button sales-analytics__more" x-show="churnData.length > pageSize" :aria-expanded="showAllChurn ? 'true' : 'false'" @click="showAllChurn = !showAllChurn" x-text="showAllChurn ? `Show first ${pageSize}` : `Show all ${churnData.length}`"></button>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="churnData.length > pageSize" :aria-expanded="showAllChurn ? 'true' : 'false'" @click="showAllChurn = !showAllChurn" x-text="showAllChurn ? ('Show first ' + (pageSize)) : ('Show all ' + (churnData.length))"></button>
           </div>
         </div>
       </section>
@@ -120,7 +186,7 @@
             <tbody>
               <template x-for="row in visible(filteredContactRows, showAllContact)" :key="row.contact_id">
                 <tr>
-                  <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                  <td class="sales-analytics__name"><a :href="('/crm/customers/' + (row.contact_id))" x-text="row.contact_name"></a></td>
                   <td class="sales-analytics__num sales-analytics__optional" x-text="formatDate(row.last_contact_date)"></td>
                   <td class="sales-analytics__num sales-analytics__optional" x-text="row.last_contact_source ? (row.last_contact_source === 'sale' ? 'Sale' : 'Task') : '—'"></td>
                   <td class="sales-analytics__num" x-text="row.days_since_contact == null ? 'No contact recorded' : daysAgo(row.days_since_contact)"></td>
@@ -129,12 +195,12 @@
             </tbody>
           </table>
           <p class="sales-analytics__empty" x-show="filteredContactRows.length === 0">No customers in this group.</p>
-          <button type="button" class="workspace-button sales-analytics__more" x-show="filteredContactRows.length > pageSize" :aria-expanded="showAllContact ? 'true' : 'false'" @click="showAllContact = !showAllContact" x-text="showAllContact ? `Show first ${pageSize}` : `Show all ${filteredContactRows.length}`"></button>
+          <button type="button" class="workspace-button sales-analytics__more" x-show="filteredContactRows.length > pageSize" :aria-expanded="showAllContact ? 'true' : 'false'" @click="showAllContact = !showAllContact" x-text="showAllContact ? ('Show first ' + (pageSize)) : ('Show all ' + (filteredContactRows.length))"></button>
         </div>
       </div>
     </section>
 
-    <section class="workspace-card" aria-labelledby="analytics-recall-title" x-show="Number(contactCompleteness.missing_any || 0) > 0" x-cloak>
+    <section class="workspace-card" aria-labelledby="analytics-recall-title" x-show="(contactCompleteness.missing_any || 0) > 0" x-cloak>
       <div class="workspace-card__header">
         <div>
           <h2 id="analytics-recall-title">Recall contact details</h2>
@@ -151,9 +217,30 @@
     </section>
   </div>
 
+<div class="crm-lane-sheet-overlay" x-show="showProductTopNModal" x-cloak @click.self="closeProductTopNModal()" style="display:flex;">
+  <div class="crm-lane-sheet" role="dialog" aria-modal="true" aria-labelledby="analytics-product-top-title">
+    <div class="crm-lane-sheet__header">
+      <h3 class="crm-lane-sheet__title" id="analytics-product-top-title">Select Top N</h3>
+      <button aria-label="Close" type="button" class="crm-btn crm-btn--ghost" @click="closeProductTopNModal()">&times;</button>
+    </div>
+    <div class="crm-lane-sheet__body">
+      <div class="crm-form-group">
+        <label class="crm-form-label" for="analytics-product-top-count">Number of customers / stores to display</label>
+        <input id="analytics-product-top-count" class="crm-form-input" type="number" min="1" :max="productTopMax" x-model.number="productTopDraftValue" @keydown.enter.prevent="applyProductTopNModal()">
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="showAllProductCustomers()">Show all</button>
+      </div>
+    </div>
+    <div class="crm-lane-sheet__footer">
+      <button type="button" class="crm-btn crm-btn--secondary" @click="closeProductTopNModal()">Cancel</button>
+      <button type="button" class="crm-btn crm-btn--primary" @click="applyProductTopNModal()">Apply</button>
+    </div>
+  </div>
+</div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 function crmAnalytics() {
   return {
     monthsBack: 12,
@@ -170,6 +257,17 @@ function crmAnalytics() {
     showAllTop: false,
     showAllChurn: false,
     showAllContact: false,
+    productStartDate: '',
+    productEndDate: '',
+    productTopN: 10,
+    productShowAll: false,
+    productTopDraftValue: 10,
+    showProductTopNModal: false,
+    productCustomerSearch: '',
+    productSales: null,
+    showUnmappedProductSales: false,
+    loadingProductSales: true,
+    productSalesError: '',
     loadingSales: true,
     loadingBreakdown: true,
     loadingChurn: true,
@@ -179,7 +277,90 @@ function crmAnalytics() {
 
     async init() {
       window.addEventListener('resize', () => this.drawChart());
+      try {
+        const savedTop = localStorage.getItem('crm-analytics-product-top-n');
+        if (savedTop === 'all') this.productShowAll = true;
+        else if (savedTop && Number.isInteger(Number(savedTop)) && Number(savedTop) > 0) this.productTopN = Number(savedTop);
+      } catch (_) {}
+      const today = new Date();
+      const yearAgo = new Date(today); yearAgo.setFullYear(today.getFullYear() - 1);
+      const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      this.productStartDate = localDate(yearAgo);
+      this.productEndDate = localDate(today);
       await this.loadAll();
+    },
+
+    get filteredProductCustomerRows() {
+      const query = this.productCustomerSearch.trim().toLocaleLowerCase();
+      return (this.productSales?.customers || []).filter((row) => row.contact_name.toLocaleLowerCase().includes(query));
+    },
+
+    get filteredProductCustomers() {
+      const rows = this.filteredProductCustomerRows;
+      return this.productShowAll ? rows : rows.slice(0, this.productTopN);
+    },
+
+    get productCustomerCountLabel() {
+      return `Showing ${this.filteredProductCustomers.length} of ${this.filteredProductCustomerRows.length} customers / stores`;
+    },
+
+    get productTopMax() { return Math.max(1, this.filteredProductCustomerRows.length); },
+
+    formatProductBreakdown(item) {
+      return `${item.product_name}: ${this.formatUnits(item.units)} units · ${this.formatCurrency(item.line_revenue)}`;
+    },
+
+    formatStoreBreakdown(store) {
+      return `${this.formatUnits(store.units)} units · ${this.formatCurrency(store.line_revenue)}`;
+    },
+
+    get productTopLabel() {
+      const total = this.filteredProductCustomerRows.length;
+      return this.productShowAll || (total > 0 && this.productTopN >= total) ? 'All' : String(this.productTopN);
+    },
+
+    openProductTopNModal() {
+      this.productTopDraftValue = this.productShowAll ? Math.max(1, this.filteredProductCustomerRows.length) : this.productTopN;
+      this.showProductTopNModal = true;
+    },
+
+    closeProductTopNModal() { this.showProductTopNModal = false; },
+
+    saveProductTopN() {
+      try { localStorage.setItem('crm-analytics-product-top-n', this.productShowAll ? 'all' : String(this.productTopN)); } catch (_) {}
+    },
+
+    showAllProductCustomers() {
+      this.productShowAll = true;
+      this.saveProductTopN();
+      this.closeProductTopNModal();
+    },
+
+    applyProductTopNModal() {
+      const draft = Number(this.productTopDraftValue);
+      if (!Number.isInteger(draft) || draft < 1) return;
+      this.productTopN = Math.min(draft, Math.max(1, this.filteredProductCustomerRows.length));
+      this.productShowAll = false;
+      this.saveProductTopN();
+      this.closeProductTopNModal();
+    },
+
+    formatUnits(value) { return new Intl.NumberFormat('en-NZ', { maximumFractionDigits: 2 }).format(value || 0); },
+
+    async loadProductSales() {
+      if (!this.productStartDate || !this.productEndDate || this.productStartDate > this.productEndDate) {
+        this.productSalesError = 'Choose a valid date range.';
+        return;
+      }
+      this.loadingProductSales = true;
+      this.productSalesError = '';
+      try {
+        this.productSales = await CRMAPI.getProductSalesByStore(this.productStartDate, this.productEndDate);
+      } catch (e) {
+        this.productSalesError = e.message || 'Failed to load product sales.';
+      } finally {
+        this.loadingProductSales = false;
+      }
     },
 
     async loadAll() {
@@ -188,7 +369,7 @@ function crmAnalytics() {
       this.loadingChurn = true;
       this.loadingContact = true;
       this.error = null;
-      await Promise.all([this.loadSales(), this.loadBreakdown(), this.loadChurn(), this.loadContact()]);
+      await Promise.all([this.loadSales(), this.loadBreakdown(), this.loadChurn(), this.loadContact(), this.loadProductSales()]);
     },
 
     async loadSales() {

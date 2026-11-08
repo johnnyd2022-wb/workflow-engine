@@ -12,12 +12,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
-from app.core.db.models.execution import ExecutionStatus
+from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
-from app.core.db.repositories.process_repo import STALE_WRITE, ProcessRepository
+from app.core.db.repositories.process_repo import STALE_WRITE, STEP_TIMING_FIELDS, ProcessRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_duration
 from app.core.security.permissions import requires_auth, requires_role
 from app.observability import get_logger
@@ -253,6 +254,24 @@ def _iso(dt):
     return dt.isoformat() if dt else None
 
 
+_STEP_TIMING_LIMIT = 525_600  # a year in minutes; the planner's limit for a step
+
+
+def _step_timing(data) -> tuple[dict, str | None]:
+    """The step-timing keys present in ``data``: whole minutes up to a year, or null to clear."""
+    timing = {}
+    for field in STEP_TIMING_FIELDS:
+        if field not in data:
+            continue
+        value = data[field]
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _STEP_TIMING_LIMIT
+        ):
+            return {}, "Step timings are whole minutes, from 0 up to a year"
+        timing[field] = value
+    return timing, None
+
+
 def _serialize_step(step) -> dict:
     return {
         "id": str(step.id),
@@ -263,6 +282,8 @@ def _serialize_step(step) -> dict:
         "inputs": step.inputs or [],
         "outputs": step.outputs or [],
         "execution_prompts": step.execution_prompts or [],
+        "duration_minutes": step.duration_minutes,
+        "wait_minutes": step.wait_minutes,
         "updated_at": _iso(getattr(step, "updated_at", None)),
     }
 
@@ -613,6 +634,8 @@ def register_routes(bp):
                         "inputs": step.inputs or [],
                         "outputs": step.outputs or [],
                         "execution_prompts": step.execution_prompts or [],
+                        "duration_minutes": step.duration_minutes,
+                        "wait_minutes": step.wait_minutes,
                     }
                     for step in step_list
                 ]
@@ -737,6 +760,20 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process ID"}), 400
 
+        # The ORM cascades a process to its executions, so a delete would take every batch's
+        # production record with it. Refuse instead and say why (GL-U02c).
+        batches = (
+            db_session.query(Execution).filter(Execution.org_id == org_id, Execution.process_id == process_uuid).count()
+        )
+        if batches:
+            return jsonify(
+                {
+                    "error": f"This workflow has {batches} batch{'es' if batches != 1 else ''} recorded against it, "
+                    "so it can't be deleted: their production records and stock history would go with it.",
+                    "batches": batches,
+                }
+            ), 409
+
         repo = ProcessRepository(db_session)
         try:
             success = repo.delete_process(process_id=process_uuid, org_id=org_id)
@@ -745,6 +782,15 @@ def register_routes(bp):
                 return jsonify({"error": "Process not found"}), 404
 
             return jsonify({"message": "Process deleted successfully"}), 200
+        except IntegrityError:
+            # A batch committed after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {
+                    "error": "This workflow has batches recorded against it, so it can't be deleted: "
+                    "their production records and stock history would go with it."
+                }
+            ), 409
         except Exception:
             # Log the full error for debugging but return generic message to client
             logger.exception("Error deleting process")
@@ -797,6 +843,9 @@ def register_routes(bp):
         expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
         if expiry_ready_errors:
             return jsonify({"error": expiry_ready_errors[0]}), 400
+        timing, timing_error = _step_timing(data)
+        if timing_error:
+            return jsonify({"error": timing_error}), 400
 
         repo = ProcessRepository(db_session)
         try:
@@ -810,6 +859,7 @@ def register_routes(bp):
                 inputs=data.get("inputs", []),
                 outputs=data.get("outputs", []),
                 execution_prompts=data.get("execution_prompts", []),
+                timing=timing,
             )
         except IntegrityError:
             db_session.rollback()
@@ -829,6 +879,8 @@ def register_routes(bp):
                     "inputs": step.inputs or [],
                     "outputs": step.outputs or [],
                     "execution_prompts": step.execution_prompts or [],
+                    "duration_minutes": step.duration_minutes,
+                    "wait_minutes": step.wait_minutes,
                 }
             ),
             201,
@@ -854,6 +906,9 @@ def register_routes(bp):
             expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
             if expiry_ready_errors:
                 return jsonify({"error": expiry_ready_errors[0]}), 400
+        timing, timing_error = _step_timing(data or {})
+        if timing_error:
+            return jsonify({"error": timing_error}), 400
 
         repo = ProcessRepository(db_session)
 
@@ -869,6 +924,7 @@ def register_routes(bp):
                 inputs=data.get("inputs"),
                 outputs=data.get("outputs"),
                 execution_prompts=data.get("execution_prompts"),
+                timing=timing,
                 if_match=_if_match_token(),
             )
         except IntegrityError:
@@ -1000,12 +1056,39 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process or step ID"}), 400
 
-        repo = ProcessRepository(db_session)
-        success = repo.delete_step(
-            step_id=step_uuid,
-            process_id=process_uuid,
-            org_id=org_id,
+        # A step's ExecutionSteps cascade with it: refuse rather than erase what batches recorded.
+        recorded = (
+            db_session.query(ExecutionStep)
+            .join(Execution, Execution.id == ExecutionStep.execution_id)
+            .filter(
+                ExecutionStep.step_id == step_uuid,
+                Execution.process_id == process_uuid,
+                Execution.org_id == org_id,
+            )
+            .count()
         )
+        if recorded:
+            return jsonify(
+                {
+                    "error": f"{recorded} batch{'es have' if recorded != 1 else ' has'} recorded this step, "
+                    "so it can't be deleted without erasing what was recorded.",
+                    "batches": recorded,
+                }
+            ), 409
+
+        repo = ProcessRepository(db_session)
+        try:
+            success = repo.delete_step(
+                step_id=step_uuid,
+                process_id=process_uuid,
+                org_id=org_id,
+            )
+        except IntegrityError:
+            # A batch recorded this step after the check above: the foreign key refused the delete.
+            db_session.rollback()
+            return jsonify(
+                {"error": "A batch has recorded this step, so it can't be deleted without erasing what was recorded."}
+            ), 409
 
         if not success:
             return jsonify({"error": "Step or process not found"}), 404

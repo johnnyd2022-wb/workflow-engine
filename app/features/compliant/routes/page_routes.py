@@ -59,7 +59,7 @@ def nz_alcohol_dashboard():
 def legacy_nz_alcohol_evidence():
     """Historic URL: NP3 evidence now lives per-check, so this page is Customs-only."""
     query = f"?{request.query_string.decode()}" if request.query_string else ""
-    return redirect(f"/compliant/nz-alcohol/customs{query}", code=302)
+    return redirect(f"/compliant/nz-alcohol/customs/records{query}", code=302)
 
 
 @page_bp.route("/compliant/nz-alcohol/customs", methods=["GET"])
@@ -70,7 +70,51 @@ def nz_alcohol_customs_workspace():
     NP3 food-safety evidence is recorded per check in its own workspace (np3_check.html) and
     does not use this generic record form.
     """
-    return render_template("compliant/customs.html", **_nz_alcohol_template_context())
+    return render_template("compliant/customs.html", **_nz_alcohol_template_context(customs_view="entry"))
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/stock", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_stock():
+    """Customs stock: the licensed area, stock outside it, the stocktake and what it explained."""
+    from app.core.db.models.organisation import Organisation
+
+    org = db_session().get(Organisation, UUID(g.org_id))
+    return render_template(
+        "compliant/customs_stock.html",
+        **_nz_alcohol_template_context(
+            customs_view="stock", multiple_sites=bool(org is not None and org.multiple_sites_enabled)
+        ),
+    )
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/records", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_records():
+    """Records for Customs: each thing Customs can ask to see, its proof, and adding more."""
+    return render_template("compliant/customs_records.html", **_nz_alcohol_template_context(customs_view="records"))
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/records/<control_id>", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_record_check(control_id: str):
+    """One Customs check: what Customs asks to see, the evidence we have, adding more, history."""
+    from app.features.compliant.modules.nz_alcohol.catalogue import NZ_ALCOHOL_FRAMEWORKS
+
+    customs = next(f for f in NZ_ALCOHOL_FRAMEWORKS if f["slug"] == "customs-alcohol")
+    if control_id not in dict(customs["controls"]):
+        return redirect("/compliant/nz-alcohol/customs/records", code=302)
+    return render_template(
+        "compliant/customs_record_check.html",
+        **_nz_alcohol_template_context(customs_view="records", control_id=control_id),
+    )
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/settings", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_settings():
+    """Customs settings: products and rates, how often to lodge, and how often to count."""
+    return render_template("compliant/customs_settings.html", **_nz_alcohol_template_context(customs_view="settings"))
 
 
 @page_bp.route("/compliant/nz-alcohol/np3-audit", methods=["GET"])
@@ -86,7 +130,22 @@ def nz_alcohol_food_safety():
     context = _nz_alcohol_template_context()
     programme = context["food_control_programme"]
     if programme in {"np1", "np2", "np3"}:  # one verification workspace for every programme (plan 2.4b)
-        return render_template("compliant/np3_audit.html", **_programme_labels(programme), **context)
+        return render_template(
+            "compliant/np3_audit.html", **_programme_labels(programme), np3_view="summary", **context
+        )
+    return redirect("/compliant/nz-alcohol/configuration", code=302)
+
+
+@page_bp.route("/compliant/nz-alcohol/food-safety/checks", methods=["GET"])
+@requires_auth
+def nz_alcohol_food_safety_checks():
+    """Every check of the programme, by section, with search and readiness filters."""
+    context = _nz_alcohol_template_context()
+    programme = context["food_control_programme"]
+    if programme in {"np1", "np2", "np3"}:
+        return render_template(
+            "compliant/np3_checks.html", **_programme_labels(programme), np3_view="checks", **context
+        )
     return redirect("/compliant/nz-alcohol/configuration", code=302)
 
 
@@ -97,7 +156,7 @@ def nz_alcohol_np3_audit_check(control_id: str):
     programme = context["food_control_programme"]
     if programme not in {"np1", "np2", "np3"}:
         return redirect("/compliant/nz-alcohol/food-safety", code=302)
-    return render_template("compliant/np3_check.html", **_programme_labels(programme), **context)
+    return render_template("compliant/np3_check.html", **_programme_labels(programme), np3_view="checks", **context)
 
 
 def _programme_labels(programme: str) -> dict:

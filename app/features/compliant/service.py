@@ -233,7 +233,7 @@ def build_priority_actions(
             {
                 "kind": "record",
                 "state": "review",
-                "title": f"Review due {record.due_date.isoformat()}: {record.title}",
+                "title": f"Review due {record.due_date.strftime('%-d %b %Y')}: {record.title}",
                 "description": "A scheduled evidence review is coming up. Confirm the proof is still accurate or add a replacement record.",
                 "value": "Open the exact control and review its current proof.",
                 "framework_slug": record.framework_slug,
@@ -1062,3 +1062,17 @@ class ComplianceService:
         self.session.add(report)
         self.session.commit()
         return {"report_id": str(report.id), "checksum_sha256": checksum, "payload": payload}
+
+
+def nz_alcohol_active(session: Session, org_id) -> bool:
+    """The org holds the Compliant subscription and runs the NZ Alcohol module (gates Sales -> Excise)."""
+    from app.core.security.entitlements import org_has_feature
+    from app.utils.config_loader import config
+
+    if not org_id or not bool(config.compliant_enabled):
+        return False
+    org_uuid = org_id if isinstance(org_id, UUID) else UUID(str(org_id))
+    if not org_has_feature(session, org_uuid, "compliant"):
+        return False
+    profile = ComplianceService(session).get_profile(org_uuid)
+    return bool(profile and profile.enabled and profile.industry_module == "nz_alcohol")

@@ -118,7 +118,9 @@ def test_ac15_upload_accepts_file_between_evidences_old_cap_and_process_docs_own
     from app.utils.config_loader import config as app_config
 
     evidence_cap_bytes = app_config.evidence_max_file_size_mb * 1024 * 1024
-    assert evidence_cap_bytes < _MAX_BYTES, "evidence's cap is no longer smaller than process_docs' — re-check this test"
+    assert evidence_cap_bytes < _MAX_BYTES, (
+        "evidence's cap is no longer smaller than process_docs' — re-check this test"
+    )
 
     # Just over evidence's old (now-irrelevant) 10MB cap, still under process_docs' own 20MB.
     in_range = b"A" * (evidence_cap_bytes + 1)

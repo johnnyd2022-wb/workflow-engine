@@ -54,6 +54,19 @@
 
   function signed(v) { return (v && v.charAt(0) !== '-' && v !== '0' ? '+' : '') + v; }
 
+  function daysFrom(iso) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    return Math.round((new Date(iso + 'T00:00:00') - today) / 86400000);
+  }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  // "6 L short", "2 units over": a difference in words, never just a signed number.
+  function differenceWords(variance, unit) {
+    var short = variance.charAt(0) === '-';
+    return variance.replace('-', '') + ' ' + unit + (short ? ' short' : ' over');
+  }
+
   function init(root) {
     if (!root || root.dataset.stBound === '1') return;
     root.dataset.stBound = '1';
@@ -61,7 +74,15 @@
     var canAdjust = root.dataset.canAdjust === '1';
     var canManage = root.dataset.canManage === '1';
     var current = null;
+    var counting = null;
     var labels = {};
+    var filter = 'all';
+
+    function setFigure(name, value, note) {
+      $('[data-st-figure="' + name + '"]').textContent = value;
+      var n = $('[data-st-figure-note="' + name + '"]');
+      if (n) n.textContent = note || '';
+    }
 
     function applyLabels(next) {
       labels = next || {};
@@ -91,35 +112,65 @@
       var list = await api('GET', '/api/core/stocktakes');
       applyLabels(list.labels);
       var s = list.schedule;
-      var text = 'Count every ' + { monthly: 'month', quarterly: 'quarter', six_monthly: 'six months', annual: 'year' }[s.frequency] + '. ';
+      var every = { monthly: 'month', quarterly: 'quarter', six_monthly: 'six months', annual: 'year' }[s.frequency];
+      var text = 'Count every ' + every + '. ';
       text += s.last_completed_on ? 'Last finished ' + fmtDate(s.last_completed_on) + '. ' : 'No stocktake finished yet. ';
       if (s.next_due) text += (s.overdue ? 'Overdue since ' : 'Next due ') + fmtDate(s.next_due) + '.';
       $('[data-st-schedule-text]').textContent = text;
       $('[data-st-frequency]').value = s.frequency;
+      if (s.bulk_tolerance_percent !== undefined) $('[data-st-tolerance]').value = s.bulk_tolerance_percent;
       $('[data-st-schedule-form]').hidden = !canManage;
       $('[data-st-start-actions]').hidden = !canAdjust;
+
+      // The stocktake still being counted, if any, is the thing to get back to.
+      counting = list.stocktakes.find(function (st) { return st.status !== 'done'; }) || null;
+      var cont = $('[data-st-continue]');
+      cont.hidden = !counting;
+      // A second scheduled count while one is open would count the same stock twice; finish
+      // the open one first. An inspector's visit can still start its own count.
+      $('[data-st-start="scheduled"]').hidden = Boolean(counting);
+      $('[data-st-start="scheduled"]').classList.add('workspace-button--primary', 'st-primary');
+
+      var due = s.next_due ? daysFrom(s.next_due) : null;
+      var dueTile = $('[data-st-tile="due"]');
+      setFigure('due', due === null ? 'Not set' : due < 0 ? plural(-due, 'day', 'days') + ' late' : due === 0 ? 'Today' : 'In ' + plural(due, 'day', 'days'),
+        s.next_due ? fmtDate(s.next_due) + ' · every ' + every : 'Finish a first stocktake to start the clock');
+      dueTile.dataset.state = s.overdue ? 'bad' : due !== null && due <= 14 ? 'warn' : '';
+      setFigure('counting', counting ? fmtDate(counting.counted_on) : 'None',
+        counting ? (counting.kind === 'customs_visit' ? (labels.authority || 'Inspector') + ' visit' : 'Stocktake') + ' in progress' : 'No count open');
+      $('[data-st-tile="counting"]').dataset.state = counting ? 'warn' : '';
+      var overdueVariances = list.open_variances.filter(function (v) { return v.overdue; }).length;
+      setFigure('differences', String(list.open_variances.length),
+        list.open_variances.length ? (overdueVariances ? overdueVariances + ' overdue' : 'to resolve or investigate') : 'Every count explained');
+      $('[data-st-tile="differences"]').dataset.state = overdueVariances ? 'bad' : list.open_variances.length ? 'warn' : '';
 
       var variances = $('[data-st-variances]');
       variances.replaceChildren();
       list.open_variances.forEach(function (v) {
-        var money = v.measure ? ' · ' + v.measure + ' ' + labels.measure + (v.cost ? ', $' + v.cost + ' ' + labels.cost : '') : '';
-        var state = v.status === 'investigating' ? 'investigating until ' + fmtDate(v.investigate_until) : 'not resolved';
-        var a = el('a', { href: '?id=' + v.stocktake_id, text: v.product + (v.batch ? ' (' + v.batch + ')' : '') });
-        a.addEventListener('click', function (e) { e.preventDefault(); openStocktake(v.stocktake_id); });
-        variances.append(el('li', {}, [a, ' ' + signed(v.variance) + ' ' + v.unit + money + ' · ' + state,
-          v.overdue ? el('span', { className: 'st-chip st-chip--bad', text: 'Overdue' }) : null]));
+        var money = v.measure ? v.measure + ' ' + labels.measure + (v.cost ? ', $' + v.cost + ' ' + labels.cost : '') : '';
+        var a = el('a', { href: '?id=' + v.stocktake_id, text: v.product + (v.batch ? ' · ' + v.batch : '') });
+        a.addEventListener('click', function (e) { e.preventDefault(); openStocktake(v.stocktake_id).catch(fail); });
+        var state = v.overdue ? el('span', { className: 'st-chip st-chip--bad', text: 'Overdue' })
+          : v.status === 'investigating' ? el('span', { className: 'st-chip st-chip--warn', text: 'Investigating until ' + fmtDate(v.investigate_until) })
+            : el('span', { className: 'st-chip st-chip--bad', text: 'Not resolved' });
+        variances.append(el('li', { className: 'st-row-item' }, [
+          el('div', { className: 'st-row-item__main' }, [a, el('span', { className: 'st-row-item__meta', text: differenceWords(v.variance, v.unit) + (money ? ' · ' + money : '') })]),
+          state]));
       });
       $('[data-st-variances-wrap]').hidden = !list.open_variances.length;
+      $('[data-st-variance-count]').textContent = list.open_variances.length ? plural(list.open_variances.length, 'difference', 'differences') : '';
 
       var historyList = $('[data-st-history]');
       historyList.replaceChildren();
       list.stocktakes.forEach(function (st) {
-        var a = el('a', { href: '?id=' + st.id, text: fmtDate(st.counted_on) + (st.kind === 'customs_visit' ? ' · ' + (labels.authority || 'Inspector') + ' visit' : '') });
-        a.addEventListener('click', function (e) { e.preventDefault(); openStocktake(st.id); });
-        historyList.append(el('li', {}, [a, ' ', el('span', { className: 'st-chip' + (st.status === 'done' ? ' st-chip--ok' : ' st-chip--warn'),
-          text: st.status === 'done' ? 'Finished' : 'In progress' })]));
+        var a = el('a', { href: '?id=' + st.id, text: fmtDate(st.counted_on) });
+        a.addEventListener('click', function (e) { e.preventDefault(); openStocktake(st.id).catch(fail); });
+        historyList.append(el('li', { className: 'st-row-item' }, [
+          el('div', { className: 'st-row-item__main' }, [a, el('span', { className: 'st-row-item__meta', text: st.kind === 'customs_visit' ? (labels.authority || 'Inspector') + ' visit' : 'Scheduled count' })]),
+          el('span', { className: 'st-chip' + (st.status === 'done' ? ' st-chip--ok' : ' st-chip--warn'), text: st.status === 'done' ? 'Finished' : 'In progress' })]));
       });
       $('[data-st-history-wrap]').hidden = !list.stocktakes.length;
+
       loadPosition().catch(fail);
     }
 
@@ -127,22 +178,26 @@
       var pos = await api('GET', '/api/core/stock-position');
       var wrap = $('[data-st-position]');
       wrap.replaceChildren();
+      var lots = pos.places.reduce(function (total, place) { return total + place.lots.length; }, 0);
+      setFigure('lines', String(lots), lots ? plural(lots, 'line', 'lines') .replace(/^\d+ /, '') + ' in ' + plural(pos.places.length, 'place', 'places') : 'Nothing finished or in progress');
       if (!pos.places.length) { wrap.append(el('p', { className: 'st-hint', text: 'No finished goods or work in progress on hand.' })); return; }
+      // A batch column of dashes says nothing; show it only when some lot has a batch.
+      var hasBatch = pos.places.some(function (place) { return place.lots.some(function (lot) { return lot.batch; }); });
       pos.places.forEach(function (place) {
         var area = labels.controlled_area || 'controlled area';
-        wrap.append(el('h3', { text: place.name + (place.inside_licensed_area ? '' : ' (outside the ' + area + ')') +
+        wrap.append(el('h3', { className: 'st-place-title', text: place.name + (place.inside_licensed_area ? '' : ' (outside the ' + area + ')') +
           (labels.measure ? ' · ' + place.total_measure + ' ' + labels.measure : '') }));
         var body = el('tbody');
         place.lots.forEach(function (lot) {
           body.append(el('tr', {}, [
-            el('td', { text: lot.name }), el('td', { text: lot.batch || '—' }), el('td', { text: lot.stage }),
+            el('td', { text: lot.name }), hasBatch ? el('td', { text: lot.batch || '—' }) : null, el('td', { text: lot.stage }),
             el('td', { className: 'st-num', text: lot.quantity + ' ' + lot.unit }),
             labels.measure ? el('td', { text: lot.detail || '—' }) : null,
             labels.measure ? el('td', { className: 'st-num', text: lot.measure || '—' }) : null
           ]));
         });
         wrap.append(el('div', { className: 'st-table-wrap' }, [el('table', { className: 'st-table' }, [
-          el('thead', {}, [el('tr', {}, [el('th', { text: 'Product' }), el('th', { text: 'Batch' }), el('th', { text: 'Stage' }),
+          el('thead', {}, [el('tr', {}, [el('th', { text: 'Product' }), hasBatch ? el('th', { text: 'Batch' }) : null, el('th', { text: 'Stage' }),
             el('th', { className: 'st-num', text: 'Quantity' }),
             labels.measure ? el('th', { text: 'Detail' }) : null,
             labels.measure ? el('th', { className: 'st-num', text: labels.measure }) : null])]),
@@ -184,6 +239,8 @@
         }
         wrap.append(renderLine(line));
       });
+      var counted = st.lines.filter(function (line) { return line.counted !== null; }).length;
+      $('[data-st-progress-bar]').style.width = (st.lines.length ? Math.round(100 * counted / st.lines.length) : 0) + '%';
       var finished = st.status === 'done';
       $('[data-st-complete-wrap]').hidden = finished || !canAdjust || st.summary.not_counted > 0 || st.summary.to_resolve > 0;
       applyFind();
@@ -201,6 +258,7 @@
 
     function renderLine(line) {
       var box = el('div', { className: 'st-line' + (toResolve(line) ? ' st-line--open' : ''), 'data-line-id': line.id,
+        'data-state': line.counted === null ? 'count' : toResolve(line) ? 'resolve' : 'done',
         'data-find': (line.name + ' ' + (line.batch || '')).toLowerCase() });
       var variance = '';
       if (line.variance !== null && line.variance !== '0') {
@@ -216,7 +274,7 @@
       if (editable) {
         var input = el('input', { type: 'number', min: '0', step: line.whole_units ? '1' : 'any', inputmode: line.whole_units ? 'numeric' : 'decimal',
           'aria-label': 'Counted ' + line.name + (line.batch ? ' ' + line.batch : ''), value: line.counted === null ? '' : line.counted });
-        var save = el('button', { type: 'button', className: 'btn btn-secondary', text: line.counted === null ? 'Save' : 'Recount' });
+        var save = el('button', { type: 'button', className: 'workspace-button', text: line.counted === null ? 'Save' : 'Recount' });
         async function submit() {
           if (input.value === '') return;
           save.disabled = true;
@@ -301,7 +359,7 @@
       addPart(total);
       var more = el('button', { type: 'button', className: 'st-link-btn', text: 'Split across another reason' });
       more.addEventListener('click', function () { addPart(''); });
-      var go = el('button', { type: 'button', className: 'btn btn-primary', text: 'Resolve' });
+      var go = el('button', { type: 'button', className: 'workspace-button workspace-button--primary st-primary', text: 'Resolve' });
       go.addEventListener('click', async function () {
         go.disabled = true;
         try {
@@ -318,8 +376,27 @@
 
     function applyFind() {
       var q = ($('[data-st-find]').value || '').trim().toLowerCase();
-      root.querySelectorAll('.st-line').forEach(function (n) { n.hidden = q && n.dataset.find.indexOf(q) === -1; });
+      var shown = 0;
+      root.querySelectorAll('.st-line').forEach(function (n) {
+        n.hidden = Boolean((q && n.dataset.find.indexOf(q) === -1) || (filter !== 'all' && n.dataset.state !== filter));
+        if (!n.hidden) shown += 1;
+      });
+      // A place heading with nothing under it is noise.
+      root.querySelectorAll('.st-place').forEach(function (heading) {
+        var next = heading.nextElementSibling;
+        var any = false;
+        while (next && !next.classList.contains('st-place')) { if (!next.hidden) any = true; next = next.nextElementSibling; }
+        heading.hidden = !any;
+      });
+      $('[data-st-filter-empty]').hidden = shown > 0;
     }
+    root.querySelectorAll('[data-st-filter]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        filter = button.dataset.stFilter;
+        root.querySelectorAll('[data-st-filter]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === button)); });
+        applyFind();
+      });
+    });
 
     async function loadRecon() {
       var rec = await api('GET', '/api/core/stocktakes/' + current.id + '/reconciliation');
@@ -331,15 +408,16 @@
       body.replaceChildren();
       rec.products.forEach(function (p) {
         var diff = p.variance === null ? 'counting' : signed(p.variance);
-        body.append(el('tr', {}, [el('td', { text: p.product }),
-          el('td', { className: 'st-num', text: p.opening === null ? '—' : p.opening }),
-          el('td', { className: 'st-num', text: p.produced_and_in === null ? '—' : p.produced_and_in }),
-          el('td', { className: 'st-num', text: p.removed }), el('td', { className: 'st-num', text: p.losses }),
-          el('td', { className: 'st-num', text: p.expected + ' ' + p.unit }),
-          el('td', { className: 'st-num', text: p.counted === null ? '—' : p.counted }),
-          el('td', { className: 'st-num', text: diff }),
-          el('td', { className: 'st-num', text: p.variance === null || p.variance === '0' ? '—' : signed(p.explained) }),
-          rec.labels.declared ? el('td', { className: 'st-num', text: p.declared || '—' }) : null]));
+        // data-label lets a phone show each row as a labelled card instead of ten squeezed columns.
+        body.append(el('tr', {}, [el('td', { className: 'st-recon-product', text: p.product }),
+          el('td', { className: 'st-num', 'data-label': 'Opening', text: p.opening === null ? '—' : p.opening }),
+          el('td', { className: 'st-num', 'data-label': 'Produced and in', text: p.produced_and_in === null ? '—' : p.produced_and_in }),
+          el('td', { className: 'st-num', 'data-label': 'Removed', text: p.removed }), el('td', { className: 'st-num', 'data-label': 'Losses', text: p.losses }),
+          el('td', { className: 'st-num', 'data-label': 'Expected', text: p.expected + ' ' + p.unit }),
+          el('td', { className: 'st-num', 'data-label': 'Counted', text: p.counted === null ? '—' : p.counted }),
+          el('td', { className: 'st-num', 'data-label': 'Difference', text: diff }),
+          el('td', { className: 'st-num', 'data-label': 'Explained', text: p.variance === null || p.variance === '0' ? '—' : signed(p.explained) }),
+          rec.labels.declared ? el('td', { className: 'st-num', 'data-label': rec.labels.declared, text: p.declared || '—' }) : null]));
       });
     }
 
@@ -383,6 +461,8 @@
         say('Stocktake finished.', true);
       } catch (err) { fail(err); }
     });
+
+    $('[data-st-continue]').addEventListener('click', function () { if (counting) openStocktake(counting.id).catch(fail); });
 
     var id = new URLSearchParams(location.search).get('id');
     (id ? openStocktake(id) : loadHome()).catch(fail);

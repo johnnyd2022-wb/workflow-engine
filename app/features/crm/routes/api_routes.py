@@ -4,7 +4,10 @@ from datetime import date, timedelta
 from io import BytesIO
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request, send_file
+import requests
+from flask import Blueprint, Response, abort, g, jsonify, request, send_file
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
+from xero_python.exceptions import OpenApiException
 
 from app.core.backend.tasks import (
     TaskError,
@@ -16,11 +19,13 @@ from app.core.backend.tasks import (
     update_lane,
 )
 from app.core.db import db_session
-from app.core.security.permissions import requires_auth
+from app.core.security.access_policy import has_permission
+from app.core.security.permissions import requires_auth, requires_permission
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.services.crm_service import CRMService
-from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
+from app.features.crm.services.xero_api_client import XeroInsufficientScopeError, _extract_exception_error_message
+from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger
 
 api_bp = Blueprint("crm_api", __name__)
@@ -52,6 +57,43 @@ def _page_args(default_page_size: int) -> tuple[int, int] | None:
 # ------------------------------------------------------------------
 # Customers
 # ------------------------------------------------------------------
+
+
+@api_bp.route("/api/crm/customers/import-template", methods=["GET"])
+@requires_auth
+def customer_import_template():
+    from app.features.crm.services.contact_import import template
+
+    return Response(
+        template(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="crm-customers-template.csv"'},
+    )
+
+
+@api_bp.route("/api/crm/customers/import", methods=["POST"])
+@requires_auth
+@requires_permission("sales.record")
+def customer_import():
+    from app.features.crm.services.contact_import import import_contacts
+
+    if request.content_length and request.content_length > 1_200_000:
+        return jsonify({"error": "Import text must be at most 1 MB"}), 413
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("text"), str):
+        return jsonify({"error": "Send import text and format"}), 400
+    try:
+        result = import_contacts(
+            db_session(),
+            UUID(g.org_id),
+            data["text"],
+            data.get("format", "csv"),
+            commit=data.get("commit") is True,
+            actor_id=_actor(),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result), 200
 
 
 @api_bp.route("/api/crm/customers", methods=["GET"])
@@ -93,6 +135,139 @@ def get_customer(contact_id: str):
     return jsonify(result), 200
 
 
+# What a call to Xero raises when Xero refuses it or cannot be reached (RuntimeError is
+# XeroAPIClient's own "no usable reply"). Anything else is a Biz-E bug and stays a 500.
+_XERO_CALL_ERRORS = (OpenApiException, requests.RequestException, Urllib3HTTPError, ConnectionError, RuntimeError)
+
+
+def _xero_failure(exc: Exception, action: str):
+    """The answer for a Xero call that failed, in words the page can show."""
+    if isinstance(exc, XeroInsufficientScopeError):
+        return jsonify({"error": "xero_insufficient_scope", "message": str(exc), "action": "reconnect_xero"}), 401
+    if isinstance(exc, XeroTokenExpiredError):
+        return jsonify(
+            {
+                "error": "The Xero connection has expired. Reconnect Xero, then try again.",
+                "code": "reconnect_required",
+                "action": "reconnect_xero",
+            }
+        ), 401
+    if isinstance(exc, ValueError):
+        return jsonify({"error": str(exc)}), 400
+    if not isinstance(exc, _XERO_CALL_ERRORS):
+        raise exc
+    refused = _extract_exception_error_message(exc)
+    if refused:
+        logger.warning("crm_xero_call_refused", action=action, org_id=g.org_id, error=refused)
+        return jsonify({"error": f"Xero refused this: {refused}"}), 400
+    logger.exception("crm_xero_call_failed", action=action, org_id=g.org_id)
+    return jsonify({"error": "Xero could not be reached. Try again in a moment."}), 502
+
+
+def _contact_sync():
+    from app.features.crm.services.contact_service import ContactSyncService
+
+    return ContactSyncService(db_session())
+
+
+def _actor() -> UUID | None:
+    return UUID(g.user_id) if getattr(g, "user_id", None) else None
+
+
+def _contact_response(contact, xero_state: dict, status: int = 200, **extra):
+    from app.features.crm.services.crm_service import _serialise_contact
+
+    return jsonify({"customer": _serialise_contact(contact), "xero_sync": xero_state, **extra}), status
+
+
+@api_bp.route("/api/crm/customers", methods=["POST"])
+@requires_auth
+def create_customer():
+    """Create a contact in Biz-E. It goes to Xero now if its sync (or the Sales default) is on."""
+    try:
+        contact, state = _contact_sync().create_contact(
+            UUID(g.org_id), request.get_json(silent=True) or {}, actor_id=_actor()
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state, 201)
+
+
+@api_bp.route("/api/crm/customers/<contact_id>", methods=["PATCH"])
+@requires_auth
+def update_customer(contact_id: str):
+    """Save edited contact details; a contact that syncs sends the changed ones to Xero."""
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    try:
+        contact, state, changed = _contact_sync().update_contact(
+            UUID(g.org_id), contact_uuid, request.get_json(silent=True) or {}, actor_id=_actor()
+        )
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state, changed=sorted(changed))
+
+
+@api_bp.route("/api/crm/customers/<contact_id>/xero-sync", methods=["PUT"])
+@requires_auth
+def set_customer_xero_sync(contact_id: str):
+    """A Biz-E contact's own Xero sync: true, false, or null to follow the Sales default."""
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    data = request.get_json(silent=True)
+    if contact_uuid is None or not isinstance(data, dict) or "sync_to_xero" not in data:
+        return jsonify({"error": "Send sync_to_xero: true, false or null"}), 400
+    try:
+        contact, state = _contact_sync().set_contact_sync(
+            UUID(g.org_id), contact_uuid, data["sync_to_xero"], actor_id=_actor()
+        )
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state)
+
+
+@api_bp.route("/api/crm/customers/<contact_id>/xero-sync/retry", methods=["POST"])
+@requires_auth
+def retry_customer_xero_sync(contact_id: str):
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    try:
+        contact, state = _contact_sync().retry(UUID(g.org_id), contact_uuid, actor_id=_actor())
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state)
+
+
+@api_bp.route("/api/crm/contact-sync-settings", methods=["GET"])
+@requires_auth
+def get_contact_sync_settings():
+    return jsonify(_contact_sync().settings(UUID(g.org_id))), 200
+
+
+@api_bp.route("/api/crm/contact-sync-settings", methods=["PUT"])
+@requires_auth
+def update_contact_sync_settings():
+    """The Sales default for contacts created in Biz-E. Turning it on sends those not yet in Xero."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("sync_contacts_to_xero"), bool):
+        return jsonify({"error": "Send sync_contacts_to_xero: true or false"}), 400
+    result = _contact_sync().set_sync_default(UUID(g.org_id), data["sync_contacts_to_xero"], actor_id=_actor())
+    return jsonify(result), 200
+
+
 # ------------------------------------------------------------------
 # Invoices
 # ------------------------------------------------------------------
@@ -126,6 +301,156 @@ def get_org_invoices():
     page, page_size = paging
     result = _crm_service().get_org_invoices(org_id, kind=kind, page=page, page_size=page_size)
     return jsonify(result), 200
+
+
+@api_bp.route("/api/crm/returns/pending", methods=["GET"])
+@requires_auth
+def list_pending_returns():
+    """Mapped credit-note lines that still need a physical-return decision."""
+    from app.features.crm.services.credit_note_returns import pending
+
+    paging = _page_args(25)
+    if paging is None:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+    page, page_size = paging
+    return jsonify(pending(db_session(), UUID(g.org_id), page=page, page_size=page_size)), 200
+
+
+@api_bp.route("/api/crm/credit-notes/<credit_note_id>/lines/<line_id>/no-return", methods=["POST"])
+@requires_auth
+def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
+    """Record, without touching inventory, that a credited product did not come back."""
+    from app.features.crm.services.credit_note_returns import ReturnDecisionConflictError, record_no_return
+
+    note_uuid = _uuid_or_none(credit_note_id)
+    line_uuid = _uuid_or_none(line_id)
+    data = request.get_json(silent=True)
+    note = data.get("note") if isinstance(data, dict) else None
+    if note_uuid is None or line_uuid is None:
+        return jsonify({"error": "Credit note line not found"}), 404
+    if not isinstance(note, str):
+        return jsonify({"error": "Add a note of 1 to 500 characters"}), 400
+    try:
+        record_no_return(db_session(), UUID(g.org_id), note_uuid, line_uuid, UUID(g.user_id), note)
+        db_session().commit()
+        return jsonify({"ok": True, "decision": "no_return"}), 200
+    except LookupError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 404
+    except ReturnDecisionConflictError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 400
+
+
+@api_bp.route("/api/crm/returns", methods=["GET"])
+@requires_auth
+def list_customer_returns():
+    """GL-P01b: goods customers sent back, newest first."""
+    from app.features.crm.services.sales_returns import recent, serialise
+
+    contact_id = None
+    if request.args.get("contact_id"):
+        contact_id = _uuid_or_none(request.args.get("contact_id"))
+        if contact_id is None:
+            return jsonify({"returns": []}), 200
+    rows = recent(db_session(), UUID(g.org_id), contact_id=contact_id)
+    return jsonify({"returns": [serialise(r) for r in rows]}), 200
+
+
+@api_bp.route("/api/crm/returns/places", methods=["GET"])
+@requires_auth
+def list_return_places():
+    """GL-P01b: the stock areas a return can be received into, and whether each is in bond."""
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+
+    org_id = UUID(g.org_id)
+    sites = {s.id: s.name for s in db_session().query(Site).filter(Site.org_id == org_id).all()}
+    rows = (
+        db_session()
+        .query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    places = [
+        {
+            "id": str(loc.id),
+            "name": f"{sites[loc.site_id]} · {loc.name}" if len(sites) > 1 and loc.site_id in sites else loc.name,
+            "in_bond": bool(loc.inside_licensed_area),
+        }
+        for loc in rows
+    ]
+    return jsonify({"places": places}), 200
+
+
+@api_bp.route("/api/crm/invoices/<xero_invoice_id>/returnable", methods=["GET"])
+@requires_auth
+def list_returnable_sale_lines(xero_invoice_id: str):
+    """GL-P01b: the sale lines on an invoice that goods could come back from."""
+    from app.features.crm.services.sales_returns import returnable_sale_lines
+
+    if not xero_invoice_id or len(xero_invoice_id) > 100:
+        return jsonify({"lines": []}), 200
+    return jsonify({"lines": returnable_sale_lines(db_session(), UUID(g.org_id), xero_invoice_id)}), 200
+
+
+@api_bp.route("/api/crm/returns", methods=["POST"])
+@requires_auth
+def record_customer_return():
+    """GL-P01b: record what physically came back. Only this moves stock; a credit note never does."""
+    from datetime import date
+
+    from app.features.crm.services.sales_returns import ReturnConflictError, ReturnError, record_return, serialise
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send the return as JSON"}), 400
+    ids = {}
+    for key, missing in (
+        ("credit_note_line_id", "Credit note line not found"),
+        ("allocation_id", "Sale line not found"),
+        ("location_id", "Stock area not found"),
+    ):
+        ids[key] = None
+        if data.get(key) not in (None, ""):
+            ids[key] = _uuid_or_none(str(data.get(key)))
+            if ids[key] is None:
+                return jsonify({"error": missing}), 404
+    try:
+        received_on = date.fromisoformat(str(data.get("received_on") or date.today().isoformat()))
+    except ValueError:
+        return jsonify({"error": "Received date must be YYYY-MM-DD"}), 400
+    session = db_session()
+    try:
+        ret = record_return(
+            session,
+            UUID(g.org_id),
+            UUID(g.user_id),
+            condition=str(data.get("condition") or ""),
+            quantity=data.get("quantity"),
+            received_on=received_on,
+            note=data.get("note") if isinstance(data.get("note"), str) else None,
+            credit_note_line_id=ids["credit_note_line_id"],
+            allocation_id=ids["allocation_id"],
+            location_id=ids["location_id"],
+            product_name=data.get("product_name") if isinstance(data.get("product_name"), str) else None,
+            unit=data.get("unit") if isinstance(data.get("unit"), str) else None,
+        )
+        session.commit()
+    except LookupError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 404
+    except ReturnConflictError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 409
+    except ReturnError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"return": serialise(ret)}), 201
 
 
 @api_bp.route("/api/crm/invoices/<invoice_id>/trace-items", methods=["GET"])
@@ -219,19 +544,8 @@ def create_customer_invoice(contact_id: str):
     data = request.get_json() or {}
     try:
         invoice = _crm_service().create_customer_invoice(UUID(contact_id), org_id, data)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "create_invoice")
     return jsonify({"invoice": invoice}), 201
 
 
@@ -241,19 +555,8 @@ def authorise_invoice(invoice_id: str):
     org_id = UUID(g.org_id)
     try:
         invoice = _crm_service().authorise_invoice(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "authorise_invoice")
     return jsonify({"invoice": invoice}), 200
 
 
@@ -264,19 +567,8 @@ def get_invoice_pdf(invoice_id: str):
     inline = str(request.args.get("inline") or "").strip().lower() in {"1", "true", "yes"}
     try:
         pdf_bytes, filename = _crm_service().get_invoice_pdf(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "invoice_pdf")
     return send_file(
         BytesIO(pdf_bytes),
         mimetype="application/pdf",
@@ -291,19 +583,8 @@ def get_invoice_view_url(invoice_id: str):
     org_id = UUID(g.org_id)
     try:
         view_url = _crm_service().get_invoice_view_url(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "invoice_view_url")
     return jsonify({"view_url": view_url}), 200
 
 
@@ -424,6 +705,27 @@ def list_tasks():
 def create_task():
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
+    if not isinstance(data, dict):
+        return jsonify(error="Use a task object"), 400
+    if data.get("task_type") == "tasting":
+        from app.features.compliant.service import nz_alcohol_active
+        from app.features.tastings.routes.tasting_routes import _write
+        from app.features.tastings.services import tasting_service
+
+        if not nz_alcohol_active(db_session(), org_id):
+            abort(404)
+        if set(data) != {"task_type", "tasting"}:
+            return jsonify(error="Supply tasting details with the task type"), 400
+        try:
+            response = _write(tasting_service.save_event, data["tasting"])
+        except tasting_service.TastingError as exc:
+            db_session().rollback()
+            return jsonify(error=str(exc)), exc.status
+        event = response.get_json()["tasting"]
+        from app.features.crm.services.crm_service import _serialise_task
+
+        row = _crm_service().task_repo.get_by_id(UUID(event["task_id"]), org_id)
+        return jsonify(task=_serialise_task(row, db=db_session()), tasting=event), 201
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
@@ -432,6 +734,27 @@ def create_task():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"task": task}), 201
+
+
+@api_bp.route("/api/crm/tasks/<task_id>", methods=["GET"])
+@requires_auth
+def get_task(task_id: str):
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.repositories.crm_task_repo import visible_task_filter
+    from app.features.crm.services.crm_service import _serialise_task
+
+    task_uuid = _uuid_or_none(task_id)
+    if task_uuid is None:
+        return jsonify(error="Invalid task ID"), 400
+    db = db_session()
+    task = (
+        db.query(CRMTask)
+        .filter(CRMTask.org_id == g.current_org_id, CRMTask.id == task_uuid, visible_task_filter(db, g.current_org_id))
+        .first()
+    )
+    if task is None:
+        abort(404)
+    return jsonify(task=_serialise_task(task, db=db))
 
 
 @api_bp.route("/api/crm/tasks/<task_id>", methods=["PUT"])
@@ -455,7 +778,10 @@ def delete_task(task_id: str):
     task_uuid = _uuid_or_none(task_id)
     if task_uuid is None:
         return jsonify({"error": "Invalid task ID"}), 400
-    ok = _crm_service().delete_task(task_uuid, org_id)
+    try:
+        ok = _crm_service().delete_task(task_uuid, org_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
     if not ok:
         return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True}), 200
@@ -539,6 +865,50 @@ def assign_task_lane(task_id: str):
         return jsonify({"task": task}), 200
     except (TaskError, ValueError, TypeError) as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+# ------------------------------------------------------------------
+# Excise from sales (NZ Alcohol orgs only)
+# ------------------------------------------------------------------
+
+
+def _excise_guard():
+    from app.features.compliant.service import nz_alcohol_active
+
+    if not nz_alcohol_active(db_session(), g.org_id):
+        return jsonify({"error": "Not found"}), 404
+    return None
+
+
+@api_bp.route("/api/crm/excise/months", methods=["GET"])
+@requires_auth
+def excise_months():
+    from app.features.compliant.modules.nz_alcohol import sales_excise
+
+    if (denied := _excise_guard()) is not None:
+        return denied
+    org_id = UUID(g.org_id)
+    return jsonify(
+        {
+            "months": sales_excise.months(db_session(), org_id),
+            "sources": sales_excise._sources(db_session(), org_id),
+            "rates_source": sales_excise.rates_source(),
+        }
+    ), 200
+
+
+@api_bp.route("/api/crm/excise", methods=["GET"])
+@requires_auth
+def excise_month():
+    from app.features.compliant.modules.nz_alcohol import sales_excise
+
+    if (denied := _excise_guard()) is not None:
+        return denied
+    try:
+        start = sales_excise.parse_month(request.args.get("month") or date.today().strftime("%Y-%m"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"report": sales_excise.month_report(db_session(), UUID(g.org_id), start)}), 200
 
 
 # ------------------------------------------------------------------
@@ -679,6 +1049,22 @@ def rankings():
     return jsonify({"rankings": data}), 200
 
 
+@api_bp.route("/api/crm/analytics/product-sales-by-store", methods=["GET"])
+@requires_auth
+def product_sales_by_store():
+    """Mapped product units by customer/store for an inclusive invoice-date window."""
+    try:
+        start_date = date.fromisoformat(request.args["start_date"])
+        end_inclusive = date.fromisoformat(request.args["end_date"])
+        end_date = end_inclusive + timedelta(days=1)
+    except (KeyError, ValueError, OverflowError):
+        return jsonify({"error": "start_date and end_date must be YYYY-MM-DD"}), 400
+    if start_date > end_inclusive:
+        return jsonify({"error": "start_date must be on or before end_date"}), 400
+    data = _crm_service().product_sales_by_store(UUID(g.org_id), start_date, end_date)
+    return jsonify(data), 200
+
+
 @api_bp.route("/api/crm/analytics/churn-risk", methods=["GET"])
 @requires_auth
 def churn_risk():
@@ -710,11 +1096,28 @@ def get_traceability_config():
 @api_bp.route("/api/crm/traceability-config", methods=["PUT"])
 @requires_auth
 def update_traceability_config():
+    from app.features.crm.services.crm_service import MatchingModeChangeError
+
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
+    # SALES-PERM: the matching mode decides whether waiting sales take stock. Switching it
+    # (say manual -> fifo) makes the next sync consume the whole waiting backlog, the same
+    # effect as /matching/run, so changing it needs inventory.adjust beside sales.manage. The
+    # service checks it under a lock, in the transaction that writes (no read-then-write race).
+    may_change_mode = has_permission(getattr(g, "current_user", None), "inventory.adjust")
     try:
-        updated = _crm_service().update_traceability_config(org_id, data)
+        updated = _crm_service().update_traceability_config(org_id, data, may_change_mode=may_change_mode)
+    except MatchingModeChangeError:
+        db_session.rollback()
+        logger.warning("access_denied", reason="matching_mode_needs_inventory_adjust", path=request.path)
+        return jsonify(
+            {
+                "error": "Changing how sales are matched changes stock, so it needs permission to adjust stock.",
+                "code": "permission_denied",
+            }
+        ), 403
     except ValueError as e:
+        db_session.rollback()
         return jsonify({"error": str(e)}), 400
     return jsonify(updated), 200
 
@@ -771,8 +1174,11 @@ def confirm_matching_line():
     return jsonify({"confirmed": count}), 200
 
 
+# /assign and /run decrement (or put back) finished-product stock, which the policy reserves for
+# inventory.adjust; the table can't ask for that beside sales.record, so the routes do.
 @api_bp.route("/api/crm/matching/assign", methods=["POST"])
 @requires_auth
+@requires_permission("inventory.adjust")
 def assign_matching_line():
     data = request.get_json(silent=True) or {}
     try:
@@ -789,6 +1195,7 @@ def assign_matching_line():
 
 @api_bp.route("/api/crm/matching/run", methods=["POST"])
 @requires_auth
+@requires_permission("inventory.adjust")
 def run_matching():
     """Re-run matching now (e.g. after changing the matching mode)."""
     try:
@@ -878,7 +1285,10 @@ def update_mapping(mapping_id: str):
     mapping_uuid = _uuid_or_none(mapping_id)
     if mapping_uuid is None:
         return jsonify({"error": "Invalid mapping ID"}), 400
-    mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
+    try:
+        mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     if not mapping:
         return jsonify({"error": "Mapping not found"}), 404
     return jsonify({"product_mapping": mapping}), 200

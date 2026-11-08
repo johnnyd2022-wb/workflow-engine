@@ -29,7 +29,8 @@
 <label>Received date<input name="purchase_date" type="date"></label>
 <label>Expiry<input name="expiry_date" type="date"></label>
 <label>Delivery evidence reference<input name="evidence_reference" maxlength="255" required></label>
-<p>Each receipt creates a distinct lot at the default site. Customer title stays with the lot through recorded transfers. Finished goods title is a separate decision.</p>
+<div data-site-pick hidden></div>
+<p>Each receipt creates a distinct lot at the chosen site (the default site unless you work at several). Customer title stays with the lot through recorded transfers. Finished goods title is a separate decision.</p>
 <button class="workspace-button workspace-button--primary" type="submit">Receive materials</button>
 </form></section>
 {% elif not materials_enabled %}<p class="workspace-empty">Customer material receipts are not enabled yet.</p>{% endif %}

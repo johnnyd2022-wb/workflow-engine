@@ -3,8 +3,8 @@
 CRM is feature-flagged; the E2E boot runs with crm_enabled on (local.ini), so these run
 rather than skip — a flag regression surfaces here as a failure, not silent absence.
 
-Customers in this app are sourced from Xero sync, not a create endpoint, so "create a
-customer" is not a UI flow to drive. What matters and is reliably testable: the Xero OAuth
+Customers mostly arrive from Xero sync; adding one in Biz-E and sending it to Xero is driven
+against a faked Xero in test_crm_contact_sync_ui.py, which a live-server test cannot fake. What matters and is reliably testable: the Xero OAuth
 entry degrades safely when unconfigured (it must never 500 or leak), the CRM API is
 auth-gated, and CRM data is org-scoped like everything else.
 
@@ -14,10 +14,11 @@ invoices). Tracked in the spec.
 
 Cross-tenant probes below cover the CRM objects that ARE creatable without a live Xero
 connection — notes, tasks, product mappings — the same way test_tenant_isolation.py
-covers inventory. Customers/invoices/sync-jobs are Xero-sourced only and stay out of
-E2E scope for the reason above; their org-scoping is covered at the unit level
+covers inventory. Customers and invoices need a faked Xero, which a live-server test cannot
+have, so their browser flows run in-process in test_crm_contact_sync_ui.py and
+test_crm_invoice_ui.py; their org-scoping is covered at the unit level
 (tests/test_crm.py: test_org_isolation, test_note_org_isolation,
-test_list_tasks_org_isolation) instead.
+test_list_tasks_org_isolation).
 """
 
 import uuid

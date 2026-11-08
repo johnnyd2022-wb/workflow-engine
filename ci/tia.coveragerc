@@ -1,0 +1,6 @@
+# Coverage settings for the test-impact recording on main (scripts/tia.py, docs/test-impact-analysis.md).
+# greenlet: Playwright's sync API switches greenlets; without it coverage silently stops
+# attributing lines to tests after the first browser test.
+[run]
+concurrency = thread,greenlet
+source = app,scripts

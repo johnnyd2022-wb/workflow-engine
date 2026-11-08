@@ -29,7 +29,7 @@
           <h3 id="add-inv-section-basic" class="spa-form-section-title">Basic Information</h3>
           <div>
             <label class="spa-field-label" for="add-inventory-name">Item name</label>
-            <input type="text" name="name" id="add-inventory-name" required class="spa-inp" placeholder="e.g., Steel Rods">
+            <input type="text" name="name" id="add-inventory-name" required class="spa-inp" placeholder="e.g., Juniper berries">
           </div>
           <div>
             <label class="spa-field-label" for="add-inventory-quantity">Quantity</label>
@@ -46,6 +46,8 @@
               <option value="pcs">Pieces</option>
             </select>
           </div>
+          {# Where it is going: shown only with multiple sites on, already set to where you last worked. #}
+          <div data-site-pick hidden></div>
         </section>
 
         <section id="add-inventory-source-section" class="spa-form-section" aria-labelledby="add-inv-section-source">
@@ -129,11 +131,12 @@
       >Add Inventory Item</button>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function() {
       const form = document.getElementById('add-inventory-form');
       if (!form || form.getAttribute('data-add-manual-spa-init') === '1') return;
       form.setAttribute('data-add-manual-spa-init', '1');
+      var sitePick = window.BizeSite ? window.BizeSite.mount(form.querySelector('[data-site-pick]')) : null;
 
       (function applyQueryPrefill() {
         try {
@@ -225,6 +228,7 @@
         } catch (ePre) {}
       })();
 
+      var saveKey = null; // GL-U03: kept across retries of one receipt, cleared once it is saved
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -296,7 +300,12 @@
             return false;
           }
 
-          await window.CoreAPI.createInventoryItem(payload);
+          // GL-U03: one key per thing being received. If this save reached the server but the reply
+          // was lost, pressing Save again replays it rather than adding the stock twice.
+          if (!saveKey) saveKey = window.CoreAPI._newIdempotencyKey();
+          if (window.BizeSite) window.BizeSite.into(payload, sitePick);
+          await window.CoreAPI.createInventoryItem(payload, { idempotencyKey: saveKey });
+          saveKey = null;
 
           window.showNotification && window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');
 
@@ -312,6 +321,8 @@
           } catch (eR) {}
           window.location.href = '/core';
         } catch (err) {
+          // The server said no (bad input, permission): the next attempt is a new request.
+          if (err && err.status && err.status < 500 && err.status !== 401) saveKey = null;
           console.error('Failed to create inventory item', err);
           window.showNotification && window.showNotification('error', 'Failed to Add Item', 'There was a problem saving this inventory item.');
         }

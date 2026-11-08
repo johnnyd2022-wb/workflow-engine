@@ -6,6 +6,8 @@ Everything comes from `app.ui.page_registry`; templates only render what this re
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from flask import g, has_request_context, request
 
 from app.core.security.access_policy import has_permission
@@ -62,11 +64,19 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
         or (
             tab is not None
             and tab.path == path
-            and tab.key in {group[0] for group in WORKSPACE_TAB_GROUPS.get(section, ())}
+            # A section without groups shows every tab, so each tab's page is in the row.
+            and (
+                section not in WORKSPACE_TAB_GROUPS or tab.key in {group[0] for group in WORKSPACE_TAB_GROUPS[section]}
+            )
         )
     ):
         return []
     crumbs = [{"label": SECTION_LABELS[section], "href": _HOME[section]}]
+    # A secondary page sits under the primary tab that lights up for it (Suppliers under Inventory),
+    # so going up passes through that tab rather than jumping to the section's home.
+    primary = _primary_tab(section, tab)
+    if primary is not None and primary.path not in {path, crumbs[-1]["href"]}:
+        crumbs.append({"label": primary.label, "href": primary.path})
     if tab is not None and tab.path not in {path, crumbs[-1]["href"]}:
         crumbs.append({"label": tab.label, "href": tab.path})
     chain = []
@@ -78,8 +88,9 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
         chain.append(found)
         parent = found.parent
     for found in reversed(chain):
-        if found.path not in {crumb["href"] for crumb in crumbs}:
-            crumbs.append({"label": found.title, "href": found.path})
+        href = _REDIRECTS.get(found.path, found.path)
+        if href not in {crumb["href"] for crumb in crumbs}:
+            crumbs.append({"label": found.title, "href": _with_kept_query(href)})
     if exact:
         crumbs.append({"label": page.title, "href": None})
     else:
@@ -88,8 +99,40 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
     return crumbs
 
 
+# Registered paths that only redirect: a crumb to one would lead back round, so it points where the
+# redirect goes (and drops out when that page is already in the trail).
+_REDIRECTS = {"/compliant/nz-alcohol/np3-audit": "/compliant/nz-alcohol/food-safety"}
+
+# Parent pages that need the current page's query to mean anything: the workflow editor without
+# ``?id=`` opens no workflow, so a step screen's way up keeps the workflow it came from.
+_KEPT_QUERY = {"/core/flows": ("id",)}
+
+
+def _with_kept_query(href: str) -> str:
+    keys = _KEPT_QUERY.get(href)
+    if not keys or not has_request_context():
+        return href
+    kept = [(key, request.args[key]) for key in keys if request.args.get(key)]
+    return href + ("?" + urlencode(kept) if kept else "")
+
+
+def _primary_tab(section: str, tab: Tab | None) -> Tab | None:
+    """The primary tab a secondary tab's page sits under, if the signed-in person can open it."""
+    if tab is None:
+        return None
+    group = next((group for group in WORKSPACE_TAB_GROUPS.get(section, ()) if tab.key in group), None)
+    # An Overview tab is the section's home, which the trail already starts with.
+    if group is None or group[0] in (tab.key, "overview"):
+        return None
+    primary = next((t for t in SECTION_TABS.get(section, ()) if t.key == group[0]), None)
+    user = getattr(g, "current_user", None) if has_request_context() else None
+    if primary is None or (user is not None and not _permitted(primary, user)):
+        return None
+    return primary
+
+
 def _conditions() -> dict[str, bool]:
-    """Setup-dependent tabs, read once per request (compliance pages only)."""
+    """Setup-dependent tabs, read once per request (compliance, sales and settings pages only)."""
     # Cached on the request's own environ: `g` can outlive a request when an app context is reused.
     cached = request.environ.get("bize.nav_conditions")
     if cached is not None:
@@ -97,8 +140,9 @@ def _conditions() -> dict[str, bool]:
     from uuid import UUID
 
     from app.core.db import db_session
+    from app.core.db.site_entitlement import entitled
     from app.features.compliant.routes.page_routes import _food_safety_programme
-    from app.features.compliant.service import ComplianceService
+    from app.features.compliant.service import ComplianceService, nz_alcohol_active
 
     org_id = getattr(g, "org_id", None)
     settings: dict = {}
@@ -110,6 +154,9 @@ def _conditions() -> dict[str, bool]:
         "food_safety": programme != "none",
         "licensing": bool(settings.get("liquor_licence_types")),
         "programme": programme,
+        "nz_alcohol": nz_alcohol_active(db_session(), org_id) if org_id else False,
+        # Settings, Sites: only where the deployment and the organisation's plan allow it.
+        "multi_site": entitled(db_session(), UUID(str(org_id))) if org_id else False,
     }
     request.environ["bize.nav_conditions"] = conditions
     return conditions
@@ -163,7 +210,12 @@ def _workspace_links(section: str | None, key: str | None, user, conditions: dic
             "food_safety": tab.when == "food_safety",
         }
         for tab in all_tabs
-        if tab.key not in primary_keys and tab.key in related and tab.path != request.path and _permitted(tab, user)
+        if tab.key not in primary_keys
+        and tab.key in related
+        and tab.path != request.path
+        and _permitted(tab, user)
+        # Module-gated links aren't in the page at all for orgs without the module.
+        and not (tab.when == "nz_alcohol" and _hidden(tab, conditions))
     ]
     if section == "production" and primary == "overview" and has_permission(user, "production.view"):
         links.append({"key": "tasks", "label": "Production tasks", "href": "/core/tasks", "hidden": False})
@@ -197,7 +249,7 @@ def nav_context() -> dict:
     if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows"}:
         tab_key = request.args["tab"]
     tabs = section_tabs(section, user) if user is not None else []
-    conditions = _conditions() if section == "compliance" and user is not None else {}
+    conditions = _conditions() if section in ("compliance", "sales", "settings") and user is not None else {}
     primary_key = _primary_key(section, tab_key, tabs)
     items = []
     for tab in tabs:

@@ -22,7 +22,11 @@ from app.core.security.access_policy import requirement_for
 from app.features.planning import batch_service, demand_service, start_service
 from app.features.planning import material_adapter as adapter
 from app.features.planning.batch_models import PlanningBatch
-from app.features.planning.forecast_models import PlanningMaterialAssessment, PlanningMaterialBatchAssessment
+from app.features.planning.forecast_models import (
+    PlanningMaterialAssessment,
+    PlanningMaterialBatchAssessment,
+    PlanningMaterialCommitment,
+)
 from tests.features.planning import test_batches as fixtures
 
 demand_world = fixtures.demand_world
@@ -31,6 +35,7 @@ base_board_clients = fixtures.board_clients
 demand_clients = fixtures.demand_clients
 flask_app = fixtures.flask_app
 TODAY = fixtures.TODAY
+service_id = batch_service._id
 
 
 def lot(db, org_id, **changes):
@@ -117,35 +122,35 @@ def test_owner_schema_absence_and_json_clearance_never_grant_availability(db, de
     assert all(row.forecast_ready_date is None for row in batches)
 
 
-def test_pending_execution_and_another_planner_request_cannot_clear_unknown_holds(db, demand_world, monkeypatch):
+def test_inputs_recorded_on_an_unfinished_step_are_held_and_json_hold_markers_still_block(
+    db, demand_world, monkeypatch
+):
+    """GL-P07 B2: a lot is available to planning, less what an unfinished execution step has
+    recorded using. Hold markers in a lot's JSON still can't be read as clearance."""
     org_id, _, _, own, _, _, setting, batches = prepare(db, demand_world)
     monkeypatch.setattr(adapter, "resolve_owner", lambda item: (True, None))
     adapter.assess(db, org_id, {}, today=TODAY)
-    assert all(row["material_start_date"] is None for row in results(db, org_id))
+    # 5 kg bound, 2 kg a batch: two of the three batches are covered.
+    assert [row["material_status"] for row in results(db, org_id)] == ["on_time", "on_time", "blocked"]
     execution = ExecutionRepository(db).create_execution(org_id, setting.process_id, commit=False)
     pending = (
         db.query(ExecutionStep).filter(ExecutionStep.org_id == org_id, ExecutionStep.execution_id == execution.id).one()
     )
-    pending.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "2", "unit": "kg"}]
-    second = demand_service.create_demand(
-        db,
-        org_id,
-        fixtures.payload(
-            setting.source_output_id, reference="Another request", due_date=(TODAY + timedelta(days=2)).isoformat()
-        ),
-    )
-    batch_service.plan_demand(db, org_id, second.id, {}, today=TODAY)
+    pending.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "2000", "unit": "g"}]
+    db.flush()
+    adapter.assess(db, org_id, {}, today=TODAY)
+    # 2 kg of it is spoken for (recorded in grams): one batch is covered.
+    assert [row["material_status"] for row in results(db, org_id)] == ["on_time", "blocked", "blocked"]
     own.extra_data = {"holds_checked": True, "committed_quantity": "0", "stock_status": "available"}
     db.flush()
     adapter.assess(db, org_id, {}, today=TODAY)
     values = results(db, org_id)
-    assert len(values) == 6
     assert all(
         row["material_status"] == "blocked" and not row["allocations"] and row["material_start_date"] is None
         for row in values
     )
-    assert own.quantity == Decimal(5) and all(row.forecast_ready_date is None for row in batches)
-    assert "commitments" in values[0]["reasons"][0]
+    assert own.quantity == Decimal(5)
+    assert batches[0].status == "blocked"
 
 
 @pytest.mark.parametrize(
@@ -258,20 +263,31 @@ def test_known_readiness_delays_only_material_estimate_and_unknown_output_stays_
     assert all(row.forecast_ready_date is None for row in batches)
 
 
-def test_missing_mapping_blocks_without_spending_a_known_lot(db, demand_world, monkeypatch):
-    org_id, _, _, own, _, _, _, batches = prepare(db, demand_world)
+def test_an_unbound_input_is_met_from_that_materials_lots_first_expiring_first(db, demand_world, monkeypatch):
+    """GL-P07 B2: no lot chosen means the business's own lots of that material, soonest
+    expiry first, in any unit that converts. Another business's lot of it is never offered."""
+    org_id, _, _, own, sibling, foreign, _, batches = prepare(db, demand_world)
     for batch in batches:
         batch.snapshot = {**batch.snapshot, "material_bindings": []}
+    sibling.expiry_date = TODAY + timedelta(days=30)
+    own.expiry_date = TODAY + timedelta(days=10)
+    grams = lot(db, org_id, name="  sugar ", quantity=Decimal(1000), unit="g", expiry_date=TODAY + timedelta(days=5))
     db.flush()
     trusted_boundary(monkeypatch)
     adapter.assess(db, org_id, {}, today=TODAY)
-    assert all(
-        row["material_status"] == "blocked"
-        and not row["allocations"]
-        and "Select an exact raw lot" in row["reasons"][0]
-        for row in results(db, org_id)
+    values = results(db, org_id)
+    assert all(row["material_status"] == "on_time" for row in values)
+    # 1 kg in grams expires first, then the 5 kg lot, then the 100 kg one.
+    assert [[(a["lot_id"], a["quantity"]) for a in row["allocations"]] for row in values] == [
+        [(str(grams.id), "1000.0000"), (str(own.id), "1000.0000")],
+        [(str(own.id), "2000.0000")],
+        [(str(own.id), "2000.0000")],
+    ]
+    held = adapter.commitments_for_items(db, org_id, [own.id, grams.id, sibling.id, foreign.id])
+    assert sorted((lot_id, row["quantity"], row["unit"]) for lot_id, rows in held.items() for row in rows) == sorted(
+        [(str(grams.id), "1000", "g"), (str(own.id), "1", "kg"), (str(own.id), "2", "kg"), (str(own.id), "2", "kg")]
     )
-    assert own.quantity == Decimal(5)
+    assert own.quantity == Decimal(5) and grams.quantity == Decimal(1000)  # held, not taken
 
 
 def test_external_intermediate_is_not_inferred_from_other_planned_output(db, demand_world, monkeypatch):
@@ -304,7 +320,7 @@ def test_external_intermediate_is_not_inferred_from_other_planned_output(db, dem
     assert all(
         row["material_status"] == "blocked"
         and row["material_start_date"] is None
-        and "intermediate supply is unresolved" in row["reasons"][0]
+        and "made by another workflow" in row["reasons"][0]
         for row in results(db, org_id)
     )
 
@@ -371,7 +387,10 @@ def test_all_batches_share_balance_and_catalog_reads_are_bounded_without_n_plus_
     event.listen(db.get_bind(), "before_cursor_execute", collect)
     try:
         adapter.assess(db, org_id, {}, today=TODAY)
-        assert len(queries) == 7
+        # GL-P07 B2 adds two, still one each however many batches: inputs held by unfinished
+        # steps, and the lots being committed.
+        # +1 since GL-P02: one open-holds lookup for every lot seen (constant, not per batch).
+        assert len(queries) == 10
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", collect)
 
@@ -493,7 +512,7 @@ def test_post_returns_its_own_run_when_another_assessment_commits_before_respons
     monkeypatch.setattr(routes.db_session, "commit", commit)
 
 
-def test_concurrent_observation_requests_preserve_sequence_and_never_reserve_stock(db, demand_world):
+def test_concurrent_assessments_keep_their_order_and_one_set_of_commitments(db, demand_world):
     from concurrent.futures import ThreadPoolExecutor
 
     from app.core.db import SessionLocal
@@ -515,7 +534,12 @@ def test_concurrent_observation_requests_preserve_sequence_and_never_reserve_sto
         assert db.query(InventoryItem).filter(
             InventoryItem.org_id == org_id, InventoryItem.id == lot_id
         ).one().quantity == Decimal(5)
-        assert all(row["material_start_date"] is None for row in results(db, org_id))
+        # Each run re-commits every live batch: only the later run's commitments stay active.
+        latest = adapter.latest(db, org_id)
+        active = db.query(PlanningMaterialCommitment).filter(
+            PlanningMaterialCommitment.org_id == org_id, PlanningMaterialCommitment.status == "active"
+        )
+        assert {row.assessment_id for row in active} == {service_id(latest["id"])}
     finally:
         db.rollback()
         identities = demand_world[:2]
@@ -523,3 +547,91 @@ def test_concurrent_observation_requests_preserve_sequence_and_never_reserve_sto
             db.query(model).filter(model.org_id.in_(identities)).delete(synchronize_session=False)
         db.commit()
         fixtures._cleanup_world(db, identities)
+
+
+def _active(db, org_id, batch):
+    return (
+        db.query(PlanningMaterialCommitment)
+        .filter(
+            PlanningMaterialCommitment.org_id == org_id,
+            PlanningMaterialCommitment.batch_id == batch.id,
+            PlanningMaterialCommitment.status == "active",
+        )
+        .count()
+    )
+
+
+def test_cancelling_releases_and_starting_consumes_what_a_batch_holds(db, demand_world, monkeypatch):
+    """GL-P07 B2: a commitment ends when its batch does. Cancelled: released for others.
+    Started: consumed by the batch being made. Cancelling the demand releases all of it."""
+    org_id, _, _, own, _, _, _, batches = prepare(db, demand_world)
+    trusted_boundary(monkeypatch)
+    adapter.assess(db, org_id, {}, today=TODAY)
+    assert [_active(db, org_id, batch) for batch in batches] == [1, 1, 0]
+    batch_service.update_batch(db, org_id, batches[0].id, {"action": "cancel", "expected_revision": 1}, today=TODAY)
+    monkeypatch.setattr(start_service, "evaluate_start", lambda *args: start_service.StartCheck(()))
+    start_service.start_batch(db, org_id, batches[1].id, {"expected_revision": 1}, "commitments-start")
+    statuses = {
+        row.batch_id: row.status
+        for row in db.query(PlanningMaterialCommitment).filter(PlanningMaterialCommitment.org_id == org_id)
+    }
+    assert statuses == {batches[0].id: "released", batches[1].id: "consumed"}
+    assert adapter.commitments_for_items(db, org_id, [own.id]) == {}
+    # Checking again commits the freed stock to the batch that was short.
+    adapter.assess(db, org_id, {}, today=TODAY)
+    assert _active(db, org_id, batches[2]) == 1
+
+
+def test_cancelling_a_demand_releases_its_batches_commitments(db, demand_world, monkeypatch):
+    org_id, _, _, _, _, _, _, batches = prepare(db, demand_world)
+    trusted_boundary(monkeypatch)
+    adapter.assess(db, org_id, {}, today=TODAY)
+    demand_service.cancel_demand(db, org_id, batches[0].demand_id)
+    assert [_active(db, org_id, batch) for batch in batches] == [0, 0, 0]
+
+
+def _one_bound_rest_unbound(db, demand_world, monkeypatch, own_available):
+    org_id, _, _, own, sibling, _, _, batches = prepare(db, demand_world)
+    sibling.name = "Molasses"  # the only Sugar is the bound lot
+    for batch in batches[1:]:
+        batch.snapshot = {**batch.snapshot, "material_bindings": []}
+    db.flush()
+    trusted_boundary(
+        monkeypatch,
+        lambda db, org, item: adapter.LotAvailability(own_available if item.id == own.id else item.quantity, TODAY, ()),
+    )
+    adapter.assess(db, org_id, {}, today=TODAY)
+    return own, results(db, org_id)
+
+
+def test_a_bound_lots_leftover_meets_unbound_inputs(db, demand_world, monkeypatch):
+    # Breaker review of !611: binding 2 kg of a 5 kg lot hid the other 3 kg from unbound batches.
+    own, values = _one_bound_rest_unbound(db, demand_world, monkeypatch, Decimal(5))
+    assert values[0]["allocations"][0]["lot_id"] == str(own.id)
+    assert values[1]["material_status"] == "on_time"
+    assert {row["lot_id"] for row in values[1]["allocations"]} == {str(own.id)}
+
+
+def test_a_bound_lot_is_not_counted_twice(db, demand_world, monkeypatch):
+    # 3 kg: the binding takes 2 kg first, so the unbound 2 kg batch is short, not double-served.
+    _, values = _one_bound_rest_unbound(db, demand_world, monkeypatch, Decimal(3))
+    assert values[0]["material_status"] == "on_time"
+    assert values[1]["material_status"] != "on_time"
+
+
+# Breaker review of !611, round 2: a binding holds its lot only for a batch that can use it.
+def test_bound_lot_is_not_reserved_for_a_batch_that_cannot_use_it(db, demand_world, monkeypatch):
+    org_id, _, _, own, sibling, _, _, batches = prepare(db, demand_world)
+    sibling.name = "Molasses"
+    for batch in batches[1:]:
+        batch.snapshot = {**batch.snapshot, "material_bindings": []}
+    other_site = Site(org_id=org_id, name="Other site", is_default=False)
+    db.add(other_site)
+    db.flush()
+    batches[0].site_id = other_site.id  # its bound lot is at the original site, so it cannot use it
+    db.flush()
+    trusted_boundary(monkeypatch)
+    adapter.assess(db, org_id, {}, today=TODAY)
+    values = results(db, org_id)
+    assert values[0]["material_status"] == "blocked"
+    assert [row["material_status"] for row in values[1:]] == ["on_time", "on_time"]

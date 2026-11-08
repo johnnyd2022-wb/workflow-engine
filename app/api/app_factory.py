@@ -5,13 +5,15 @@ import os
 import re
 
 import requests
-from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session
+from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp, invite_bp
 from app.api.routes.org_routes import org_bp, people_pages
+from app.core.security import csp
 from app.core.security.access_policy import setup_access_policy
 from app.core.security.two_factor_policy import resolve_require_admin_2fa, setup_two_factor_policy
 from app.observability import (
@@ -30,7 +32,8 @@ from app.utils.config_loader import config
 # form with no live password guidance at all. Add here only for assets a logged-out page
 # genuinely loads, and only when the asset is not org-specific: these bytes are
 # world-readable.
-PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js"})
+# actions.js: the landing page and the public print pages need it before anyone signs in (GL-S03).
+PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js", "actions.js"})
 
 
 def create_app():
@@ -138,10 +141,18 @@ def create_app():
 
     @app.context_processor
     def _inject_google_sign_in():
-        return {"google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False)}
+        return {
+            "csp_nonce": csp.csp_nonce,
+            "google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False),
+            "support_email": config.support_email,
+        }
 
     app.register_blueprint(org_bp)
     app.register_blueprint(people_pages)
+
+    from app.ui.legal import legal_bp
+
+    app.register_blueprint(legal_bp)
 
     # Register core blueprint
     from app.core.backend.backend import core_bp
@@ -151,6 +162,27 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # GL-P02: quality hold and release on a lot.
+    from app.core.backend.lot_holds_routes import lot_holds_bp
+
+    app.register_blueprint(lot_holds_bp)
+    # GL-P10: download every record the business holds as one ZIP.
+    from app.features.data_export.routes import bp as data_export_bp
+
+    app.register_blueprint(data_export_bp)
+    # GL-P03: product recall cases (on operational cases).
+    from app.features.recalls.routes import bp as recalls_bp
+
+    app.register_blueprint(recalls_bp)
+    # Getting started (GL-P09): the guided first-day path.
+    from app.core.backend.getting_started import getting_started_bp
+
+    app.register_blueprint(getting_started_bp)
+    # Record a production step: the Production overview's main button (go-live UX blocker).
+    from app.core.backend.record_step import record_step_bp
+
+    app.register_blueprint(record_step_bp)
+
     # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
     from app.core.backend.stock_locations import stock_locations_bp
 
@@ -206,6 +238,9 @@ def create_app():
             logger.exception("optional_product_unavailable", product="crm")
         else:
             crm_available = True
+            from app.features.tastings.routes.tasting_routes import bp as tastings_bp
+
+            app.register_blueprint(tastings_bp)
 
     # Compliant is a separately mounted, feature-gated product area.  Its checks register
     # with CoreChecksRunner only when this flag is on; core remains usable without it.
@@ -350,6 +385,23 @@ def create_app():
         ]
         return Response(upstream_response.content, status=upstream_response.status_code, headers=response_headers)
 
+    # Intentionally public, rate-limited: the browser posts CSP violation reports with no
+    # session or CSRF token. Only the directive, the blocked origin and path, the page path
+    # and a 40-character sample are logged (app/core/security/csp.py).
+    # Keyed on the address alone: the default key reads a JSON body for an email, which here
+    # would read the whole body before the size check below.
+    @app.post(csp.REPORT_PATH)  # nosemgrep: route-missing-requires-auth
+    @limiter.limit("60 per minute", key_func=get_remote_address)
+    def csp_report():
+        # Read no more than a report can be: a declared oversized body is refused unread, and an
+        # undeclared one is read only to one byte past the limit (which parse_report then drops).
+        if (request.content_length or 0) > csp.MAX_REPORT_BYTES:
+            return "", 413
+        raw = request.stream.read(csp.MAX_REPORT_BYTES + 1)
+        for violation in csp.parse_report(raw):
+            logger.warning("csp_violation", **violation)
+        return "", 204
+
     # Intentionally public, rate-limited ingest endpoint for browser RUM (Faro); the
     # browser has no session-authenticated way to call this before/during page load.
     @app.post("/telemetry")  # nosemgrep: route-missing-requires-auth
@@ -440,6 +492,9 @@ def create_app():
     install_site_request_validation(app)
     setup_session_security(app)
     setup_observability(app)
+    from app.api.error_pages import register_error_pages
+
+    register_error_pages(app)  # GL-C04: 404/500 say how to get help, with a reference
 
     # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
     # This ensures all connections are encrypted, preventing man-in-the-middle attacks
@@ -503,24 +558,14 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
-            # static.cloudflareinsights.com is Cloudflare's RUM beacon, auto-injected by
-            # the CF proxy on the deployed environments (it POSTs back to
-            # cloudflareinsights.com/cdn-cgi/rum). Allowed here so it doesn't spam a CSP
-            # violation on every page; disable "Web Analytics / Browser Insights" in the
-            # Cloudflare dashboard instead if the same-origin /telemetry RUM is enough.
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com; "
-                "img-src 'self' data:; "
-                "connect-src 'self' https://cloudflareinsights.com; "
-                # PostHog's vendored session-recording bundle spins up its rrweb
-                # compression worker from a data: URI rather than a same-origin
-                # script file; without this, browsers silently refuse to create
-                # the worker and no recording snapshots are ever captured.
-                "worker-src 'self' data: blob:"
-            )
+            # GL-S03: the nonce policy is enforced; report-only remains for regression telemetry.
+            framable = response.headers.get("X-Frame-Options") == "SAMEORIGIN"
+            nonce = csp.csp_nonce()
+            response.headers["Content-Security-Policy"] = csp.enforced_policy(nonce, framable=framable)
+            if response.mimetype == "text/html":
+                response.headers["Content-Security-Policy-Report-Only"] = csp.report_only_policy(
+                    nonce, framable=framable
+                )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
         # This prevents protocol downgrade attacks and cookie hijacking
@@ -541,8 +586,36 @@ def create_app():
         # a CSRF header. The SPA may still send X-CSRFToken; exemption only skips validation.
         # SameSite=Strict on the session cookie limits cross-site cookie use in browsers.
         for endpoint, view in app.view_functions.items():
-            if endpoint.startswith("auth.") or endpoint in {"ingest_faro_telemetry", "ingest_posthog_telemetry"}:
+            if endpoint.startswith("auth.") or endpoint in {
+                "ingest_faro_telemetry",
+                "ingest_posthog_telemetry",
+                "csp_report",
+            }:
                 csrf.exempt(view)
+
+        from flask_wtf.csrf import CSRFError
+
+        @app.errorhandler(CSRFError)
+        def handle_csrf_error(e):
+            # GL-U03: a write from a page whose session has ended fails CSRF before it reaches the
+            # sign-in check (the CSRF secret went with the session). Say "signed out", as a 401
+            # would, so the page offers to sign in again. A signed-in session with a stale token
+            # (it signed in again in another tab) gets code "csrf", so the page can fetch a fresh
+            # token from /auth/csrf-token and retry. Public forms (sign-in, Google sign-in, invite
+            # acceptance) and the customer portal keep Flask-WTF's own 400: nobody was signed in.
+            from app.core.security.access_policy import PUBLIC, requirement_for
+
+            if request.path.startswith("/portal") or requirement_for(request.endpoint or "", request.method) == PUBLIC:
+                return e
+            if not session.get("user_id"):
+                return jsonify(
+                    {
+                        "error": "Session expired or not authenticated",
+                        "message": "Session expired or not authenticated",
+                        "code": "signed_out",
+                    }
+                ), 401
+            return jsonify({"error": e.description, "code": "csrf"}), 400
     except ImportError:
         # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
         if config.environment not in ("local", "test"):
@@ -625,7 +698,7 @@ def create_app():
     # so the CDN edge-caches them after the first hit and the origin stops being in the
     # asset path.
     #
-    # Scope: /static/js, /static/css, /static/inventory, /static/img (+ /crm/static/*
+    # Scope: /static/js, /static/css, /static/inventory, /static/img, /static/fonts (+ /crm/static/*
     # when CRM is on). /ui/shared (per-file auth gate) stays on its Flask route.
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
     # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
@@ -670,6 +743,8 @@ def create_app():
         app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
+    # Self-hosted webfonts (fonts.css): woff2 files plus their licence note, all public.
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "fonts"), prefix="static/fonts/")
     if crm_available:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")

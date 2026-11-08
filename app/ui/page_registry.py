@@ -24,15 +24,17 @@ class Page:
 
 
 PAGES: tuple[Page, ...] = (
-    Page("/core/dashboard", "dashboard", None, "Dashboard", None, None),
+    Page("/core/dashboard", "dashboard", None, "Home", None, None),
     Page("/core/go-live", "dashboard", None, "Go live", None, None),
+    Page("/core/getting-started", "dashboard", None, "Getting started", None, None),
     Page("/core", "production", "overview", "Production overview", None, None),
     Page("/core/cases", "production", "overview", "Cases", None, None),
     Page("/core/cases/new", "production", "overview", "New case", "/core/cases", None),
-    Page("/core/tasks", "production", "overview", "Tasks", None, None),
+    Page("/core/tasks", "production", "overview", "Production tasks", None, None),
     Page("/core/planner", "production", "planner", "Production demand", None, None),
     Page("/core/planner/board", "production", "planner", "Production board", "/core/planner", None),
     Page("/core/executions/live", "production", "batches", "Batches", None, None),
+    Page("/core/record", "production", "overview", "Record a production step", "/core", None),
     Page("/core/processes", "production", "workflows", "Product workflows", None, None),
     Page("/core/flows", "production", "workflows", "Workflow editor", "/core/processes", None),
     Page("/core/flows/create/start", "production", "workflows", "Create a workflow", "/core/processes", None),
@@ -76,10 +78,50 @@ PAGES: tuple[Page, ...] = (
         "compliance",
         "np3",
         "NP3 food safety",
-        "/compliant/nz-alcohol/np3-audit",
+        None,  # the Food safety tab's own page; /np3-audit only redirects here
+        "compliant",
+    ),
+    Page(
+        "/compliant/nz-alcohol/food-safety/checks",
+        "compliance",
+        "np3",
+        "Checks",
+        None,  # the Food safety tab already leads the trail
         "compliant",
     ),
     Page("/compliant/nz-alcohol/customs", "compliance", "customs", "Customs", None, "compliant"),
+    Page(
+        "/compliant/nz-alcohol/customs/stock",
+        "compliance",
+        "customs",
+        "Customs stock",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
+    Page(
+        "/compliant/nz-alcohol/customs/transfers",
+        "compliance",
+        "customs",
+        "Sales to other CCAs",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
+    Page(
+        "/compliant/nz-alcohol/customs/records",
+        "compliance",
+        "customs",
+        "Records for Customs",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
+    Page(
+        "/compliant/nz-alcohol/customs/settings",
+        "compliance",
+        "customs",
+        "Customs settings",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
     Page(
         "/compliant/nz-alcohol/evidence",
         "compliance",
@@ -89,7 +131,14 @@ PAGES: tuple[Page, ...] = (
         "compliant",
     ),
     Page("/compliant/nz-alcohol/licensing", "compliance", "licensing", "Licensing", None, "compliant"),
-    Page("/compliant/nz-alcohol/premises", "compliance", "premises", "Premises", None, "compliant"),
+    Page(
+        "/compliant/nz-alcohol/premises",
+        "compliance",
+        "customs",
+        "Customs licences and areas",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
     Page(
         "/compliant/nz-alcohol/food-registrations",
         "compliance",
@@ -104,9 +153,11 @@ PAGES: tuple[Page, ...] = (
     ),
     Page("/crm", "sales", "overview", "Sales overview", None, "crm"),
     Page("/crm/customers", "sales", "customers", "Customers", None, "crm"),
+    Page("/crm/tastings", "sales", "tastings", "Tastings", None, "crm"),
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
+    Page("/crm/excise", "sales", "excise", "Excise estimate", None, "crm"),
     Page("/core/settings", "settings", "account", "My account", None, None),
     Page("/core/people", "settings", "people", "People and roles", None, None),
     Page("/core/sites", "settings", "sites", "Sites", None, None),
@@ -142,7 +193,7 @@ class Tab:
 
 
 SECTION_LABELS = {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "production": "Production",
     "compliance": "Compliance",
     "sales": "Sales",
@@ -161,10 +212,9 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     ),
     "compliance": (
         Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
-        Tab("np3", "Food safety", "/compliant/nz-alcohol/np3-audit", ("compliance.view",), when="food_safety"),
+        Tab("np3", "Food safety", "/compliant/nz-alcohol/food-safety", ("compliance.view",), when="food_safety"),
         Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
         Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
-        Tab("premises", "Premises", "/compliant/nz-alcohol/premises", ("compliance.view",)),
         Tab(
             "food-registrations",
             "Food registrations",
@@ -179,11 +229,24 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
     "sales": (
         Tab("overview", "Overview", "/crm", ("sales.view",)),
         Tab("customers", "Customers", "/crm/customers", ("sales.view",)),
-        Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
+        Tab("tasks", "Sales tasks", "/crm/tasks", ("sales.view",)),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
+        # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales. GL-U02b: one name
+        # per place: the estimate lives in Sales, the filing draft in Compliance → Customs.
+        Tab("excise", "Excise estimate", "/crm/excise", ("sales.view",), when="nz_alcohol"),
         # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
+    ),
+    # Plan 2.5: one row for your account and the organisation's setup. Sales and Compliance
+    # settings stay in their own sections, beside the work they configure.
+    "settings": (
+        Tab("account", "Account", "/core/settings"),
+        Tab("people", "People", "/core/people", ("users.manage",)),
+        # Only where the deployment and the organisation's plan allow multiple sites (GL-P07).
+        Tab("sites", "Sites", "/core/sites", ("settings.manage",), when="multi_site"),
+        Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
+        Tab("section-settings", "Task settings", "/core/tasks/configuration", ("production.view",)),
     ),
 }
 
@@ -198,10 +261,15 @@ WORKSPACE_TAB_GROUPS = {
         ("inventory", "suppliers"),
     ),
     "compliance": (
-        ("overview", "premises", "tools", "configuration"),
+        ("overview", "tools", "configuration"),
         ("np3", "food-registrations"),
         ("customs",),
         ("licensing",),
     ),
-    "sales": (("overview", "configuration"), ("customers",), ("tasks",), ("analytics", "matching")),
+    "sales": (
+        ("overview", "configuration", "excise"),
+        ("customers",),
+        ("tasks",),
+        ("analytics", "matching"),
+    ),
 }

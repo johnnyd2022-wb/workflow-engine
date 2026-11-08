@@ -1,17 +1,32 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}{{ programme_short }} · NZ Alcohol · Compliance{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/np3.css">{% endblock %}
 {% block content %}
-<main class="compliant-shell" data-np3-audit-root data-programme-short="{{ programme_short }}" aria-busy="true">
-  <header class="compliant-hero np3-audit-hero">
-    <div><p class="compliant-eyebrow">{{ programme_label|upper }}</p><p><a class="np3-guidance-link" href="{{ guidance_url }}" target="_blank" rel="noopener noreferrer">Open the latest MPI {{ programme_label }} guidance ↗</a></p></div>
-    <div class="compliant-summary" role="status" aria-live="polite"><span data-np3-date>No verification visit booked.</span></div>
-  </header>
+<main class="max-content workspace-overview workspace-page np3-page np3-summary-page" data-np3-audit-root data-np3-view="summary" data-programme-short="{{ programme_short }}" aria-busy="true">
+  {% include "compliant/_np3_header.html" %}
   <p class="compliant-error" data-np3-error hidden></p>
+
+  <section class="np3-readiness" data-np3-readiness aria-label="{{ programme_short }} readiness">
+    <div class="np3-facts" data-np3-health-cards aria-live="polite"></div>
+    <p class="np3-core-line" data-np3-core-stats></p>
+  </section>
+
   {% include "compliant/_verification_panel.html" %}
-  <section class="np3-overview-panels"><section class="np3-health-dashboard" aria-label="Audit health"><p class="compliant-eyebrow">AUDIT HEALTH</p><div class="np3-health-progress" data-np3-health-progress aria-live="polite"></div><div class="np3-health-cards" data-np3-health-cards aria-live="polite"></div></section><section class="np3-core-evidence" data-np3-core-evidence><p class="compliant-eyebrow">LIVE FROM CORE</p><div class="np3-core-evidence__stats" data-np3-core-stats></div></section></section>
-  <section class="np3-audit-layout"><aside class="np3-audit-rail" aria-label="{{ programme_short }} categories and register"><p class="compliant-eyebrow np3-audit-rail__label">CATEGORY</p><section class="np3-check-search" aria-label="Search {{ programme_short }} checks"><svg class="np3-check-search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input id="np3-check-search" type="search" data-np3-check-search autocomplete="off" aria-label="Search {{ programme_short }} checks" placeholder="Search"></section><div data-np3-category-tabs class="np3-category-tabs" role="tablist" aria-label="{{ programme_short }} categories"></div><section class="np3-rail-register" aria-label="Evidence register"><p class="compliant-eyebrow">EVIDENCE REGISTER</p><a class="np3-download" href="/api/compliant/np3-audit?format=pdf" hx-boost="false">Download evidence pack (.pdf)</a><a class="np3-download" href="/api/compliant/np3-audit?format=csv" hx-boost="false">Download register (.csv)</a></section><section class="np3-audit-prep"><details><summary><span><span class="compliant-eyebrow">AUDIT PREP</span>Prepare the last details before your visit</span><span class="np3-audit-prep__hint">Open checklist</span></summary><div class="np3-prep-panel"><div><p class="compliant-eyebrow">BEFORE THE VISIT</p><h2>Bring the things that cannot be reconstructed later.</h2></div><ul data-np3-preparation></ul></div></details></section></aside><div class="np3-audit-content"><section class="np3-audit-register"><div class="np3-audit-main"><header class="np3-audit-main__heading"><h2 data-np3-active-category>Every verification topic, its current proof, and the next gap.</h2></header><section class="np3-work-queue" data-np3-work-queue hidden aria-labelledby="np3-work-queue-title"><div><p class="compliant-eyebrow">GUIDED NEXT STEPS</p><h3 id="np3-work-queue-title">Start with what matters most.</h3></div><div data-np3-work-queue-items></div></section><div data-np3-categories class="np3-categories" aria-live="polite"></div></div></section></div></section>
+
+  <section class="workspace-card np3-next" data-np3-work-queue aria-labelledby="np3-next-title" hidden>
+    <div class="np3-section-head">
+      <h2 id="np3-next-title">Needs doing</h2>
+      <p class="workspace-caption">Verifications mostly fail on missing records and open corrective actions. Start here.</p>
+    </div>
+    <ul class="np3-next__list" data-np3-work-queue-items></ul>
+    <a class="np3-next__all" href="/compliant/nz-alcohol/food-safety/checks">All {{ programme_short }} checks →</a>
+  </section>
+
+  <details class="workspace-card np3-prep">
+    <summary>Before the visit</summary>
+    <ul data-np3-preparation></ul>
+  </details>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/np3-audit.js"></script><script src="/compliant/static/verification.js"></script>{% endblock %}

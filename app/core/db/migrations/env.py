@@ -33,6 +33,10 @@ from app.features.contract_manufacturing.models import ContractCustomer, Contrac
 from app.features.contract_manufacturing.models.material_receipt import ContractMaterialReceipt  # noqa: F401
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+from app.features.crm.models.xero_credit_note import XeroCreditNote
+from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
+from app.features.crm.models.sales_return import SalesReturn
+from app.features.recalls.models import Recall, RecallContact
 from app.features.crm.models.xero_sync_job import XeroSyncJob
 from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.crm_note import CRMNote
@@ -48,6 +52,7 @@ from app.features.compliant.models.alcohol_product_profile import AlcoholProduct
 from app.features.operational_cases.models.operational_case import OperationalCase
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
 from app.features.operational_cases.models.operational_case_link import OperationalCaseLink
+from app.features.tastings import models as _tasting_models  # noqa: F401
 from app.utils.config_loader import config
 from app.features.planning.models import PlanningDemand
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting

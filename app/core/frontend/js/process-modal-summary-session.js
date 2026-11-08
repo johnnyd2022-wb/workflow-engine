@@ -161,6 +161,10 @@
         if (Object.prototype.hasOwnProperty.call(session, 'stepDescription')) {
           next.description = (session.stepDescription || '').toString();
         }
+        if (Object.prototype.hasOwnProperty.call(session, 'durationMinutes')) {
+          next.duration_minutes = session.durationMinutes;
+          next.wait_minutes = session.waitMinutes;
+        }
 
         next.inputs = helpers.mapSessionInputsToSummaryRows(session.inputs || []);
         next.outputs = JSON.parse(

@@ -147,6 +147,15 @@
       const descEl = document.getElementById('guided-step-description');
       const stepName = nameEl ? (nameEl.value || '') : (merge ? (prev.stepName || '') : '');
       const stepDescription = descEl ? (descEl.value || '') : (merge ? (prev.stepDescription || '') : '');
+      const timingEl = document.querySelector('[data-step-timing]');
+      const timing = timingEl && window.StepTiming ? window.StepTiming.read(timingEl) : null;
+      // Unreadable times are kept out of the session; the Next button refuses them.
+      const keep = function (value, field) {
+        if (timing) return typeof value === 'number' && !isNaN(value) ? value : null;
+        return merge && prev[field] != null ? prev[field] : null;
+      };
+      const durationMinutes = keep(timing && timing.duration_minutes, 'durationMinutes');
+      const waitMinutes = keep(timing && timing.wait_minutes, 'waitMinutes');
 
       let inputs;
       if (document.getElementById('guided-inputs-list-unified')) {
@@ -273,6 +282,8 @@
         v: 1,
         stepName,
         stepDescription,
+        durationMinutes,
+        waitMinutes,
         workflowProcessName,
         inputs,
         outputs,
@@ -297,6 +308,8 @@
       v: 1,
       stepName: '',
       stepDescription: '',
+      durationMinutes: null,
+      waitMinutes: null,
       workflowProcessName: (prev.workflowProcessName != null ? String(prev.workflowProcessName) : '').trim(),
       inputs: [],
       outputs: [],

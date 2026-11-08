@@ -15,6 +15,7 @@ from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth
 from app.features.compliant.routes.api_routes import api_bp
 from app.features.compliant.routes.cca_movement_routes import cca_movement_bp
+from app.features.compliant.routes.cca_transfer_routes import cca_transfer_bp
 from app.features.compliant.routes.food_registration_routes import food_registration_bp
 from app.features.compliant.routes.licensing_routes import licensing_bp
 from app.features.compliant.routes.page_routes import page_bp
@@ -30,9 +31,14 @@ COMPLIANT_FEATURE_KEY = "compliant"
 
 
 def create_compliant_blueprint() -> Blueprint:
+    from app.core.backend.getting_started import register_step_provider
+    from app.features.compliant.modules.nz_alcohol.getting_started import what_you_make
+
+    register_step_provider(what_you_make)  # GL-P09: "Tell us what you make" on Getting started
     bp = Blueprint("compliant", __name__)
     bp.register_blueprint(api_bp)
     bp.register_blueprint(cca_movement_bp)
+    bp.register_blueprint(cca_transfer_bp)
     bp.register_blueprint(page_bp)
     bp.register_blueprint(tools_bp)
     bp.register_blueprint(verification_bp)

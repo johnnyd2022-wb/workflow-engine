@@ -45,7 +45,17 @@ def inventory_dispose():
     """Full-page disposal flow for recording inventory wastage."""
     item_ids_param = (request.args.get("item_ids") or "").strip()
     item_ids = [v.strip() for v in item_ids_param.split(",") if v and v.strip()] if item_ids_param else []
-    return render_template("inventory/dispose.html", active_page="core", initial_item_ids=item_ids)
+    # From a notification about expired lots: dispose of all of each, with the reason filled in,
+    # so the only thing left is to press Dispose.
+    whole = bool(item_ids) and request.args.get("whole") == "1"
+    reason = (request.args.get("reason") or "").strip()[:200]
+    return render_template(
+        "inventory/dispose.html",
+        active_page="core",
+        initial_item_ids=item_ids,
+        prefill_whole=whole,
+        prefill_reason=reason,
+    )
 
 
 @requires_auth
@@ -83,6 +93,7 @@ def inventory_dispose_confirm():
     inventory_item_name = "item"
     inventory_item_unit = ""
     remaining_quantity_display = ""
+    held_warning = None
     org_id = getattr(g, "org_id", None)
     if org_id and inventory_item_id:
         try:
@@ -107,6 +118,7 @@ def inventory_dispose_confirm():
                 if "." in rs:
                     rs = rs.rstrip("0").rstrip(".")
                 remaining_quantity_display = rs
+                held_warning = _held_warning(org_id, item, remaining_dec)
             elif not error:
                 # Same rationale as record_wastage's access_denied log above: this branch
                 # covers both a genuinely nonexistent id and a cross-org one indistinguishably
@@ -133,7 +145,36 @@ def inventory_dispose_confirm():
         inventory_item_unit=inventory_item_unit,
         remaining_quantity_display=remaining_quantity_display,
         quantity_wasted=quantity_wasted,
+        held_warning=held_warning,
         error=error,
+    )
+
+
+def _held_warning(org_id, item, remaining):
+    """GL-P07 B2b: planned batches hold part of this lot. Disposing into that hold is allowed
+    (a soft hold), but the person should know which batches will then be short."""
+    from decimal import Decimal
+
+    from app.features.planning.material_adapter import commitments_for_items
+
+    held = commitments_for_items(db_session, org_id if isinstance(org_id, UUID) else UUID(str(org_id)), [item.id])
+    rows = held.get(str(item.id), [])
+    total = sum((Decimal(row["quantity"]) for row in rows), Decimal(0))
+    if not rows or remaining >= total:
+        return None
+    unit = f" {item.unit}" if item.unit else ""
+    from datetime import date
+
+    def starts(value):
+        day = date.fromisoformat(value)
+        return f"{day.day} {day.strftime('%b')}"
+
+    batches = ", ".join(f"{row['batch']} (starts {starts(row['starts'])})" for row in rows[:3])
+    more = f" and {len(rows) - 3} more" if len(rows) > 3 else ""
+    return (
+        f"Planned batches hold {format(total.normalize(), 'f')}{unit} of this lot: {batches}{more}. "
+        "You can still dispose of it, but check materials on the Production board afterwards; "
+        "they'll need stock from elsewhere."
     )
 
 

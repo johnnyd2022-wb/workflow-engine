@@ -42,8 +42,12 @@ allowed_mime_types = application/pdf, application/msword, application/vnd.openxm
 [email]
 sender_email = your-email@example.com
 receiver_email = production-email@example.com
+# Shown on the sign-in form for a forgotten password or a locked account (GL-A04).
+support_email = support@biz-e.app
 
 [features]
+# Multiple sites (GL-P07); also needs the multi_site subscription and the org's own switch.
+multi_site_enabled = false
 invoice_button_enabled = true
 schedule_enabled = true
 crm_enabled = true
@@ -76,9 +80,7 @@ rum_posthog_api_key =
 # storage_uri = redis://localhost:6379/0
 
 [google_sign_in]
-# Requires OAuth credentials from KeePassXC locally or protected environment variables.
-# Off until a production Google OAuth client exists; turn on together with GOOGLE_CLIENT_ID / _SECRET.
-enabled = false
+# The client id and secret reach the container as GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+# (scripts/run_prod.sh, from KeePassXC). The redirect URI must be registered on that client.
+enabled = true
 redirect_uri = https://biz-e.app/auth/google/callback
-keepass_client_id_entry = workflow-engine/google/client_id
-keepass_client_secret_entry = workflow-engine/google/client_secret

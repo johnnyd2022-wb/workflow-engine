@@ -7,7 +7,7 @@ import json
 import time
 from collections import deque
 from datetime import UTC, date, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import requests
 from sqlalchemy.orm import Session
@@ -111,8 +111,7 @@ class XeroAPIClient:
 
                 if _is_insufficient_scope(e):
                     raise XeroInsufficientScopeError(
-                        "Connected Xero permissions are missing required invoice scope. "
-                        "Reconnect Xero to update permissions."
+                        "The Xero connection does not allow this change. Reconnect Xero to update its permissions."
                     ) from e
 
                 if code == 429:
@@ -166,6 +165,36 @@ class XeroAPIClient:
 
         return contacts
 
+    def create_contact(self, fields: dict, *, idempotency_key: str | None = None):
+        """Create a contact in Xero from Biz-E fields (see _contact_model) and return Xero's copy.
+
+        The idempotency key makes a retried create (after a lost response) return the first
+        contact instead of making a second one."""
+        from xero_python.accounting import AccountingApi
+        from xero_python.accounting.models import Contacts
+
+        api = AccountingApi(self._get_api_client())
+        payload = Contacts(contacts=[_contact_model(fields)])
+        extra = {"idempotency_key": idempotency_key} if idempotency_key else {}
+        result = self._call_with_retry(
+            api.create_contacts, self._xero_tenant_id, payload, summarize_errors=False, **extra
+        )
+        return _first_contact(result)
+
+    def update_contact(self, contact_xero_id: str, fields: dict):
+        """Send changed Biz-E fields to an existing Xero contact and return Xero's copy.
+
+        Only the fields given are sent, so Xero keeps anything Biz-E does not hold (other phone
+        types, tax settings). Addresses go as both types Biz-E holds, every part included, so a
+        changed postal address cannot blank the street one."""
+        from xero_python.accounting import AccountingApi
+        from xero_python.accounting.models import Contacts
+
+        api = AccountingApi(self._get_api_client())
+        payload = Contacts(contacts=[_contact_model(fields, contact_id=contact_xero_id)])
+        result = self._call_with_retry(api.update_contact, self._xero_tenant_id, contact_xero_id, payload)
+        return _first_contact(result)
+
     def get_contact_payment_terms(self, contact_xero_id: str) -> dict | None:
         """Fetch a single contact's payment terms from Xero."""
         from xero_python.accounting import AccountingApi
@@ -210,6 +239,31 @@ class XeroAPIClient:
 
         return invoices
 
+    def fetch_all_credit_notes(self, modified_after: datetime | None = None) -> list:
+        """Return all ACCRECCREDIT notes, with each page using the normal Xero retry policy."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        credit_notes = []
+        page = 1
+        kwargs: dict = {"where": 'Type=="ACCRECCREDIT"'}
+        if modified_after:
+            if modified_after.tzinfo is None:
+                modified_after = modified_after.replace(tzinfo=UTC)
+            kwargs["if_modified_since"] = modified_after
+
+        while True:
+            result = self._call_with_retry(api.get_credit_notes, tenant_id, page=page, **kwargs)
+            batch = getattr(result, "credit_notes", None) or []
+            credit_notes.extend(batch)
+            logger.debug("Credit notes page %d: %d records", page, len(batch))
+            if len(batch) < 100:
+                break
+            page += 1
+
+        return credit_notes
+
     def create_invoice(
         self,
         *,
@@ -252,18 +306,29 @@ class XeroAPIClient:
             line_items=li_models,
         )
         payload = Invoices(invoices=[invoice_model])
+        # One key for every attempt below: a 5xx can arrive after Xero made the invoice, and the
+        # retry must return that invoice rather than make a second one.
+        idempotency_key = f"bize-invoice-{uuid4()}"
 
         def _create():
             try:
-                return api.create_invoices(tenant_id, invoices=payload, summarize_errors=False)
+                return api.create_invoices(
+                    tenant_id, invoices=payload, summarize_errors=False, idempotency_key=idempotency_key
+                )
             except TypeError:
-                return api.create_invoices(tenant_id, payload, summarize_errors=False)
+                return api.create_invoices(tenant_id, payload, summarize_errors=False, idempotency_key=idempotency_key)
 
         result = self._call_with_retry(_create)
         invoices = getattr(result, "invoices", None) or []
         if not invoices:
             raise RuntimeError("Xero did not return a created invoice")
-        return invoices[0]
+        invoice = invoices[0]
+        # With summarize_errors=False Xero answers 200 for an invoice it refused, carrying the
+        # reasons on the invoice itself.
+        errors = getattr(invoice, "validation_errors", None) or []
+        if errors:
+            raise ValueError("; ".join(str(getattr(error, "message", error)) for error in errors))
+        return invoice
 
     def authorise_invoice(self, *, xero_invoice_id: str):
         """Authorise an existing ACCREC invoice in Xero."""
@@ -413,6 +478,46 @@ class XeroAPIClient:
                             return val.strip()
 
         raise ValueError("Xero did not return an online invoice URL for this invoice.")
+
+
+def _contact_model(fields: dict, contact_id: str | None = None):
+    """A xero-python Contact carrying only the given fields. An empty string clears a field in
+    Xero; a key that is absent leaves Xero's value alone."""
+    from xero_python.accounting.models import Address, Contact, Phone
+
+    kwargs = {key: fields[key] for key in ("name", "first_name", "last_name", "email_address") if key in fields}
+    if "phone_number" in fields:
+        kwargs["phones"] = [Phone(phone_type="DEFAULT", phone_number=fields["phone_number"] or "")]
+    if fields.get("addresses"):
+        kwargs["addresses"] = [
+            Address(
+                address_type=item["type"],
+                address_line1=item.get("line1") or "",
+                address_line2=item.get("line2") or "",
+                address_line3=item.get("line3") or "",
+                address_line4=item.get("line4") or "",
+                city=item.get("city") or "",
+                region=item.get("region") or "",
+                postal_code=item.get("postal_code") or "",
+                country=item.get("country") or "",
+                attention_to=item.get("attention_to") or "",
+            )
+            for item in fields["addresses"]
+        ]
+    if contact_id:
+        kwargs["contact_id"] = contact_id
+    return Contact(**kwargs)
+
+
+def _first_contact(result):
+    contacts = getattr(result, "contacts", None) or []
+    if not contacts:
+        raise RuntimeError("Xero did not return the contact")
+    contact = contacts[0]
+    errors = getattr(contact, "validation_errors", None) or []
+    if errors:
+        raise ValueError("; ".join(str(getattr(error, "message", error)) for error in errors))
+    return contact
 
 
 def _normalise_payment_terms(raw) -> dict | None:

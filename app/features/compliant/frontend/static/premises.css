@@ -1,9 +1,66 @@
-.premises { box-sizing: border-box; min-width: 0; }
-.premises-form { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin: 1rem 0 2rem; }
-.premises-form label { display: grid; gap: .4rem; flex: 1 1 210px; min-width: 0; }
-.premises-form input, .premises-form select { min-width: 0; width: 100%; box-sizing: border-box; padding: .6rem; }
-.premises-form button { padding: .7rem 1rem; }
-.premises article { border-top: 1px solid #dde2e2; padding: 1rem 0; overflow-wrap: anywhere; }
-.premises article h3 { margin: 0 0 .4rem; }
-.premises article p { margin: .4rem 0; }
-@media (max-width: 600px) { .premises { width: 100%; padding: 1rem; } }
+/* Customs licences and areas: Style 1 by licence, 2 by place, 3 as a timeline. */
+#page-content .premises-page { display: flex; flex-direction: column; gap: 20px; padding-bottom: 48px; }
+#page-content .premises-page .workspace-header { margin-bottom: 0; }
+#page-content .prem-header-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+#page-content .prem-summary { margin: 0; font-size: 15px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .prem-summary:empty { display: none; }
+#page-content .prem-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+#page-content .prem-licences > .prem-empty { grid-column: 1 / -1; }
+#page-content .premises-page.prem-failed .workspace-card { display: none; }
+#page-content .prem-empty { margin: 0; padding: 12px 4px; font-size: 14px; color: var(--ui-text-muted, #64748b); list-style: none; }
+
+/* Order and what shows: Style 1 */
+#page-content .prem-summary { order: 1; }
+#page-content .prem-licences-card { order: 2; }
+#page-content .prem-outside-card { order: 3; }
+#page-content .prem-outside-card[hidden] { display: none; }
+
+/* Status in words */
+#page-content .prem-status { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; background: var(--ui-surface-subtle, #f1f5f9); color: var(--ui-text-muted, #475569); }
+#page-content .prem-status--current { background: #dcfae6; color: #17603f; }
+#page-content .prem-status--soon, #page-content .prem-status--later { background: #fef0c7; color: #8a5a00; }
+html[data-spa-theme="dark"] #page-content .prem-status--current { background: rgba(23, 178, 106, .18); color: #47cd89; }
+html[data-spa-theme="dark"] #page-content .prem-status--soon, html[data-spa-theme="dark"] #page-content .prem-status--later { background: rgba(247, 144, 9, .18); color: #fdb022; }
+
+/* Licences */
+#page-content .prem-licences { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+#page-content .prem-licence { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 18px 20px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); background: var(--ui-surface, #fff); }
+#page-content .prem-licence__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+#page-content .prem-licence h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
+#page-content .prem-licence p { margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
+#page-content .prem-licence__areas { margin-top: 10px; }
+#page-content .prem-ended { margin-top: 16px; }
+#page-content .prem-ended > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
+#page-content .prem-ended[open] > summary { margin-bottom: 12px; }
+#page-content .prem-ended .prem-licence { opacity: .75; }
+
+/* Rows */
+#page-content .prem-rows { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .prem-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 12px 2px; border-bottom: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .prem-row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#page-content .prem-row__main strong { font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
+#page-content .prem-row__main span { font-size: 13px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
+#page-content .prem-row__date { font-size: 12px; color: var(--ui-text-muted, #64748b); white-space: nowrap; }
+
+/* Timeline */
+#page-content .prem-timeline { display: flex; flex-direction: column; gap: 6px; }
+
+/* Dialogs */
+#page-content .prem-dialog { position: fixed; inset: 0; margin: auto; overflow: auto; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); box-shadow: 0 24px 48px rgb(15 23 42 / 18%); }
+#page-content .prem-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+#page-content .prem-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; padding: 24px; }
+#page-content .prem-form h2 { margin: 0; font-size: 19px; font-weight: 600; }
+#page-content .prem-form .workspace-caption { margin: -6px 0 0; }
+#page-content .prem-form label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; }
+#page-content .prem-form .span-2 { grid-column: 1 / -1; }
+#page-content .prem-form__error { margin: 0; padding: 10px 12px; border-radius: 8px; background: #fee4e2; color: #b42318; font-size: 13px; }
+#page-content .prem-form__error[hidden] { display: none; }
+#page-content .prem-form__actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; margin: 6px -24px -24px; padding: 14px 24px; border-top: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); }
+
+@media (max-width: 720px) {
+  #page-content .premises-page .workspace-header { flex-direction: column; align-items: stretch; }
+  #page-content .prem-header-actions .workspace-button { flex: 1 1 auto; }
+  #page-content .prem-form { grid-template-columns: minmax(0, 1fr); }
+  #page-content .prem-row { grid-template-columns: minmax(0, 1fr); }
+  #page-content .prem-row .prem-status { justify-self: start; }
+}

@@ -203,7 +203,7 @@
     // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml() or encodeURIComponent()
     card.innerHTML =
       '<div class="flows2-step__header">' +
-        '<button type="button" class="flows2-step__drag step-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();">' +
+        '<button type="button" class="flows2-step__drag step-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder" data-action-stop>' +
           '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<line x1="8" y1="6" x2="8" y2="6"></line>' +
             '<line x1="8" y1="12" x2="8" y2="12"></line>' +
@@ -216,7 +216,7 @@
         '<div class="flow-step-num-badge step-number" aria-label="Step number">' +
           escapeHtml(String(displayNumber)) +
         '</div>' +
-        '<div class="flows2-step__titlewrap" onclick="toggleStep(this)">' +
+        '<div class="flows2-step__titlewrap" data-action="toggleStep" data-action-args=\'["$el"]\'>' +
           '<p class="flows2-step__title">' +
             escapeHtml(step.name || 'Unnamed step') +
           '</p>' +
@@ -227,9 +227,9 @@
         '<div class="flows2-step__header-edit">' +
           '<a class="btn btn-secondary btn-sm" href="' +
             editHref +
-            '" onclick="event.stopPropagation();">Edit</a>' +
+            '" data-action-stop>Edit</a>' +
         '</div>' +
-        '<button type="button" class="flows2-step__toggle" onclick="toggleStep(this)" aria-label="Expand step">' +
+        '<button type="button" class="flows2-step__toggle" data-action="toggleStep" data-action-args=\'["$el"]\' aria-label="Expand step">' +
           '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<polyline points="6 9 12 15 18 9"></polyline>' +
           '</svg>' +

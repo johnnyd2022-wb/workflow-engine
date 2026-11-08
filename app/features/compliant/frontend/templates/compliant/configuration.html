@@ -1,34 +1,203 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Configuration · NZ Alcohol · Compliance{% endblock %}
+{% block title %}Compliance settings{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/compliance-settings.css">{% endblock %}
+{% macro section_head(name, title, intro, change_label) %}
+      <div class="cs-intro">
+        <div class="cs-intro__row">
+          <div>
+            <h2 id="cs-{{ name }}-title">{{ title }}</h2>
+            <p>{{ intro }}</p>
+          </div>
+        </div>
+      </div>
+{% endmacro %}
+{% macro section_actions() %}
+          <div class="cs-actions">
+            <button type="submit" class="workspace-button cs-save">Save</button>
+          </div>
+          <p class="cs-section-error" role="alert" data-cs-error hidden></p>
+{% endmacro %}
 {% block content %}
-<main class="compliant-shell" data-compliant-configuration-root>
-  <header class="compliant-hero"><div><p class="compliant-eyebrow">NZ ALCOHOL / CONFIGURATION</p><h1>Switch on only the obligations that belong to your operation.</h1><p>These settings control the frameworks and audit pages your team sees. They do not determine legal obligations.</p></div></header>
-  <p class="compliant-error" data-configuration-error hidden></p>
-  <section class="compliant-record-panel configuration-panel"><form data-configuration-form>
-    <label class="span-2 config-toggle"><input name="enabled" type="checkbox"> <span><strong>Enable NZ Alcohol compliance workspace</strong><small>Start with only the framework packs that relate to this site.</small></span></label>
-    <fieldset class="config-choice-group"><legend>What leaves your site?</legend><p>We use this to show wine-specific requirements only to wineries and keep unrelated duties out of the way.</p><label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine / vineyard</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label></fieldset>
-    <label>Food safety programme <select name="food_control_programme"><option value="np1">National Programme 1</option><option value="np2">National Programme 2</option><option value="np3">National Programme 3</option><option value="none">No National Programme selected</option></select></label>
-    <fieldset class="config-choice-group"><legend>Alcohol licence activity</legend><p>Only select activities covered by an alcohol licence or application that this site operates under.</p><label><input type="checkbox" name="liquor_licence_type" value="on"> On-licence</label><label><input type="checkbox" name="liquor_licence_type" value="off"> Off-licence</label><label><input type="checkbox" name="liquor_licence_type" value="club"> Club licence</label><label><input type="checkbox" name="liquor_licence_type" value="special"> Special licence</label></fieldset>
-    <label>Liquor licence / application reference <input name="liquor_licence_reference" maxlength="255"></label><label>Licence renewal or event date <input name="liquor_licence_due_date" type="date"></label>
-    <label>NP3 verification date <input name="np3_verification_date" type="date"></label><label>Verifier name <input name="np3_verifier_name" maxlength="255"></label><label class="span-2">Verification location <input name="np3_verification_location" maxlength="255"></label>
-    <label>Default NP3 review reminder <select name="np3_review_interval_months"><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select><small>Each signed check gets a review reminder. People can adjust it for a specific check.</small></label>
-    <label class="span-2">NP3 Production evidence capture <select name="np3_execution_evidence_mode"><option value="off">Off — do not add a Compliance evidence shelf</option><option value="recommended">Recommended — show a reusable evidence shelf on Production steps</option><option value="required">Required — block a Production step until an evidence file is attached</option></select><small>Required is enforced by the server as well as the browser. It applies only when NP3 is selected.</small></label>
-    <details class="workflow-preview span-2"><summary>Preview what this adds to a Production workflow step</summary><div class="workflow-preview__canvas"><div class="workflow-preview__step"><strong>Blend and fill</strong><span>Usual Production step fields</span></div><div class="workflow-preview__evidence"><strong>NP3 operational evidence</strong><span>Attach photo or PDF · linked to this step and its product lineage</span></div></div><p>Recommended makes this prompt available. Required also prevents completing a step without an active evidence file; the server enforces that rule.</p></details>
-    <aside class="council-explainer span-2"><strong>What is the council catalogue?</strong><p>Selecting one loads that authority's current trade-waste control headings and source link into your dashboard. It does not submit anything, create a consent, or claim that trade waste applies. Add a consent reference only when you have one.</p></aside>
-    <label>Council catalogue <select name="trade_waste_council" data-trade-waste-council><option value="">No trade-waste catalogue selected</option></select></label><label>Council / water provider name <input name="council_name" maxlength="255"></label><label>Trade-waste consent reference <input name="consent" maxlength="255"></label>
-    <label class="span-2 config-toggle"><input type="checkbox" name="require_core_source_refs"> Require a linked Production record for every evidence record</label>
-    <button type="submit">Save configuration</button>
-  </form></section>
-  <section class="compliant-record-panel configuration-panel abv-rules-panel" data-abv-rules>
-    <div class="section-heading"><div><p class="compliant-eyebrow">ABV ON ALCOHOL PRODUCTS</p><h2>Record ABV on every alcohol product batch</h2></div><p>Tick each workflow's final product that is an alcohol product. Its final step then asks for the batch's ABV and cannot be completed without it.</p></div>
-    <p class="compliant-error" data-abv-error hidden></p>
-    <div class="np3-training-table abv-candidates"><table><thead><tr><th scope="col">ABV</th><th scope="col">Workflow</th><th scope="col">Final product</th><th scope="col">Status</th></tr></thead><tbody data-abv-candidates><tr><td colspan="4">Loading workflows…</td></tr></tbody></table></div>
-    <form class="abv-contains-form" data-abv-contains-form><label>Also require ABV on any final product whose name contains <input name="pattern" maxlength="255" placeholder="e.g. final product" autocomplete="off"></label><button type="submit" class="suggestion">Add phrase</button><small>Matching ignores upper/lower case. A phrase also covers workflows you add later.</small></form>
-    <ul class="abv-rule-list" data-abv-rule-list hidden></ul>
-    <div class="abv-actions"><button type="button" data-abv-save>Save ABV rules</button><span class="abv-status" data-abv-status aria-live="polite"></span></div>
-  </section>
+<main class="max-content workspace-overview compliance-settings" data-compliant-configuration-root aria-busy="true">
+  <header class="workspace-header cs-header">
+    <div>
+      <h1>Compliance settings</h1>
+      <p class="workspace-caption">Switch on only the obligations that belong to your operation. These decide which checks and pages your team sees; they don't decide what the law requires.</p>
+    </div>
+  </header>
+
+
+  <div class="cs-load-error" role="alert" data-configuration-error hidden>
+    <span data-cs-load-message></span>
+    <button type="button" class="workspace-button" data-cs-retry>Try again</button>
+  </div>
+
+  <div class="cs-stack" data-cs-stack hidden>
+    <section class="cs-section" id="workspace" data-cs-section="workspace" aria-labelledby="cs-workspace-title">
+{{ section_head("workspace", "NZ Alcohol compliance", "Turns the Compliance workspace on for this organisation, with only the checks the choices below call for.", "Change whether NZ Alcohol compliance is on") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <label class="cs-check">
+            <input type="checkbox" name="enabled">
+            <span><strong>NZ Alcohol compliance is on</strong><small>Off hides the Compliance checks; nothing recorded is deleted.</small></span>
+          </label>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="products" data-cs-section="products" aria-labelledby="cs-products-title">
+{{ section_head("products", "What leaves your site", "Shows wine-specific requirements only to wineries, and keeps duties you don't have out of the way.", "Change what leaves your site") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <fieldset class="cs-chips">
+            <legend>Products</legend>
+            <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label>
+            <label><input type="checkbox" name="product_type" value="beer"> Beer</label>
+            <label><input type="checkbox" name="product_type" value="wine"> Wine or vineyard</label>
+            <label><input type="checkbox" name="product_type" value="cider"> Cider</label>
+            <label><input type="checkbox" name="product_type" value="mead"> Mead</label>
+            <label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
+          </fieldset>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="food-safety" data-cs-section="food" aria-labelledby="cs-food-title">
+{{ section_head("food", "Food safety programme", "Which national programme you're registered under, how often each signed check is reviewed, and what Production asks for.", "Change the food safety programme") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <label class="cs-field">
+            <span>Programme</span>
+            <select name="food_control_programme" id="cs-programme">
+              <option value="np1">National Programme 1</option>
+              <option value="np2">National Programme 2</option>
+              <option value="np3">National Programme 3</option>
+              <option value="none">No national programme</option>
+            </select>
+          </label>
+          <label class="cs-field cs-field--short" data-cs-np-only>
+            <span>Review each signed check</span>
+            <select name="np3_review_interval_months" id="cs-review-interval">
+              <option value="1">Every month</option>
+              <option value="3">Every 3 months</option>
+              <option value="6">Every 6 months</option>
+              <option value="12">Every year</option>
+            </select>
+            <small>The default. A check's own page can change it.</small>
+          </label>
+          <fieldset class="cs-choices" data-cs-np-only>
+            <legend>Evidence on Production steps</legend>
+            <label class="cs-choice"><input type="radio" name="np3_execution_evidence_mode" value="off"><span><strong>Off</strong><small>Production steps don't ask for evidence.</small></span></label>
+            <label class="cs-choice"><input type="radio" name="np3_execution_evidence_mode" value="recommended"><span><strong>Recommended</strong><small>Each step offers a place to attach a photo or PDF.</small></span></label>
+            <label class="cs-choice"><input type="radio" name="np3_execution_evidence_mode" value="required"><span><strong>Required</strong><small>A step can't be completed without an evidence file. The server enforces it too.</small></span></label>
+          </fieldset>
+          <details class="cs-preview" data-cs-np-only>
+            <summary>What this adds to a Production step</summary>
+            <div class="cs-preview__canvas">
+              <div class="cs-preview__step"><strong>Blend and fill</strong><span>The step's usual fields</span></div>
+              <div class="cs-preview__evidence"><strong>Food safety evidence</strong><span>Attach a photo or PDF, linked to this step and its batch</span></div>
+            </div>
+          </details>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="visit" data-cs-section="visit" aria-labelledby="cs-visit-title" data-cs-np-section>
+{{ section_head("visit", "Next verification visit", "When your verifier is coming. It clears itself once the visit is recorded.", "Change the next verification visit") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <div class="cs-field-row">
+            <label class="cs-field cs-field--short"><span>Date</span><input type="date" name="np3_verification_date" id="cs-visit-date"></label>
+            <label class="cs-field"><span>Verifier</span><input name="np3_verifier_name" maxlength="255" autocomplete="off"></label>
+          </div>
+          <label class="cs-field"><span>Where</span><input name="np3_verification_location" maxlength="255" autocomplete="off"></label>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="licence" data-cs-section="licence" aria-labelledby="cs-licence-title">
+{{ section_head("licence", "Liquor licence", "The licence or application this site trades under. Choosing a kind turns on the Licensing tab.", "Change the liquor licence") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <fieldset class="cs-chips">
+            <legend>Kind of licence</legend>
+            <label><input type="checkbox" name="liquor_licence_type" value="on"> On-licence</label>
+            <label><input type="checkbox" name="liquor_licence_type" value="off"> Off-licence</label>
+            <label><input type="checkbox" name="liquor_licence_type" value="club"> Club licence</label>
+            <label><input type="checkbox" name="liquor_licence_type" value="special"> Special licence</label>
+          </fieldset>
+          <div class="cs-field-row">
+            <label class="cs-field"><span>Licence or application reference</span><input name="liquor_licence_reference" maxlength="255" autocomplete="off"></label>
+            <label class="cs-field cs-field--short"><span>Renewal or event date</span><input type="date" name="liquor_licence_due_date" id="cs-licence-date"></label>
+          </div>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="trade-waste" data-cs-section="tradeWaste" aria-labelledby="cs-tradeWaste-title">
+{{ section_head("tradeWaste", "Trade waste", "Choosing a council loads its current trade-waste headings and source link into Compliance. It doesn't submit anything or say trade waste applies.", "Change trade waste") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <label class="cs-field">
+            <span>Council catalogue</span>
+            <select name="trade_waste_council" data-trade-waste-council id="cs-council"><option value="">None</option></select>
+          </label>
+          <div class="cs-field-row">
+            <label class="cs-field"><span>Council or water provider</span><input name="council_name" maxlength="255" autocomplete="off"></label>
+            <label class="cs-field"><span>Consent reference</span><input name="consent" maxlength="255" autocomplete="off"><small>Only once you have one.</small></label>
+          </div>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="evidence" data-cs-section="evidence" aria-labelledby="cs-evidence-title">
+{{ section_head("evidence", "Evidence records", "Whether every evidence record has to point at the batch or step it came from.", "Change evidence records") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <label class="cs-check">
+            <input type="checkbox" name="require_core_source_refs">
+            <span><strong>Every evidence record needs a linked Production record</strong><small>A record without one can't be saved.</small></span>
+          </label>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved></p>
+      </div>
+    </section>
+
+    <section class="cs-section" id="abv" data-cs-section="abv" aria-labelledby="cs-abv-title" data-abv-rules>
+{{ section_head("abv", "ABV on alcohol products", "Tick each workflow's final product that is alcohol. Its final step then asks for the batch's ABV and can't be completed without it.", "Change which products need an ABV") }}
+      <div class="cs-body">
+        <form class="cs-form" data-cs-form hx-boost="false">
+          <ul class="cs-abv-list" data-abv-candidates><li class="cs-empty">Loading workflows…</li></ul>
+          <div class="cs-phrase">
+            <label class="cs-field" for="cs-abv-phrase"><span>Also any final product whose name contains</span></label>
+            <div class="cs-phrase__row">
+              <input id="cs-abv-phrase" name="pattern" maxlength="255" placeholder="e.g. gin" autocomplete="off" data-abv-phrase>
+              <button type="button" class="workspace-button" data-abv-add-phrase>Add phrase</button>
+            </div>
+            <small>Upper and lower case are treated the same. A phrase also covers workflows you add later.</small>
+            <ul class="cs-phrases" data-abv-rule-list hidden></ul>
+          </div>
+{{ section_actions() }}
+        </form>
+        <p class="cs-saved" role="status" data-cs-saved data-abv-status></p>
+      </div>
+    </section>
+  </div>
+
 </main>
 {% endblock %}
-{% block scripts %}<script src="/compliant/static/configuration.js"></script>{% endblock %}
+{% block scripts %}<script src="/compliant/static/configuration.js" defer></script>{% endblock %}

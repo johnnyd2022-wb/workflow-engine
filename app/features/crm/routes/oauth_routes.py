@@ -35,7 +35,7 @@ def xero_auth():
             has_client_id=bool(client_id),
             has_redirect_uri=bool(redirect_uri),
         )
-        return redirect("/crm/configuration?error=xero_not_configured")
+        return redirect("/core/integrations?error=xero_not_configured")
 
     state = XeroOAuthService.generate_state()
     session[_XERO_STATE_SESSION_KEY] = state
@@ -91,16 +91,16 @@ def xero_callback():
     expected_state = session.pop(_XERO_STATE_SESSION_KEY, None)
     if not expected_state or state_param != expected_state:
         logger.warning("xero_oauth_state_mismatch", org_id=str(org_id))
-        return redirect("/crm/configuration?error=xero_state_mismatch")
+        return redirect("/core/integrations?error=xero_state_mismatch")
 
     error = request.args.get("error")
     if error:
         logger.warning("xero_oauth_callback_error", org_id=str(org_id), error=error)
-        return redirect(f"/crm/configuration?error=xero_{error}")
+        return redirect(f"/core/integrations?error=xero_{error}")
 
     code = request.args.get("code")
     if not code:
-        return redirect("/crm/configuration?error=xero_no_code")
+        return redirect("/core/integrations?error=xero_no_code")
 
     db = db_session()
     service = XeroOAuthService(db)
@@ -109,11 +109,11 @@ def xero_callback():
         token_data = service.exchange_code(code)
         connections = service.get_connections(token_data["access_token"])
         if not connections:
-            return redirect("/crm/configuration?error=xero_no_tenant")
+            return redirect("/core/integrations?error=xero_no_tenant")
 
     except Exception:
         logger.exception("xero_oauth_exchange_failed", org_id=str(org_id))
-        return redirect("/crm/configuration?error=xero_exchange_failed")
+        return redirect("/core/integrations?error=xero_exchange_failed")
 
     if len(connections) == 1:
         # Single tenant — auto-connect immediately
@@ -125,7 +125,7 @@ def xero_callback():
         service.store_tokens(org_id, token_data, connections[0])
     except Exception:
         logger.exception("xero_pending_token_store_failed", org_id=str(org_id))
-        return redirect("/crm/configuration?error=xero_exchange_failed")
+        return redirect("/core/integrations?error=xero_exchange_failed")
 
     # Store only non-sensitive connection metadata in the session cookie
     session[_XERO_PENDING_CONNECTIONS_KEY] = [
@@ -148,7 +148,7 @@ def xero_select_tenant_page():
     connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
     if not connections:
         # Nothing pending — they may have arrived here directly
-        return redirect("/crm/configuration")
+        return redirect("/core/integrations")
 
     return render_template("crm/select_tenant.html", connections=connections)
 
@@ -160,7 +160,7 @@ def xero_select_tenant_submit():
     org_id = UUID(g.org_id)
     connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
     if not connections:
-        return redirect("/crm/configuration?error=xero_session_expired")
+        return redirect("/core/integrations?error=xero_session_expired")
 
     selected_tenant_id = request.form.get("tenant_id", "").strip()
     connection = next((c for c in connections if c["tenantId"] == selected_tenant_id), None)
@@ -222,7 +222,7 @@ def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: di
         )
     except Exception:
         logger.exception("xero_oauth_complete_connection_failed", org_id=str(org_id))
-        return redirect("/crm/configuration?error=xero_exchange_failed")
+        return redirect("/core/integrations?error=xero_exchange_failed")
 
     try:
         sync_service = XeroSyncService(service.db)
@@ -262,17 +262,22 @@ def xero_sync():
             result = sync_service.incremental_sync(org_id, triggered_by="manual_incremental")
         else:
             result = sync_service.full_sync(org_id, triggered_by="manual_full")
-        return jsonify(
-            {
-                "ok": True,
-                "contacts_synced": result.contacts_synced,
-                "invoices_synced": result.invoices_synced,
-                "sales_allocated": result.sales_allocated,
-                "sales_unmapped": result.sales_unmapped,
-                "sales_insufficient_stock": result.sales_insufficient_stock,
-                "errors": result.errors,
-            }
-        ), 200
+        body = {
+            "ok": result.success,
+            "contacts_synced": result.contacts_synced,
+            "invoices_synced": result.invoices_synced,
+            "credit_notes_synced": result.credit_notes_synced,
+            "sales_allocated": result.sales_allocated,
+            "sales_unmapped": result.sales_unmapped,
+            "sales_insufficient_stock": result.sales_insufficient_stock,
+            "errors": result.errors,
+        }
+        if result.success:
+            return jsonify(body), 200
+        more = len(result.errors) - 1
+        body["error"] = f"The Xero sync did not finish: {result.errors[0]}" + (f" (and {more} more)" if more else "")
+        # A sync that brought nothing in failed; one that brought some in is reported with its errors.
+        return jsonify(body), 200 if result.partial else 502
     except XeroTokenExpiredError:
         return jsonify({"error": "reconnect_required", "message": "Xero token expired — please reconnect."}), 401
     except XeroInsufficientScopeError as e:

@@ -131,7 +131,7 @@
     // ============================================================
     // LOAD RAW MATERIALS FOR DROPDOWN
     // ============================================================
-    let rawMaterialsCache = null;
+    var rawMaterialsCache = null;
     
     async function loadRawMaterials() {
       if (rawMaterialsCache) {
@@ -151,7 +151,7 @@
     // ============================================================
     // UNIT GROUPS FOR SMART UNIT SELECTION
     // ============================================================
-    const unitGroups = {
+    var unitGroups = {
       weight: ['kg', 'g'],
       volume: ['L', 'mL'],
       count: ['pcs', 'units']

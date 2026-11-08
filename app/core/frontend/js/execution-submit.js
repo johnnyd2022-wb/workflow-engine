@@ -357,7 +357,7 @@
 
     if (draftProcessId) {
       try {
-        var createResult = await CoreAPI.createExecution(draftProcessId);
+        var createResult = await CoreAPI.createExecution(draftProcessId, window.BizeSite ? window.BizeSite.current() : null);
         executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
         if (!executionId) {
           showNotification('error', 'Error', 'Could not create execution.');
@@ -414,7 +414,7 @@
       if (anyPending) {
         // Ensure we have a real execution (draft).
         if (draftProcessId && (!executionId || !executionStepId)) {
-          var createResult = await CoreAPI.createExecution(draftProcessId);
+          var createResult = await CoreAPI.createExecution(draftProcessId, window.BizeSite ? window.BizeSite.current() : null);
           executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
           if (!executionId) throw new Error('Could not create execution for evidence upload.');
           var executionData2 = await CoreAPI.getExecution(executionId);

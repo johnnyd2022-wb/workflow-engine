@@ -1,0 +1,42 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Getting started{% endblock %}
+
+{% block body_class %}getting-started-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="From sign-up to a traced sale, one step at a time">
+{% endblock %}
+
+{% block content %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='getting-started.css') }}">
+  <main class="gs-shell workspace-overview workspace-page" data-getting-started-root>
+    <header class="workspace-header">
+      <div>
+        <h1>Getting started</h1>
+        <p data-gs-lede>From sign-up to your first sale traced back to its batch.</p>
+      </div>
+    </header>
+
+    <p class="gs-message" data-gs-message role="status" hidden></p>
+    <p class="gs-loading" data-gs-loading>Loading your progress…</p>
+
+    <section class="gs-progress" data-gs-progress hidden aria-label="Progress">
+      <p class="gs-progress__text"><strong data-gs-done>0</strong> of <span data-gs-total>0</span> done</p>
+      <div class="gs-progress__bar" aria-hidden="true"><span data-gs-bar></span></div>
+    </section>
+
+    <section class="gs-complete workspace-card" data-gs-complete hidden aria-labelledby="gs-complete-title">
+      <h2 id="gs-complete-title">You're set up</h2>
+      <p>Every step is done: your stock, batches and sales are connected, and a batch traces to its customers. Home shows what needs you each day.</p>
+      <a class="workspace-button workspace-button--primary gs-primary" href="/core/dashboard">Go to Home</a>
+    </section>
+
+    {# The setup guide (Shopify-style): one card, the next step open, the rest folded. #}
+    <section class="workspace-card gs-guide" data-gs-guide-card hidden aria-labelledby="gs-guide-title">
+      <h2 id="gs-guide-title" class="gs-visually-hidden">Steps</h2>
+      <ol class="gs-guide__list" data-gs-guide></ol>
+    </section>
+  </main>
+  <script src="/static/js/getting-started.js" defer></script>
+{% endblock %}

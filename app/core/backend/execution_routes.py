@@ -39,6 +39,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.security.permissions import requires_auth
+from app.core.services.lot_holds import LotOnHoldError
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
@@ -49,6 +50,7 @@ logger = get_logger(__name__)
 
 
 _ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
+_RECORD_PICKER = "/core/record"  # keep in sync with RECORD_PICKER in batch-start-scripts.html
 _EXECUTION_DATA_TRACE_KEYS = {
     "completed_by",
     "completed_by_email",
@@ -105,8 +107,10 @@ def _safe_flow_return_to(value, process_id) -> str:
         norm_path = "/" + norm_path
     if "\\" in norm_path:
         return default
-    # Stay within process workspace routes (blocks /core/flows/../../admin → /admin)
-    if norm_path != _ALLOWED_RETURN_PREFIX and not norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/"):
+    # Stay within process workspace routes (blocks /core/flows/../../admin → /admin), or the
+    # Record a production step picker, which sends people here and wants them back.
+    in_flows = norm_path == _ALLOWED_RETURN_PREFIX or norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/")
+    if not in_flows and norm_path != _RECORD_PICKER:
         return default
     if parsed.fragment:
         frag = unquote(parsed.fragment)
@@ -257,18 +261,8 @@ def register_routes(
 
         return_to = _safe_flow_return_to(request.args.get("return_to"), process_id)
 
-        # HTMX fragment support (boosted navigation swaps #page-content).
-        if request.headers.get("HX-Request") == "true":
-            return render_template(
-                "processes/batch-start-hx.html",
-                active_page="core",
-                process_id=str(process_id),
-                execution_id=str(execution_id) if execution_id else None,
-                step_id=str(step_id) if step_id else None,
-                draft=is_draft,
-                return_to=return_to,
-            )
-
+        # One template for full and boosted loads: base_spa carries a boosted page's assets, and a
+        # separate fragment dropped the section tabs and breadcrumb.
         return render_template(
             "processes/batch-start.html",
             active_page="core",
@@ -1250,6 +1244,10 @@ def register_routes(
 
                 # Single commit for all inventory operations
                 db_session.commit()
+            except LotOnHoldError as e:
+                # GL-P02: a held lot was picked. Nothing is taken; say which lot and why.
+                db_session.rollback()
+                return jsonify({"error": str(e), "code": "lot_on_hold"}), 409
             except Exception as e:
                 logger.exception("Failed to commit inventory operations atomically")
                 db_session.rollback()

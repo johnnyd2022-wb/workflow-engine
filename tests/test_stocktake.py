@@ -9,6 +9,7 @@ import pytest
 
 from app.core.backend import stocktake
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.stock_location import StockLocation
 from app.core.db.models.stocktake import Stocktake, StocktakeLine, StocktakeResolution
@@ -32,6 +33,7 @@ def st(world):  # noqa: F811
     db.rollback()
     for model in (StocktakeResolution, StocktakeLine, Stocktake):
         db.query(model).filter(model.org_id == org.id).delete(synchronize_session=False)
+    db.query(InventoryMovement).filter(InventoryMovement.org_id == org.id).delete(synchronize_session=False)
     db.query(InventoryWastage).filter(InventoryWastage.org_id == org.id).delete(synchronize_session=False)
     db.commit()
 
@@ -283,6 +285,8 @@ def test_schedule_and_due_reminder(st):
     assert due_soon[0]["title"].startswith("Stocktake due") and due_soon[0]["overdue"] is False
     assert stocktake._add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
 
+    assert listing["schedule"]["bulk_tolerance_percent"] == "1"
+
     # The profile form doesn't wipe the schedule (it doesn't send these keys).
     client.put("/api/compliant/profile", json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}})
     assert client.get("/api/core/stocktakes").get_json()["schedule"]["frequency"] == "quarterly"
@@ -345,3 +349,39 @@ def test_other_tenants_cannot_see_or_touch_a_stocktake(st, db, flask_app):  # no
         clear_org_synthetic_data(db, other_org.id)
         db.query(Organisation).filter(Organisation.id == other_org.id).delete(synchronize_session=False)
         db.commit()
+
+
+def test_a_rejected_resolution_leaves_no_breakage_behind(st):
+    db, client = st["db"], st["client"]
+    vat44 = st["lot"]("VAT44", 50)
+    body = _count(client, _start(client), {(MAIN, "VAT44"): "43"})
+    line = _line(body, "VAT44")
+    # The second reason is invalid (no place), so the whole resolution must be refused.
+    resp = client.post(
+        f"/api/core/stocktakes/{body['id']}/lines/{line['id']}/resolve",
+        json={"reasons": [{"reason": "broken", "quantity": "3"}, {"reason": "found_elsewhere", "quantity": "4"}]},
+    )
+    assert resp.status_code == 400
+    db.expire_all()
+    assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == vat44.id).count() == 0
+    assert db.get(InventoryItem, vat44.id).quantity == Decimal("50")
+
+
+@pytest.mark.parametrize(("counted", "reason"), [("47", "broken"), ("52", "under_recorded")])
+def test_stocktake_adjustments_keep_the_lot_history_balanced(st, counted, reason):
+    from app.features.inventory.checks.stock_integrity import run_stock_integrity_check
+
+    db, org, client = st["db"], st["org"], st["client"]
+    vat44 = st["lot"]("VAT44", 50)
+    body = _count(client, _start(client), {(MAIN, "VAT44"): counted})
+    line = _line(body, "VAT44")
+    quantity = str(abs(int(counted) - 50))
+    resp = client.post(
+        f"/api/core/stocktakes/{body['id']}/lines/{line['id']}/resolve",
+        json={"reasons": [{"reason": reason, "quantity": quantity}]},
+    )
+    assert resp.status_code == 200, resp.get_json()
+    db.expire_all()
+    assert db.get(InventoryItem, vat44.id).quantity == Decimal(counted)
+    alerts = run_stock_integrity_check(org.id, db).data["system_alerts"]
+    assert not [a for a in alerts if a["id"] == f"stock:{vat44.id}:balance_mismatch"], alerts

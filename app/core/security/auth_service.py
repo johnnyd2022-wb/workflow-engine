@@ -30,6 +30,12 @@ from app.core.utils.time import utc_now
 _DUMMY_PASSWORD_HASH = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
+def auth_stamp(password_hash: str | None) -> str:
+    """A short fingerprint of a password hash, kept in the session (as Django's session auth hash
+    is). It reveals nothing usable about the hash, and it changes whenever the password does."""
+    return hmac.new(b"bize-session-auth", (password_hash or "").encode(), hashlib.sha256).hexdigest()[:32]
+
+
 class AuthService:
     """Service for authentication and authorization"""
 
@@ -152,8 +158,13 @@ class AuthService:
         org = self.org_repo.get_org_by_id(org_id)
         org_name = org.name if org else None
 
+        if user is None:
+            user = self.user_repo.get_user_by_id(user_id)
         session_data = {
             "user_id": str(user_id),
+            # GL-A02: ties the session to the password it was signed in with; a password change
+            # makes every other session's stamp stale (tenant_context checks it on each request).
+            "auth_stamp": auth_stamp(user.password_hash if user is not None else None),
             "org_id": str(org_id),
             "user_email": user_email,  # Store as user_email for consistency
             "org_name": org_name,  # Store org_name for lightweight access

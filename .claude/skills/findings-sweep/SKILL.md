@@ -52,6 +52,14 @@ The sweep runs first for a reason: it closes items merged since the last run (vi
 `Findings-Index:` trailer), reopens anything that regressed, and drops anything a human
 suppressed. **Working from a stale index means re-fixing shipped work.**
 
+It also marks `mr-open` every item that an **open** MR's `Findings-Index:` trailer claims, and
+`next` skips those. Your worktree is cut from `origin/main`, which does not have an unmerged
+fix, so without that the same finding is re-picked every day while its MR waits for review
+(in November 2026 two sweep MRs for the same Tastings findings sat open together). The mark is released if the MR closes
+unmerged, and never on a glab failure. If `next` then returns nothing, there is nothing an
+agent can honestly do: report `verdict: stood-down` and name the MRs waiting for review
+(the scheduled runner itself logs "nothing outstanding" and does not launch you).
+
 Then honour the budget, exactly:
 
 | Budget says | Do |
@@ -160,10 +168,20 @@ the MR ready for review.
 Findings-Index: 09d144c1, 1ced5f93
 ```
 
+Put the same line in the body of the commit that fixes those items, too, and only for
+items that commit really fixes. The index is rebuilt from an empty store every day, and the
+MR window (`merged_lookback_days`) is two days: the commit trailer, read from `origin/main`'s
+history, is what keeps a fix that merged last week from being listed as new work. It closes
+an item only the first time a worktree sees it, and the daily run is always a new worktree,
+so it does not stop a closure coming back each day. A fix undone by `git revert` (the
+commit, or a merge with `-m 1`) stops closing its items. The GitLab Revert button writes no
+commit id, so it is not seen: if you take a fix back out that way, or any other, edit the
+finding's source so it is open again, because the trailer will keep closing it.
+
 This is not decoration — it is the entire feedback path. The next sweep reads that
 trailer out of the merged MR and closes those items. **No trailer means the work merges
-and the index never learns**, so the items sit `mr-open` forever and eventually get
-picked up again. The script deliberately refuses to guess closure from title similarity,
+and the index never learns**, so the items are picked up again as soon as the MR
+stops being open. The script deliberately refuses to guess closure from title similarity,
 because a wrong auto-close silently drops real work off the list.
 
 The description should also, per finding: what was owed, where it was documented, what
@@ -186,7 +204,7 @@ Write `.agents/reports/findings-sweep/<date>.md`:
 ```markdown
 # FINDINGS SWEEP: <date>
 budget: <n> items (<why, quoted from the budget line>)
-index: <total> tracked, <open> open  (<new> new, <closed> closed by merge, <gone>, <regressed>)
+index: <total> tracked, <open> open  (<new> new, <closed> closed by merge, <shipped> already shipped, <gone>, <regressed>)
 picked: <id> <title> [P0/security]
 grader: codex/gpt-5.6-sol (high) | subagent fallback — <which, and why>
 verdict: shipped | partial | stood-down | blocked

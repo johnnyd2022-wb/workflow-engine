@@ -93,3 +93,12 @@ connection ever looks unreachable again — its `test_db` check names this exact
   never actually contain.
 - Teardown lives in the fixture, not scattered `finally` blocks in every test — delete
   in reverse dependency order (children before parents) to respect FK constraints.
+- A backstop catches a fixture that forgets: `tests/org_purge.py` records every
+  `Organisation` the pytest process inserts through the ORM (factory, repository or bare
+  model) and an autouse session fixture in `tests/conftest.py` purges whatever is left at
+  session end, raising if it cannot. An org a suite means to keep (the shared "Whistlebird
+  Demo") is listed in `_PERSISTENT_ORG_NAMES` and never tracked. Tear down for yourself
+  anyway — it runs once, at the end, so it does nothing for isolation between tests. It
+  cannot see an org a *server process* created
+  (a live-server test that signs up over HTTP): purge those by name with
+  `purge_orgs_named`, as `tests/test_2fa_totp_optimized.py` does.

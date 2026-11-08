@@ -6,6 +6,7 @@ from flask import Blueprint, g, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
+from app.core.db.site_entitlement import sites_on
 from app.core.db.site_guard import SiteScopeError
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
@@ -22,6 +23,11 @@ sites_bp = Blueprint(
 
 def _org():
     return UUID(g.org_id)
+
+
+def _operations() -> bool:
+    """Every gate is on: work can be recorded at any active site, not just the default."""
+    return sites_on(db_session, _org(), g.current_org.multiple_sites_enabled)
 
 
 def _body():
@@ -55,6 +61,13 @@ def list_sites():
     return jsonify(service.overview(db_session, _org()))
 
 
+@sites_bp.route("/api/core/sites/choices", methods=["GET"])
+@requires_auth
+def site_choices():
+    """For site pickers and the site lens: any member who records or reads stock or batches."""
+    return jsonify(service.choices(db_session, _org()))
+
+
 @sites_bp.route("/api/core/sites/<site_id>/position", methods=["GET"])
 @requires_auth
 def site_position(site_id):
@@ -81,7 +94,7 @@ def site_position(site_id):
     )
     return jsonify(
         {
-            "site": service.serialise(site),
+            "site": service.serialise(site, _operations()),
             "stock": [
                 {"inventory_type": kind, "unit": unit, "quantity": str(quantity), "lots": count}
                 for kind, unit, quantity, count in rows
@@ -107,8 +120,9 @@ def configure_sites():
 def create_site():
     site = service.save_site(db_session, _org(), _body())
     db_session.commit()
-    log_action("create", "site", site.id, service.serialise(site))
-    return jsonify(service.serialise(site)), 201
+    shown = service.serialise(site, _operations())
+    log_action("create", "site", site.id, shown)
+    return jsonify(shown), 201
 
 
 @sites_bp.route("/api/core/sites/<site_id>", methods=["PATCH"])
@@ -119,8 +133,9 @@ def update_site(site_id):
         return jsonify({"error": "Site not found"}), 404
     service.save_site(db_session, _org(), _body(), site)
     db_session.commit()
-    log_action("update", "site", site.id, service.serialise(site))
-    return jsonify(service.serialise(site))
+    shown = service.serialise(site, _operations())
+    log_action("update", "site", site.id, shown)
+    return jsonify(shown)
 
 
 def install_site_request_validation(app):
@@ -135,11 +150,16 @@ def install_site_request_validation(app):
             "core.create_execution",
             "stock_locations.create_location",
             "core.consume_final_product_fifo",
+            "core.csv_commit",
+            "go_live.create_opening_stock",
         }
     )
 
     @app.before_request
     def validate_requested_site():
+        # Never carry a previous request's site over: `g` can outlive a request when an app
+        # context is reused, and a request that names no site must land on the default.
+        g.validated_site_id = None
         if request.endpoint not in tagged_endpoints or not getattr(g, "current_user", None):
             return None
         data = request.get_json(silent=True)
@@ -168,8 +188,8 @@ def install_site_request_validation(app):
             site = service.get_site(db_session, _org(), service.parse_id(data["site_id"]))
             if site is None or not site.is_active:
                 raise SiteScopeError("Site must be active and belong to this organisation")
-            if not site.is_default and not g.current_org.multiple_site_operations_enabled:
-                raise SiteScopeError("Operations at additional sites are not available yet")
+            if not site.is_default and not sites_on(db_session, _org(), g.current_org.multiple_sites_enabled):
+                raise SiteScopeError("Working at additional sites is not part of this organisation's plan")
             g.validated_site_id = site.id
             if request.endpoint == "core.create_inventory_item" and data.get("barcode"):
                 from app.core.db.models.inventory_item import InventoryItem

@@ -110,4 +110,66 @@ html[data-spa-theme="dark"] {
   --ui-border: var(--border-default, rgb(255 255 255 / 14%));
   --ui-shadow-card: 0 2px 8px rgb(0 0 0 / 18%);
 }
+/* GL-U04: --ui-text and friends are declared on :root as var(--text-primary, ...), and a custom
+   property is resolved where it is declared. The dark theme sets --text-primary and the rest on
+   #page-content (spa-theme.css), so on :root these tokens still held the light values: pages that
+   read them got near-black text on the dark page. Declare them again where the dark values live. */
+html[data-spa-theme="dark"] #page-content.page-content {
+  --ui-text: var(--text-primary, #ffffff);
+  --ui-text-muted: var(--text-secondary, #d6dee6);
+  --ui-surface: var(--bg-card, #121212);
+  --ui-surface-subtle: var(--bg-secondary, #161616);
+  --ui-border: var(--border-default, rgb(255 255 255 / 14%));
+}
 html[data-spa-theme="dark"] .ui-button { color: #10201f; }
+
+/* Signed out mid-save (app/ui/shared/session-ended.js, GL-U03). */
+.session-ended {
+  position: fixed;
+  z-index: 10000;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--ui-radius-md, 10px);
+  background: var(--ui-surface, #fff);
+  border: 1px solid #fedf89;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  color: var(--ui-text, #172033);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.session-ended[hidden] { display: none; }
+.session-ended__text { margin: 0; flex: 1; }
+.session-ended__signin {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--ui-radius-sm, 8px);
+  background: var(--ui-accent, #0f766e);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.session-ended__signin:hover { filter: brightness(1.08); }
+.session-ended__signin:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: 2px; }
+.session-ended__close {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-text-muted, #64748b);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+@media (max-width: 560px) {
+  .session-ended { flex-wrap: wrap; }
+  .session-ended__text { flex-basis: 100%; }
+}
+html[data-spa-theme="dark"] .session-ended { background: #111827; color: #e5e7eb; border-color: #b4830a; }
+html[data-spa-theme="dark"] .session-ended__signin { color: #10201f; }
+html[data-spa-theme="dark"] .session-ended__close { color: #9ca3af; }

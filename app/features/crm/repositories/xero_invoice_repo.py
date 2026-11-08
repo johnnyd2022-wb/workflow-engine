@@ -8,6 +8,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.utils.time import utc_now
+from app.features.crm.models.xero_credit_note import XeroCreditNote
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 
@@ -55,9 +56,9 @@ class XeroInvoiceRepository:
         return inv
 
     def replace_line_items(self, invoice_id: UUID, org_id: UUID, line_items: list[dict]) -> None:
-        self.db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice_id).delete(
-            synchronize_session=False
-        )
+        self.db.query(XeroInvoiceLineItem).filter(
+            XeroInvoiceLineItem.invoice_id == invoice_id, XeroInvoiceLineItem.org_id == org_id
+        ).delete(synchronize_session=False)
 
         for item in line_items:
             li = XeroInvoiceLineItem(
@@ -110,7 +111,7 @@ class XeroInvoiceRepository:
         q = (
             self.db.query(XeroInvoice)
             .filter(XeroInvoice.contact_id == contact_id, XeroInvoice.org_id == org_id)
-            .order_by(XeroInvoice.date.desc())
+            .order_by(XeroInvoice.date.desc().nulls_last(), XeroInvoice.id.desc())
         )
         total = q.count()
         return q.offset((page - 1) * page_size).limit(page_size).all(), total
@@ -147,8 +148,12 @@ class XeroInvoiceRepository:
         )
         return rows, total
 
-    def get_line_items(self, invoice_id: UUID) -> list[XeroInvoiceLineItem]:
-        return self.db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice_id).all()
+    def get_line_items(self, invoice_id: UUID, org_id: UUID) -> list[XeroInvoiceLineItem]:
+        return (
+            self.db.query(XeroInvoiceLineItem)
+            .filter(XeroInvoiceLineItem.invoice_id == invoice_id, XeroInvoiceLineItem.org_id == org_id)
+            .all()
+        )
 
     def line_item_options_for_contact(self, contact_id: UUID, org_id: UUID) -> list[dict]:
         """Return distinct line item description/code combinations for a contact."""
@@ -290,7 +295,17 @@ class XeroInvoiceRepository:
             )
             .one()
         )
-        return {"total": float(row.total or 0), "invoice_count": row.invoice_count or 0}
+        credit_total = (
+            self.db.query(func.coalesce(func.sum(XeroCreditNote.total), 0))
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
+                XeroCreditNote.date >= start_date,
+                XeroCreditNote.date < end_date,
+            )
+            .scalar()
+        )
+        return {"total": float(row.total or 0) - float(credit_total or 0), "invoice_count": row.invoice_count or 0}
 
     def outstanding_receivables(self, org_id: UUID) -> dict:
         row = (
@@ -374,7 +389,7 @@ class XeroInvoiceRepository:
         }
 
     def monthly_sales_totals(self, org_id: UUID, months: int = 12) -> list[dict]:
-        """Return monthly invoice totals for AUTHORISED/PAID invoices (ACCREC only)."""
+        """Return monthly net revenue for AUTHORISED/PAID invoices and credit notes."""
         rows = (
             self.db.query(
                 func.date_trunc("month", XeroInvoice.date).label("month"),
@@ -389,17 +404,31 @@ class XeroInvoiceRepository:
             )
             .group_by(func.date_trunc("month", XeroInvoice.date))
             .order_by(func.date_trunc("month", XeroInvoice.date).desc())
-            .limit(months)
             .all()
         )
-        return [
-            {
-                "month": row.month.strftime("%Y-%m") if row.month else None,
-                "total": float(row.total or 0),
-                "invoice_count": row.invoice_count,
-            }
+        totals = {
+            row.month.strftime("%Y-%m"): {"total": float(row.total or 0), "invoice_count": row.invoice_count}
             for row in rows
-        ]
+            if row.month
+        }
+        credits = (
+            self.db.query(
+                func.date_trunc("month", XeroCreditNote.date).label("month"),
+                func.sum(XeroCreditNote.total).label("total"),
+            )
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
+                XeroCreditNote.date.isnot(None),
+            )
+            .group_by(func.date_trunc("month", XeroCreditNote.date))
+            .all()
+        )
+        for row in credits:
+            if row.month:
+                key = row.month.strftime("%Y-%m")
+                totals.setdefault(key, {"total": 0.0, "invoice_count": 0})["total"] -= float(row.total or 0)
+        return [{"month": month, **values} for month, values in sorted(totals.items(), reverse=True)[:months]]
 
     def daily_sales_totals_for_period(self, org_id: UUID, start_date: date, end_date: date) -> list[dict]:
         """Return daily sales totals for AUTHORISED/PAID invoices (ACCREC only)."""
@@ -421,14 +450,28 @@ class XeroInvoiceRepository:
             .order_by(XeroInvoice.date.asc())
             .all()
         )
-        return [
-            {
-                "day": row.day.isoformat() if row.day else None,
-                "total": float(row.total or 0),
-                "invoice_count": int(row.invoice_count or 0),
-            }
+        totals = {
+            row.day.isoformat(): {"total": float(row.total or 0), "invoice_count": int(row.invoice_count or 0)}
             for row in rows
-        ]
+            if row.day
+        }
+        credits = (
+            self.db.query(XeroCreditNote.date, func.sum(XeroCreditNote.total).label("total"))
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
+                XeroCreditNote.date >= start_date,
+                XeroCreditNote.date < end_date,
+            )
+            .group_by(XeroCreditNote.date)
+            .all()
+        )
+        for row in credits:
+            if row.date:
+                totals.setdefault(row.date.isoformat(), {"total": 0.0, "invoice_count": 0})["total"] -= float(
+                    row.total or 0
+                )
+        return [{"day": day, **values} for day, values in sorted(totals.items())]
 
     def monthly_sales_totals_for_contact(
         self,
@@ -635,7 +678,7 @@ class XeroInvoiceRepository:
     def customer_product_breakdown(
         self,
         org_id: UUID,
-        limit: int = 20,
+        limit: int | None = 20,
         start_date: date | None = None,
         end_date: date | None = None,
         descending: bool = True,
@@ -667,17 +710,15 @@ class XeroInvoiceRepository:
         if end_date:
             q = q.filter(XeroInvoice.date < end_date)
         order_expr = revenue_expr.desc().nulls_last() if descending else revenue_expr.asc().nulls_last()
-        rows = (
-            q.group_by(
-                XeroInvoice.contact_id,
-                XeroContact.name,
-                XeroInvoiceLineItem.item_code,
-                XeroInvoiceLineItem.description,
-            )
-            .order_by(order_expr)
-            .limit(limit)
-            .all()
-        )
+        q = q.group_by(
+            XeroInvoice.contact_id,
+            XeroContact.name,
+            XeroInvoiceLineItem.item_code,
+            XeroInvoiceLineItem.description,
+        ).order_by(order_expr)
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
         return [
             {
                 "contact_id": str(row.contact_id) if row.contact_id else None,

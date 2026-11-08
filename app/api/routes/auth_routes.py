@@ -30,6 +30,7 @@ from app.core.security.tenant_scope import unscoped
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
 from app.core.utils.log_action import log_action
 from app.observability import get_logger, start_span, traced
+from app.ui.legal import TERMS_VERSION
 
 logger = get_logger(__name__)
 
@@ -218,6 +219,10 @@ def signup():
 
     if password != password_confirm:
         return jsonify({"error": "Passwords do not match"}), 400
+    try:
+        validate_new_password(password)
+    except PeopleError as err:
+        return jsonify({"error": str(err)}), 400
 
     # Normalize phone number if provided (reusable function for consistency)
     from app.core.utils.phone_normalization import normalize_phone_number
@@ -247,7 +252,9 @@ def signup():
         user_role = user.role.value
 
         # Log signup
-        log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
+        log_action(
+            "signup", "organisation", org.id, {"org_name": org_name, "terms_version": TERMS_VERSION}, org.id, user.id
+        )
 
         from app.core.utils.emit_event import emit_event
 
@@ -339,9 +346,6 @@ def login():
         ip_address = get_remote_address()
         user_agent = request.headers.get("User-Agent", "Unknown")
 
-        # Check if this is a password reset attempt (unlocks account)
-        is_password_reset = data.get("password_reset", False)
-
         auth_service = AuthService(db)
 
         # Try to get user by email first to check lockout status
@@ -363,8 +367,9 @@ def login():
         user = auth_service.authenticate(email, password)
 
         # CRITICAL: Account Lockout Logic
-        # If account is locked and this is NOT a password reset, block login
-        if user_by_email and not is_password_reset:
+        # If the account is locked, block login. Nothing the caller sends can skip this (GL-A03):
+        # only the lock expiring, or a verified recovery, clears it.
+        if user_by_email:
             if user_repo.is_account_locked(user_by_email.id):
                 # Calculate remaining lockout time
                 remaining_seconds = int((user_by_email.account_locked_until - datetime.now(UTC)).total_seconds())
@@ -473,21 +478,6 @@ def login():
 
             # Always return the same error message to prevent user enumeration
             return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 401
-
-        # CRITICAL: Account Lockout - Reset failed attempts on successful authentication
-        # If password reset flag is set, unlock the account
-        if is_password_reset:
-            with start_span(
-                "auth.account_unlock",
-                attributes={
-                    "org_id": str(user.org_id),
-                    "user_id": str(user.id),
-                    "reason": "password_reset",
-                },
-            ):
-                user_repo.unlock_account(user.id)
-            db.commit()
-            logger.info(f"Account unlocked via password reset for user {user.id}")
 
         # Reset failed login attempts on successful authentication
         user_repo.reset_failed_login_attempts(user.id)
@@ -780,6 +770,20 @@ def logout():
     # Do NOT clear trusted device cookie - it should persist across logout/login
     # This allows "Remember this device" to work as expected
     return jsonify({"message": "Logout successful"}), 200
+
+
+@auth_bp.route("/csrf-token", methods=["GET"])
+@requires_auth
+def get_csrf_token():
+    """A fresh CSRF token for an open page whose token went stale (GL-U03).
+
+    Signing in again in another tab rotates the session and its CSRF secret, so a form left
+    open in the first tab can no longer save. app/ui/shared/session-ended.js fetches this and
+    updates the page's meta tag; only a signed-in session can get one.
+    """
+    from flask_wtf.csrf import generate_csrf
+
+    return jsonify({"csrf_token": generate_csrf()}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])
@@ -1522,6 +1526,11 @@ def change_password():
     # Validate passwords match
     if new_password != new_password_confirm:
         return jsonify({"error": "New passwords do not match"}), 400
+
+    try:
+        validate_new_password(new_password)
+    except PeopleError as err:
+        return jsonify({"error": str(err)}), 400
 
     # Ensure new password is different from current
     if current_password == new_password:

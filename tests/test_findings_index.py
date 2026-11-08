@@ -46,6 +46,8 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(fi, "scan_code_markers", lambda: [])
     monkeypatch.setattr(fi, "scan_open_mrs", lambda: [])
     monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({}, []))
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {})
     monkeypatch.setattr(fi, "suppressed_ids", lambda items: {})
     monkeypatch.setattr(fi, "compute_budget", lambda cfg=None: {"items": 2, "why": "test", "quota": None})
     return tmp_path
@@ -377,6 +379,30 @@ def test_route_parameter_in_a_code_span_is_not_mistaken_for_a_format_placeholder
     # F2's only placeholder sits in a code span that does not start with `/`: still a template.
     assert len(items) == 1
     assert "`/api/crm/customers/<id>/analytics`" in items[0].detail
+
+
+def test_a_bullet_of_only_file_links_is_evidence_not_a_finding(tmp_path, monkeypatch):
+    """The Evidence list under an audit's finding is `- [file.py:38](app/file.py:38)` lines. Each was
+    indexed as its own worklist item, titled with a bare file name and no claim to act on."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/audit.md",
+        """## Findings
+
+### F1 - Medium - a Sales write moves stock
+
+Evidence:
+
+- [access_policy.py:38](app/core/security/access_policy.py:38)
+- [api_routes.py:867](app/api_routes.py:867), [inventory_repo.py:529](app/inventory_repo.py:529)
+- [api_routes.py:900](app/api_routes.py:900) lets a Sales user run reconciliation without inventory.adjust
+""",
+    )
+    items = fi.parse_doc(path)
+    assert [i.detail for i in items] == [
+        "[api_routes.py:900](app/api_routes.py:900) lets a Sales user run reconciliation without inventory.adjust"
+    ]
 
 
 def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
@@ -1110,6 +1136,114 @@ def test_merge_closure_survives_a_sweep_that_still_finds_the_text(store, monkeyp
     assert result["stats"]["reopened"] == 0
 
 
+def test_merge_closure_applies_to_an_item_first_seen_after_it_merged(store, monkeypatch):
+    """The index lives in a gitignored, per-worktree file, and the daily run starts in a
+    fresh worktree: the store is EMPTY when the sweep begins, so the fix's item has no
+    record yet when its trailer is read. Every other closure test sweeps the item once
+    first, which is the one situation the timer never produces. Without this, a finding
+    that shipped yesterday is listed as brand-new work today."""
+    item = make_item(detail="a finding fixed and merged before this worktree existed")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!142"}, ["!142"]))
+
+    result = fi.sweep()  # first sweep this store has ever run
+
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert record["mr"] == "!142"
+    assert result["stats"]["already_shipped"] == 1
+    assert result["stats"]["closed_by_merge"] == 0, "that counts merges since last seen, and none was"
+    assert result["stats"]["new"] == 0, "a shipped item is not new work"
+    assert fi.rank(result["store"]["items"]) == []
+    assert result["open"] == 0
+
+    # Sticky: the report bullet is never edited out, so the next sweep finds the same text.
+    again = fi.sweep()
+    assert again["store"]["items"][item.id]["status"] == "done"
+    assert again["stats"]["reopened"] == 0
+
+
+def test_a_closure_for_an_item_nobody_found_makes_no_record(store, monkeypatch):
+    """A trailer naming an id whose text is gone from the tree must not mint a phantom
+    record: there is nothing to close."""
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({"deadbeef": "!7"}, ["!7"]))
+    result = fi.sweep()
+    assert result["store"]["items"] == {}
+    assert result["stats"]["closed_by_merge"] == result["stats"]["already_shipped"] == 0
+
+
+def test_a_trailer_in_main_history_closes_an_item_the_mr_window_no_longer_covers(store, monkeypatch):
+    """`merged_lookback_days` is two days. An item fixed last week and still described in
+    an unedited audit report would otherwise come back as outstanding in every fresh
+    worktree. The trailer is also on the commit, and history never ages out."""
+    item = make_item(detail="a finding fixed a week ago, its report bullet never edited")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+
+    result = fi.sweep()
+
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert record["mr"] == "commit 86eedfe5"
+    assert result["open"] == 0
+    assert result["stats"]["already_shipped"] == 1
+
+
+def test_history_is_read_even_when_the_remote_is_skipped(store, monkeypatch):
+    """`--no-remote` means no glab. Git history is local, so a degraded sweep still knows
+    what shipped instead of re-listing it."""
+    item = make_item(detail="a finding fixed on main, swept with glab unavailable")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+
+    result = fi.sweep(skip_remote=True)
+
+    assert result["store"]["items"][item.id]["status"] == "done"
+
+
+@pytest.mark.parametrize("status", ["outstanding", "wont-fix", "suppressed"])
+def test_history_never_overrides_a_record_the_store_already_holds(store, monkeypatch, status):
+    """History does not age out and a revert does not remove a trailer. If it re-applied to
+    records already held, a human who reopened an item (its fix was reverted) or declined it
+    would be overridden by the next sweep, for ever. It only speaks for what it first sees."""
+    item = make_item(detail="a finding whose merged fix was later reverted by hand")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    held = fi.load_store()
+    held["items"][item.id]["status"] = status
+    fi.save_store(held)
+
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == status
+    assert result["stats"]["already_shipped"] == result["stats"]["closed_by_merge"] == 0
+
+
+def test_an_mr_trailer_still_closes_a_record_the_store_already_holds(store, monkeypatch):
+    """The MR window is the live path -- the fix merged since this store last saw the item --
+    and it keeps closing existing records, as before. Only history is birth-only."""
+    item = make_item(detail="a finding an MR closes while the store holds it")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!142"}, ["!142"]))
+
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "done"
+    assert result["stats"]["closed_by_merge"] == 1
+
+
+def test_an_mr_reference_wins_over_a_commit_reference(store, monkeypatch):
+    """Both sources can name the same item (the MR description and the commit carry the
+    same trailer). The MR number is the more useful pointer, so it is the one kept."""
+    item = make_item(detail="named by both the merged MR and its commit")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!547"}, ["!547"]))
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+    assert fi.sweep()["store"]["items"][item.id]["mr"] == "!547"
+
+
 def test_merge_closure_wins_over_the_disappearance_pass(store, monkeypatch):
     """Order matters: an item whose text is gone BECAUSE it was fixed must read 'done',
     never 'gone'. Getting this backwards would log real shipped work as vanished."""
@@ -1207,6 +1341,165 @@ def test_suppressed_item_stays_off_the_worklist(store, monkeypatch):
     monkeypatch.setattr(fi, "suppressed_ids", lambda items: {item.id: "accepted risk"})
     result = fi.sweep()
     assert fi.rank(result["store"]["items"]) == []
+
+
+# --- trailers read from merged history --------------------------------------------------
+# These run real git against a throwaway repo (no network, never the working repo): the
+# property under test -- "only what is on origin/main counts" -- is a git fact, and a
+# stubbed `subprocess` would only prove the stub.
+
+
+def _git(repo, *args):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.test", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _commit(repo, message, name):
+    (repo / name).write_text(name, encoding="utf-8")
+    _git(repo, "add", name)
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+@pytest.fixture
+def history_repo(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    monkeypatch.setattr(fi, "REPO_ROOT", repo)
+    return repo
+
+
+def test_commit_closures_read_every_trailer_on_origin_main(history_repo):
+    shipped = _commit(history_repo, "fix: one\n\nBody.\n\nFindings-Index: aaaa1111, bbbb2222\n", "one")
+    _commit(history_repo, "fix: two\n\nFindings-Index: cccc3333\n", "two")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    closures = fi.merged_commit_closures()
+
+    assert set(closures) == {"aaaa1111", "bbbb2222", "cccc3333"}
+    assert closures["aaaa1111"] == f"commit {shipped[:8]}"
+
+
+def test_the_newest_commit_is_the_one_named(history_repo):
+    _commit(history_repo, "fix: first attempt\n\nFindings-Index: aaaa1111\n", "first")
+    newest = _commit(history_repo, "fix: the real fix\n\nFindings-Index: aaaa1111\n", "second")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {"aaaa1111": f"commit {newest[:8]}"}
+
+
+@pytest.mark.parametrize("line", ["findings-index: ffff6666", "  Findings-Index: ffff6666", "FINDINGS-INDEX: FFFF6666"])
+def test_commit_closures_accept_every_trailer_form_the_mr_reader_accepts(history_repo, line):
+    """The MR path matches the trailer case-insensitively with leading whitespace; a commit
+    written the same way must not be silently missed by the git filter in front of it."""
+    _commit(history_repo, f"fix: x\n\n{line}\n", "x")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"ffff6666"}
+
+
+def test_commit_closures_ignore_a_trailer_that_has_not_merged(history_repo):
+    """The skill is never authorised to merge, so it must never *claim* a merge. A trailer
+    on this run's own unmerged commit would otherwise close its items before anyone has
+    reviewed the MR -- the exact thing `done` is reserved to mean."""
+    _commit(history_repo, "fix: merged\n\nFindings-Index: aaaa1111\n", "merged")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _git(history_repo, "checkout", "-q", "-b", "chore/findings-sweep")
+    _commit(history_repo, "fix: mine, not merged\n\nFindings-Index: dddd4444\n", "mine")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_commit_closures_need_the_trailer_on_its_own_line(history_repo):
+    """Prose that merely mentions the trailer (a commit explaining the mechanism) is not
+    a closure."""
+    _commit(history_repo, "docs: how it works\n\nWe write a Findings-Index: eeee5555 line per MR.\n", "prose")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_a_fix_that_was_reverted_no_longer_closes_its_items(history_repo):
+    """A revert does not remove the trailer, so without this the item stays closed in every
+    fresh-store run although the fix is gone from the tree."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # the revert took aaaa1111 only
+
+
+def test_reverting_a_revert_closes_the_items_again(history_repo):
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "revert", "--no-edit", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_reverting_a_merge_undoes_the_fixes_it_brought_in(history_repo):
+    """The trailer is on the fix commit on its branch; `git revert -m 1 <merge>` names only
+    the merge, whose own message has none. The merge's side must count as reverted too."""
+    _commit(history_repo, "chore: base", "base")
+    _git(history_repo, "checkout", "-q", "-b", "fix-branch")
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "checkout", "-q", "main")
+    _commit(history_repo, "fix: elsewhere\n\nFindings-Index: bbbb2222\n", "elsewhere")
+    _git(history_repo, "merge", "--no-ff", "-q", "-m", "Merge branch 'fix-branch'", "fix-branch")
+    _git(history_repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # only what the merge brought in
+
+
+def test_revert_detection_does_not_depend_on_the_users_grep_flavour(history_repo):
+    """`git log --grep` follows grep.patternType, and under extended or perl the interval
+    `\\{40\\}` is a literal, so reverts would silently stop being seen."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "config", "grep.patternType", "extended")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_one_revert_naming_several_commits_cancels_each(history_repo):
+    first = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    second = _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _commit(
+        history_repo,
+        f"Revert both\n\nThis reverts commit {second}.\nThis reverts commit {first}.\n",
+        "both",
+    )
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_a_revert_that_names_no_commit_cancels_nothing(history_repo):
+    """GitLab's Revert button writes "This reverts merge request !N". With no sha to match,
+    the closure stands rather than being guessed away; the docstring states the limit."""
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, 'Revert "fix: x"\n\nThis reverts merge request !123\n', "revert")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_commit_closures_are_empty_without_origin_main(history_repo):
+    """No remote ref (a bare clone, a CI checkout): no evidence of any merge, not an error."""
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+
+    assert fi.merged_commit_closures() == {}
 
 
 # --- absence is only evidence if we actually looked -------------------------------------
@@ -1652,3 +1945,679 @@ def test_findings_sweep_closure_mr_is_not_re_indexed_from_its_own_writeup(monkey
     assert [i.source_ref for i in items] == ["!226"], (
         f"only the non-closure MR should contribute items, got {[(i.source_ref, i.title) for i in items]}"
     )
+
+
+# --- an open MR's `Findings-Index:` trailer takes its items off the worklist until it merges ---
+
+
+def _open_mrs(*descriptions):
+    return [{"iid": 600 + n, "title": f"mr {n}", "description": d} for n, d in enumerate(descriptions)]
+
+
+def test_open_mr_claims_reads_every_id_from_every_open_mrs_trailer(monkeypatch):
+    mrs = _open_mrs(
+        "## Per finding\n- owed: x\n\nFindings-Index: 1f24d8a6, A8C9782F\n",
+        "no trailer here, just prose about 0286511e\n",
+        "Findings-Index: b69bff9b, a8c9782f\n",  # a8c9782f is also in !600; the first MR listed keeps it
+        None,  # an MR with no description at all
+    ) + [{"iid": None, "description": "Findings-Index: cccccccc\n"}, {"description": "Findings-Index: dddddddd\n"}]
+    seen = []
+
+    def fake_glab(args, timeout=45):
+        seen.append(args)
+        return mrs
+
+    monkeypatch.setattr(fi, "_glab_json", fake_glab)
+
+    assert fi.open_mr_claims() == {"1f24d8a6": "!600", "a8c9782f": "!600", "b69bff9b": "!602"}
+    # Open MRs only: `--merged` would claim shipped work, `--all` would claim closed-unmerged MRs' items.
+    assert seen == [["mr", "list", "--output", "json", "--per-page", "50"]]
+
+
+@pytest.mark.parametrize("answer", [None, {"message": "401 Unauthorized"}, "oops"])
+def test_open_mr_claims_is_none_when_gitlab_cannot_be_read(monkeypatch, answer):
+    """None, not {}: 'no MR claims anything' and 'could not look' must stay distinguishable, because
+    the sweep releases items whose claim has gone and must not do so during an outage."""
+    monkeypatch.setattr(fi, "_glab_json", lambda args, timeout=45: answer)
+
+    assert fi.open_mr_claims() is None
+
+
+def test_open_mr_claims_is_empty_when_open_mrs_claim_nothing(monkeypatch):
+    monkeypatch.setattr(fi, "_glab_json", lambda args, timeout=45: _open_mrs("just a description"))
+
+    assert fi.open_mr_claims() == {}
+
+
+def test_sweep_marks_an_item_fixed_in_an_open_mr_as_mr_open(store, monkeypatch):
+    """Daily runs kept re-picking the same finding because its fix sat in an unmerged MR: the next
+    run starts from origin/main, which does not have it, so it read as untouched work."""
+    claimed = make_item(detail="a finding whose fix is in an open findings-sweep MR")
+    unclaimed = make_item(detail="a different finding nobody has an MR for")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [claimed, unclaimed])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {claimed.id: "!617", "deadbeef": "!617"})  # deadbeef: not indexed
+
+    result = fi.sweep()
+
+    records = result["store"]["items"]
+    assert records[claimed.id]["status"] == "mr-open"
+    assert records[claimed.id]["mr"] == "!617"
+    assert records[unclaimed.id]["status"] == "outstanding"
+    assert "deadbeef" not in records
+    assert result["stats"]["in_open_mr"] == 1
+
+
+def test_a_claim_does_not_override_an_item_already_being_worked_or_settled(store, monkeypatch):
+    working = make_item(detail="a finding this run has already started on")
+    settled = make_item(detail="a finding a human marked wont-fix")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [working, settled])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][working.id], "in-progress", "started")
+    fi._note(saved["items"][settled.id], "wont-fix", "scope", explicit=True)
+    fi.save_store(saved)
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {working.id: "!9", settled.id: "!9"})
+
+    result = fi.sweep()
+
+    assert result["store"]["items"][working.id]["status"] == "in-progress"
+    assert result["store"]["items"][settled.id]["status"] == "wont-fix"
+    assert result["stats"]["in_open_mr"] == 0
+
+
+def test_next_skips_items_already_claimed_by_an_open_mr(store, monkeypatch, capsys):
+    import argparse
+
+    claimed = make_item(detail="a finding whose fix is in an open findings-sweep MR", priority="P0")
+    other = make_item(detail="a lower-priority finding with no MR", priority="P3")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [claimed, other])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {claimed.id: "!617"})
+    fi.sweep()
+
+    assert fi.cmd_next(argparse.Namespace(limit=5, json=True)) == 0
+
+    picked = [r["id"] for r in json.loads(capsys.readouterr().out)["items"]]
+    assert picked == [other.id]  # the P0 outranks it, and is skipped only because !617 has it
+
+
+# The scheduled runner keeps ONE store in its own checkout across days, so the next tests keep the
+# store between sweeps (no unlinking) -- that is where a claim that goes away has to be taken back.
+
+
+def _picked(capsys):
+    import argparse
+
+    fi.cmd_next(argparse.Namespace(limit=5, json=True))
+    return [r["id"] for r in json.loads(capsys.readouterr().out)["items"]]
+
+
+def test_an_item_is_released_when_its_open_mr_is_closed_unmerged(store, monkeypatch, capsys):
+    """A one-way latch would hide owed work for good: the MR closes, its trailer leaves the open list,
+    and without a release the item stays `mr-open` -- skipped by `next` on every later day."""
+    item = make_item(detail="a finding whose MR was closed without merging", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+    assert _picked(capsys) == []
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # !617 was closed
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "outstanding"
+    assert result["stats"]["released_from_open_mr"] == 1
+    assert result["stats"]["in_open_mr"] == 0
+    assert _picked(capsys) == [item.id]
+
+
+def test_a_gitlab_outage_neither_claims_nor_releases(store, monkeypatch, capsys):
+    item = make_item(detail="a finding that is claimed when GitLab goes down", priority="P1")
+    fresh = make_item(detail="a finding first seen during the outage", priority="P2")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item, fresh])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: None)  # glab unreachable
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"  # not released on no information
+    assert result["store"]["items"][fresh.id]["status"] == "outstanding"
+    assert result["stats"]["in_open_mr"] == 1  # still reported
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_no_remote_sweep_does_not_look_at_open_mrs(store, monkeypatch):
+    item = make_item(detail="a claimed finding on a --no-remote sweep", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    def must_not_be_called():
+        raise AssertionError("--no-remote must not call glab")
+
+    monkeypatch.setattr(fi, "open_mr_claims", must_not_be_called)
+    result = fi.sweep(skip_remote=True)
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+
+
+def test_a_hand_recorded_mr_open_is_not_released(store, monkeypatch):
+    """An `mr-open` that no open MR has ever claimed (its MR merged without a trailer, say) has no claim
+    to lose, so the release leaves it alone."""
+    item = make_item(detail="a finding someone recorded as mr-open by hand", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "mr-open", "recorded by hand")
+    fi.save_store(saved)
+
+    result = fi.sweep()  # open_mr_claims() is {} -- nothing claims it
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_a_claimed_item_whose_mr_has_merged_is_closed_not_released(store, monkeypatch):
+    """The claim vanishes because the MR merged -- possibly days ago, outside the merged-MR window.
+    The commit trailer on origin/main remembers; the item is done, not owed again."""
+    item = make_item(detail="a finding whose MR merged while the runner was down", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit abc1234"})
+    result = fi.sweep()
+
+    record = result["store"]["items"][item.id]
+    assert (record["status"], record["mr"]) == ("done", "commit abc1234")
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_a_hand_recorded_mr_open_is_adopted_once_an_open_mr_claims_it_and_then_released(store, monkeypatch, capsys):
+    """The skill's Step 4 opens the MR (trailer in the description) and THEN runs
+    `record --status mr-open`. In a store that outlives the run, that hand-recorded mark must still
+    be taken back when the MR closes unmerged, or the item is skipped by `next` for good."""
+    item = make_item(detail="a finding recorded mr-open by hand right after its MR was opened", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "in-progress", "started")
+    fi._note(saved["items"][item.id], "mr-open", "recorded by hand")
+    saved["items"][item.id]["mr"] = "!7"
+    fi.save_store(saved)
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!7"})
+    fi.sweep()  # the MR is open and claims it: adopted
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # closed unmerged
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "outstanding"
+    assert _picked(capsys) == [item.id]
+
+
+def test_a_hand_record_ends_a_claim_so_a_later_unclaimed_mr_open_is_kept(store, monkeypatch):
+    """Any status change must clear the claim tag. Otherwise a stale tag outlives a manual wont-fix,
+    and a later hand-recorded mr-open (no MR claims it) would inherit it and be released."""
+    item = make_item(detail="a claimed finding a human later closed by hand and then reopened", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!7"})
+    fi.sweep()  # claimed and tagged
+    saved = fi.load_store()
+    fi._note(saved["items"][item.id], "wont-fix", "scope", explicit=True)
+    fi._note(saved["items"][item.id], "mr-open", "a different MR, recorded by hand")
+    fi.save_store(saved)
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {})  # nothing claims it any more
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "mr-open"
+    assert result["stats"]["released_from_open_mr"] == 0
+
+
+def test_in_open_mr_does_not_count_an_item_the_same_sweep_closes_or_suppresses(store, monkeypatch):
+    gone = make_item(detail="a claimed finding whose source text disappears", priority="P1")
+    muted = make_item(detail="a claimed finding a human has ruled a false positive", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [gone, muted])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {gone.id: "!7", muted.id: "!7"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [muted])  # `gone`'s text is deleted
+    monkeypatch.setattr(fi, "suppressed_ids", lambda items: {muted.id: "human verdict"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][gone.id]["status"] == "done"  # existing behaviour: shipped
+    assert result["store"]["items"][muted.id]["status"] == "suppressed"
+    assert result["stats"]["in_open_mr"] == 0
+
+
+def test_the_pointer_follows_a_claim_that_moves_to_another_mr(store, monkeypatch):
+    item = make_item(detail="a finding whose fix moved from one MR to a replacement", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!5"})
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!6"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["mr"] == "!6"
+    assert result["stats"]["in_open_mr"] == 1  # counted in steady state, not only on the day it changed
+
+
+def test_a_claimed_item_whose_source_text_is_gone_is_closed_by_the_disappearance_pass(store, monkeypatch):
+    """The `item_id in found` guard: a claim must not mark an item the sweep no longer sees as mr-open,
+    or it would be closed as 'shipped' rather than 'gone'."""
+    item = make_item(detail="a finding whose report text is deleted while an MR claims it", priority="P1")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [])
+    monkeypatch.setattr(fi, "open_mr_claims", lambda: {item.id: "!617"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "gone"
+    assert result["stats"]["in_open_mr"] == 0
+
+
+# --- page-design review reports: sections that record what is right, or already corrected ---
+
+
+def test_positive_findings_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Checks and positive findings' lists what a review confirmed is correct ("Dynamic
+    values use `textContent`", "no mutation/CSRF omission here"). `\\bfindings?\\b` opened it,
+    and a "csrf" keyword then ranked the confirmations as P0 security work."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Checks and positive findings
+
+- Dynamic values use `textContent` and DOM node creation; no dynamic innerHTML was found.
+- The only new request is a same-origin read-only GET, so there is no CSRF omission here.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_a_plain_findings_heading_next_to_positive_findings_still_opens(tmp_path, monkeypatch):
+    """Contrast: the cue is 'positive', not the surrounding report."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Positive findings
+- The export endpoint validates every field before it writes anything to the database.
+
+## Findings
+- The export endpoint has no rate limit and could be abused for a denial of service.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "no rate limit" in items[0].detail
+
+
+def test_non_goals_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Non-goals / explicitly deferred' (docs/live-sync-architecture.md) lists what the
+    design chose not to build. `\\bdeferred\\b` opened it; a declared non-goal is not owed."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """## Non-goals / explicitly deferred
+
+- SSE/WebSocket transport is designed for but not built now, since it needs an ASGI server.
+- A Redis/broker fan-out: the polled Postgres feed is sufficient at the stated scale.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_deferred_heading_without_non_goals_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast: a design doc's 'Deliberately deferred' call-outs are real deferred work."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """### Deliberately deferred
+
+- Index necessity is unproven at scale; recalibrate with production-shaped volume.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_findings_and_corrections_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Findings and corrections' (settings-review.md) records each finding together with
+    the correction the re-review then confirmed; the bullets are confirmations, not debt."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings and corrections
+
+1. **Boosted arrival does not run the dedicated initializer.** Move it into content.
+
+Re-review confirmed the corrections:
+
+- Dedicated account code is now extracted to a controller registered through the page lifecycle.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Findings and corrections needed",
+        "Findings & corrections required",
+        "Findings handed back for correction",
+        "Findings and corrections: two still open",
+        "Findings and corrections (pending founder)",
+        "Positive findings and open gaps",
+        "Follow-ups (non-goals excluded)",
+        "Open follow-ups and non-goals",
+        "Open gaps and positive findings",
+        "Negative and positive findings",
+        "Outstanding positive findings",
+    ],
+)
+def test_a_heading_that_only_contains_a_closing_phrase_keeps_its_section_open(tmp_path, monkeypatch, heading):
+    """Contrast: the closing cues match the WHOLE title. The same words inside a longer heading
+    that says work is still owed ("two still open", "pending", "and open gaps") say nothing
+    about the bullets under it, and must stay on the worklist."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        f"""## {heading}
+
+- The invoice export does not scope its query to the caller's organisation.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_leading_bold_verdict_closes_a_report(tmp_path, monkeypatch):
+    """page-design reviews open with '**Verdict: clean. No unresolved actionable findings.**'.
+    `verdict:` only matched at line start, so the report was never read as closed and its
+    later 'independent follow-up' logs ("Restored exact dashboard: **1 passed**") were indexed."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# Compliance review
+
+## HTML and JavaScript
+
+**Verdict: clean. No unresolved actionable findings.**
+
+## Static module-title test update — independent follow-up
+
+- Restored exact dashboard: **1 passed**, `/tmp/compliance-515-evaluator-title-restored.log`
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_a_clean_bold_section_verdict_does_not_close_a_report_with_an_invalid_one(tmp_path, monkeypatch):
+    """page-design reviews write a bold verdict per section. A clean first section must not
+    close a report whose later section says `**Verdict: invalid.**` and lists the finding
+    (the "first verdict wins" rule is for a plain header, not for section verdicts)."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## HTML and JavaScript
+
+**Verdict: clean. No unresolved actionable findings.**
+
+## Test evaluation
+
+**Verdict: invalid.**
+
+### Findings
+- `test_export_is_scoped` is a tautology: it asserts the fixture it just created.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "tautology" in items[0].detail
+
+
+@pytest.mark.parametrize(
+    "later_verdict",
+    [
+        "**Verdict: invalid.**",
+        "**Verdict:** invalid",
+        "- **Verdict: invalid**",
+        "### Verdict: invalid",
+        "**VERDICT \u2014 invalid**",
+        "**Verdict**: invalid",
+        "> **Verdict: invalid**",
+        "**Verdict:** `findings-open`",
+        "Scope added: the export test. **Verdict: invalid.** Its assertion is a tautology.",
+    ],
+)
+def test_no_spelling_of_a_later_open_verdict_slips_past_a_clean_bold_one(tmp_path, monkeypatch, later_verdict):
+    """The all-verdicts-closed check must see a verdict however it is written -- colon inside
+    the bold, a dash, a quote, a list marker, a heading, mid-paragraph -- not only the
+    `**Verdict: word**` shape it first learned to close on."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        f"""**Verdict: clean. No unresolved actionable findings.**
+
+## Test evaluation
+
+{later_verdict}
+
+### Findings
+- `test_export_is_scoped` is a tautology: it asserts the fixture it just created.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_leading_bold_findings_open_verdict_does_not_close_a_report(tmp_path, monkeypatch):
+    """Contrast: only a closed verdict word closes; bold alone is not a verdict."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """**Verdict: findings-open**
+
+## Findings
+- The export endpoint has no rate limit and could be abused for a denial of service.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_sales_redesign_plan_is_excluded_but_review_docs_are_not():
+    """docs/sales-redesign-plan.md's 'Review round: figures band, trend beside follow-ups'
+    names the CRM task feature, so `\\bfollow[- ]?ups?\\b` swept five bullets describing the
+    shipped Board as open follow-ups. Narrowness guard: other design docs are still scanned."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert "docs/sales-redesign-plan.md" not in rel
+    assert "docs/core-load-performance-design.md" in rel
+
+
+# ---------------------------------------------------------------------------
+# code markers: a marker is a comment, not an identifier that happens to be spelled TODO
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def code_tree(tmp_path, monkeypatch):
+    """A tmp repo whose only code root is `app/`, scanned by the real ripgrep path."""
+    if not fi.shutil.which("rg"):
+        pytest.skip("ripgrep is not installed")
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app",))
+    (tmp_path / "app").mkdir()
+    return tmp_path
+
+
+def _scan_markers(root, **files):
+    for name, text in files.items():
+        (root / "app" / name).write_text(text, encoding="utf-8")
+    return {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+
+def test_a_constant_named_todo_is_not_a_work_marker(code_tree):
+    """`DONE, TODO, BLOCKED = "done", "todo", "blocked"` was indexed as an open P4 item
+    (de586e6f) because only the word was matched; its long tail got past the length gate."""
+    found = _scan_markers(
+        code_tree,
+        **{
+            "states.py": 'DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"\n',
+            "label.py": 'TODO = "the label shown on a step that has not been started"\n',
+            "use.py": 'status = {"state": TODO, "label": "not started yet, nothing to do"}\n',
+        },
+    )
+
+    assert found == set()
+
+
+def test_markers_in_every_comment_style_are_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{
+            "a.py": "x = 1\n# TODO: handle the empty queue properly\n",
+            "b.js": "var y = 2; // FIXME retry on a 502 from the proxy\n",
+            "c.css": "/* HACK: pin the dialog width until the shell is fixed */\n",
+            "d.html": "<!-- TODO: replace this banner with the shared component -->\n",
+            "e.html": "{# XXX: the partial renders twice on boosted navigation #}\n",
+            "f.js": "/**\n * BUG: the tally ignores linked invoices on reopen\n */\n",
+            "g.py": "x = 3  # TODO(johnny): drop this once the importer is rewritten\n",
+        },
+    )
+
+    assert found == {
+        ("app/a.py", 2),
+        ("app/b.js", 1),
+        ("app/c.css", 1),
+        ("app/d.html", 1),
+        ("app/e.html", 1),
+        ("app/f.js", 2),
+        ("app/g.py", 1),
+    }
+
+
+def test_a_marker_leading_a_docstring_line_is_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{"doc.py": 'def f():\n    """Do the thing.\n\n    TODO: split this into read and write halves\n    """\n'},
+    )
+
+    assert found == {("app/doc.py", 4)}
+
+
+def test_the_scanners_own_test_fixtures_are_not_indexed_as_work_owed(code_tree, monkeypatch):
+    """The sample comments in this file's own fixtures are real-looking markers; indexing them
+    queued seven phantom P4 items the first time they were written."""
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app", "tests"))
+    (code_tree / "tests").mkdir()
+    (code_tree / "tests" / "test_findings_index.py").write_text(
+        'SAMPLE = "# TODO: handle the empty queue properly"\n', encoding="utf-8"
+    )
+    (code_tree / "tests" / "test_other.py").write_text("# TODO: cover the empty queue properly\n", encoding="utf-8")
+
+    found = {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+    assert found == {("tests/test_other.py", 1)}
+
+
+@pytest.mark.parametrize(
+    ("line", "is_note"),
+    [
+        ("# TODO: handle the empty queue properly", True),
+        ("x = 3  # TODO(johnny): drop this once the importer is rewritten", True),
+        ("var y = 2; // FIXME retry on a 502 from the proxy", True),
+        ("/* HACK: pin the dialog width until the shell is fixed */", True),
+        ("<!-- TODO: replace this banner with the shared component -->", True),
+        ("{# XXX: the partial renders twice on boosted navigation #}", True),
+        (" * BUG: the tally ignores linked invoices on reopen", True),
+        ("    TODO: split this into read and write halves", True),
+        ('DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"', False),
+        ('TODO = "the label shown on a step that has not been started"', False),
+        ('status = {"state": TODO, "label": "not started yet, nothing to do"}', False),
+    ],
+)
+def test_marker_classification_needs_no_ripgrep(line, is_note):
+    """The tree-scan tests above skip where ripgrep is absent (CI's image has none); this pins the
+    same rule on the matcher alone so it is still enforced there."""
+    match = fi.CODE_MARKER_RE.search(line)
+
+    assert match is not None
+    assert fi._is_code_note(line, match) is is_note
+
+
+def test_code_marker_scan_ignores_an_identifier_named_like_a_marker_but_keeps_real_markers(tmp_path, monkeypatch):
+    """`app/core/backend/getting_started.py` declares a status enum whose members include one
+    spelled like the first marker word. The scanner matched the bare word and indexed that
+    line as a code-marker finding nobody can fix (findings-sweep 2026-11-05, id de586e6f). A
+    marker is a comment, or the explicit `WORD:` / `WORD(who)` syntax; an identifier is
+    neither. Every real spelling must still be found, or the fix would quietly shrink the
+    worklist.
+
+    The marker words are bound to names and interpolated into the fixture text, never written
+    inline in a comment here: a comment in this file reading as a marker would be indexed as a
+    finding in this very file.
+    """
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    todo, fixme, hack, xxx, bug = "TODO", "FIXME", "HACK", "XXX", "BUG"
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "status.py").write_text(
+        f'DONE, {todo}, BLOCKED = "done", "todo", "blocked"\n'
+        f'state = {{"status": DONE if finished else {todo}, "note": "pending review of the whole step list"}}\n'
+        f"# {todo} tighten this validation before the pilot customer goes live\n"
+        f"value = compute()  # {fixme}(johnny) this retry loop never backs off between attempts\n"
+        '"""\n'
+        f"{hack}: reuse the cached parser until the importer is rewritten\n"
+        '"""\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "widget.js").write_text(
+        f"const a = 1; // {xxx} replace this polling loop with a server push\n"
+        "/*\n"
+        f" * {bug} the dialog keeps its scroll position after the form resets\n"
+        " */\n"
+        f"x = 1; /* {hack} keep this in step with the server-side limit */\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "page.html").write_text(
+        f"<!-- {todo} replace this banner once the design is settled -->\n"
+        f"{{# {fixme} drop this block when the legacy layout goes #}}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+
+    items = fi.scan_code_markers()
+
+    assert items is not None, "scan_code_markers could not run"
+    found = {(i.source_path, i.source_line, i.title.split(":")[0]) for i in items}
+    assert found == {
+        ("app/status.py", 3, todo),
+        ("app/status.py", 4, fixme),
+        ("app/status.py", 6, hack),
+        ("app/widget.js", 1, xxx),
+        ("app/widget.js", 3, bug),
+        ("app/widget.js", 5, hack),
+        ("app/page.html", 1, todo),
+        ("app/page.html", 2, fixme),
+    }, f"the identifier on lines 1-2 must not be indexed and every real marker must be, got: {sorted(found)}"

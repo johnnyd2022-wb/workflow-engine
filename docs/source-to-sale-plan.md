@@ -254,6 +254,11 @@ want it, and never produce a recall list that can't be trusted.
     match (stock goes back to the old batch). Page: CRM → Batch matching (`/crm/matching`).
     Source Map marks sales "pre-sold" / "awaiting review". For d, lines FIFO can't fill
     still count as `insufficient_stock` in the summary; their queue is 3.3.
+    Changed after !338 (findings-sweep, 2026-10-24, !557): choosing a batch and re-running matching
+    move stock, so they need `inventory.adjust` as well as `sales.record`. The Sales role can
+    review and confirm but not pick. Creating or authorising an invoice still consumes stock
+    through the sync. The reasoning and the open call on that are in
+    `.agents/reports/crm/security-tenant-audit.md` (F1) and `review.md` (O1).
 
 - [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M* (!336)
   - Evidence: nothing stops a finished lot holding 78.5 bottles, and FIFO
@@ -401,6 +406,16 @@ records, not from people typing figures in.
       event, samples). A later sale from a rep's stock links to the original removal and
       isn't counted twice. This needs stock locations in inventory; check what Core has
       today.
+      - [x] **Tastings workflow** (!586): Subscription-gated Tasting task type in
+        Sales Tasks, using its Board/List/Week views, projects one task into the shared
+        Sales/Production calendars. Confirmed physical
+        removal records frozen excise evidence; measured partial-bottle outcomes and
+        reusable leftovers stay in a separate tasting-stock ledger. Library stock is
+        excluded from this workflow. No automatic Customs filing or return-to-bond.
+      - [x] **Take stock out to tastings and events** (!604): an outing closes with mL
+        poured, bottles sold (counted, or the day's Xero lines ticked so they come off event
+        stock, not the warehouse) and unopened bottles brought back as a duty-paid lot of the
+        same batch, listed as a possible credit. See `docs/take-stock-out-plan.md`.
     - [x] c. **Lines calculated automatically for each period**, grouped by product and
       tariff item: units × volume × ABV = LAL, then LAL × rate = duty. Each line drills
       down to its batches and invoices or movements. The rate table is editable and
@@ -592,6 +607,22 @@ records, not from people typing figures in.
     volume); packaged units have none.
   - Done when: a Customs officer's count can be recorded during the visit, and every
     variance ends in an explained adjustment that ties back to a lodged period.
+
+- [x] **2.7 Excise from sales (Sales → Excise).** *High · M* (!543)
+  - Problem: the founder wants to see, for any month, what was sold and roughly what
+    duty that carries, without building the lodgement draft or a spreadsheet.
+  - Solution: Sales → Excise, only for orgs on the NZ Alcohol module. One row per product
+    and strength ("Wildflower - 44%"): quantity sold, supplementary quantity (litres),
+    litres of alcohol, estimated excise duty, then estimated alcohol levy and GST on them.
+    - Rates come from a built-in Customs guide (`excise_tariff.py`: Part A excise items,
+      the five rate bands per LAL or per litre, the Pae Ora alcohol levy classes), indexed
+      each 1 July. A product's **product type** on Customs setup picks its item by ABV;
+      a rate typed for a tariff item still overrides it. The lodgement draft uses the
+      same resolver, so the two pages agree.
+    - Sales come through `crm/services/sales_sources.py`, which is source-agnostic: Xero
+      today; MYOB or Hnry is one class and one registry entry.
+  - Not a lodgement figure: duty is charged on removals, not sales. The page says so and
+    links to Customs.
 
 ---
 
@@ -866,10 +897,14 @@ Founder decisions for this phase:
       everything exactly as today. On, the org defines its sites (name, address, kind:
       manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
       is the default. Existing stock and executions go to the default site.
+      - [x] Three gates, all off by default (deployment flag, `multi_site` subscription,
+        the business's own switch), a movable default site, and the Sites page that walks
+        the setup (!597, !598).
     - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
       locations (2.1) become places within a site. Screens and APIs filter by site; every
       total can be shown per site or for the whole business. No separate database or org
       per site.
+      - [x] Every add flow asks where; Inventory shows what is where by site (!599).
     - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
       be linked to zero or more registrations: a Customs CCA licence (one licence may
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
@@ -890,6 +925,8 @@ Founder decisions for this phase:
         immutable batch-lineage fragments, confirmed-loss policy checks and printable
         carrier/consignment docket (!438). Operational release stays internally off;
         overage resolution, drag/scan and the complete movement workflow remain open.
+      - [x] One Move dialog and a Stock transfers page built for receiving (!600).
+        Drag/scan stays open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
@@ -918,6 +955,8 @@ Founder decisions for this phase:
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] An excise entry per CCA licence with several sites; the licence register
+        decides which areas are licensed (!601).
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
@@ -1073,6 +1112,8 @@ Founder decisions for this phase:
       - [x] Workflow batch-size settings and explicit step duration/wait snapshots,
         fixed output-ready timing and exact workflow-version pinning (!440);
         unknown readiness stays unknown and delivery forecasts remain unpublished.
+      - [x] Step working and waiting time set on the workflow, planner defaults from it,
+        and expiry-aware planned surplus (!606).
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
@@ -1085,6 +1126,13 @@ Founder decisions for this phase:
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
         dependent-production planning and forecast integration remain.
+      - [x] Checking materials commits them to planned batches: bound lots first, the
+        rest from the material's lots soonest-expiring first; cancel releases, start
+        consumes (!611).
+      - [x] Each lot shows what planned batches hold; disposing into a hold warns;
+        suppliers carry a lead time and every shortage says who to order from and by
+        when, on the board and as a notification (!615). Intermediates made by another
+        workflow are still not planned.
     - [x] e. **Can we do it?** (!449, !464, !467) Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to

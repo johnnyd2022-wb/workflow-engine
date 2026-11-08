@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     try {
       if (localStorage.getItem('spa-theme') === 'dark') {
         document.documentElement.setAttribute('data-spa-theme', 'dark');
@@ -14,8 +14,10 @@
   <meta name="operational-cases-enabled" content="{{ 'true' if operational_cases_available else 'false' }}">
   <meta name="current-org-id" content="{{ g.current_org_id or '' }}">
   <meta name="current-user-id" content="{{ g.current_user.id if g.current_user else '' }}">
+  {# GL-C04: this page's reference for Help (help.js keeps it current across boosted navigation). #}
+  <meta name="request-reference" content="{{ request_reference() }}">
   {# Back/forward reload the page from the server rather than restoring an inert DOM snapshot. #}
-  <meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
+  <meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true,"inlineScriptNonce":"{{ csp_nonce() }}","allowEval":false}'>
   <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
   {# Inline SVG favicon — avoids a /favicon.ico 404 without shipping a binary asset. #}
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='%232DD4BF' fill-opacity='.22'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%232DD4BF'/%3E%3C/svg%3E">
@@ -26,6 +28,8 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='spa-theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='design-system.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='section-tabs.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='site-picker.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='move-stock.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
@@ -48,6 +52,7 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='flows2.css') }}">
   {# Notifications page styles. Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications-page.css') }}">
   {# Processes list page styles. Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='processes-list.css') }}">
   {# Inventory view page styles. Global for HTMX swaps. #}
@@ -65,12 +70,12 @@
   {% if crm_enabled %}
   <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='crm.css') }}">
   {% endif %}
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/fonts.css">
 
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workspace-overviews.css') }}">
+  {# Production overview: global, like the rest, so an in-app visit to /core arrives styled. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='production-overview.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batches.css') }}">
 
   {# Page-level head customisation #}
   {% block head_extras %}{% endblock %}
@@ -80,10 +85,16 @@
   {% block body_extra_attrs %}{% endblock %}
   hx-boost="true"
   hx-target="#page-content"
-  hx-select="#page-content"
+  hx-select="#page-content > *"
   hx-push-url="true"
   x-data
 >
+  {# Load the small API client before page scripts: Home can request data as soon as
+     its root exists, while the rest of the shared shell scripts are downloading. #}
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  {# Before any page script: add forms ask it where stock goes (GL-P07 A3). #}
+  <script src="/ui/shared/site-picker.js"></script>
+  <script src="/ui/shared/move-stock.js"></script>
   <div class="app-layout">
     {% include 'shared/sidebar-v2.html' %}
 
@@ -285,9 +296,39 @@
               <div class="bee-menu__name" x-text="fullName || 'Loading...'"></div>
               <div class="bee-menu__email" x-text="email || ''"></div>
               <div class="bee-menu__org" x-text="orgName || ''"></div>
+              <a class="bee-menu__settings" href="/core/settings" role="menuitem" @click="closeMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.57V21h-3v-.77a1.7 1.7 0 0 0-1.04-1.57 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.57-1.04H4v-3h1.43A1.7 1.7 0 0 0 7 9.92a1.7 1.7 0 0 0-.34-1.88L6.6 7.98l2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.7 4.7V4h3v.7a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.57 1.04H22v3h-1.03A1.7 1.7 0 0 0 19.4 15z"/></svg>
+                <span>Settings</span>
+              </a>
+              <button type="button" class="bee-menu__help" role="menuitem" @click="openHelp()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                <span>Help and contact</span>
+              </button>
             </div>
           </div>
         </div>
+
+      {# GL-C04: help and contact on every page, with the reference support needs to find the
+         request. Outside #page-content so a boosted navigation keeps it; help.js fills it in. #}
+      <dialog id="bize-help" class="bize-help" aria-labelledby="bize-help-title">
+        <div class="bize-help__head">
+          <h2 id="bize-help-title">Help and contact</h2>
+          <button type="button" class="bize-help__close" data-dialog-close aria-label="Close help">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {% if support_email %}
+        <p class="bize-help__lede">Email <a id="bize-help-mail" data-support-email="{{ support_email }}" href="mailto:{{ support_email }}">{{ support_email }}</a>. The email starts with this page and its reference filled in, so we can see exactly what happened.</p>
+        {% else %}
+        <p class="bize-help__lede">Ask the person who runs biz-e for your business, and give them the reference below.</p>
+        {% endif %}
+        <dl class="bize-help__facts">
+          <div><dt>Page</dt><dd id="bize-help-page"></dd></div>
+          <div><dt>Reference</dt><dd><code id="bize-help-ref" data-testid="help-reference"></code>
+            <button type="button" class="bize-help__copy" id="bize-help-copy">Copy</button></dd></div>
+          <div id="bize-help-error-row" hidden><dt>Last error</dt><dd id="bize-help-error" data-testid="help-last-error"></dd></div>
+        </dl>
+      </dialog>
 
       <main id="page-content" class="page-content">
         {# A boosted navigation swaps only #page-content, so the page's own CSS and scripts (which a
@@ -295,7 +336,9 @@
            swapped-in scripts in order. See docs/ux-overhaul-plan.md (1.3). #}
         {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
-        {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
+        {# Which main tab this page is under; sidebar-v2.js reads it after a boosted swap. #}
+        <div hidden data-nav-section="{{ active_section or '' }}"></div>
+        {% block section_tabs %}{% set section_actions %}{% block section_actions %}{% endblock %}{% endset %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
         {% block workspace_links %}{% include 'shared/workspace_links.html' %}{% endblock %}
@@ -323,7 +366,7 @@
           <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
           <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
         </div>
-        <button type="button" onclick="window.closeNotification && window.closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
+        <button type="button" data-action="closeNotification" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -333,20 +376,22 @@
     </div>
   </div>
   {# Core JS and shared behaviour #}
-  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-stock-summary.js') }}"></script>
   {# Near-real-time backbone: polls /api/core/changes, dispatches to LiveSync.subscribe() #}
   <script src="{{ url_for('core.serve_core_js', filename='live-sync.js') }}"></script>
-  <script src="{{ url_for('core.serve_core_js', filename='core-active-batches-graph.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-adjust.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script src="/ui/shared/page-init.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/dialog-focus.js" defer></script>
+  <script src="/ui/shared/help.js" defer></script>
+  <script src="/ui/shared/tabs-keyboard.js" defer></script>
+  <script src="/ui/shared/session-ended.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
   {% if rum_enabled and (grafana_data_enabled or posthog_data_enabled) %}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     window.__RUM_CONFIG__ = {
       enabled: true,
       grafanaDataEnabled: {{ grafana_data_enabled|tojson }},
@@ -368,6 +413,8 @@
   {% endif %}
   <script src="/ui/shared/observability-rum.js"></script>
   {% endif %}
+  {# GL-S03: data-action in place of inline on*="" handlers; loaded on every page, RUM or not. #}
+  <script src="/ui/shared/actions.js"></script>
 
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
@@ -382,10 +429,36 @@
   <script src="{{ url_for('crm.serve_crm_js', filename='configuration.js') }}" defer></script>
   <script src="{{ url_for('crm.serve_crm_js', filename='integrations.js') }}" defer></script>
   <script src="{{ url_for('crm.serve_crm_js', filename='matching.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='excise.js') }}" defer></script>
   {% endif %}
-  <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
+  {# GL-S03 step 3: Alpine's CSP build (no eval). Components are named in x-data and registered
+     with Alpine.data() below; the page scripts above define them. #}
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      // Every global function an x-data names. The CSP build can't call window functions from
+      // markup, so each one is registered under its own name, now and again after a boosted
+      // swap (a page's inline script may define its component only then).
+      var COMPONENTS = [
+        'coreTasksBoard', 'coreTaskConfiguration', 'crmAnalytics', 'crmConfiguration', 'crmCustomerDetail',
+        'crmCustomers', 'crmExcise', 'crmMatching', 'crmOverview', 'crmTasks', 'xeroIntegration',
+      ];
+      var done = {};
+      window.spaRegisterAlpineData = function () {
+        var alpine = window.Alpine;
+        if (!alpine || typeof alpine.data !== 'function') return;
+        COMPONENTS.forEach(function (name) {
+          if (!done[name] && typeof window[name] === 'function') {
+            alpine.data(name, window[name]);
+            done[name] = true;
+          }
+        });
+      };
+      document.addEventListener('alpine:init', window.spaRegisterAlpineData);
+    })();
+  </script>
+  <script src="{{ url_for('core.serve_core_js', filename='alpinejs-csp.min.js') }}" defer></script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       var KEY = 'spa-theme';
       function apply(mode) {
@@ -430,7 +503,7 @@
     })();
   </script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     /**
      * Fallback URL for the process-flow wizard when history has no prior entry (e.g. opened in a new tab).
      * Clicks normally use history.back() so the banner follows the real page sequence.
@@ -524,7 +597,7 @@
         if (stepNum > 1) {
           el.setAttribute('href', '/core/flows/create/step/' + (stepNum - 1) + q);
         } else {
-          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core/processes';
           el.setAttribute('href', dest);
         }
         el.setAttribute('data-spa-back-explicit', 'true');
@@ -538,7 +611,7 @@
       }
       if (path === '/core/flows/create') {
         var legacyPid = new URLSearchParams(window.location.search).get('id');
-        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
+        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core/processes';
         el.setAttribute('href', legacyDest);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;
@@ -717,6 +790,13 @@
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
       }
     });
+    // GL-U03: a form with no action is driven by its own script (it would only submit to this same
+    // URL natively). Boosting must never send it too: when the script's save failed, htmx's GET of
+    // the form reloaded the page with the fields in the URL and the error gone.
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+      var d = evt && evt.detail;
+      if (d && d.boosted && d.elt && d.elt.tagName === 'FORM' && !d.elt.hasAttribute('action')) evt.preventDefault();
+    });
     document.body.addEventListener('htmx:beforeRequest', function (evt) {
       var tgt = evt && evt.detail && evt.detail.target;
       if (!tgt || tgt.id !== 'page-content') return;
@@ -747,6 +827,7 @@
       spaAlpinePaused = null;
       var alpine = window.Alpine;
       if (!alpine || typeof alpine.startObservingMutations !== 'function') return;
+      if (window.spaRegisterAlpineData) window.spaRegisterAlpineData();
       alpine.startObservingMutations();
       if (initTarget && typeof alpine.initTree === 'function') {
         try { alpine.initTree(initTarget); } catch (e) {}
@@ -803,7 +884,7 @@
     });
   </script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Alpine.js component for the top-right bee + profile dropdown.
     // Animation is fully local (inline SVG + CSS) so it will not break in production.
     document.addEventListener('alpine:init', function () {
@@ -914,6 +995,11 @@
           this.open = true;
           },
 
+          openHelp() {
+            this.closeMenu();
+            if (window.BizeHelp) window.BizeHelp.open();
+          },
+
           closeMenu() {
             if (!this.open) return;
             this.open = false;
@@ -924,7 +1010,7 @@
     });
   </script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // System findings notification badge count (top-right bell icon).
     // Uses sessionStorage keys set by notifications.html per-card actions.
     (function () {
@@ -1102,7 +1188,7 @@
     })();
   </script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       'use strict';
       var notificationTimeout = null;

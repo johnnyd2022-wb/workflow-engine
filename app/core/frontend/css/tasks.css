@@ -30,3 +30,8 @@
 .core-tasks__card h4 { margin:8px 0 6px; font-size:.8125rem; font-weight:600; line-height:1.4; word-break:break-word; }
 .core-tasks__card p { margin:8px 0; font-size:.74rem; line-height:1.4; }
 @media (max-width:640px) { .core-tasks__hero{padding:4px 0 14px}.core-tasks__calendar-card{padding:14px}.core-tasks__calendar-actions{align-items:stretch}.core-tasks__search-wrap{max-width:none;flex:1 1 100%}.core-tasks__new-task{width:100%;margin-left:0} }
+/* GL-U04: the light-page purples, reds and greens fall under 3:1 on dark cards. */
+html[data-spa-theme="dark"] .core-tasks__source { color: #c4b5fd; }
+html[data-spa-theme="dark"] .priority-high, html[data-spa-theme="dark"] .overdue { color: #fca5a5; }
+html[data-spa-theme="dark"] .priority-medium { color: #fcd34d; }
+html[data-spa-theme="dark"] .priority-low { color: #6ee7b7; }

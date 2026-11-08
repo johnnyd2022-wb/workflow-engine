@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from uuid import uuid4
 
@@ -18,6 +19,17 @@ except Exception:  # pragma: no cover - fallback for pre-dependency bootstrap
 
 _ACCESS_LOGGER = get_logger("app.observability.access")
 
+# A caller-supplied X-Request-ID is kept only when it looks like an id: it is written into every
+# log line and echoed in a response header, so anything else (spaces, newlines, very long) is
+# replaced by this request's own id.
+_SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{7,63}")
+
+
+def incoming_request_id(value: str | None) -> str | None:
+    if value and _SAFE_REQUEST_ID.fullmatch(value):
+        return value
+    return None
+
 
 def setup_observability(app) -> None:
     """Attach request-scoped logging context and access logs."""
@@ -29,7 +41,10 @@ def setup_observability(app) -> None:
         g._request_start_perf = time.perf_counter()
 
         correlation_id = str(getattr(g, "correlation_id", uuid4()))
-        request_id = request.headers.get("X-Request-ID", correlation_id)
+        request_id = incoming_request_id(request.headers.get("X-Request-ID")) or correlation_id
+        # GL-C04: the reference people quote to support is this id (reference.py); it is in every
+        # log line for the request and goes back on the response as X-Request-ID.
+        g.request_id = request_id
         org_id = getattr(g, "org_id", None)
         user_id = getattr(g, "user_id", None)
 
@@ -47,6 +62,9 @@ def setup_observability(app) -> None:
 
     @app.after_request
     def _emit_access_log(response):
+        request_id = getattr(g, "request_id", None)
+        if request_id and "X-Request-ID" not in response.headers:
+            response.headers["X-Request-ID"] = request_id
         start = getattr(g, "_request_start_perf", None)
         duration_ms = 0.0
         if start is not None:

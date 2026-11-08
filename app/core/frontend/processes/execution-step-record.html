@@ -1,4 +1,7 @@
 {% extends "shared/base_spa.html" %}
+{# A completed step is reached from its batch, so going up leads back to Batches. #}
+{% set breadcrumb_leaf = step_name %}
+{% set breadcrumb_extra = [{"label": "Batches", "href": "/core/executions/live"}] %}
 
 {% block title %}Step record | Workflow Engine{% endblock %}
 

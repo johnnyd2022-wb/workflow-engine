@@ -1,0 +1,62 @@
+/* Settings: one category at a time, reached from the same underlined tab row Production,
+   Compliance and Sales use beneath their titles. */
+#page-content .settings-overview { max-width: 1280px; }
+#page-content .settings-overview .workspace-header { margin-bottom: 24px; }
+#page-content .settings-overview .page-title { font-size: 28px; }
+/* The Settings tab row sits above, so the categories are the house's view switch (as on Customs). */
+.settings-nav { display: flex; gap: 4px; margin: 4px 0 24px; padding: 4px; width: fit-content; max-width: 100%; border: 1px solid var(--ui-border); border-radius: 999px; background: var(--ui-surface); }
+#page-content .settings-nav a { padding: 7px 16px; border-radius: 999px; color: var(--ui-text-muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+#page-content .settings-nav a:hover { color: var(--ui-text); }
+#page-content .settings-nav a[aria-current] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
+html[data-spa-theme="dark"] #page-content .settings-nav a[aria-current] { background: rgba(45, 212, 191, .14); color: #5eead4; }
+.settings-group { min-width: 0; }
+.settings-group[hidden], .settings-overview [hidden] { display: none !important; }
+/* The tab names the category on screen; the heading stays for screen readers and the outline. */
+.settings-group-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.settings-group-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+#page-content .settings-overview .settings-card { margin: 0; padding: 24px; min-width: 0; max-width: 640px; }
+#page-content .settings-overview .card-header { padding: 0 0 16px !important; border: 0; }
+#page-content .settings-overview .card-content { padding: 0 !important; }
+#page-content .settings-overview .settings-section-list > .form-group { padding: 0 0 16px; border: 0; }
+/* Short fields sit in pairs so a name or a phone number is not typed into a full-width box. */
+#settings-account .settings-section-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+#settings-account .settings-section-list > :first-child { grid-column: 1 / -1; }
+#page-content .settings-overview .form-label { color: var(--ui-text); }
+#page-content .settings-overview .workspace-button--primary { background: var(--ui-accent); border-color: var(--ui-accent); color: white; }
+html[data-spa-theme="dark"] #page-content.page-content .settings-overview .workspace-button--primary,
+html[data-spa-theme="dark"] #page-content.page-content .settings-overview .workspace-button--primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
+#page-content #session-timeout-input { width: 100px !important; }
+#page-content #session-timeout-unit { width: 120px !important; }
+.settings-overview .switch input:checked + .switch-slider { background: var(--ui-accent); }
+.settings-overview .switch input:focus-visible + .switch-slider { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.settings-overview .switch input:disabled + .switch-slider { cursor: not-allowed; opacity: .5; }
+.settings-overview .settings-2fa-actions { align-items: flex-start; }
+.settings-load-status { color: var(--ui-text-muted); margin-bottom: 16px; }
+@media (max-width: 640px) {
+  /* On a phone the tabs are one row that scrolls sideways, not two rows. */
+  .settings-nav { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  #page-content .settings-nav a { flex: 1 1 auto; padding: 7px 10px; font-size: 13px; text-align: center; }
+  #settings-account .settings-section-list { display: block; }
+  #page-content .settings-overview .settings-card { padding: 18px; }
+}
+@media (max-width: 640px) {
+  /* Four sections (admins also get "Your records", GL-P10) don't fit one row on a phone:
+     a 2 x 2 grid instead of a row that scrolls sideways. */
+  .settings-nav:has(> a:nth-child(4)) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
+  #page-content .settings-nav:has(> a:nth-child(4)) a { min-height: 40px; display: grid; place-items: center; white-space: normal; }
+}
+@media (max-width: 359px) {
+  .settings-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
+  #page-content .settings-nav a { min-height: 44px; display: grid; place-items: center; white-space: normal; }
+}
+#page-content #settings-load-retry { margin-bottom: 20px; }
+
+/* GL-C02: the terms and privacy policy are always one tap away from Settings. */
+#page-content .settings-legal-links { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 32px 0 8px; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .settings-legal-links a { color: var(--ui-text-muted); text-decoration: underline; text-underline-offset: 2px; }
+#page-content .settings-legal-links a:hover { color: var(--ui-text); }
+
+/* GL-P10: Your records */
+#page-content .settings-records-copy { margin: 0 0 16px; max-width: 62ch; line-height: 1.5; color: var(--ui-text); }
+#page-content .settings-records-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+#page-content .settings-records-note { font-size: 13px; color: var(--ui-text-muted); }

@@ -74,6 +74,11 @@ function crmMatching() {
       } catch (e) { this.error = e.message; }
     },
 
+    // Pick again for a line that already has batches: the whole quantity it took.
+    repick(line) {
+      return this.openPicker({ ...line, quantity: line.batches.reduce((s, b) => s + Number(b.quantity), 0) });
+    },
+
     async openPicker(line) {
       this.error = null;
       try {

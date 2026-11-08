@@ -94,7 +94,8 @@ class XeroContactRepository:
             _ = term  # noqa: F841
 
         if status:
-            q = q.filter(XeroContact.contact_status == status.upper())
+            # A contact made in Biz-E has no Xero status until Xero sends one; it is active.
+            q = q.filter(func.coalesce(XeroContact.contact_status, "ACTIVE") == status.upper())
 
         if missing_contact:
             has_email = func.nullif(func.trim(XeroContact.email_address), "").isnot(None)
@@ -138,11 +139,14 @@ class XeroContactRepository:
             XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
             XeroInvoice.date <= today,
         )
+        from app.features.crm.repositories.crm_task_repo import visible_task_filter
+
         task_day = func.date(func.coalesce(CRMTask.completed_at, CRMTask.created_at))
         tasks = self.db.query(CRMTask.contact_id, func.max(task_day)).filter(
             CRMTask.org_id == org_id,
             CRMTask.contact_id.isnot(None),
             CRMTask.status != "cancelled",
+            visible_task_filter(self.db, org_id),
             task_day <= today,
         )
         if contact_ids is not None:

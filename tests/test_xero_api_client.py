@@ -349,6 +349,30 @@ class TestPagination:
             assert kw["where"] == 'Type=="ACCREC"'
             assert kw["statuses"] == ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"]
 
+    def test_fetch_all_credit_notes_filters_receivables_and_paginates(self, xero, fake_api):
+        install, calls = fake_api
+        install(get_credit_notes=[_page("credit_notes", 100), _page("credit_notes", 1)])
+
+        notes = xero.fetch_all_credit_notes()
+
+        assert len(notes) == 101
+        assert [(name, args[0], kwargs["page"]) for name, args, kwargs in calls] == [
+            ("get_credit_notes", TENANT_ID, 1),
+            ("get_credit_notes", TENANT_ID, 2),
+        ]
+        assert all(kwargs["where"] == 'Type=="ACCRECCREDIT"' for _name, _args, kwargs in calls)
+
+    def test_credit_note_pages_use_retry_and_modified_after(self, xero, fake_api, sleeps):
+        from datetime import datetime
+
+        install, calls = fake_api
+        install(get_credit_notes=[XeroHTTPError(429), _page("credit_notes", 0)])
+
+        assert xero.fetch_all_credit_notes(modified_after=datetime(2026, 1, 2, 3, 4, 5)) == []
+        assert len(calls) == 2
+        assert all(kwargs["if_modified_since"].tzinfo == UTC for _name, _args, kwargs in calls)
+        assert sleeps == [2]
+
     def test_pagination_calls_go_through_the_retry_wrapper(self, xero, fake_api, sleeps):
         install, calls = fake_api
         install(get_invoices=[XeroHTTPError(429), _page("invoices", 2)])
@@ -482,6 +506,41 @@ class TestCreateInvoice:
         assert self._create(xero).invoice_id == "inv-3"
         assert len(calls) == 2
         assert sleeps == [2]
+
+    def test_an_invoice_xero_refused_is_an_error_in_xeros_words_not_a_created_invoice(self, xero, fake_api):
+        # summarize_errors=False makes Xero answer 200 with the refused invoice and its errors
+        # (and an all-zero InvoiceID) instead of a 400. That reply is not a created invoice.
+        install, _calls = fake_api
+        install(
+            create_invoices=_created(
+                invoice_id="00000000-0000-0000-0000-000000000000",
+                has_errors=True,
+                validation_errors=[
+                    SimpleNamespace(message="Account code '999' is not a valid code for this document.")
+                ],
+            )
+        )
+
+        with pytest.raises(ValueError, match="Account code '999' is not a valid code"):
+            self._create(xero)
+
+    def test_a_create_retried_after_a_server_error_sends_the_same_idempotency_key(self, xero, fake_api, sleeps):
+        # A 503 can arrive after Xero made the invoice; without a key the retry makes a second one.
+        install, calls = fake_api
+        install(create_invoices=[XeroHTTPError(503), _created(invoice_id="inv-4")])
+
+        assert self._create(xero).invoice_id == "inv-4"
+        keys = [kwargs.get("idempotency_key") for _name, _args, kwargs in calls]
+        assert len(keys) == 2 and keys[0] and keys[0] == keys[1]
+
+    def test_two_separate_creates_do_not_share_an_idempotency_key(self, xero, fake_api):
+        install, calls = fake_api
+        install(create_invoices=[_created(invoice_id="inv-5"), _created(invoice_id="inv-6")])
+
+        self._create(xero)
+        self._create(xero)
+
+        assert calls[0][2]["idempotency_key"] != calls[1][2]["idempotency_key"]
 
 
 class TestAuthoriseInvoice:

@@ -2,7 +2,7 @@
 
 import calendar
 import csv
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from uuid import UUID
@@ -11,6 +11,7 @@ from flask import Blueprint, Response, g, jsonify, render_template, request, sen
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.evidence.evidence_service import get_evidence_for_download
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
 from app.core.db.models.user import User, UserRole
@@ -18,6 +19,7 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant import record_files as record_files_module
 from app.features.compliant.models import ComplianceRecord, ComplianceReport
+from app.features.compliant.modules.nz_alcohol import excise_tariff
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
@@ -253,6 +255,7 @@ def update_np3_check_settings(control_id: str):
 
 @api_bp.route("/api/compliant/np3-audit/attestations", methods=["POST"])
 @requires_auth
+@idempotent_write("np3_attestation")  # GL-U03: a retried save adds the evidence once
 def attest_np3_check():
     """Append a focused NP3 self-review without exposing the generic record register."""
     data = request.get_json(silent=True)
@@ -329,6 +332,7 @@ def attest_np3_check():
 
 @api_bp.route("/api/compliant/np3-audit/checks/<control_id>/logs", methods=["POST"])
 @requires_auth
+@idempotent_write("np3_log")  # GL-U03: a retried save adds the evidence once
 def add_np3_check_log(control_id: str):
     """Append a control-specific operational log entry from the check workspace."""
     template = np3_log_template(control_id)
@@ -671,6 +675,7 @@ def list_records():
 
 @api_bp.route("/api/compliant/records", methods=["POST"])
 @requires_auth
+@idempotent_write("compliance_record")  # GL-U03: a retried save adds the evidence once
 def create_record():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -879,14 +884,26 @@ def _parse_iso(value, field):
 @api_bp.route("/api/compliant/nz-alcohol/excise", methods=["GET"])
 @requires_auth
 def get_excise_period():
+    """One period's entry; with several sites, one CCA licence's (``cca``, else the first)."""
     excise, cfg = _excise_cfg()
     try:
         day = _parse_iso(request.args["period"], "period") if request.args.get("period") else None
+        licence_id = _cca_param(request.args.get("cca"))
+        if day is None:
+            day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
+        current = excise.draft(db_session, _org_id(), day, cfg["frequency"], licence_id=licence_id)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    if day is None:
-        day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
-    return jsonify({"settings": cfg, "draft": excise.draft(db_session, _org_id(), day, cfg["frequency"])}), 200
+    return jsonify({"settings": cfg, "draft": current}), 200
+
+
+def _cca_param(value):
+    if not value:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        raise ValueError("cca must be a CCA licence id") from None
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/periods", methods=["GET"])
@@ -896,8 +913,19 @@ def list_excise_periods():
     from app.features.compliant.models.excise import ExciseLodgement
 
     excise, cfg = _excise_cfg()
+    try:
+        licence_id = _cca_param(request.args.get("cca"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if licence_id is None and excise.per_cca(db_session, _org_id()):
+        current = excise.period_for(date.today(), cfg["frequency"])
+        first = excise.cca_licences(db_session, _org_id(), current[0], current[1])
+        licence_id = first[0].id if first else None
     lodged = {
-        r.period_start: r for r in db_session.query(ExciseLodgement).filter(ExciseLodgement.org_id == _org_id()).all()
+        r.period_start: r
+        for r in db_session.query(ExciseLodgement).filter(
+            ExciseLodgement.org_id == _org_id(), ExciseLodgement.licence_id.is_not_distinct_from(licence_id)
+        )
     }
     start = excise.period_for(date.today(), cfg["frequency"])[0]
     rows = []
@@ -907,6 +935,7 @@ def list_excise_periods():
         rows.append(
             {
                 "period_start": s0.isoformat(),
+                "period_end": (e0 - timedelta(days=1)).isoformat(),
                 "label": excise.period_label(s0, e0),
                 "due": excise.entry_due(e0).isoformat(),
                 "open": date.today() < e0,
@@ -914,10 +943,21 @@ def list_excise_periods():
                 "lodged_on": rec.lodged_on.isoformat() if rec else None,
                 "nil_return": bool(rec.nil_return) if rec else None,
                 "total_lal": (rec.snapshot or {}).get("total_lal") if rec else None,
+                "total": ((rec.snapshot or {}).get("entry") or {}).get("total") if rec else None,
             }
         )
         start = excise.previous_period(s0, cfg["frequency"])[0]
     return jsonify({"settings": cfg, "periods": rows}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/position", methods=["GET"])
+@requires_auth
+def get_excise_position():
+    """Where the org stands with Customs: the year's duty, this period, stocktake, remissions, setup."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    profile = _service().get_profile(_org_id())
+    return jsonify(excise.position(db_session, _org_id(), profile)), 200
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/settings", methods=["PUT"])
@@ -952,8 +992,16 @@ def lodge_excise_period():
     try:
         start = _parse_iso(data.get("period_start"), "period_start")
         lodged_on = _parse_iso(data.get("lodged_on") or date.today().isoformat(), "lodged_on")
+        licence_id = _cca_param(data.get("cca"))
         record = excise.lodge(
-            db_session, _org_id(), start, cfg["frequency"], lodged_on, data.get("entry_reference"), g.current_user.id
+            db_session,
+            _org_id(),
+            start,
+            cfg["frequency"],
+            lodged_on,
+            data.get("entry_reference"),
+            g.current_user.id,
+            licence_id=licence_id,
         )
         db_session.commit()
     except ValueError as e:
@@ -968,11 +1016,12 @@ def lodge_excise_period():
         _org_id(),
         {
             "period_start": record.period_start.isoformat(),
+            "cca": str(record.licence_id) if record.licence_id else None,
             "nil_return": record.nil_return,
             "total_lal": (record.snapshot or {}).get("total_lal"),
         },
     )
-    return jsonify({"draft": excise.draft(db_session, _org_id(), start, cfg["frequency"])}), 201
+    return jsonify({"draft": excise.draft(db_session, _org_id(), start, cfg["frequency"], licence_id=licence_id)}), 201
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/rates", methods=["GET"])
@@ -1035,6 +1084,19 @@ def add_excise_rate():
     return list_excise_rates()
 
 
+@api_bp.route("/api/compliant/nz-alcohol/excise/categories", methods=["GET"])
+@requires_auth
+def list_excise_categories():
+    """The built-in Customs guide: product types, their excise items and today's rates."""
+    return jsonify(
+        {
+            "categories": excise_tariff.catalogue(date.today()),
+            "source": excise_tariff.SOURCE,
+            "guide": excise_tariff.guide_status(date.today()),
+        }
+    ), 200
+
+
 @api_bp.route("/api/compliant/nz-alcohol/excise/products", methods=["GET"])
 @requires_auth
 def list_excise_products():
@@ -1055,6 +1117,7 @@ def list_excise_products():
                 if p is not None and p.pack_volume_ml
                 else None,
                 "tariff_item": p.customs_product_code if p is not None else None,
+                "excise_category": p.excise_category if p is not None else None,
                 "abv_fallback": f"{Decimal(str(p.abv_percent)).normalize():f}"
                 if p is not None and p.abv_percent is not None
                 else None,
@@ -1082,6 +1145,9 @@ def save_excise_product():
     if abv is not None and not (0 <= abv <= 100):
         return jsonify({"error": "ABV must be between 0 and 100"}), 400
     tariff = str(data.get("tariff_item") or "").strip()[:100] or None
+    category = str(data.get("excise_category") or "").strip() or None
+    if category is not None and excise_tariff.category(category) is None:
+        return jsonify({"error": "Unknown product type"}), 400
     profile = (
         db_session.query(AlcoholProductProfile)
         .filter(AlcoholProductProfile.org_id == _org_id(), AlcoholProductProfile.inventory_name == name)
@@ -1095,6 +1161,7 @@ def save_excise_product():
     profile.pack_volume_ml = volume
     profile.abv_percent = abv
     profile.customs_product_code = tariff
+    profile.excise_category = category
     profile.is_active = True
     db_session.commit()
     return list_excise_products()

@@ -53,6 +53,11 @@
               .
             </p>
           {% endif %}
+          {% if held_warning %}
+            <p class="dispose-confirm__held" role="note" style="margin: 0; padding: 10px 12px; border: 1px solid var(--ui-border, #e5e7eb); border-left: 3px solid #b45309; border-radius: 6px; font-size: 0.875rem; line-height: 1.5; color: var(--text-primary);">
+              {{ held_warning }}
+            </p>
+          {% endif %}
           <p style="color: var(--text-secondary); margin: 0; font-size: 0.875rem; line-height: 1.45;">
             This will deduct the disposed quantity from inventory. Items with zero quantity will no longer appear in stock.
           </p>
@@ -93,7 +98,7 @@
     {% endcall %}
   </div>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function () {
       var submitBtn = document.getElementById('dispose-confirm-submit');
       if (!submitBtn) return;

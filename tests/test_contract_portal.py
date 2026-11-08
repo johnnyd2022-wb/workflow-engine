@@ -304,6 +304,8 @@ def test_selected_batch_milestones_are_scoped_derived_and_frozen(portal_world, d
     selected = [{"execution_step_id": str(step.id), "label": "Bottling for customer"}]
     page = w["clients"][0].get(f"/core/contracts/{order['id']}/portal-sharing").get_data(as_text=True)
     assert str(step.id) in page and "Bottle" in page
+    # The batch is named for a person (its workflow and start), not by its id.
+    assert f">Batch {batch.id}" not in page and "started " in page
     assert (
         w["clients"][0]
         .post(
@@ -318,8 +320,15 @@ def test_selected_batch_milestones_are_scoped_derived_and_frozen(portal_world, d
     url = f"/portal/api/orders/{order['id']}"
     first = customer.get(url).get_json()["order"]["progress"]
     assert first["available"] is True
+    batch_name = first["milestones"][0]["batch_name"]
+    assert batch_name.startswith("Batch started ")
     assert first["milestones"] == [
-        {"batch_id": str(batch.id), "label": "Bottling for customer", "status": step.status.value}
+        {
+            "batch_id": str(batch.id),
+            "batch_name": batch_name,
+            "label": "Bottling for customer",
+            "status": step.status.value,
+        }
     ]
     assert "selection" not in first and "Bottle" not in str(first)
     page = w["clients"][0].get(f"/core/contracts/{order['id']}/portal-sharing").get_data(as_text=True)
@@ -746,7 +755,12 @@ def test_linked_batch_ids_are_copied_without_private_execution_data(portal_world
     _publish(w, bottling_dates={str(batch.id): "2026-12-01"})
     client = _accept(w)
     body = client.get(f"/portal/api/orders/{order['id']}").get_json()["order"]
-    assert body["batches"]["items"] == [{"batch_id": str(batch.id), "bottling_date": "2026-12-01"}]
+    [item] = body["batches"]["items"]
+    assert item["batch_id"] == str(batch.id) and item["bottling_date"] == "2026-12-01"
+    # The customer sees their batch by a name, never the producer's internal id.
+    assert item["batch_name"].startswith("Batch started ")
+    page = client.get(f"/portal/orders/{order['id']}").get_data(as_text=True)
+    assert item["batch_name"] in page and str(batch.id) not in page
     # Distinctive markers: a bare "999" also occurs by chance inside random UUIDs/timestamps.
     assert all(value not in str(body) for value in ("Cost-999.97", "Private juniper", "Secret botanical"))
 

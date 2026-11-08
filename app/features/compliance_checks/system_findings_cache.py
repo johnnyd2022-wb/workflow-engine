@@ -69,8 +69,15 @@ def _fetch(session, org_id: UUID):
     return session.query(SystemFindingsCache).filter(SystemFindingsCache.org_id == org_id).first()
 
 
+# Bump when a cached check's output changes shape or wording, so a deploy doesn't serve the old
+# findings until the next midnight. (2: stock findings link to their lot and read in plain words.)
+PAYLOAD_VERSION = 2
+
+
 def _fresh(row, now: datetime) -> bool:
     if not row or row.stale:
+        return False
+    if (row.payload or {}).get("version") != PAYLOAD_VERSION:
         return False
     computed_at = row.computed_at
     if computed_at.tzinfo is None:
@@ -169,7 +176,11 @@ def _upsert(session, org_id: UUID, expensive_results: list[dict], now: datetime)
             SET payload = EXCLUDED.payload, computed_at = EXCLUDED.computed_at, stale = false
             """
         ),
-        {"org_id": str(org_id), "payload": json.dumps({"results": expensive_results}), "now": now},
+        {
+            "org_id": str(org_id),
+            "payload": json.dumps({"version": PAYLOAD_VERSION, "results": expensive_results}),
+            "now": now,
+        },
     )
 
 
@@ -247,6 +258,10 @@ def get_expired_materials_result(org_id: UUID, session):
 _EXPIRED_RAW_KEEP = (
     "id",
     "name",
+    # Notifications names the lot and what is left of it, so a person can act without opening it.
+    "supplier_batch_number",
+    "quantity",
+    "unit",
     "expiry_date",
     "created_at",
     "purchase_date",

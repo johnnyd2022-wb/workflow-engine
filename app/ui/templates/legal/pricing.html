@@ -1,0 +1,44 @@
+{% extends "legal/_page.html" %}
+{% block title %}Pricing{% endblock %}
+{% block description %}What biz-e costs, what it includes and how to cancel.{% endblock %}
+{% block styles %}
+    .pricing-plan { border: 1px solid var(--legal-border); border-radius: 1rem; padding: 1.75rem; background: rgba(255,255,255,.03); margin-top: 1.5rem; }
+    .pricing-plan h2 { margin-top: 0; }
+    .pricing-price { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; margin: .25rem 0 .75rem; }
+    .pricing-price strong { font-size: 2.5rem; color: #F9FAFB; letter-spacing: -.02em; }
+    .pricing-price span { color: var(--legal-muted); }
+    .pricing-for { color: var(--legal-muted) !important; margin: 0 0 1rem; }
+    .pricing-plan ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+    .pricing-plan li { padding-left: 1.75rem; position: relative; }
+    .pricing-plan li::before { content: "✓"; position: absolute; left: 0; color: var(--legal-accent); font-weight: 700; }
+    .pricing-cta { display: inline-block; margin-top: 1.5rem; background: var(--legal-accent); color: #04211d !important; text-decoration: none; font-weight: 600; padding: .75rem 1.25rem; border-radius: .625rem; }
+{% endblock %}
+{% block body %}
+  <h1>Pricing</h1>
+  <p class="legal-updated">Updated {{ updated }}</p>
+  <p class="legal-draft" data-legal-draft><strong>Placeholder.</strong> Prices and inclusions are being confirmed before launch and may change. Nothing here is an offer yet.</p>
+
+  {% for plan in plans %}
+  <section class="pricing-plan" aria-labelledby="plan-{{ loop.index }}">
+    <h2 id="plan-{{ loop.index }}">{{ plan.name }}</h2>
+    <p class="pricing-price"><strong>{{ plan.price }}</strong><span>{{ plan.per }}</span></p>
+    <p class="pricing-for">{{ plan.for }}</p>
+    <ul>
+      {% for item in plan.includes %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    <a class="pricing-cta" href="/">Sign up</a>
+  </section>
+  {% endfor %}
+
+  <h2>Not included yet</h2>
+  <ul>
+    {% for item in not_included %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+
+  <h2>Billing and cancelling</h2>
+  <ul>
+    <li>Billed monthly in New Zealand dollars. GST is added at 15%.</li>
+    <li>No fixed term. Cancel any time by contacting us; the subscription ends at the close of the month already paid for. Part months aren't refunded.</li>
+    <li>Your records are yours. You can have a full export of them before cancelling or for 30 days after; see the <a href="/terms">terms</a> for how long we keep them afterwards.</li>
+  </ul>
+{% endblock %}

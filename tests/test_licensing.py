@@ -266,3 +266,28 @@ def test_state_helpers_directly():
     assert licensing.licence_state(lic, date(2026, 12, 1))["state"] == "expired"
     lic.renewal_lodged_on = date(2026, 10, 1)
     assert "continues" in licensing.licence_state(lic, date(2026, 12, 1))["label"]
+
+
+def test_each_alert_lands_on_the_part_of_licensing_that_resolves_it(world):
+    client = world["client"]
+    _licence(client, annual_fee_due_on=(TODAY + timedelta(days=20)).isoformat())
+    client.post(
+        "/api/compliant/licensing/licences",
+        json={"kind": "special", "event_name": "Gin Fest", "event_starts_on": (TODAY + timedelta(days=5)).isoformat()},
+    )
+    alerts = run_licensing_check(world["org"].id, world["db"]).data["system_alerts"]
+    by_kind = {a["id"].split("-")[0] + "-" + a["id"].split("-")[1]: a for a in alerts}
+    assert by_kind["licence-renewal"]["href"] == "/compliant/nz-alcohol/licensing#lic-licences"
+    assert by_kind["licence-fee"]["action_label"] == "Mark the fee paid"
+    assert by_kind["special-licence"]["action_label"] == "Name the manager"
+    assert all(a["href"].startswith("/compliant/nz-alcohol/licensing#lic-") for a in alerts)
+
+
+def test_a_long_title_is_cut_at_a_word():
+    from app.features.compliant.modules.nz_alcohol.licensing import _shorten
+
+    text = "Display the licence, and the name of the manager on duty, where the Act and the licence require it"
+    short = _shorten(text, 60)
+    assert short.endswith("…") and len(short) <= 61
+    assert text.startswith(short[:-1]) and text[len(short) - 1] in " ,"  # whole words, no trailing comma
+    assert _shorten("Short enough", 60) == "Short enough"

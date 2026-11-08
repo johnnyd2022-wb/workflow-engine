@@ -75,6 +75,8 @@ _FIELD_LABELS = {
     "inputs": "Inputs",
     "outputs": "Outputs",
     "execution_prompts": "Prompts",
+    "duration_minutes": "Takes",
+    "wait_minutes": "Then waits",
     "category": "Category",
     "is_draft": "Draft",
 }
@@ -378,6 +380,12 @@ def _human_summary(ev) -> str:
         after = p.get("quantity_after", p.get("quantity", "?"))
         unit = p.get("unit", "")
         return f"Quantity adjusted {_format_quantity(before)} → {_format_quantity(after)} {unit}".strip()
+
+    # GL-P02: quality hold and release.
+    if et == "inventory_item.hold_placed":
+        return f"Put on quality hold: {p.get('reason') or 'no reason given'}"
+    if et == "inventory_item.hold_released":
+        return f"Released from quality hold: {p.get('note') or 'no note'}"
 
     if et == "inventory_item.consumed":
         qty = _format_quantity(p.get("quantity_consumed", "?"))
