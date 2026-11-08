@@ -61,8 +61,8 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
 | ☑ | GL-P02 | Quality hold and release on a lot | Build | !640: held lots can't be used in production, sales, tastings, dispatch or split transfers; hold from a lot's panel (with lots made from it); release needs compliance.manage and a note; history kept |
-| ◐ | GL-P01 | Returns, credit notes and physical stock | In progress | !642 GL-P01a imports credit notes, nets overview revenue and records credit-only decisions; physical returns and duty treatment continue in GL-P01b |
-| ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
+| ☑ | GL-P01 | Returns, credit notes and physical stock | Build | Money, goods and duty kept apart and linked (docs/returns-and-credits.md): !642 imports Xero credit notes and nets revenue; !644 records what physically came back (back into its batch, onto quality hold, or nothing), and returns into bond are possible credits on the excise draft |
+| ☑ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Build | !647: a recall (or drill) is an operational case on a lot; scope from the forward trace and matched sales; real recalls hold the stock (GL-P02), drills hold nothing; per customer a drafted (never sent) notice, sent/acknowledged/unreachable, recovered/disposed; the case can't resolve or verify until everyone is accounted for. Start one from a lot's Inventory panel; work the customer checklist on the case page |
 | ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |
 | ☑ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Fix | Decided (founder away, 2026-11-06): one name each everywhere. Sales → Excise is the **Sales estimate** (from invoices); Compliance → Customs is the **Filing draft** (from removals; **Lodged return** once lodged). Each links to the other by name and says why they differ (tastings, samples, moves under bond, invoice dates). MR !627 |
 | ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
@@ -71,7 +71,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☑ | GL-P09 | Guided first-day setup | Decide | !574: Style 1, the setup guide, chosen 2026-10-26 |
 | ☑ | GL-P10 | One readable export of all the business's records | Build | !639: Settings → Account → Your records; ZIP of a CSV per table, plain summaries and a README; secrets never exported; admins only, rate-limited, audit-logged |
 | ☐ | GL-P11 | Reminders outside the app | Founder (blocked) | Same hold as GL-A04: needs SES (or Google Workspace) after the production infrastructure. **Non-blocking for the 2026-10-27 check (founder):** left out of this check, still to do |
-| ☐ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | |
+| ☑ | GL-P12 | Cost, purchasing, fulfilment depth | Discuss | **Decision (!643; 2026-11-07; follows the founder's 2026-10-27 direction): defer commercial-depth work until a named buyer has a specific missing job.** No such buyer gap is recorded for this go-live. Keep accounting in Xero; do not present invoicing as a complete finance or distribution system. Do not claim landed-cost/margin reporting, purchase orders, general pick/pack fulfilment, or POS/e-commerce integrations. Reopen against a named prospect and the job their sale depends on. |
 
 ### UX and accessibility
 
@@ -110,7 +110,6 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 ### To go over together
 
 - **GL-P07: multi-site and planning.** Founder (2026-10-27): build both rather than limit what is advertised.
-- **GL-P12: commercial depth.** I agree with the report and would build these only when a named buyer is missing one; listing them here invites building ahead of demand.
 - **The "ten times better" targets.** Founder (2026-10-26): present options once the other items are addressed.
 - **GL-S03: tightening the CSP.** Agreed 2026-10-26: a planned migration over several MRs, starting now.
 - **No archive for workflows.** After !572 a workflow with batches can't be deleted, and there's no "archive" to hide old ones. Worth a design item if old workflows clutter the list.
