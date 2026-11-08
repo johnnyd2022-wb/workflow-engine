@@ -1,4 +1,4 @@
-# Demo script (GL-C06, placeholder)
+# Demo script (GL-C06)
 
 **Placeholder.** Not demoing until the go-live checklist is done (founder, 2026-10-26). The two
 orgs and the order below are a starting point to rehearse and rewrite.
@@ -52,10 +52,9 @@ with every manual step visible. Pick the parts the prospect asks about.
 | "We make for other brands" | Production → Contract orders | Orders, customer-owned materials, dispatch to their CCA |
 | "Who did what?" | Any batch → its history | Every step, who recorded it and when |
 
-**Exceptions still to script** (they depend on checklist items not built yet):
-- a return or credit note (GL-P01);
-- a quality hold and release (GL-P02);
-- a recall case with acknowledgements (GL-P03).
+| "A batch is cloudy, stop it going out" | Inventory → the lot → *Hold…* | The lot already on hold (lab check pending): can't be used, sold or dispatched; the released one shows its history and who signed it off (GL-P02) |
+| "A customer sent bottles back" | Sales → Overview → *Did stock come back?* | Credit note CN-0007 from Xero: one bottle back damaged (now its own lot, on hold), one still to decide; record *Fine*, *Destroyed* or *Credit only*. Bond returns appear on the excise draft as a possible credit (GL-P01) |
+| "Run a recall drill" | Cases → *Recall drill: …* | The drill on a sold lot: every customer who got it, notices drafted (never sent), one acknowledged, what still blocks closing; nothing held because it's a drill (GL-P03) |
 
 ## Before the first real demo
 
