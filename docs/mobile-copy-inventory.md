@@ -39,6 +39,11 @@ and `verified`. Automated suggestions are triage only. A long form can have
 many short labels, and legal or safety copy must stay accessible even if it is
 long.
 
+`work.mobile_copy_page_progress` groups those decisions by page, so the next
+page can be selected by unreviewed containers and visible words. The first
+page changes are in !666 (Sales overview, stacked on !664), !667 (Sales
+settings), !668 (Sales excise estimate), and !669 (Go live).
+
 ## First pages to review on a phone
 
 | Route | Main issue to inspect | Initial treatment to test |
@@ -85,6 +90,16 @@ FROM work.mobile_copy_relations r
 JOIN work.mobile_copy_pages p ON p.page_key = r.page_key
 JOIN work.mobile_copy_pages shared ON shared.page_key = r.included_page_key
 WHERE p.route_patterns LIKE '%/crm%';
+```
+
+Find the next routed pages with the most unreviewed visible text:
+
+```sql
+SELECT route_patterns, template_name, unreviewed, visible_words,
+       proposed, implemented, verified
+FROM work.mobile_copy_page_progress
+WHERE page_kind = 'routed'
+ORDER BY unreviewed DESC, visible_words DESC;
 ```
 
 ## Refreshing the map

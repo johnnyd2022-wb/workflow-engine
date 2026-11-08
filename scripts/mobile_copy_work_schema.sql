@@ -62,3 +62,16 @@ CREATE INDEX IF NOT EXISTS mobile_copy_containers_review_idx
     ON work.mobile_copy_containers(review_state, word_count DESC);
 CREATE INDEX IF NOT EXISTS mobile_copy_containers_search_idx
     ON work.mobile_copy_containers USING gin (to_tsvector('english', desktop_text || ' ' || coalesce(mobile_text, '')));
+
+CREATE OR REPLACE VIEW work.mobile_copy_page_progress AS
+SELECT p.page_key, p.template_name, p.route_patterns, p.page_kind,
+       count(c.container_key) AS containers,
+       coalesce(sum(c.word_count), 0) AS visible_words,
+       count(c.container_key) FILTER (WHERE c.review_state = 'unreviewed') AS unreviewed,
+       count(c.container_key) FILTER (WHERE c.review_state = 'proposed') AS proposed,
+       count(c.container_key) FILTER (WHERE c.review_state = 'implemented') AS implemented,
+       count(c.container_key) FILTER (WHERE c.review_state = 'verified') AS verified,
+       count(c.container_key) FILTER (WHERE c.mobile_treatment IS NOT NULL) AS treatment_recorded
+FROM work.mobile_copy_pages p
+LEFT JOIN work.mobile_copy_containers c USING (page_key)
+GROUP BY p.page_key, p.template_name, p.route_patterns, p.page_kind;
