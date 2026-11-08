@@ -1,6 +1,7 @@
 """GL-P07 B4: capacity units and placement, the real start check, and automatic replanning."""
 
 from datetime import timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -192,37 +193,97 @@ def test_stock_used_since_the_check_blocks_the_start(db, demand_world, monkeypat
     org_id, own, batches = _assessed(db, demand_world, monkeypatch)
     InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "1", commit=False)
     db.flush()
+    # 1 kg left, and the second batch still holds 2 kg of it.
     assert start_service.evaluate_start(db, org_id, batches[0]).blockers == (
-        "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
+        "Only 0 kg of Sugar is left on hand once other batches' share is counted; "
+        "this batch holds 2 kg. Check materials again",
     )
 
 
-def test_started_batch_commitment_is_reserved_until_its_inputs_are_recorded(db, demand_world, monkeypatch):
-    """A 3 kg lot cannot start two batches each holding 2 kg, including before input capture."""
+def test_two_starts_can_never_take_more_than_the_lot_has(db, demand_world, monkeypatch):
+    """B4 review: 5 kg lot, two batches hold 2 kg each. The first starts (its hold is consumed,
+    nothing recorded yet), then the lot falls to 3 kg: the second can't start on stock the
+    first batch is about to use."""
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
     org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-seq-1")
+    assert start_service.evaluate_start(db, org_id, batches[1]).blockers == ()  # 5 - 2 leaves its 2 kg
     InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "3", commit=False)
     db.flush()
-
-    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == ()
-    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-start-commitment")
     assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
-        "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
+        "Only 1 kg of Sugar is left on hand once other batches' share is counted; "
+        "this batch holds 2 kg. Check materials again",
     )
-
-    execution_step = (
-        db.query(ExecutionStep)
-        .filter(ExecutionStep.org_id == org_id, ExecutionStep.execution_id == batches[0].execution_id)
-        .one()
+    with pytest.raises(batch_service.PlanningConflictError, match="Only 1 kg of Sugar"):
+        start_service.start_batch(db, org_id, batches[1].id, {"expected_revision": 1}, "b4-seq-2")
+    # Once the first batch records using its 2 kg on a finished step, the lot is down to 1 kg
+    # and nothing is claimed twice.
+    step = (
+        db.query(start_service.ExecutionStep)
+        .filter(start_service.ExecutionStep.execution_id == batches[0].execution_id)
+        .first()
     )
-    execution_step.status = ExecutionStepStatus.IN_PROGRESS
-    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "2", "unit": "kg"}]
+    step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "2", "unit": "kg"}]
+    step.status = __import__("app.core.db.models.execution_step", fromlist=["x"]).ExecutionStepStatus.COMPLETED
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "1", commit=False)
     db.flush()
-    # Pending actual inputs take over from the consumed reservation; they are not charged twice.
     assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
         "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
     )
+
+
+def test_started_later_batch_still_reserves_its_lot_before_earlier_batch_starts(db, demand_world, monkeypatch):
+    """A started batch's claim survives even when it sorts after the batch being checked."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    batches[0].proposed_start_date = TODAY - timedelta(days=2)
+    batches[1].proposed_start_date = TODAY - timedelta(days=1)
+    db.flush()
+    start_service.start_batch(db, org_id, batches[1].id, {"expected_revision": 1}, "b4-out-of-order")
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "3", commit=False)
+    db.flush()
+    assert "Only 1 kg of Sugar" in start_service.evaluate_start(db, org_id, batches[0]).blockers[0]
+
+
+def test_nonfinite_recorded_input_blocks_start_without_crashing(db, demand_world, monkeypatch):
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-nan-input")
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == batches[0].execution_id).one()
+    execution_step.status = ExecutionStepStatus.IN_PROGRESS
+    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "NaN", "unit": "kg"}]
+    db.flush()
+    assert "quantity can't be read" in start_service.evaluate_start(db, org_id, batches[1]).blockers[0]
+
+
+def test_multiple_commitments_to_one_lot_count_recorded_use_once(db, demand_world, monkeypatch):
+    """Two raw inputs for one lot share one execution/lot actual-input total."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-duplicate-claim")
+    first = db.query(PlanningMaterialCommitment).filter_by(batch_id=batches[0].id).one()
+    first.quantity = Decimal(1)
+    db.add(
+        PlanningMaterialCommitment(
+            org_id=org_id,
+            batch_id=batches[0].id,
+            inventory_item_id=own.id,
+            assessment_id=first.assessment_id,
+            material=first.material,
+            quantity=Decimal(1),
+            unit=first.unit,
+            status="consumed",
+            closed_at=first.closed_at,
+        )
+    )
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == batches[0].execution_id).one()
+    execution_step.status = ExecutionStepStatus.COMPLETED
+    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "1", "unit": "kg"}]
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "2", commit=False)
+    db.flush()
+    assert "Only 1 kg of Sugar" in start_service.evaluate_start(db, org_id, batches[1]).blockers[0]
 
 
 def test_a_full_still_blocks_the_start(db, demand_world, monkeypatch):

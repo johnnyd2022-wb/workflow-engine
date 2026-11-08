@@ -774,3 +774,29 @@ def test_saving_a_contract_order_syncs_the_planner(db, demand_clients, flask_app
         db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
     db.query(AuditLog).filter(AuditLog.org_id == org_id).delete(synchronize_session=False)
     db.commit()
+
+
+def test_a_stored_nan_contract_quantity_is_listed_not_a_crash(db, demand_world):
+    """PostgreSQL NUMERIC 'NaN' passes `quantity > 0`; sync must list it, never raise (B3 review)."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _, order, line = _contract(db, org_id, output_id, 10)
+    db.execute(
+        __import__("sqlalchemy").text("UPDATE contract_order_lines SET quantity = 'NaN' WHERE id = :id"),
+        {"id": line.id},
+    )
+    db.expire_all()
+    result = contract_sync.sync_contract_demand(db, org_id)
+    assert _synced(db, org_id) == []
+    assert [row["reason"] for row in result["unmapped"]] == ["The ordered quantity can't be planned"]
+
+
+def test_stock_that_lasts_beyond_the_horizon_has_no_runs_out_date(db, demand_world, sales):
+    """15,000 bottles selling 1 every 12 weeks is far past any date timedelta can hold (B3 review)."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(3, 1)]}, {org_id: TODAY - timedelta(days=3)})
+    _stock(db, org_id, output_id, 15000)
+    forecast_service.save_target(db, org_id, None, {"source_output_id": str(output_id), "weeks_of_cover": 104})
+    (row,) = _cover(db, org_id)["products"]
+    assert row["runs_out_on"] is None and row["suggestion"] is None
+    assert row["summary"].startswith("Lasts more than 5 years at ")
