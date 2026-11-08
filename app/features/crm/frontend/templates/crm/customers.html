@@ -8,7 +8,10 @@
   <header class="workspace-header">
     <div><h1>Customers</h1><p>Find a customer. Keep their contact details ready.</p></div>
     {% if can('sales.record') %}
-    <button type="button" class="workspace-button workspace-button--primary" data-new-customer @click="openNewCustomer()">New customer</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="workspace-button" @click="openImport()">Import customers</button>
+      <button type="button" class="workspace-button workspace-button--primary" data-new-customer @click="openNewCustomer()">New customer</button>
+    </div>
     {% endif %}
   </header>
 
@@ -20,6 +23,41 @@
     {% endif %}
     <span x-show="xeroStatus && !isConnected" x-cloak class="customers-connection-hint">Customers you add here stay available without Xero.</span>
   </div>
+  {% if can('sales.record') %}
+  <section class="workspace-card customers-import" x-show="importer.open" x-cloak aria-label="Import customers" style="margin:16px 0; padding:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; gap:12px;">
+      <div><h2>Import customers and notes</h2><p>Check the rows before saving. Imported customers stay in Biz-E until you turn on Xero sync for each one.</p></div>
+      <button type="button" class="workspace-button" @click="importer.open=false">Close</button>
+    </div>
+    <p><a href="/api/crm/customers/import-template" download>Download CSV template</a> · Only <strong>name</strong> is required. Keep the header row; add one customer per row and an optional note.</p>
+    <label class="crm-form-label" for="crm-import-format">Import from</label>
+    <select id="crm-import-format" class="crm-form-input" x-model="importer.format" @change="importer.text=''; importer.result=null; importer.saved=false">
+      <option value="csv">CSV file</option><option value="tsv">Paste from a spreadsheet</option>
+    </select>
+    <div x-show="importer.format==='csv'" style="margin-top:12px;">
+      <label class="crm-form-label" for="crm-import-file">CSV file (up to 1 MB and 500 customers)</label>
+      <input id="crm-import-file" type="file" accept=".csv,text/csv" @change="importFile($event)">
+    </div>
+    <div x-show="importer.format==='tsv'" style="margin-top:12px;">
+      <label class="crm-form-label" for="crm-import-paste">Paste rows copied from Excel or Google Sheets, including the header</label>
+      <textarea id="crm-import-paste" class="crm-form-input" rows="7" x-model="importer.text" @input="importer.result=null; importer.saved=false" placeholder="name&#9;email_address&#9;note"></textarea>
+    </div>
+    <p class="crm-error-banner" role="alert" x-show="importer.error" x-text="importer.error" x-cloak></p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+      <button type="button" class="workspace-button" :disabled="importer.busy" @click="runImport(false)" x-text="importer.busy ? 'Checking…' : 'Preview import'">Preview import</button>
+      <button type="button" class="workspace-button workspace-button--primary" x-show="hasImportResult && !importer.saved" :disabled="!canCommitImport" @click="runImport(true)">Import ready rows</button>
+    </div>
+    <div x-show="hasImportResult" x-cloak aria-live="polite" style="margin-top:16px;">
+      <p x-show="!importer.saved"><strong x-text="importReady"></strong> ready · <strong x-text="importRejected"></strong> need attention.</p>
+      <p x-show="importer.saved"><strong x-text="importCreated"></strong> imported · <strong x-text="importRejected"></strong> skipped.</p>
+      <div x-show="importProblems.length">
+        <h3>Rows to fix</h3>
+        <button type="button" class="workspace-button" @click="downloadImportProblems()">Download problem rows report</button>
+        <ul><template x-for="item in importProblems" :key="item.row"><li><span x-text="item.error"></span> <span x-text="item.name"></span></li></template></ul>
+      </div>
+    </div>
+  </section>
+  {% endif %}
   <div x-show="error" class="customers-error" role="alert" x-cloak>
     <span x-text="error"></span><button type="button" class="workspace-button" @click="loadCustomers()">Try again</button>
   </div>

@@ -18,6 +18,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.crm.models.crm_note import CRMNote
 from app.features.crm.models.xero_contact import XeroContact
 from app.features.crm.services import xero_api_client as xero_api_client_module
 from app.features.crm.services.contact_service import ContactNotFoundError, ContactSyncService
@@ -412,6 +413,84 @@ def test_http_refuses_bad_input_and_unknown_contacts(app_client):
     assert app_client.patch("/api/crm/customers/not-a-uuid", json={"name": "x"}).status_code == 400
     assert app_client.put(f"/api/crm/customers/{uuid4()}/xero-sync", json={}).status_code == 400
     assert app_client.put("/api/crm/contact-sync-settings", json={"sync_contacts_to_xero": "on"}).status_code == 400
+
+
+def test_contact_import_previews_then_saves_valid_rows_and_notes_without_xero(app_client, db, org, xero):
+    ContactSyncService(db).set_sync_default(org.id, True)
+    template = app_client.get("/api/crm/customers/import-template")
+    assert template.status_code == 200
+    assert template.data.startswith(b"name,first_name,last_name,email_address,phone_number,")
+
+    text = 'name,email_address,note\n"River Wines",river@example.nz,"Met at fair, call Friday"\n"Bad Wine",bad-email,Oops\n'
+    payload = {"text": text, "format": "csv"}
+    preview = app_client.post("/api/crm/customers/import", json=payload)
+    assert preview.status_code == 200
+    assert preview.get_json()["ready"] == 1
+    problem = preview.get_json()["problems"][0]
+    assert (problem["row"], problem["name"], problem["error"]) == (
+        3,
+        "Bad Wine",
+        "Enter an email address like name@example.com",
+    )
+    assert problem["data"]["email_address"] == "bad-email"
+    assert db.query(XeroContact).filter(XeroContact.org_id == org.id).count() == 0
+
+    saved = app_client.post("/api/crm/customers/import", json={**payload, "commit": True})
+    assert saved.status_code == 200
+    assert saved.get_json()["created"] == 1
+    contact = db.query(XeroContact).filter(XeroContact.org_id == org.id).one()
+    assert (contact.name, contact.source, contact.sync_to_xero, contact.xero_contact_id) == (
+        "River Wines",
+        "bize",
+        False,
+        None,
+    )
+    note = db.query(CRMNote).filter(CRMNote.org_id == org.id).one()
+    assert note.contact_id == contact.id and note.content == "Met at fair, call Friday"
+    assert xero.created == []
+    assert len(_events(db, org.id, "crm_contact.imported")) == 1
+    assert app_client.post("/api/crm/customers/import", json={**payload, "commit": True}).get_json()["created"] == 0
+
+
+def test_contact_import_rejects_bad_headers_and_duplicate_paste_rows(app_client, db, org):
+    bad = app_client.post(
+        "/api/crm/customers/import", json={"text": "email_address,note\na@b.nz,Hello\n", "format": "csv"}
+    )
+    assert bad.status_code == 400 and "name" in bad.get_json()["error"]
+    pasted = "name\temail_address\tnote\nLake Wines\tlake@example.nz\tFirst\nLAKE WINES\tother@example.nz\tSecond\n"
+    response = app_client.post("/api/crm/customers/import", json={"text": pasted, "format": "tsv", "commit": True})
+    assert response.status_code == 200
+    assert (response.get_json()["created"], response.get_json()["rejected"]) == (1, 1)
+    assert response.get_json()["problems"][0]["row"] == 3
+    assert db.query(XeroContact).filter(XeroContact.org_id == org.id).count() == 1
+
+
+def test_contact_import_requires_sales_record(db, org):
+    from app.api.app_factory import create_app
+
+    email = f"crm_auditor_{uuid4()}@test.com"
+    UserRepository(db).create_user(
+        org_id=org.id, email=email, password_hash=AuthService.hash_password("TestPass123!"), role=UserRole.AUDITOR
+    )
+    db.commit()
+    flask_app = create_app()
+    flask_app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+    with flask_app.test_client() as client:
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        with flask_app.app_context():
+            assert client.post("/auth/login", json={"email": email, "password": "TestPass123!"}).status_code in (
+                200,
+                201,
+            )
+            assert client.get("/api/crm/customers/import-template").status_code == 200
+            assert (
+                client.post(
+                    "/api/crm/customers/import", json={"text": "name\nNo access\n", "format": "csv", "commit": True}
+                ).status_code
+                == 403
+            )
+    assert db.query(XeroContact).filter(XeroContact.org_id == org.id).count() == 0
 
 
 def test_the_sales_default_needs_sales_manage_but_adding_a_customer_does_not(db, org):

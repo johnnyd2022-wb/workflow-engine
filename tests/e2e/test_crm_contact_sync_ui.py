@@ -171,6 +171,50 @@ def test_a_failed_send_shows_why_and_try_again_sends_it(xero, sales_page, db, or
     expect(row.get_by_text("Not sent to Xero")).to_be_hidden()
 
 
+def test_import_customers_from_spreadsheet_previews_and_saves_notes(sales_page, db, org):
+    from app.features.crm.models.crm_note import CRMNote
+
+    page = sales_page
+    page.goto("https://crm.test/crm/customers")
+    page.get_by_role("button", name="Import customers").click()
+    section = page.get_by_role("region", name="Import customers")
+    expect(section).to_be_visible()
+    section.get_by_label("Import from").select_option("tsv")
+    section.get_by_label("Paste rows copied from Excel or Google Sheets, including the header").fill(
+        "name\temail_address\tnote\nCellar Club\tclub@example.nz\tMet at tasting\n"
+    )
+    section.get_by_role("button", name="Preview import").click()
+    expect(section).to_contain_text("1 ready")
+    assert db.query(CRMNote).filter(CRMNote.org_id == org.id).count() == 0
+    _shot(page, "import-preview-desktop")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
+    _shot(page, "import-preview-desktop-dark")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'light')")
+    page.set_viewport_size({"width": 390, "height": 844})
+    _shot(page, "import-preview-phone")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
+    _shot(page, "import-preview-phone-dark")
+    section.get_by_role("button", name="Import ready rows").click()
+    expect(section).to_contain_text("1 imported")
+    expect(page.locator("tbody tr").filter(has_text="Cellar Club")).to_be_visible()
+    note = db.query(CRMNote).filter(CRMNote.org_id == org.id).one()
+    assert note.content == "Met at tasting"
+
+    section.get_by_label("Import from").select_option("csv")
+    section.get_by_label("CSV file (up to 1 MB and 500 customers)").set_input_files(
+        {
+            "name": "contacts.csv",
+            "mimeType": "text/csv",
+            "buffer": b"name,email_address,note\nBottle Shop,shop@example.nz,Wholesale lead\n",
+        }
+    )
+    section.get_by_role("button", name="Preview import").click()
+    expect(section).to_contain_text("1 ready")
+    section.get_by_role("button", name="Import ready rows").click()
+    expect(section).to_contain_text("1 imported")
+    expect(page.locator("tbody tr").filter(has_text="Bottle Shop")).to_be_visible()
+
+
 def test_the_sales_default_sends_waiting_customers(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
