@@ -40,3 +40,28 @@ html[data-spa-theme="dark"] #page-content .cd-fact--bad .cd-fact__value, html[da
   #page-content .cd-tabs { display: flex; border-radius: 12px; }
   #page-content .cd-tabs button { flex: 1 1 auto; padding: 6px 10px; }
 }
+
+/* GL-P01b: goods back from this customer */
+#page-content .cd-returns { margin-bottom: 14px; padding: 14px 16px; }
+#page-content .cd-returns h3 { margin: 0 0 8px; font-size: .95rem; }
+#page-content .cd-returns__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+#page-content .cd-returns__item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); font-size: .84rem; }
+#page-content .cd-returns__what { min-width: 0; overflow-wrap: anywhere; }
+#page-content .cd-returns__when { color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+#page-content .cd-return-entry { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--ui-border); }
+#page-content .cd-return-form { display: grid; gap: 10px; }
+#page-content .cd-return-form h4 { margin: 0; font-size: .9rem; }
+#page-content .cd-return-form__hint { margin: 0; color: var(--ui-text-muted); font-size: .82rem; }
+#page-content .cd-return-form__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; }
+#page-content .cd-return-form__fields label { display: grid; gap: 5px; min-width: 0; font-size: .78rem; font-weight: 700; }
+#page-content .cd-return-form__fields :is(input, select) { width: 100%; min-width: 0; min-height: 36px; padding: 6px 9px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+#page-content .cd-return-form__fields :is(input, select):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+#page-content .cd-return-form__note { grid-column: 1 / -1; }
+#page-content .cd-return-form__fields > label:first-child { grid-column: span 2; }
+#page-content .cd-return-form__error { margin: 0; color: var(--crm-red, #b42318); font-size: .82rem; }
+#page-content .cd-return-form__actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 640px) {
+  #page-content .cd-returns__item { grid-template-columns: minmax(0, 1fr) auto; }
+  #page-content .cd-returns__when { grid-column: 1 / -1; }
+  #page-content .cd-return-form__fields > label:first-child { grid-column: 1 / -1; }
+}

@@ -78,6 +78,7 @@ SAFE_LOOKING_SECRET: dict[tuple[str, str], str] = {
     ("crm_sales_traceability_config", "matching_key"): "which product field sales are matched on",
     ("feature_subscriptions", "feature_key"): "the name of a plan feature",
     ("planning_workflow_settings", "workflow_fingerprint"): "a hash of the workflow, to notice edits",
+    ("xero_credit_note_lines", "line_key"): "which Xero credit-note line this is",
 }
 
 SECRET_NAME = re.compile(r"token|secret|hash|password|passwd|key|salt|otp|credential|encrypt|fingerprint", re.I)

@@ -96,6 +96,18 @@
   }
 
   function renderSource(data) {
+    // GL-P03: a recall has no finding to show; its customer checklist takes the source's place.
+    if (data.source_type === 'recall' && window.BizeRecall) {
+      var section = document.querySelector('[data-oc-source-section]');
+      if (section) section.hidden = true;
+      var recallEl = document.querySelector('[data-oc-recall]');
+      var root = document.querySelector('[data-oc-detail-root]');
+      if (recallEl && !recallEl.dataset.rendered) {
+        recallEl.dataset.rendered = '1';
+        window.BizeRecall.render(recallEl, data.id, root && root.dataset.canWorkRecall === 'true');
+      }
+      return;
+    }
     var obs = document.querySelector('[data-oc-source-observation]');
     var state = data.source_observation && data.source_observation.state;
     var observedAt = data.source_observation && data.source_observation.observed_at;
