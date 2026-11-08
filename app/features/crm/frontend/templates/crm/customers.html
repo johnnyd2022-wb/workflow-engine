@@ -50,10 +50,15 @@
     <div x-show="hasImportResult" x-cloak aria-live="polite" style="margin-top:16px;">
       <p x-show="!importer.saved"><strong x-text="importReady"></strong> ready · <strong x-text="importRejected"></strong> need attention.</p>
       <p x-show="importer.saved"><strong x-text="importCreated"></strong> imported · <strong x-text="importRejected"></strong> skipped.</p>
+      <div x-show="importReady && !importer.saved">
+        <h3>Ready rows</h3>
+        <ul><template x-for="item in importPreview" :key="item.row"><li>Row <span x-text="item.row"></span> · <span x-text="item.name"></span></li></template></ul>
+        <p x-show="importMore">And <span x-text="importMore"></span> more ready rows.</p>
+      </div>
       <div x-show="importProblems.length">
         <h3>Rows to fix</h3>
         <button type="button" class="workspace-button" @click="downloadImportProblems()">Download problem rows report</button>
-        <ul><template x-for="item in importProblems" :key="item.row"><li><span x-text="item.error"></span> <span x-text="item.name"></span></li></template></ul>
+        <ul><template x-for="item in importProblems" :key="item.row"><li>Row <span x-text="item.row"></span> · <span x-text="item.name"></span>: <span x-text="item.error"></span></li></template></ul>
       </div>
     </div>
   </section>

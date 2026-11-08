@@ -51,6 +51,8 @@ function crmCustomers() {
     get importCreated() { return this.importer.result ? this.importer.result.created : 0; },
     get importRejected() { return this.importer.result ? this.importer.result.rejected : 0; },
     get importProblems() { return this.importer.result ? this.importer.result.problems : []; },
+    get importPreview() { return this.importer.result ? this.importer.result.preview.slice(0, 20) : []; },
+    get importMore() { return Math.max(0, this.importReady - 20); },
     get hasImportResult() { return Boolean(this.importer.result); },
     get canCommitImport() { return this.hasImportResult && !this.importer.saved && !this.importer.busy && this.importReady > 0; },
 

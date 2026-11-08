@@ -185,6 +185,7 @@ def test_import_customers_from_spreadsheet_previews_and_saves_notes(sales_page, 
     )
     section.get_by_role("button", name="Preview import").click()
     expect(section).to_contain_text("1 ready")
+    expect(section).to_contain_text("Row 2 · Cellar Club")
     assert db.query(CRMNote).filter(CRMNote.org_id == org.id).count() == 0
     _shot(page, "import-preview-desktop")
     page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
