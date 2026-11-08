@@ -94,6 +94,7 @@ def test_sales_overview_creation_actions_open_existing_forms(xero, sales_page, d
     actions = page.locator(".sales-header-actions")
     expect(actions.get_by_role("link", name="New customer")).to_be_visible()
     expect(actions.get_by_role("link", name="New task")).to_be_visible()
+    expect(page.get_by_role("region", name="Did stock come back?")).to_be_hidden()
     _shot(page, "sales-overview-actions-desktop")
 
     actions.get_by_role("link", name="New customer").click()
