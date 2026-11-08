@@ -1,0 +1,534 @@
+{
+  "access_date": "2026-11-08",
+  "purpose": "Source provenance for the AI engineering workflow research. Discovery/adoption signals are not quality benchmarks.",
+  "method": [
+    "Repository metadata and file listings fetched from GitHub REST API without authentication.",
+    "README files fetched from default branch during initial inspection; selected skill and supporting files fetched at the recorded revision.",
+    "Retrieved means downloaded for inspection; selected bodies and relevant sections reviewed, not every transitive reference or bundled script.",
+    "No remote installer, skill script, hook, or agent framework was executed.",
+    "API license labels can be absent or incomplete; inspect per-file and per-skill license text before copying.",
+    "Raw downloads remained in temporary research storage; this manifest retains links and hashes, not vendor content."
+  ],
+  "repositories": [
+    {
+      "repository": "EveryInc/compound-engineering-plugin",
+      "url": "https://github.com/EveryInc/compound-engineering-plugin",
+      "stars_at_access": 25978,
+      "archived_at_access": false,
+      "revision": "d307bdb7ce158fc47184097ec258007a1a8e7bb3",
+      "default_branch_at_access": "main",
+      "license_api_label": "MIT",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/EveryInc/compound-engineering-plugin/blob/d307bdb7ce158fc47184097ec258007a1a8e7bb3/README.md",
+          "sha256": "e9bf58531fc2830a22b22393462f9bb778e58a3ba077209d42b5df4de5d83f5b",
+          "bytes": 23297,
+          "words_approx": 2908
+        },
+        {
+          "path": "skills/ce-code-review/SKILL.md",
+          "url": "https://github.com/EveryInc/compound-engineering-plugin/blob/d307bdb7ce158fc47184097ec258007a1a8e7bb3/skills/ce-code-review/SKILL.md",
+          "sha256": "210fe6141d256c0e3f9fca59a6b2702739329d8129e57204860815c80d4f6bad",
+          "bytes": 7800,
+          "words_approx": 1198
+        },
+        {
+          "path": "skills/ce-compound/SKILL.md",
+          "url": "https://github.com/EveryInc/compound-engineering-plugin/blob/d307bdb7ce158fc47184097ec258007a1a8e7bb3/skills/ce-compound/SKILL.md",
+          "sha256": "a88e1d140e487415e8e0f041bba9d424f1149f03c404ede604a9359fafac3655",
+          "bytes": 7825,
+          "words_approx": 1135
+        }
+      ]
+    },
+    {
+      "repository": "JuliusBrussee/caveman",
+      "url": "https://github.com/JuliusBrussee/caveman",
+      "stars_at_access": 118211,
+      "archived_at_access": false,
+      "revision": "1e91f1306d602d4ca23618701b1185575ae1869b",
+      "default_branch_at_access": "main",
+      "license_api_label": "Apache-2.0",
+      "files_retrieved": [
+        {
+          "path": "CLAUDE.md",
+          "url": "https://github.com/JuliusBrussee/caveman/blob/1e91f1306d602d4ca23618701b1185575ae1869b/CLAUDE.md",
+          "sha256": "c03bab3a6b08ccc89970e481f2426367b05c95b1014998dabbd916b7f0cc611b",
+          "bytes": 49947,
+          "words_approx": 6355
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/JuliusBrussee/caveman/blob/1e91f1306d602d4ca23618701b1185575ae1869b/README.md",
+          "sha256": "8ddaaf5de2e00a9ae83b38f70a01121f207475f18ab678263b9001d56b52b096",
+          "bytes": 22657,
+          "words_approx": 3109
+        },
+        {
+          "path": "browse/CLAUDE.md",
+          "url": "https://github.com/JuliusBrussee/caveman/blob/1e91f1306d602d4ca23618701b1185575ae1869b/browse/CLAUDE.md",
+          "sha256": "9349875f0e78e4e3a5c88a5be2d7b390786ba1a9362146bf8d9005ec23218e2e",
+          "bytes": 3457,
+          "words_approx": 470
+        },
+        {
+          "path": "skills/caveman/SKILL.md",
+          "url": "https://github.com/JuliusBrussee/caveman/blob/1e91f1306d602d4ca23618701b1185575ae1869b/skills/caveman/SKILL.md",
+          "sha256": "415d43518f2b1a9498c15a445d4657117b129ee5e81b19454ce348439cc6672b",
+          "bytes": 4678,
+          "words_approx": 744
+        }
+      ]
+    },
+    {
+      "repository": "OthmanAdi/planning-with-files",
+      "url": "https://github.com/OthmanAdi/planning-with-files",
+      "stars_at_access": 27948,
+      "archived_at_access": false,
+      "revision": "2362ca385ad74f061aa0e7b73f56543a4b7e6df2",
+      "default_branch_at_access": "master",
+      "license_api_label": "MIT",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/OthmanAdi/planning-with-files/blob/2362ca385ad74f061aa0e7b73f56543a4b7e6df2/README.md",
+          "sha256": "c91344031168712e55f8bc50e776d2a59f0ea1079eeca54e53fe00d1e4038dc0",
+          "bytes": 113740,
+          "words_approx": 13395
+        },
+        {
+          "path": "skills/planning-with-files/SKILL.md",
+          "url": "https://github.com/OthmanAdi/planning-with-files/blob/2362ca385ad74f061aa0e7b73f56543a4b7e6df2/skills/planning-with-files/SKILL.md",
+          "sha256": "45c25f71fe5e54b1bf514368df96d956fcd32da1e9725a788705d5c1a2ab9ca5",
+          "bytes": 41800,
+          "words_approx": 5988
+        }
+      ]
+    },
+    {
+      "repository": "anthropics/skills",
+      "url": "https://github.com/anthropics/skills",
+      "stars_at_access": 188981,
+      "archived_at_access": false,
+      "revision": "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+      "default_branch_at_access": "main",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/anthropics/skills/blob/2c5958ecac7cee2b583967a2c4981d0f4a75c579/README.md",
+          "sha256": "1fca448ca17ccf901bd068c661209b15300bc5be3f039ba1a616c3a13a374ccb",
+          "bytes": 5547,
+          "words_approx": 709
+        },
+        {
+          "path": "skills/frontend-design/SKILL.md",
+          "url": "https://github.com/anthropics/skills/blob/2c5958ecac7cee2b583967a2c4981d0f4a75c579/skills/frontend-design/SKILL.md",
+          "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+          "bytes": 9390,
+          "words_approx": 1516
+        },
+        {
+          "path": "skills/skill-creator/SKILL.md",
+          "url": "https://github.com/anthropics/skills/blob/2c5958ecac7cee2b583967a2c4981d0f4a75c579/skills/skill-creator/SKILL.md",
+          "sha256": "dcd4803e61e913e6fc27294184cd3a71f09f5e924ff20c8a9a20173e7b3c2bcf",
+          "bytes": 33168,
+          "words_approx": 5205
+        },
+        {
+          "path": "skills/webapp-testing/SKILL.md",
+          "url": "https://github.com/anthropics/skills/blob/2c5958ecac7cee2b583967a2c4981d0f4a75c579/skills/webapp-testing/SKILL.md",
+          "sha256": "51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2",
+          "bytes": 3913,
+          "words_approx": 501
+        }
+      ]
+    },
+    {
+      "repository": "bmad-code-org/BMAD-METHOD",
+      "url": "https://github.com/bmad-code-org/BMAD-METHOD",
+      "stars_at_access": 55121,
+      "archived_at_access": false,
+      "revision": "a867e1604b365d48ea03cbd109da1066ba0c84bc",
+      "default_branch_at_access": "main",
+      "license_api_label": "NOASSERTION",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/a867e1604b365d48ea03cbd109da1066ba0c84bc/README.md",
+          "sha256": "7547d18b57a7004a057ace1b03dd10394bd6f687f4174172b73d7d7cf5687d5a",
+          "bytes": 7919,
+          "words_approx": 988
+        },
+        {
+          "path": "skills/bmad-build/SKILL.md",
+          "url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/a867e1604b365d48ea03cbd109da1066ba0c84bc/skills/bmad-build/SKILL.md",
+          "sha256": "4c19bb23bfedc541df60f100e5333e22d62aff5dbec5cd72d52a8454e7aba228",
+          "bytes": 1642,
+          "words_approx": 241
+        },
+        {
+          "path": "skills/bmad-build/workflow.md",
+          "url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/a867e1604b365d48ea03cbd109da1066ba0c84bc/skills/bmad-build/workflow.md",
+          "sha256": "a4a1fed8a1d374b5ff8ac5613211a2e31d7e89743d1b153348ae6fe9ce36ec80",
+          "bytes": 4110,
+          "words_approx": 603
+        }
+      ]
+    },
+    {
+      "repository": "forrestchang/andrej-karpathy-skills",
+      "url": "https://github.com/forrestchang/andrej-karpathy-skills",
+      "stars_at_access": 230696,
+      "archived_at_access": false,
+      "revision": "2c606141936f1eeef17fa3043a72095b4765b9c2",
+      "default_branch_at_access": "main",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "CLAUDE.md",
+          "url": "https://github.com/forrestchang/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/CLAUDE.md",
+          "sha256": "694a2d721e41c385f3db492838c23299826df5ba9809e3b0721aac70021e196a",
+          "bytes": 2357,
+          "words_approx": 358
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/forrestchang/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/README.md",
+          "sha256": "daf314efb31894b86d68b67786c820bd8470bb2126e578ba9cd0e3e2667883f8",
+          "bytes": 6198,
+          "words_approx": 865
+        },
+        {
+          "path": "skills/karpathy-guidelines/SKILL.md",
+          "url": "https://github.com/forrestchang/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/skills/karpathy-guidelines/SKILL.md",
+          "sha256": "6e22cc54cb02a5e98ae42d06d9d7292db0c1b43894831b32879beb0166b2aea7",
+          "bytes": 2518,
+          "words_approx": 371
+        }
+      ],
+      "canonical_repository_at_access": "multica-ai/andrej-karpathy-skills"
+    },
+    {
+      "repository": "gsd-build/get-shit-done",
+      "url": "https://github.com/gsd-build/get-shit-done",
+      "stars_at_access": 64158,
+      "archived_at_access": true,
+      "revision": "bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815",
+      "default_branch_at_access": "main",
+      "license_api_label": "MIT",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/gsd-build/get-shit-done/blob/bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815/README.md",
+          "sha256": "6530ef6aad23383980a7c405d32c40e73c798ee4263a883f804aef31548569b6",
+          "bytes": 329,
+          "words_approx": 49
+        }
+      ]
+    },
+    {
+      "repository": "mattpocock/skills",
+      "url": "https://github.com/mattpocock/skills",
+      "stars_at_access": 317990,
+      "archived_at_access": false,
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "default_branch_at_access": "main",
+      "license_api_label": "MIT",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/README.md",
+          "sha256": "345041d56cf1411b6b3ca1cc54014d26c563890f817f4cb9e2cb193dcd771a3e",
+          "bytes": 16461,
+          "words_approx": 2108
+        },
+        {
+          "path": "skills/engineering/diagnosing-bugs/SKILL.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/diagnosing-bugs/SKILL.md",
+          "sha256": "849198df88cdb65fd0d97236604c1fca7ff2f22d2f705f9724a800d0266b118d",
+          "bytes": 8664,
+          "words_approx": 1427
+        },
+        {
+          "path": "skills/engineering/grill-with-docs/SKILL.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/grill-with-docs/SKILL.md",
+          "sha256": "7de372c13488f1ee96cc11cd8907b56b6809cc93eef776eeddd37de6b6cbe3fe",
+          "bytes": 247,
+          "words_approx": 35
+        },
+        {
+          "path": "skills/engineering/tdd/SKILL.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/tdd/SKILL.md",
+          "sha256": "5505d25bbaa8fc14a79e4d20163936958992a2995b7f1dd1d6197edc9ed722e0",
+          "bytes": 3629,
+          "words_approx": 574
+        },
+        {
+          "path": "skills/productivity/grill-me/SKILL.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/productivity/grill-me/SKILL.md",
+          "sha256": "caaf8b8de1684f96e26b28f3c29189db5c89cce4b73e1c93d86164f66ef88637",
+          "bytes": 157,
+          "words_approx": 22
+        },
+        {
+          "path": "skills/productivity/grilling/SKILL.md",
+          "url": "https://github.com/mattpocock/skills/blob/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/productivity/grilling/SKILL.md",
+          "sha256": "a146842ed93ca43d833550fa9adf02e58cb63c83fea9d4b4522995b82242d4e2",
+          "bytes": 2077,
+          "words_approx": 333
+        }
+      ]
+    },
+    {
+      "repository": "obra/superpowers",
+      "url": "https://github.com/obra/superpowers",
+      "stars_at_access": 314256,
+      "archived_at_access": false,
+      "revision": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "default_branch_at_access": "main",
+      "license_api_label": "MIT",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/obra/superpowers/blob/22f0b463e7a5e579904dd6211a520321035526f7/README.md",
+          "sha256": "79f29f50c735862d2e304ea547b4c9aa67d9db6909ff6fb7b5ea922d7bcbc3e7",
+          "bytes": 14847,
+          "words_approx": 1961
+        },
+        {
+          "path": "skills/subagent-driven-development/SKILL.md",
+          "url": "https://github.com/obra/superpowers/blob/22f0b463e7a5e579904dd6211a520321035526f7/skills/subagent-driven-development/SKILL.md",
+          "sha256": "1baf70e307bde682c462513c86116333f1f066168c6710f45145bf5f0b00828d",
+          "bytes": 19740,
+          "words_approx": 2895
+        },
+        {
+          "path": "skills/systematic-debugging/SKILL.md",
+          "url": "https://github.com/obra/superpowers/blob/22f0b463e7a5e579904dd6211a520321035526f7/skills/systematic-debugging/SKILL.md",
+          "sha256": "51c6435d98c83c42c96ba7c35725a0b2c376cd487fb1a4e6bd0ddbe7e33ef202",
+          "bytes": 9530,
+          "words_approx": 1454
+        },
+        {
+          "path": "skills/using-superpowers/SKILL.md",
+          "url": "https://github.com/obra/superpowers/blob/22f0b463e7a5e579904dd6211a520321035526f7/skills/using-superpowers/SKILL.md",
+          "sha256": "82c5c8866ad7f5dd4440ce66bd7806ba48a2f13771beae5cf112e53f08fe36ba",
+          "bytes": 3192,
+          "words_approx": 492
+        },
+        {
+          "path": "skills/verification-before-completion/SKILL.md",
+          "url": "https://github.com/obra/superpowers/blob/22f0b463e7a5e579904dd6211a520321035526f7/skills/verification-before-completion/SKILL.md",
+          "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3",
+          "bytes": 3646,
+          "words_approx": 580
+        }
+      ]
+    },
+    {
+      "repository": "open-gsd/gsd-core",
+      "url": "https://github.com/open-gsd/gsd-core",
+      "stars_at_access": 11333,
+      "archived_at_access": false,
+      "revision": "6ed41f751e5f4e479075032407fcb477d48ee876",
+      "default_branch_at_access": "next",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/open-gsd/gsd-core/blob/6ed41f751e5f4e479075032407fcb477d48ee876/README.md",
+          "sha256": "66fe062ee3705af835b09ffa8da112fd14bc8a6025f0d4fb22b4291d353268a9",
+          "bytes": 5922,
+          "words_approx": 549
+        },
+        {
+          "path": "docs/CONFIGURATION.md",
+          "url": "https://github.com/open-gsd/gsd-core/blob/6ed41f751e5f4e479075032407fcb477d48ee876/docs/CONFIGURATION.md",
+          "sha256": "6e637a9f996dea78038cef07a455cffba94b20613430c8dd35ae3b3b5bb35fd6",
+          "bytes": 208296,
+          "words_approx": 28314
+        },
+        {
+          "path": "skills/gsd-quick/SKILL.md",
+          "url": "https://github.com/open-gsd/gsd-core/blob/6ed41f751e5f4e479075032407fcb477d48ee876/skills/gsd-quick/SKILL.md",
+          "sha256": "179089ba2bfe7182083c0611ff79087c0b89822b727d506205b27098d22a0401",
+          "bytes": 9671,
+          "words_approx": 1168
+        }
+      ]
+    },
+    {
+      "repository": "openai/plugins",
+      "url": "https://github.com/openai/plugins",
+      "stars_at_access": 7810,
+      "archived_at_access": false,
+      "revision": "d420d13051bffe4543ed39e30fa46b87148e47dd",
+      "default_branch_at_access": "main",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/openai/plugins/blob/d420d13051bffe4543ed39e30fa46b87148e47dd/README.md",
+          "sha256": "b3681ebd15797bdee1d638c6520c7ba10a36e676760ea5c251530f53f843c852",
+          "bytes": 1283,
+          "words_approx": 150
+        },
+        {
+          "path": "plugins/build-web-apps/skills/frontend-testing-debugging/SKILL.md",
+          "url": "https://github.com/openai/plugins/blob/d420d13051bffe4543ed39e30fa46b87148e47dd/plugins/build-web-apps/skills/frontend-testing-debugging/SKILL.md",
+          "sha256": "03724620cf7e7de425b607a5492f572d867b1cf5d9c92c74bf50d057d7415e0b",
+          "bytes": 9800,
+          "words_approx": 1462
+        },
+        {
+          "path": "plugins/codex-security/skills/security-diff-scan/SKILL.md",
+          "url": "https://github.com/openai/plugins/blob/d420d13051bffe4543ed39e30fa46b87148e47dd/plugins/codex-security/skills/security-diff-scan/SKILL.md",
+          "sha256": "f85962d46f141227d794a25253a39232bc4e1ad756509ecd3d8769b85b735136",
+          "bytes": 6102,
+          "words_approx": 744
+        }
+      ]
+    },
+    {
+      "repository": "openai/skills",
+      "url": "https://github.com/openai/skills",
+      "stars_at_access": 28594,
+      "archived_at_access": false,
+      "revision": "49f948faa9258a0c61caceaf225e179651397431",
+      "default_branch_at_access": "main",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/openai/skills/blob/49f948faa9258a0c61caceaf225e179651397431/README.md",
+          "sha256": "0f6a07580f3c627253e15a58dd0439e135049ec38eb16cf3587f7e50abc6f590",
+          "bytes": 1840,
+          "words_approx": 224
+        },
+        {
+          "path": "skills/.curated/gh-fix-ci/SKILL.md",
+          "url": "https://github.com/openai/skills/blob/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/gh-fix-ci/SKILL.md",
+          "sha256": "7b326b4a2f0f5f85122144628ec02077e48841e0e0e82efce88b3415bcfb7c26",
+          "bytes": 3651,
+          "words_approx": 527
+        },
+        {
+          "path": "skills/.curated/playwright/SKILL.md",
+          "url": "https://github.com/openai/skills/blob/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/playwright/SKILL.md",
+          "sha256": "0ffaabcc8e0990627c4725f18bf1c7955534a796c1c199e872909de2013ce6a8",
+          "bytes": 3771,
+          "words_approx": 522
+        }
+      ]
+    },
+    {
+      "repository": "pbakaus/impeccable",
+      "url": "https://github.com/pbakaus/impeccable",
+      "stars_at_access": 105745,
+      "archived_at_access": false,
+      "revision": "924bbd194d02e5e15a227e75b5901fb0d7a4ecad",
+      "default_branch_at_access": "main",
+      "license_api_label": "Apache-2.0",
+      "files_retrieved": [
+        {
+          "path": ".claude/skills/impeccable/SKILL.md",
+          "url": "https://github.com/pbakaus/impeccable/blob/924bbd194d02e5e15a227e75b5901fb0d7a4ecad/.claude/skills/impeccable/SKILL.md",
+          "sha256": "ceea5bbbce47681772503483f1753d7cce13148b8c55f0a09443704667f650b8",
+          "bytes": 11608,
+          "words_approx": 1547
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/pbakaus/impeccable/blob/924bbd194d02e5e15a227e75b5901fb0d7a4ecad/README.md",
+          "sha256": "6c4a86424a12eac2a568e4cc3afa411d9f2acb08fce3e97b41c9d6e951ba8bdf",
+          "bytes": 16573,
+          "words_approx": 2217
+        }
+      ]
+    },
+    {
+      "repository": "trailofbits/skills",
+      "url": "https://github.com/trailofbits/skills",
+      "stars_at_access": 8065,
+      "archived_at_access": false,
+      "revision": "e4dd0bb5b15535f7c5a0834187dffba6ac37e4ff",
+      "default_branch_at_access": "main",
+      "license_api_label": "CC-BY-SA-4.0",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/trailofbits/skills/blob/e4dd0bb5b15535f7c5a0834187dffba6ac37e4ff/README.md",
+          "sha256": "438708bde7ea8556250d58f3cdc56d315202f96e2ec4156497c98c9575a61c19",
+          "bytes": 10650,
+          "words_approx": 1223
+        },
+        {
+          "path": "plugins/differential-review/skills/differential-review/SKILL.md",
+          "url": "https://github.com/trailofbits/skills/blob/e4dd0bb5b15535f7c5a0834187dffba6ac37e4ff/plugins/differential-review/skills/differential-review/SKILL.md",
+          "sha256": "f9af6a8193fc1a9f8ca3c54bb8d19095a5f20c9472ca6d014488bbde50b67da0",
+          "bytes": 7439,
+          "words_approx": 1087
+        },
+        {
+          "path": "plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+          "url": "https://github.com/trailofbits/skills/blob/e4dd0bb5b15535f7c5a0834187dffba6ac37e4ff/plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+          "sha256": "9448cacb65c6237a7c22dc59602667177ecae405524079ae9ff92240590b995a",
+          "bytes": 4306,
+          "words_approx": 645
+        }
+      ]
+    },
+    {
+      "repository": "vercel-labs/agent-browser",
+      "url": "https://github.com/vercel-labs/agent-browser",
+      "stars_at_access": 47062,
+      "archived_at_access": false,
+      "revision": "4b0e9f01fa8d214d39bbfe5391257640634fb9a0",
+      "default_branch_at_access": "main",
+      "license_api_label": "Apache-2.0",
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/vercel-labs/agent-browser/blob/4b0e9f01fa8d214d39bbfe5391257640634fb9a0/README.md",
+          "sha256": "a96587f37a6e624a56ceba9402892f072229b49f50dc6f56b1c128ce9a2126b2",
+          "bytes": 8780,
+          "words_approx": 922
+        },
+        {
+          "path": "skills/agent-browser/SKILL.md",
+          "url": "https://github.com/vercel-labs/agent-browser/blob/4b0e9f01fa8d214d39bbfe5391257640634fb9a0/skills/agent-browser/SKILL.md",
+          "sha256": "ef7c2da16e25e86b78396bd9a2fd112e23c42cdd2de435197a920b9fc646d1c2",
+          "bytes": 3220,
+          "words_approx": 457
+        }
+      ]
+    },
+    {
+      "repository": "vercel-labs/agent-skills",
+      "url": "https://github.com/vercel-labs/agent-skills",
+      "stars_at_access": 33698,
+      "archived_at_access": false,
+      "revision": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "default_branch_at_access": "main",
+      "license_api_label": null,
+      "files_retrieved": [
+        {
+          "path": "README.md",
+          "url": "https://github.com/vercel-labs/agent-skills/blob/1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62/README.md",
+          "sha256": "9429e781e3fb2f005e619b96fe18cdc59f8db38b619a4c98f0c46c86357e56a0",
+          "bytes": 7273,
+          "words_approx": 958
+        },
+        {
+          "path": "skills/web-design-guidelines/SKILL.md",
+          "url": "https://github.com/vercel-labs/agent-skills/blob/1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62/skills/web-design-guidelines/SKILL.md",
+          "sha256": "f4647ca866a3accf763777f83e7682954f0187cd6bea7eea0399796652414e8f",
+          "bytes": 1231,
+          "words_approx": 176
+        }
+      ]
+    }
+  ]
+}
