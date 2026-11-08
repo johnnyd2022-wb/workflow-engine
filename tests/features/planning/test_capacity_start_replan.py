@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.db.models.execution import Execution
+from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.site import Site
 from app.core.db.models.step import Step
 from app.core.security.access_policy import requirement_for
@@ -192,6 +193,34 @@ def test_stock_used_since_the_check_blocks_the_start(db, demand_world, monkeypat
     InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "1", commit=False)
     db.flush()
     assert start_service.evaluate_start(db, org_id, batches[0]).blockers == (
+        "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
+    )
+
+
+def test_started_batch_commitment_is_reserved_until_its_inputs_are_recorded(db, demand_world, monkeypatch):
+    """A 3 kg lot cannot start two batches each holding 2 kg, including before input capture."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "3", commit=False)
+    db.flush()
+
+    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == ()
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-start-commitment")
+    assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
+        "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
+    )
+
+    execution_step = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.org_id == org_id, ExecutionStep.execution_id == batches[0].execution_id)
+        .one()
+    )
+    execution_step.status = ExecutionStepStatus.IN_PROGRESS
+    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "2", "unit": "kg"}]
+    db.flush()
+    # Pending actual inputs take over from the consumed reservation; they are not charged twice.
+    assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
         "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
     )
 
