@@ -99,6 +99,7 @@ def _material_blockers(db, org_id, batch, today):
     }
     holds = open_holds(db, org_id, lots.keys())
     pending = _pending_inputs(db, org_id, list(lots))
+    claimed = _claimed_elsewhere(db, org_id, batch, lots)
     reasons = []
     needed = {}
     for row in held:
@@ -118,14 +119,103 @@ def _material_blockers(db, org_id, batch, today):
             have = Decimal(lot.quantity)
             for used, used_unit in pending.get(str(lot_id), ()):
                 have -= convert_quantity_decimal(Decimal(str(used)), used_unit, lot.unit)
+            have -= claimed.get(lot_id, Decimal(0))
         except (TypeError, ValueError, InvalidOperation):
             reasons.append(f"The {name} lot's quantity can't be read; check materials again")
             continue
         if have < want:
             left, unit = readable(max(have, Decimal(0)), lot.unit)
             need, need_unit = readable(want, lot.unit)
-            reasons.append(f"Only {left} {unit} of {name} is left on hand; this batch holds {need} {need_unit}")
+            reasons.append(
+                f"Only {left} {unit} of {name} is left on hand once other batches' share is counted; "
+                f"this batch holds {need} {need_unit}. Check materials again"
+                if lot_id in claimed
+                else f"Only {left} {unit} of {name} is left on hand; this batch holds {need} {need_unit}"
+            )
     return reasons
+
+
+def _claimed_elsewhere(db, org_id, batch, lots):
+    """What other batches still have a claim on each lot, in the lot's unit (B4 review): every
+    other batch's active commitment, and the part of a started batch's consumed commitment its
+    execution hasn't recorded using yet (recorded use on an unfinished step is already in
+    pending inputs; on a finished step it has already left the lot's quantity)."""
+    from decimal import Decimal, InvalidOperation
+
+    from app.core.db.models.execution import Execution, ExecutionStatus
+    from app.core.utils.unit_conversion import convert_quantity_decimal
+    from app.features.planning.batch_models import PlanningBatch
+    from app.features.planning.forecast_models import PlanningMaterialCommitment
+
+    if not lots:
+        return {}
+    claimed = {}
+
+    def add(lot_id, quantity, unit):
+        try:
+            amount = convert_quantity_decimal(Decimal(quantity), unit, lots[lot_id].unit)
+        except (TypeError, ValueError, InvalidOperation):
+            return
+        if amount > 0:
+            claimed[lot_id] = claimed.get(lot_id, Decimal(0)) + amount
+
+    for row in (
+        db.query(PlanningMaterialCommitment)
+        .filter(
+            PlanningMaterialCommitment.org_id == org_id,
+            PlanningMaterialCommitment.inventory_item_id.in_(list(lots)),
+            PlanningMaterialCommitment.status == "active",
+            PlanningMaterialCommitment.batch_id != batch.id,
+        )
+        .all()
+    ):
+        add(row.inventory_item_id, row.quantity, row.unit)
+    started = (
+        db.query(PlanningMaterialCommitment, PlanningBatch.execution_id)
+        .join(
+            PlanningBatch,
+            (PlanningBatch.org_id == PlanningMaterialCommitment.org_id)
+            & (PlanningBatch.id == PlanningMaterialCommitment.batch_id),
+        )
+        .join(Execution, (Execution.org_id == PlanningBatch.org_id) & (Execution.id == PlanningBatch.execution_id))
+        .filter(
+            PlanningMaterialCommitment.org_id == org_id,
+            PlanningMaterialCommitment.inventory_item_id.in_(list(lots)),
+            PlanningMaterialCommitment.status == "consumed",
+            PlanningBatch.status == "started",
+            PlanningBatch.id != batch.id,
+            Execution.status.in_((ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS)),
+        )
+        .all()
+    )
+    if not started:
+        return claimed
+    recorded = {}
+    for execution_id, inputs in (
+        db.query(ExecutionStep.execution_id, ExecutionStep.actual_inputs)
+        .filter(
+            ExecutionStep.org_id == org_id,
+            ExecutionStep.execution_id.in_({execution_id for _, execution_id in started}),
+            ExecutionStep.actual_inputs.isnot(None),
+        )
+        .all()
+    ):
+        for entry in inputs if isinstance(inputs, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            key = (execution_id, str(entry.get("inventory_item_id")))
+            recorded.setdefault(key, []).append((entry.get("quantity"), entry.get("unit")))
+    for commitment, execution_id in started:
+        lot = lots[commitment.inventory_item_id]
+        try:
+            outstanding = convert_quantity_decimal(commitment.quantity, commitment.unit, lot.unit)
+            for quantity, unit in recorded.get((execution_id, str(lot.id)), ()):
+                outstanding -= convert_quantity_decimal(Decimal(str(quantity)), unit, lot.unit)
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+        if outstanding > 0:
+            add(lot.id, outstanding, lot.unit)
+    return claimed
 
 
 def _capacity_blockers(db, org_id, batch, today):
