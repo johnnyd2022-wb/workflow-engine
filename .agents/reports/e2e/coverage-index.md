@@ -26,7 +26,7 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Inventory add (hub) | `/core/inventory/add` | 🔵 render |
 | Inventory add manual | `/core/inventory/add/manual` | ✅ flow (create + unhappy) |
 | Inventory add CSV | `/core/inventory/add/csv` | ✅ flow (file input, Browse chooser and drop → review → add, and skip) |
-| Inventory add barcode | `/core/inventory/add/barcode` | 🟡 partial (typed code → lookup → add, Enter → form; camera scan not driven) |
+| Inventory add barcode | `/core/inventory/add/barcode` | ✅ flow (typed code → lookup → add, Enter → form, camera scan decoded from a fake camera under the production CSP) |
 | Inventory dispose | `/core/inventory/dispose` | 🟡 partial (dispose flow via session API) |
 | Notifications | `/core/notifications` | 🔵 render |
 | Settings | `/core/settings` | ✅ flow (change + persist) |
@@ -62,7 +62,8 @@ before writing tests rather than re-deriving this by hand. Legend:
 | CSV upload through the page (file input → review card → add / skip) | ✅ | test_inventory_csv_flow |
 | Barcode add: typed code → lookup → add | ✅ | test_inventory_flow |
 | Barcode scanner-style Enter → capture → form (stops before the add) | ✅ | test_inventory_flow |
-| Barcode camera scan | 🔵 not driven (see Known deferred) |
+| Barcode camera scan: ZXing fallback decodes an EAN-13 from a fake camera, strict CSP | ✅ | test_barcode_camera |
+| Barcode camera scan: native `BarcodeDetector` path (stubbed) reaches the result | ✅ | test_barcode_camera |
 | Cross-tenant read/update/delete/list/aggregate | ✅ | test_tenant_isolation |
 | **Settings** | | |
 | Change a setting and verify it persists | ✅ | test_settings_flow |
@@ -86,16 +87,6 @@ before writing tests rather than re-deriving this by hand. Legend:
 
 ## Known deferred (with reason, not faked)
 
-- **Barcode camera scan** — the typed and Enter paths are driven; the camera path is not.
-  A headless Chromium can be given a fake camera (`--use-fake-device-for-media-stream`), so
-  the camera itself is not what blocks this. Decoding is: it needs the browser's native
-  `BarcodeDetector`, which Linux Chromium does not have, or the ZXing fallback, which
-  `app/core/frontend/js/inventory-barcode-spa.js:647` imports from `cdn.jsdelivr.net`. The
-  CSP `script-src` (`app/api/app_factory.py:515`) allows `unpkg.com` and Cloudflare Insights
-  but not jsdelivr, so on a browser without `BarcodeDetector` that import looks blocked and a
-  scan could never decode (read from the code on 2026-10-13, not reproduced in a browser).
-  A test needs a stubbed `BarcodeDetector`; whether the fallback should be vendored or the CSP
-  widened is a product and security call.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-

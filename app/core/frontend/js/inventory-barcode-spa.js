@@ -624,6 +624,35 @@
     return canvas;
   }
 
+  // The ZXing fallback for browsers without BarcodeDetector. It is the library's own UMD bundle,
+  // vendored as zxing-library.min.js (npm @zxing/library 0.19.1, umd/index.min.js, MIT, see
+  // docs/third-party-notices.md) and served from our origin. It used to be import()ed from
+  // cdn.jsdelivr.net, which the page's script-src ('self' + nonce) refuses. The template gives
+  // the served URL in data-zxing-src because url_for() is not available here.
+  var zxingLoading = null;
+  function loadZxing() {
+    if (window.ZXing) return Promise.resolve(window.ZXing);
+    if (zxingLoading) return zxingLoading;
+    var root = document.getElementById('barcode-spa-root');
+    var src = root && root.getAttribute('data-zxing-src');
+    if (!src) return Promise.reject(new Error('The barcode decoder is not configured'));
+    zxingLoading = new Promise(function (resolve, reject) {
+      var tag = document.createElement('script');
+      tag.src = src;
+      tag.onload = function () {
+        if (window.ZXing) resolve(window.ZXing);
+        else { zxingLoading = null; reject(new Error('The barcode decoder did not start')); }
+      };
+      tag.onerror = function () {
+        zxingLoading = null;
+        tag.remove();
+        reject(new Error('The barcode decoder could not be loaded'));
+      };
+      document.head.appendChild(tag);
+    });
+    return zxingLoading;
+  }
+
   function decodeBarcodeFromCanvas(canvas) {
     canvas = adaptiveContrastEnhance(canvas);
     var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
@@ -640,24 +669,16 @@
       }).catch(function () { return null; });
     }
     function tryZxing(targetCanvas) {
-      return new Promise(function (resolve) {
-        targetCanvas.toBlob(function (blob) {
-          if (!blob) { resolve(null); return; }
-          var url = URL.createObjectURL(blob);
-          var img = new Image();
-          img.onload = function () {
-            URL.revokeObjectURL(url);
-            import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/+esm').then(function (zxing) {
-              var reader = new zxing.BrowserMultiFormatReader();
-              reader.decodeFromImageElement(img).then(function (result) {
-                resolve(result ? result.getText() : null);
-              }).catch(function () { resolve(null); });
-            }).catch(function () { resolve(null); });
-          };
-          img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
-          img.src = url;
-        }, 'image/png');
-      });
+      // Decode straight from the canvas: no blob: image (img-src refuses it) and no CDN.
+      return loadZxing().then(function (zxing) {
+        var source = new zxing.HTMLCanvasElementLuminanceSource(targetCanvas);
+        var bitmap = new zxing.BinaryBitmap(new zxing.HybridBinarizer(source));
+        try {
+          return new zxing.MultiFormatReader().decode(bitmap).getText();
+        } catch (e) {
+          return null; // NotFoundException (no barcode in this frame) and checksum/format errors
+        }
+      }).catch(function () { return null; });
     }
     function decodeOne(c) {
       return tryBarcodeDetector(c).then(function (value) {
