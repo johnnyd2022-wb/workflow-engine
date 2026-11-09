@@ -385,3 +385,9 @@ html[data-spa-theme="dark"] #page-content .customs-bucket__list em { color: #fdb
 #page-content .customs-page .excise-cca:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: -2px; }
 html[data-spa-theme="dark"] #page-content .customs-page .excise-cca__state--todo { background: rgb(252 211 77 / 12%); color: #fcd34d; }
 @media (max-width: 767px) { #page-content .customs-page .excise-cca__name { display: none; } }
+/* A phone: each licence's state goes under its code, and more licences than fit wrap to a new
+   row, so the strip never scrolls sideways (UX-SWEEP). */
+@media (max-width: 480px) {
+  #page-content .customs-page .excise-ccas { flex-wrap: wrap; overflow-x: visible; }
+  #page-content .customs-page .excise-cca { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 10px; }
+}
