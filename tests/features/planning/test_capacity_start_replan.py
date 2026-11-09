@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.db.models.execution import Execution
+from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.site import Site
 from app.core.db.models.step import Step
 from app.core.security.access_policy import requirement_for
@@ -423,3 +424,57 @@ def test_replan_never_touches_another_org(db, demand_world):
 def test_replan_routes_need_planner_permissions():
     assert requirement_for("planning.replan_now", "POST") == "production.record"
     assert requirement_for("planning.get_replan_events", "GET") == "production.view"
+
+
+# Regression tests from !663 (started batches' recorded use, out-of-order starts, NaN input).
+def test_started_later_batch_still_reserves_its_lot_before_earlier_batch_starts(db, demand_world, monkeypatch):
+    """A started batch's claim survives even when it sorts after the batch being checked."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    batches[0].proposed_start_date = TODAY - timedelta(days=2)
+    batches[1].proposed_start_date = TODAY - timedelta(days=1)
+    db.flush()
+    start_service.start_batch(db, org_id, batches[1].id, {"expected_revision": 1}, "b4-out-of-order")
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "3", commit=False)
+    db.flush()
+    assert "Only 1 kg of Sugar" in start_service.evaluate_start(db, org_id, batches[0]).blockers[0]
+
+
+def test_nonfinite_recorded_input_blocks_start_without_crashing(db, demand_world, monkeypatch):
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-nan-input")
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == batches[0].execution_id).one()
+    execution_step.status = ExecutionStepStatus.IN_PROGRESS
+    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "NaN", "unit": "kg"}]
+    db.flush()
+    assert "quantity can't be read" in start_service.evaluate_start(db, org_id, batches[1]).blockers[0]
+
+
+def test_multiple_commitments_to_one_lot_count_recorded_use_once(db, demand_world, monkeypatch):
+    """Two raw inputs for one lot share one execution/lot actual-input total."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-duplicate-claim")
+    first = db.query(PlanningMaterialCommitment).filter_by(batch_id=batches[0].id).one()
+    first.quantity = Decimal(1)
+    db.add(
+        PlanningMaterialCommitment(
+            org_id=org_id,
+            batch_id=batches[0].id,
+            inventory_item_id=own.id,
+            assessment_id=first.assessment_id,
+            material=first.material,
+            quantity=Decimal(1),
+            unit=first.unit,
+            status="consumed",
+            closed_at=first.closed_at,
+        )
+    )
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == batches[0].execution_id).one()
+    execution_step.status = ExecutionStepStatus.COMPLETED
+    execution_step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "1", "unit": "kg"}]
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "2", commit=False)
+    db.flush()
+    assert "Only 1 kg of Sugar" in start_service.evaluate_start(db, org_id, batches[1]).blockers[0]
