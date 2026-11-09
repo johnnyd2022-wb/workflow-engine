@@ -108,7 +108,8 @@ html[data-spa-theme="dark"] #page-content .compliance-board .compliance-state[da
 /* The tab-row actions match the settled Production treatment without changing the shared head. */
 #page-content .compliance-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 #page-content .compliance-header-actions [hidden] { display: none !important; }
-#page-content .compliance-header-actions .workspace-button { min-height: 44px; padding-inline: 18px; white-space: nowrap; }
+#page-content .compliance-header-actions .workspace-button { min-height: 44px; padding-inline: 18px; white-space: nowrap; display: inline-flex; align-items: center; gap: 10px; }
+#page-content .compliance-header-actions .compliance-primary svg { width: 18px; height: 18px; flex: 0 0 auto; }
 #page-content .compliance-header-actions .workspace-button--primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
 #page-content .compliance-header-actions .workspace-button--primary:hover { background: var(--ui-accent-strong); border-color: var(--ui-accent-strong); }
 html[data-spa-theme="dark"] #page-content.page-content .compliance-header-actions .workspace-button--primary,

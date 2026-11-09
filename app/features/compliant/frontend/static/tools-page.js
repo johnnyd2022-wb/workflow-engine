@@ -76,7 +76,7 @@
         if (!input) return;
         var isTarget = name === target;
         input.disabled = isTarget;
-        input.placeholder = isTarget ? 'solving for this' : '';
+        input.placeholder = isTarget ? 'Calculated' : '';
         if (isTarget) input.value = '';
       });
     }
