@@ -25,6 +25,7 @@ def _nz_alcohol_template_context(**context):
         "active_page": "compliant",
         "food_control_programme": _food_safety_programme(settings),
         "liquor_licensing": bool((settings or {}).get("liquor_licence_types")),
+        "compliance_enabled": bool(profile and profile.enabled),
         **context,
     }
 
