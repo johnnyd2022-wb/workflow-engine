@@ -77,6 +77,7 @@ SEED_KINDS = (
     "tasks",
     "customer",
     "people",
+    "cases",
 )
 
 
@@ -2249,6 +2250,46 @@ def _seed_people(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_cases(db, org_id, inv) -> None:
+    """Operational cases for the Cases queue and a case page: one owned by a named teammate and
+    due soon, one overdue, and one whose owner has left (needs a new owner)."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.db.models.user import User, UserRole
+    from app.features.operational_cases.models.operational_case import OperationalCase
+    from tests.factories import UserFactory
+
+    admin = db.query(User).filter(User.org_id == org_id, User.role == UserRole.ADMIN).first()
+    run = uuid.uuid4().hex[:6]
+    owner = UserFactory(org_id=org_id, email=f"hemi.{run}@example.test", role=UserRole.PRODUCTION)
+    owner.first_name, owner.last_name = "Hemi", "Walker"
+    gone = UserFactory(org_id=org_id, email=f"sione.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    gone.first_name, gone.last_name = "Sione", "Fale"
+    db.flush()
+    now = datetime.now(UTC)
+    for title, who, due, action in (
+        ("Juniper berries expired with stock left", owner, now + timedelta(days=2), "Count what is left and dispose of it"),
+        ("Batch 14 output short by 12 L", admin, now - timedelta(days=1), "Check the still log and reconcile the remaining quantity"),
+        ("Gift boxes below reorder point", gone, now + timedelta(days=5), "Raise a purchase order with Kerer\u016b Packaging"),
+    ):
+        db.add(
+            OperationalCase(
+                org_id=org_id,
+                title=title,
+                source_type="manual",
+                check_id="ui-shots",
+                source_entity_type="inventory_item",
+                source_entity_id=uuid.uuid4(),
+                source_snapshot={"schema_version": 1},
+                owner_id=who.id,
+                created_by=admin.id,
+                due_at=due,
+                next_action=action,
+            )
+        )
+    db.commit()
+
+
 def _seed_tastings(db, org_id, inv) -> None:
     """A realistic sampling week, with distinct stock and partial-bottle leftovers."""
     from datetime import datetime
@@ -2500,6 +2541,7 @@ def cmd_seed(args) -> int:
             "transfers": _seed_transfers,
             "np3": _seed_np3,
             "people": _seed_people,
+            "cases": _seed_cases,
             "customer": _seed_customer,
             "tasks": _seed_tasks,
             "premises": _seed_premises,
