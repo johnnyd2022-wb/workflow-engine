@@ -1185,7 +1185,7 @@ Founder decisions for this phase:
         and batches off full days (never pinned ones, or ones a person placed), and the
         board lists what moved and why. Replanning on a finished-late batch or a flagged
         ready date as it happens, rather than on the next load, remains.
-    - [x] g. **Promise dates** (B5, MR pending). For a new order, "when can we deliver n?" from stock on
+    - [x] g. **Promise dates** (B5, !681). For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
     - [ ] h. **Compliance in the plan.** Planned work respects what the modules require:
