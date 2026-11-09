@@ -1,7 +1,7 @@
 """Load a mobile-copy source snapshot into the local work-board PostgreSQL index.
 
-Existing mobile decisions are preserved on refresh. Rows from older commits remain
-queryable with their source_commit, so reviewers can reconcile changed copy.
+Existing mobile decisions survive line moves. Changed text is reset for review,
+and entries absent from the latest complete scan are removed.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ def load_sql(folder: Path) -> str:
         parts.append("\\.")
     parts.extend(
         (
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM stage_pages) OR NOT EXISTS (SELECT 1 FROM stage_text) THEN RAISE EXCEPTION 'empty mobile copy scan'; END IF; END $$;",
             """INSERT INTO work.mobile_copy_pages(page_key,template_name,route_patterns,page_kind,page_title,source_commit,scanned_at)
                SELECT page_key,template_name,route_patterns,page_kind,page_title,source_commit,now() FROM stage_pages WHERE true
                ON CONFLICT(page_key) DO UPDATE SET template_name=excluded.template_name,
@@ -45,6 +46,12 @@ def load_sql(folder: Path) -> str:
                  source_line=excluded.source_line,element_tag=excluded.element_tag,text_source=excluded.text_source,
                  desktop_text=excluded.desktop_text,word_count=excluded.word_count,
                  suggested_mobile_treatment=excluded.suggested_mobile_treatment,
+                 review_state=CASE WHEN work.mobile_copy_text.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN 'unreviewed' ELSE work.mobile_copy_text.review_state END,
+                 mobile_treatment=CASE WHEN work.mobile_copy_text.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN NULL ELSE work.mobile_copy_text.mobile_treatment END,
+                 mobile_text=CASE WHEN work.mobile_copy_text.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN NULL ELSE work.mobile_copy_text.mobile_text END,
                  source_commit=excluded.source_commit,scanned_at=now();""",
             """INSERT INTO work.mobile_copy_relations(page_key,included_page_key,relation,source_commit)
                SELECT page_key,included_page_key,relation,source_commit FROM stage_relations WHERE true
@@ -65,7 +72,22 @@ def load_sql(folder: Path) -> str:
                ON CONFLICT(page_key,container_key) DO UPDATE SET desktop_text=excluded.desktop_text,
                  word_count=excluded.word_count,dynamic_count=excluded.dynamic_count,
                  suggested_mobile_treatment=excluded.suggested_mobile_treatment,
+                 review_state=CASE WHEN work.mobile_copy_containers.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN 'unreviewed' ELSE work.mobile_copy_containers.review_state END,
+                 mobile_treatment=CASE WHEN work.mobile_copy_containers.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN NULL ELSE work.mobile_copy_containers.mobile_treatment END,
+                 mobile_text=CASE WHEN work.mobile_copy_containers.desktop_text IS DISTINCT FROM excluded.desktop_text
+                   THEN NULL ELSE work.mobile_copy_containers.mobile_text END,
                  source_commit=excluded.source_commit,scanned_at=now();""",
+            """DELETE FROM work.mobile_copy_text t WHERE NOT EXISTS
+               (SELECT 1 FROM stage_text s WHERE s.page_key=t.page_key AND s.node_key=t.node_key);""",
+            """DELETE FROM work.mobile_copy_containers c WHERE NOT EXISTS
+               (SELECT 1 FROM stage_text s WHERE s.page_key=c.page_key AND s.container_key=c.container_key);""",
+            """DELETE FROM work.mobile_copy_relations r WHERE NOT EXISTS
+               (SELECT 1 FROM stage_relations s WHERE s.page_key=r.page_key
+                AND s.included_page_key=r.included_page_key AND s.relation=r.relation);""",
+            """DELETE FROM work.mobile_copy_pages p WHERE NOT EXISTS
+               (SELECT 1 FROM stage_pages s WHERE s.page_key=p.page_key);""",
             "COMMIT;",
         )
     )

@@ -1,7 +1,9 @@
 """Inventory page copy and its mobile review surface from Jinja templates.
 
-Writes two CSV files for the work-board PostgreSQL tables documented in
-docs/mobile-copy-inventory.md. No application or customer data is read.
+Writes pages, text and relation CSV files for the work-board PostgreSQL index.
+No application or customer data is read. Run with --output DIR, then load with
+``python scripts/mobile_copy_work_load.py DIR``. The schema is in
+``scripts/mobile_copy_work_schema.sql``.
 """
 
 from __future__ import annotations
@@ -178,7 +180,7 @@ class CopyParser(HTMLParser):
         line = self.getpos()[0]
         classes = attributes.get("class") or ""
         identity = attributes.get("id") or (classes.split()[0] if classes else tag)
-        locator_base = f"{tag}#{identity}@{line}"
+        locator_base = f"{tag}#{identity}"
         self.locator_counts[locator_base] += 1
         locator = f"{locator_base}:{self.locator_counts[locator_base]}"
         is_container = tag in CONTAINER_TAGS or any(part in classes for part in CONTAINER_CLASSES)
@@ -218,7 +220,7 @@ class CopyParser(HTMLParser):
             return
         if source == "visible" and not any(char.isalnum() for char in value):
             return
-        base = f"{line}:{tag}:{source}:{container}:{value}"
+        base = f"{tag}:{source}:{container}:{value}"
         self.counts[base] += 1
         key = hashlib.sha1(f"{base}:{self.counts[base]}".encode()).hexdigest()[:16]
         words = len(value.split())
