@@ -295,9 +295,9 @@
         await load();
         say(name + ' added at ' + areaSite.name + '.', true);
       } catch (error) {
-        // Area names are unique across the business for now, so say where the clash is.
-        var clash = state.sites.filter(function (s) { return (s.areas || []).some(function (a) { return a.name.toLowerCase() === name.toLowerCase(); }); })[0];
-        areaError.textContent = clash ? clash.name + ' already has an area called ' + name + '. Give this one a name of its own, such as ' + name + ' (' + areaSite.name + ').' : error.message;
+        // The server checks uniqueness within the selected site. Another site's
+        // area may legitimately have the same name.
+        areaError.textContent = error.message;
         areaError.hidden = false;
       }
     });
