@@ -1,6 +1,7 @@
 """GL-P07 B4: capacity units and placement, the real start check, and automatic replanning."""
 
 from datetime import timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -228,6 +229,45 @@ def test_two_starts_can_never_take_more_than_the_lot_has(db, demand_world, monke
     db.flush()
     assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
         "Only 1 kg of Sugar is left on hand; this batch holds 2 kg",
+    )
+
+
+def test_a_lot_held_twice_by_a_started_batch_counts_its_recorded_use_once(db, demand_world, monkeypatch):
+    """B4 review r2: a started batch holds the lot through two 1 kg commitments (the same lot in
+    two raw inputs) and has recorded 1 kg used. It still owes 1 kg, so with 2 kg on hand the
+    second batch, needing 2 kg, can't start."""
+    from app.core.db.models.execution_step import ExecutionStepStatus
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org_id, own, batches = _assessed(db, demand_world, monkeypatch)
+    start_service.start_batch(db, org_id, batches[0].id, {"expected_revision": 1}, "b4-twice-1")
+    (held,) = db.query(PlanningMaterialCommitment).filter(PlanningMaterialCommitment.batch_id == batches[0].id)
+    held.quantity = Decimal("1")
+    db.add(
+        PlanningMaterialCommitment(
+            org_id=org_id,
+            batch_id=held.batch_id,
+            inventory_item_id=held.inventory_item_id,
+            assessment_id=held.assessment_id,
+            material=held.material,
+            quantity=Decimal("1"),
+            unit=held.unit,
+            status="consumed",
+            closed_at=held.closed_at,
+        )
+    )
+    step = (
+        db.query(start_service.ExecutionStep)
+        .filter(start_service.ExecutionStep.execution_id == batches[0].execution_id)
+        .first()
+    )
+    step.actual_inputs = [{"inventory_item_id": str(own.id), "quantity": "1", "unit": "kg"}]
+    step.status = ExecutionStepStatus.COMPLETED
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "2", commit=False)
+    db.flush()
+    assert start_service.evaluate_start(db, org_id, batches[1]).blockers == (
+        "Only 1 kg of Sugar is left on hand once other batches' share is counted; "
+        "this batch holds 2 kg. Check materials again",
     )
 
 

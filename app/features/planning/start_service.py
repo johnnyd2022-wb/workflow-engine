@@ -205,16 +205,25 @@ def _claimed_elsewhere(db, org_id, batch, lots):
                 continue
             key = (execution_id, str(entry.get("inventory_item_id")))
             recorded.setdefault(key, []).append((entry.get("quantity"), entry.get("unit")))
+    # One execution can hold a lot through several commitments (the same lot in two raw
+    # inputs): its recorded use comes off their total once, not off each row (B4 review r2).
+    owed = {}
     for commitment, execution_id in started:
         lot = lots[commitment.inventory_item_id]
         try:
-            outstanding = convert_quantity_decimal(commitment.quantity, commitment.unit, lot.unit)
-            for quantity, unit in recorded.get((execution_id, str(lot.id)), ()):
+            amount = convert_quantity_decimal(commitment.quantity, commitment.unit, lot.unit)
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+        owed[(execution_id, lot.id)] = owed.get((execution_id, lot.id), Decimal(0)) + amount
+    for (execution_id, lot_id), outstanding in owed.items():
+        lot = lots[lot_id]
+        try:
+            for quantity, unit in recorded.get((execution_id, str(lot_id)), ()):
                 outstanding -= convert_quantity_decimal(Decimal(str(quantity)), unit, lot.unit)
         except (TypeError, ValueError, InvalidOperation):
             continue
         if outstanding > 0:
-            add(lot.id, outstanding, lot.unit)
+            add(lot_id, outstanding, lot.unit)
     return claimed
 
 
