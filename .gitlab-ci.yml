@@ -296,7 +296,9 @@ relevant_tests:
       # spaces here: tia.py writes node IDs such as "...[wildflower-Whistlebird Gin 44% - ...]".
       sed '/^$/d' < /tmp/relevant-pytest-targets > /tmp/pytest-args
       if python3 scripts/select_relevant_tests.py --targets-file /tmp/relevant-pytest-targets --needs-e2e; then
-        E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v
+        # Perf E2E records Flask signals in pytest's process. The dedicated mr_e2e and
+        # tastings_e2e jobs already use this supported in-process TLS fixture.
+        E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v
       else
         # A large selection (the full suite, or many targets) runs on 6 workers, each with its
         # own cloned test database (tests/xdist_db.py); a small one runs in-process.
