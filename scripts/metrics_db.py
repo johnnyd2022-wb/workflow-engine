@@ -35,7 +35,8 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,10 @@ CONNECT_TIMEOUT_S = 3
 
 class MetricsDBUnavailableError(RuntimeError):
     """No credentials, driver or server -- callers degrade (spool / skip), never crash."""
+
+
+class IndicatorConflictError(RuntimeError):
+    """An existing report/metric pair has different data; preserve the original row."""
 
 
 # --------------------------------------------------------------------------------------
@@ -134,15 +139,21 @@ def spool_path() -> Path:
     return Path(override) if override else Path.home() / ".local" / "state" / "bize-metrics" / "spool.jsonl"
 
 
-def spool_append(kind: str, record: dict[str, Any]) -> None:
-    path = spool_path()
+def indicator_spool_path() -> Path:
+    """Separate spool so older worktrees never read an indicator kind they do not know."""
+    base = spool_path()
+    return base.with_name(f"{base.name}.indicators")
+
+
+def spool_append(kind: str, record: dict[str, Any], *, path: Path | None = None) -> None:
+    path = path or spool_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "record": record}, sort_keys=True) + "\n")
 
 
-def spool_read() -> list[dict[str, Any]]:
-    path = spool_path()
+def spool_read(*, path: Path | None = None) -> list[dict[str, Any]]:
+    path = path or spool_path()
     if not path.exists():
         return []
     out = []
@@ -184,13 +195,13 @@ def _adopt_orphaned_claims(path: Path) -> None:
         mine.unlink(missing_ok=True)
 
 
-def spool_flush(conn) -> int:
+def spool_flush(conn, *, path: Path | None = None) -> int:
     """Insert spooled records (idempotent via the identity indexes), then drop them.
 
     Several agents append to the spool. Claim it first by renaming it to a private name, so a
     line appended between the read and the unlink lands in a fresh spool instead of being
     deleted unflushed. A failed insert puts the claimed lines back for the next flush."""
-    path = spool_path()
+    path = path or spool_path()
     _adopt_orphaned_claims(path)
     claimed = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.flushing")
     try:
@@ -202,16 +213,31 @@ def spool_flush(conn) -> int:
         if line.strip():
             with contextlib.suppress(json.JSONDecodeError):
                 entries.append(json.loads(line))
+    rejected: list[dict[str, Any]] = []
     try:
         for entry in entries:
-            _insert(conn, entry["kind"], entry["record"])
+            try:
+                _insert(conn, entry["kind"], entry["record"])
+            except IndicatorConflictError:
+                if entry["kind"] != "indicator":
+                    raise
+                rejected.append(entry)
+        if rejected:
+            rejected_path = path.with_name(f"{path.name}.rejected")
+            with rejected_path.open("a", encoding="utf-8") as fh:
+                for entry in rejected:
+                    fh.write(json.dumps(entry, sort_keys=True) + "\n")
+            print(
+                f"WARNING: {len(rejected)} conflicting indicator observations quarantined to {rejected_path}",
+                file=sys.stderr,
+            )
     except Exception:
         with path.open("a", encoding="utf-8") as fh:
             fh.write(claimed.read_text(encoding="utf-8"))
         claimed.unlink(missing_ok=True)
         raise
     claimed.unlink(missing_ok=True)
-    return len(entries)
+    return len(entries) - len(rejected)
 
 
 # --------------------------------------------------------------------------------------
@@ -255,6 +281,27 @@ def provenance() -> dict[str, Any]:
 _RUN_COLS = ("ts", "skill", "run_type", "scope", "findings", "verdict", "ref", "duration_s", "notes")
 _RUN_PROV = ("commit_sha", "mr_iid", "pipeline_id")
 _OUTCOME_COLS = ("ts", "ref", "outcome", "skill", "notes")
+_INDICATOR_COLS = (
+    "scope_key",
+    "report_path",
+    "metric_key",
+    "measured_on",
+    "period_start",
+    "period_end",
+    "value",
+    "lower_bound",
+    "upper_bound",
+    "unit",
+    "geography",
+    "segment",
+    "source_ref",
+    "source_published_on",
+    "confidence",
+    "method",
+    "refresh_cadence",
+    "threshold_operator",
+    "threshold_value",
+)
 
 
 _INSERT_SQL = {
@@ -267,31 +314,77 @@ _INSERT_SQL = {
         "INSERT INTO skill_outcomes (ts, ref, outcome, skill, notes) "
         "VALUES (COALESCE(%s, now()), %s, %s, %s, %s) ON CONFLICT DO NOTHING"
     ),
+    "indicator": (
+        "INSERT INTO market_indicators (" + ", ".join(_INDICATOR_COLS) + ") "
+        "VALUES (" + ", ".join(["%s"] * len(_INDICATOR_COLS)) + ") ON CONFLICT DO NOTHING RETURNING id"
+    ),
 }
 _SELECT_SQL = {
     "run": "SELECT ts, skill, run_type, scope, findings, verdict, ref, duration_s, notes FROM skill_runs ORDER BY ts, id",
     "outcome": "SELECT ts, ref, outcome, skill, notes FROM skill_outcomes ORDER BY ts, id",
+    "indicator": "SELECT " + ", ".join(_INDICATOR_COLS) + " FROM market_indicators ORDER BY measured_on, id",
 }
 
 
-def _insert(conn, kind: str, record: dict[str, Any]) -> None:
-    cols = _RUN_COLS + _RUN_PROV if kind == "run" else _OUTCOME_COLS
+_INDICATOR_NUMBERS = {"value", "lower_bound", "upper_bound", "threshold_value"}
+_INDICATOR_DATES = {"measured_on", "period_start", "period_end", "source_published_on"}
+
+
+def _indicator_normalized(field: str, value: Any) -> Any:
+    if value is None:
+        return None
+    if field in _INDICATOR_NUMBERS:
+        return Decimal(str(value))
+    if field in _INDICATOR_DATES:
+        return date.fromisoformat(str(value))
+    return value
+
+
+def _insert(conn, kind: str, record: dict[str, Any]) -> str | None:
+    cols = {"run": _RUN_COLS + _RUN_PROV, "outcome": _OUTCOME_COLS, "indicator": _INDICATOR_COLS}[kind]
     with conn.cursor() as cur:
         cur.execute(_INSERT_SQL[kind], [record.get(c) for c in cols])
+        if kind != "indicator":
+            return None
+        if cur.fetchone() is not None:
+            return "inserted"
+        cur.execute(
+            "SELECT scope_key, report_path, metric_key, measured_on, period_start, period_end, "
+            "value, lower_bound, upper_bound, unit, geography, segment, source_ref, "
+            "source_published_on, confidence, method, refresh_cadence, threshold_operator, "
+            "threshold_value FROM market_indicators WHERE report_path = %s AND metric_key = %s",
+            (record["report_path"], record["metric_key"]),
+        )
+        existing = cur.fetchone()
+        if existing is None:
+            raise IndicatorConflictError("indicator insert conflicted with an unexpected constraint")
+        differing = [
+            field
+            for field, old in zip(cols, existing, strict=True)
+            if _indicator_normalized(field, old) != _indicator_normalized(field, record.get(field))
+        ]
+        if differing:
+            raise IndicatorConflictError(
+                f"{record['metric_key']} already recorded for {record['report_path']} with different "
+                f"fields ({', '.join(differing)}); use a new dated report"
+            )
+        return "already-present"
 
 
 def store(kind: str, record: dict[str, Any]) -> str:
-    """Insert one skill run/outcome. Returns 'db' or 'spooled'. Never raises on outage."""
+    """Insert a record; indicators distinguish inserted, already-present and spooled."""
     if kind == "run":
         prov = provenance()
         record = {**{k: prov[k] for k in _RUN_PROV}, **record}
+    path = indicator_spool_path() if kind == "indicator" else spool_path()
     try:
         with session() as conn:
-            spool_flush(conn)
-            _insert(conn, kind, record)
-        return "db"
+            spool_flush(conn, path=path)
+        with session() as conn:
+            result = _insert(conn, kind, record)
+        return result or "db"
     except MetricsDBUnavailableError:
-        spool_append(kind, record)
+        spool_append(kind, record, path=path)
         return "spooled"
 
 
@@ -302,12 +395,27 @@ def _iso(value: Any) -> Any:
 def fetch(kind: str) -> list[dict[str, Any]]:
     """All runs or outcomes in append order, plus anything still spooled locally. Raises
     MetricsDBUnavailableError when the DB is down -- the caller decides how to degrade."""
-    cols = _RUN_COLS if kind == "run" else _OUTCOME_COLS
+    cols = {"run": _RUN_COLS, "outcome": _OUTCOME_COLS, "indicator": _INDICATOR_COLS}[kind]
     with session() as conn:
-        spool_flush(conn)
+        spool_flush(conn, path=indicator_spool_path() if kind == "indicator" else spool_path())
         with conn.cursor() as cur:
             cur.execute(_SELECT_SQL[kind])
             return [{c: _iso(v) for c, v in zip(cols, row, strict=True)} for row in cur.fetchall()]
+
+
+def market_indicator_history(scope_key: str) -> list[dict[str, Any]]:
+    """All dated observations for one market scope, flushing any pending spool first."""
+    with session() as conn:
+        spool_flush(conn, path=indicator_spool_path())
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT scope_key, report_path, metric_key, measured_on, period_start, period_end, "
+                "value, lower_bound, upper_bound, unit, geography, segment, source_ref, "
+                "source_published_on, confidence, method, refresh_cadence, threshold_operator, "
+                "threshold_value FROM market_indicators WHERE scope_key = %s ORDER BY measured_on, id",
+                (scope_key,),
+            )
+            return [{c: _iso(v) for c, v in zip(_INDICATOR_COLS, row, strict=True)} for row in cur.fetchall()]
 
 
 # --------------------------------------------------------------------------------------
@@ -489,14 +597,15 @@ def cmd_status() -> int:
                 "SELECT 'skill_runs', count(*) FROM skill_runs UNION ALL "
                 "SELECT 'skill_outcomes', count(*) FROM skill_outcomes UNION ALL "
                 "SELECT 'perf_runs', count(*) FROM perf_runs UNION ALL "
-                "SELECT 'perf_results', count(*) FROM perf_results"
+                "SELECT 'perf_results', count(*) FROM perf_results UNION ALL "
+                "SELECT 'market_indicators', count(*) FROM market_indicators"
             )
             for table, n in cur.fetchall():
                 print(f"  {table}: {n}")
     except MetricsDBUnavailableError as e:
         print(f"unavailable: {e}", file=sys.stderr)
         return 1
-    print(f"spooled locally: {len(spool_read())}")
+    print(f"spooled locally: {len(spool_read())} skill rows, {len(spool_read(path=indicator_spool_path()))} indicators")
     return 0
 
 
@@ -508,16 +617,16 @@ def cmd_check() -> int:
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = ANY(%s)",
                 (
                     os.environ.get("BIZE_METRICS_SCHEMA", SCHEMA),
-                    ["skill_runs", "skill_outcomes", "perf_runs", "perf_results"],
+                    ["skill_runs", "skill_outcomes", "perf_runs", "perf_results", "market_indicators"],
                 ),
             )
             found = cur.fetchone()[0]
     except MetricsDBUnavailableError as e:
         print(f"SKIPPED: metrics DB not checked ({e}); this never blocks a merge")
         return 0
-    if found != 4:
+    if found != 5:
         print(
-            f"metrics DB reachable but schema incomplete ({found}/4 tables) -- run metrics_db.py migrate",
+            f"metrics DB reachable but schema incomplete ({found}/5 tables) -- run metrics_db.py migrate",
             file=sys.stderr,
         )
         return 1

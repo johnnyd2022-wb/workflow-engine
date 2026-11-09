@@ -109,6 +109,7 @@ reviews: no change | <notable new review themes>
 
 ## Handoffs
 
+- ← **Market Research:** new named Biz-E competitors worth adding to the weekly watch list.
 - → **Marketing Director**: positioning-relevant changes (pricing moves, new claims).
 - → **Bize-E Product Manager**: feature-gap signal (a competitor shipped something in
   Biz-E's differentiator space).

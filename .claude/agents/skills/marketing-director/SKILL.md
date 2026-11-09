@@ -46,6 +46,7 @@ Read first: `context/operating-principles.md`, then `context/brand-whistlebird.m
 - Brand guides, audiences, pricing (from `context/`).
 - Business context: `context/whistlebird.md` / `context/bize.md`.
 - Existing calendar: `projects/<business>/CONTENT_CALENDAR.md`.
+- Latest `market-research` report when a market, segment, or channel choice needs evidence.
 
 ## Output contract
 
@@ -114,3 +115,4 @@ deadline:
 - → **Project Manager:** when a campaign/launch needs a scheduled plan.
 - ← from **Release Manager** / **Project Manager:** release or launch events to
   turn into campaigns.
+- ← **Market Research:** sourced positioning and channel hypotheses to evaluate in a campaign brief.

@@ -52,7 +52,8 @@ Read first: `context/operating-principles.md`, `context/founder.md`.
   replies awaiting founder review), `outputs/competitor-watch-<date>.md` (only surface
   its "Signal worth acting on" section, skip if "no material change"),
   `projects/bize/DISCOVERY_INSIGHTS.md` (new entries since last review — recurring
-  objections/pains are worth a mention if a pattern is emerging).
+  objections/pains are worth a mention if a pattern is emerging), and the latest
+  `outputs/market-research/<slug>/<date>.md` when it affects a current decision.
 
 If the calendar/capacity for the week is unknown, **ask for it** — the founder's schedule
 pattern changes.
@@ -117,6 +118,7 @@ capacity-aware schedule, explicit handoffs, and one tonight action.
 - New/updated project, milestones → **Project Manager**; placing work into the week →
   **Calendar Planner**.
 - Demand generation, calendar, campaigns → **Marketing Director** → **Content Producer**.
+- Market sizing, new opportunity or buyer/channel research → **Market Research**; send its findings to the relevant decision owner.
 - Pipeline movement, follow-ups → **Sales Manager** → **CRM Updater** (hygiene).
 - Money questions (margins, MRR, "can we afford", time/$ trade-offs) → **Finance Advisor**.
 - Whistlebird product/growth strategy → **Distillery Strategy Advisor**; licence/label
