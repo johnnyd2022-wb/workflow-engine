@@ -87,6 +87,23 @@ def cancel_demand(demand_id):
     return jsonify(service.demand_dict(row))
 
 
+def _replan(trigger):
+    """Re-plan after a change, in the same transaction; audited per change it makes."""
+    from app.features.planning.replan import replan
+
+    for event in replan(db_session, _org_id(), today=date.today(), trigger=trigger):
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action=f"planning_batch_auto_{event.kind}",
+                entity="planning_batch",
+                entity_id=event.batch_id,
+                meta_data={"reason": event.reason, "trigger": trigger},
+            )
+        )
+
+
 def _planning_error(exc):
     db_session.rollback()
     status = 409 if isinstance(exc, batches.PlanningConflictError) else 400
@@ -199,6 +216,7 @@ def sync_planning_demand():
         result = contract_sync.sync_contract_demand(db_session, _org_id())
         for action, row in result["changes"]:
             _audit(action, row)
+        _replan("demand_synced")
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
@@ -320,6 +338,7 @@ def change_planning_batch(batch_id):
             return jsonify({"error": "Batch not found"}), 404
         if changed:
             _batch_audit("planning_batch_" + request.get_json()["action"], row)
+            _replan("batch_" + request.get_json()["action"])
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
@@ -420,7 +439,80 @@ def save_capacity(site_id):
                 meta_data={"site_id": str(row.site_id), "revision": row.revision},
             )
         )
+        _replan("capacity_saved")
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
     return jsonify({"setting": setting_dict(row)})
+
+
+@planning_bp.post("/api/core/planner/replan")
+@requires_auth
+@requires_org_scope
+def replan_now():
+    """The board and Planner call this as they load: stock and sales change elsewhere."""
+    from app.features.planning.replan import replan
+
+    try:
+        events = replan(db_session, _org_id(), today=date.today(), trigger="page_load")
+        for event in events:
+            db_session.add(
+                AuditLog(
+                    org_id=_org_id(),
+                    user_id=g.current_user.id,
+                    action=f"planning_batch_auto_{event.kind}",
+                    entity="planning_batch",
+                    entity_id=event.batch_id,
+                    meta_data={"reason": event.reason, "trigger": "page_load"},
+                )
+            )
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"changed": len(events)})
+
+
+@planning_bp.get("/api/core/planner/replan-events")
+@requires_auth
+@requires_org_scope
+def get_replan_events():
+    """What the planner changed by itself in the last two weeks, newest first."""
+    from datetime import UTC, datetime
+
+    from app.features.planning.batch_models import PlanningBatch, PlanningReplanEvent
+    from app.features.planning.models import PlanningDemand
+
+    since = datetime.now(UTC) - timedelta(days=14)
+    rows = (
+        db_session.query(PlanningReplanEvent, PlanningBatch, PlanningDemand)
+        .join(
+            PlanningBatch,
+            (PlanningBatch.org_id == PlanningReplanEvent.org_id) & (PlanningBatch.id == PlanningReplanEvent.batch_id),
+        )
+        .join(
+            PlanningDemand,
+            (PlanningDemand.org_id == PlanningBatch.org_id) & (PlanningDemand.id == PlanningBatch.demand_id),
+        )
+        .filter(PlanningReplanEvent.org_id == _org_id(), PlanningReplanEvent.created_at >= since)
+        .order_by(PlanningReplanEvent.created_at.desc(), PlanningReplanEvent.id)
+        .limit(50)
+        .all()
+    )
+    return jsonify(
+        {
+            "events": [
+                {
+                    "id": str(event.id),
+                    "batch_id": str(event.batch_id),
+                    "kind": event.kind,
+                    "from_date": event.from_date.isoformat() if event.from_date else None,
+                    "to_date": event.to_date.isoformat() if event.to_date else None,
+                    "reason": event.reason,
+                    "reference": demand.reference,
+                    "batch_number": batch.batch_number,
+                    "at": event.created_at.isoformat(),
+                }
+                for event, batch, demand in rows
+            ]
+        }
+    )

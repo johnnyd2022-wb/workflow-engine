@@ -104,7 +104,36 @@ def test_freezes_exact_lot_and_does_not_substitute_same_name_or_mutate_stock(db,
     assert own.quantity == Decimal(5) and sibling.quantity == Decimal(100)
     assert all(row.forecast_ready_date is None and row.status == "blocked" for row in batches)
     assert db.query(Execution).filter(Execution.org_id == org_id).count() == 0
+    # B4: the start check is real. Its materials are held and on hand, and nothing else
+    # stops it here, so it clears; a quality hold on the lot it holds closes it again.
+    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == ()
+    from app.core.services.lot_holds import place_hold
+
+    place_hold(db, org_id, own.id, "Contamination suspected", None)
+    db.flush()
+    assert start_service.evaluate_start(db, org_id, batches[0]).blockers == (
+        "The Sugar lot is on quality hold: Contamination suspected",
+    )
     assert not start_service.can_start_batch(db, org_id, batches[0])
+
+
+def test_a_blocked_bound_batch_is_short_only_by_what_its_lot_has_left(db, demand_world, monkeypatch):
+    """5 kg lot bound to three 2 kg batches: two hold 4 kg, 1 kg is left, so the third is short
+    by 1 kg, not its whole 2 kg (decision on GL-P07-B4). Allocation itself is unchanged."""
+    org_id, *_, own, _, _, _, batches = prepare(db, demand_world)
+    trusted_boundary(monkeypatch)
+    adapter.assess(db, org_id, {}, today=TODAY)
+    values = results(db, org_id)
+    assert [row["material_status"] for row in values] == ["on_time", "on_time", "blocked"]
+    assert values[2]["allocations"] == []
+    assert values[2]["shortages"] == [{"lot_id": str(own.id), "quantity": "1", "unit": "kg"}]
+    # With nothing left over, the whole need is short.
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    InventoryRepository(db).set_inventory_item_quantity(own.id, org_id, "4", commit=False)
+    db.flush()
+    adapter.assess(db, org_id, {}, today=TODAY)
+    assert results(db, org_id)[2]["shortages"] == [{"lot_id": str(own.id), "quantity": "2", "unit": "kg"}]
 
 
 def test_owner_schema_absence_and_json_clearance_never_grant_availability(db, demand_world, monkeypatch):

@@ -1,4 +1,5 @@
-"""A producer can observe a configured resource overload on the phone board."""
+"""Capacity on the phone board: batches are placed around a resource's minutes (B4), closing a
+day moves them with a reason, and an overload that can't be planned around offers a review."""
 
 from datetime import timedelta
 from urllib.parse import urlsplit
@@ -65,33 +66,27 @@ def test_phone_capacity_group_step_and_overload(db, board_clients, browser, widt
         page.get_by_role("button", name="Save planning settings").click()
         page.get_by_text("Planning settings saved", exact=True).wait_for()
         page.get_by_role("button", name="Plan batches").click()
-        page.get_by_text("1 overloaded resource-day(s) in this view.", exact=True).wait_for()
-        page.get_by_text("180/120 minutes", exact=False).wait_for()
+        # B4: planning places the three batches around the line's 120 minutes a day, so no day
+        # is over capacity (before B4 all three landed today: 180/120).
+        page.get_by_text("No overload in configured groups for this view.", exact=False).wait_for()
         calendar = page.locator("[data-capacity-calendar]")
         today_checkbox = calendar.locator(f'[name="working_days"][value="{TODAY.weekday()}"]')
         today_checkbox.uncheck()
         calendar.get_by_role("button", name="Save calendar").click()
         page.get_by_text("Resource calendar saved", exact=True).wait_for()
-        page.get_by_text("180/0 minutes", exact=False).wait_for()
-        page.get_by_text("resource closed", exact=False).wait_for()
+        # Closing today: the planner moves today's batches and says so.
+        page.locator("[data-replan]").get_by_text("Bottling line was full on", exact=False).first.wait_for()
+        page.get_by_text("No overload in configured groups for this view.", exact=False).wait_for()
         today_checkbox.check()
-        calendar.locator('[name="closed_dates"]').fill(TODAY.isoformat())
+        # A closed date does the same: the batches on it move, and the board says why.
+        calendar.locator('[name="closed_dates"]').fill((TODAY + timedelta(days=1)).isoformat())
         calendar.get_by_role("button", name="Save calendar").click()
         page.get_by_text("Resource calendar saved", exact=True).wait_for()
-        page.get_by_text("180/0 minutes", exact=False).wait_for()
+        page.get_by_text("No overload in configured groups for this view.", exact=False).wait_for()
         calendar.locator('[name="closed_dates"]').fill("")
         calendar.get_by_role("button", name="Save calendar").click()
         page.get_by_text("Resource calendar saved", exact=True).wait_for()
-        page.get_by_text("180/120 minutes", exact=False).wait_for()
-        page.get_by_role("button", name="Review and move suggested batch").first.click()
-        page.get_by_text("Choose a new start date, then move the suggested batch.", exact=True).wait_for()
-        focused = page.locator('[name="start_date"]:focus')
-        assert focused.count() == 1
         next_day = (TODAY + timedelta(days=1)).isoformat()
-        focused.fill(next_day)
-        focused.locator("..").locator("..").get_by_role("button", name="Move batch", exact=True).click()
-        page.get_by_text("Plan updated", exact=True).wait_for()
-        page.get_by_text("No overload in configured groups for this view.", exact=False).wait_for()
         # A two-day resource load still appears on tomorrow even when its batch
         # starts outside the selected day. The review action must open its start day.
         catalog = client.get("/api/core/planner/workflows").get_json()["workflows"]

@@ -70,7 +70,8 @@ def test_card_shows_what_and_whether_it_can_start_with_actions_behind_details(pl
         # Quantities lose their padding zeros, and the state is words, not colour alone.
         expect(card.locator(".board-batch__what")).to_contain_text("250 ")
         expect(card.locator(".board-batch__what")).not_to_contain_text("250.0000")
-        expect(card.locator(".board-batch__state")).to_have_text(f"{len(batches[0]['blockers'])} checks to clear")
+        # B4: the card counts what the live start check still needs: here, a materials check.
+        expect(card.locator(".board-batch__state")).to_have_text("1 check to clear")
         expect(card.get_by_role("button", name="Pin batch", exact=True)).to_be_visible()
         expect(card.get_by_role("button", name="Set priority")).to_be_hidden()
 

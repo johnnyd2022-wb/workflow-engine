@@ -294,6 +294,9 @@
           // Contract orders become demand here too, in case a save's own sync didn't run.
           try { synced = await api('/api/core/planner/demand/sync', 'POST'); }
           catch (err) { if (err.name === 'AbortError') throw err; synced = null; }
+          // Stock and sales change elsewhere: keep planned batches right before showing them.
+          try { await api('/api/core/planner/replan', 'POST'); }
+          catch (err) { if (err.name === 'AbortError') throw err; }
         }
         var results = await Promise.all([
           api('/api/core/planner/demands'),

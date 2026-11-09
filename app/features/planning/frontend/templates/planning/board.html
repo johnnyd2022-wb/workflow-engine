@@ -52,6 +52,11 @@
       <p class="workspace-empty board-empty" data-board-empty hidden>No planned batches in this period. Choose a demand above and plan its batches.</p>
       <section class="board-days" data-board-days aria-label="Planned production by day"></section>
     </section>
+    <section class="workspace-card board-changes" aria-labelledby="board-changes-title" data-replan hidden>
+      <h2 id="board-changes-title">What the planner changed</h2>
+      <p class="workspace-caption">It keeps the plan right as stock, orders and capacity change. Pinned batches, and batches you moved yourself, stay where they are.</p>
+      <ul class="board-changes__list" data-replan-list></ul>
+    </section>
     <section class="workspace-card board-capacity" aria-labelledby="capacity-title">
       <h2 id="capacity-title">Capacity</h2>
       <div class="board-capacity__results" data-capacity-results aria-live="polite"></div>
@@ -79,6 +84,8 @@
             <label>Site<select name="site_id" required data-capacity-site></select></label>
             <label>Resource name<input name="name" maxlength="100" required placeholder="Still, bottling line, tanks"></label>
             <label>Minutes per day<input name="minutes_per_day" type="number" min="1" max="1440" step="1" required></label>
+            <label>How many<input name="units" type="number" min="1" max="50" step="1" value="1" required aria-describedby="capacity-units-help"></label>
+            <p class="workspace-caption" id="capacity-units-help">Two stills? Enter 2: each runs one batch's step at a time.</p>
             <button type="submit" class="workspace-button">Add group</button>
           </form>
           <div class="board-capacity__groups" data-capacity-groups></div>
