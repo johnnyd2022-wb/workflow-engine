@@ -112,11 +112,18 @@ def publish_order(db, org_id, actor_id, order_id, data):
         if ready["planned_ready_date"]:
             # GL-P07 B5: the planner's date, with what was checked. A forecast only when no
             # batch is blocked, so the customer sees a date the producer expects to keep.
+            # The customer gets plain words, not the planner's internal reasons, and a date
+            # that says when it was true: it's a copy taken at publish (!681 review).
+            as_of = datetime.now(UTC).date().isoformat()
             timing = {
                 "available": True,
                 "planned_ready_date": ready["planned_ready_date"],
                 "forecast_ready_date": ready["forecast_ready_date"],
-                "reason": ready["ready_reason"],
+                "reason": (
+                    f"Expected ready {ready['forecast_ready_date']}, as of {as_of}"
+                    if ready["forecast_ready_date"]
+                    else f"Planned for {ready['planned_ready_date']}, not yet confirmed (as of {as_of})"
+                ),
             }
     stage = text_value(data.get("stage_label"), "stage_label", 100, False)
     step = text_value(data.get("step_label"), "step_label", 100, False)

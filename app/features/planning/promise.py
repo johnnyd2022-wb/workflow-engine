@@ -61,10 +61,20 @@ def line_dates(db, org_id: UUID, line_ids: list) -> dict[str, dict]:
     for demand in demands:
         rows = batches.get(demand.id, [])
         if demand.status == "fulfilled":
-            out[demand.source_ref] = {"planned": None, "forecast": None, "reason": "Made and finished"}
+            out[demand.source_ref] = {
+                "planned": None,
+                "forecast": None,
+                "reason": "Made and finished",
+                "done": "fulfilled",
+            }
             continue
         if demand.status != "open":
-            out[demand.source_ref] = {"planned": None, "forecast": None, "reason": "Not being planned"}
+            out[demand.source_ref] = {
+                "planned": None,
+                "forecast": None,
+                "reason": "Not being planned",
+                "done": "cancelled",
+            }
             continue
         if not rows:
             out[demand.source_ref] = {"planned": None, "forecast": None, "reason": "Not planned yet"}
@@ -87,23 +97,32 @@ def line_dates(db, org_id: UUID, line_ids: list) -> dict[str, dict]:
 
 
 def order_dates(order, lines: dict[str, dict]) -> dict:
-    """One order's dates from its lines: the latest line wins; any line without one leaves it open."""
+    """One order's dates from its lines. Lines already made, or no longer planned, don't hold
+    the order back: the latest of the rest wins, and any of those without a date leaves it open."""
     rows = [lines.get(str(line.id)) for line in order.lines]
-    if not rows or any(r is None for r in rows):
-        missing = sum(1 for r in rows if r is None)
+    active = [r for r in rows if not (r and r.get("done"))]
+    if rows and not active:
+        done = {r["done"] for r in rows}
+        return {
+            "planned_ready_date": None,
+            "forecast_ready_date": None,
+            "ready_reason": "Made and finished" if done == {"fulfilled"} else "Not being planned",
+        }
+    if not active or any(r is None for r in active):
+        missing = sum(1 for r in active if r is None)
         return {
             "planned_ready_date": None,
             "forecast_ready_date": None,
             "ready_reason": "Not planned yet"
-            if not rows or missing == len(rows)
+            if not active or missing == len(active)
             else f"{missing} line(s) not planned yet",
         }
-    planned = [r["planned"] for r in rows]
-    forecast = [r["forecast"] for r in rows]
+    planned = [r["planned"] for r in active]
+    forecast = [r["forecast"] for r in active]
     p = max(planned) if all(planned) else None
     f = max(forecast) if all(forecast) else None
-    reason = next((r["reason"] for r in rows if r["forecast"] is None), None) or rows[0]["reason"]
-    if f and len(rows) > 1:
+    reason = next((r["reason"] for r in active if r["forecast"] is None), None) or active[0]["reason"]
+    if f and len(active) > 1:
         reason = f"Can be ready {_fmt(f)}: every line's batches are checked and placed"
     return {
         "planned_ready_date": p.isoformat() if p else None,
@@ -177,17 +196,29 @@ def promise(db, org_id: UUID, data: dict, *, today: date) -> dict:
     batch_size = setting.batch_quantity
     batches = int((shortfall / batch_size).to_integral_value(rounding="ROUND_CEILING")) if batch_size else 1
     capacity = placement.site_capacity(db, org_id, site.id if site else None)
-    start, problem = (today, None) if capacity is None else placement.place(capacity, snapshot, today, today=today)
-    if start is None:
-        return {
-            "ready_date": None,
-            "from": "capacity",
-            "unit": unit,
-            "in_stock": float(in_stock),
-            "reason": problem or "No capacity found",
-        }
+    # Place every batch the order needs, one after another, on what the site already has
+    # booked: the promise is when the *last* one is ready (!681 review).
+    first_start, last_start, problem = None, None, None
+    for _ in range(max(1, batches)):
+        if capacity is None:
+            start, note = today, None
+        else:
+            start, note = placement.place(capacity, snapshot, today, today=today)
+            if start is None:
+                return {
+                    "ready_date": None,
+                    "from": "capacity",
+                    "unit": unit,
+                    "in_stock": float(in_stock),
+                    "reason": note or "No capacity found",
+                }
+            placement.add(capacity, snapshot, start)
+        problem = problem or note
+        first_start = start if first_start is None else min(first_start, start)
+        last_start = start if last_start is None else max(last_start, start)
+    start = first_start
     # Day-level dates round a part day up, as the planner does.
-    ready = start + timedelta(days=-(-int(elapsed.total_seconds()) // 86400))
+    ready = last_start + timedelta(days=-(-int(elapsed.total_seconds()) // 86400))
     held = f"{in_stock.normalize():f} {unit} in stock, " if in_stock else ""
     capacity_note = f" ({problem.lower()})" if problem else ""
     return {

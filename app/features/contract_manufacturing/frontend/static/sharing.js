@@ -18,6 +18,7 @@
         const body = form.hasAttribute('data-upload') ? data : Object.fromEntries(data);
         if (form.hasAttribute('data-publication')) {
           body.document_ids = data.getAll('document_ids');
+          body.share_ready_dates = data.has('share_ready_dates');
           body.shared_steps = [...form.querySelectorAll('[data-shared-step]')].filter((row) => row.querySelector('[name="shared_step_id"]').checked).map((row) => ({
             execution_step_id: row.querySelector('[name="shared_step_id"]').value,
             label: row.querySelector('[name="shared_step_label"]').value,

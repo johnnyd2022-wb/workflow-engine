@@ -116,3 +116,36 @@ def test_promise_never_reads_another_orgs_batches(db, demand_world):
 
 def test_promise_endpoint_is_a_production_read():
     assert requirement_for("planning.get_promise", "GET") == "production.view"
+
+
+def test_a_promise_places_every_batch_it_needs_on_capacity(db, demand_world):
+    """!681 review: three batches on a one-unit still go on days 0, 1 and 2, so the promise is
+    the last one's ready date, as plan_demand would schedule them."""
+    from tests.features.planning import test_capacity_start_replan as cap
+
+    org_id, output_id, _site = cap._setup(db, demand_world, units=1)
+    result = promise.promise(db, org_id, {"source_output_id": str(output_id), "quantity": "750"}, today=TODAY)
+    demand = cap._demand(db, org_id, output_id, 750, 2)  # due soon: planned as early as capacity allows
+    rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=TODAY)
+    planned_last = max(r.proposed_start_date for r in rows) + timedelta(days=int(rows[0].snapshot["elapsed_days"]))
+    assert result["batches"] == 3
+    assert result["ready_date"] == planned_last.isoformat()
+
+
+def test_finished_and_cancelled_lines_dont_erase_an_orders_dates():
+    """!681 review: an order takes the latest of its lines still to make."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    a, b, c = (SimpleNamespace(id=f"line-{n}") for n in "abc")
+    order = SimpleNamespace(lines=[a, b, c])
+    ready = date(2026, 11, 18)
+    lines = {
+        "line-a": {"planned": None, "forecast": None, "reason": "Made and finished", "done": "fulfilled"},
+        "line-b": {"planned": ready, "forecast": ready, "reason": "Can be ready 18 Nov"},
+        "line-c": {"planned": None, "forecast": None, "reason": "Not being planned", "done": "cancelled"},
+    }
+    out = promise.order_dates(order, lines)
+    assert out["forecast_ready_date"] == "2026-11-18" == out["planned_ready_date"]
+    finished = promise.order_dates(SimpleNamespace(lines=[a]), lines)
+    assert finished["ready_reason"] == "Made and finished" and finished["planned_ready_date"] is None
