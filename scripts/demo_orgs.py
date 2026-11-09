@@ -67,6 +67,7 @@ def _seed_exceptions(db, org_id, user) -> None:
     from app.features.crm.models.xero_invoice import XeroInvoice
     from app.features.crm.services import sales_returns
     from app.features.recalls import service as recalls
+    from app.features.recalls.models import RecallContact
 
     now = datetime.now(UTC)
     sold = (
@@ -99,12 +100,19 @@ def _seed_exceptions(db, org_id, user) -> None:
     if len(unsold) > 1:
         old = lot_holds.place_hold(db, org_id, unsold[1].id, "Label batch code smudged", user.id)[0]
         old.placed_at = now - timedelta(days=30)
-        lot_holds.release_hold(db, org_id, old.id, "Relabelled and checked by the duty manager", user.id)
+        released = lot_holds.release_hold(db, org_id, old.id, "Relabelled and checked by the duty manager", user.id)
+        # release_hold stamps now; the script calls it last month's hold, so date it then.
+        released.released_at = now - timedelta(days=25)
     db.flush()
 
     # Money and goods: a credit note on a real sale, two cases' worth credited, one back damaged.
-    if sold:
-        allocation, invoice = sold[0]
+    # The script promises one bottle back damaged and one still to decide: that needs a sale
+    # of at least two. Fail loudly rather than seed a demo that contradicts its own script.
+    returnable = [(a, inv) for a, inv in sold if Decimal(str(a.quantity)) >= 2]
+    if sold and not returnable:
+        raise RuntimeError("demo seed: no sale of 2+ bottles to credit; the exception loop needs one")
+    if returnable:
+        allocation, invoice = returnable[0]
         mapping = (
             db.query(ProductMapping)
             .filter(ProductMapping.org_id == org_id, ProductMapping.biz_e_product_name == allocation.product_name)
@@ -119,7 +127,7 @@ def _seed_exceptions(db, org_id, user) -> None:
             )
             db.add(mapping)
             db.flush()
-        qty = min(Decimal(str(allocation.quantity)), Decimal("2"))
+        qty = Decimal("2")
         note = XeroCreditNote(
             org_id=org_id,
             xero_credit_note_id=f"demo-cn-{uuid.uuid4().hex[:8]}",
@@ -144,17 +152,16 @@ def _seed_exceptions(db, org_id, user) -> None:
         )
         db.add(line)
         db.flush()
-        if qty > 1:
-            sales_returns.record_return(
-                db,
-                org_id,
-                user.id,
-                condition="damaged",
-                quantity="1",
-                received_on=(now - timedelta(days=1)).date(),
-                note="Carton crushed in transit",
-                credit_note_line_id=line.id,
-            )
+        sales_returns.record_return(
+            db,
+            org_id,
+            user.id,
+            condition="damaged",
+            quantity="1",
+            received_on=(now - timedelta(days=1)).date(),
+            note="Carton crushed in transit",
+            credit_note_line_id=line.id,
+        )
     db.flush()
 
     # A recall drill on a sold lot: two customers' notices sent, one acknowledged.
@@ -170,7 +177,12 @@ def _seed_exceptions(db, org_id, user) -> None:
             due_at=now + timedelta(days=2),
             is_drill=True,
         )
-        contacts = recalls._contacts(db, org_id, drill.id)
+        contacts = (
+            db.query(RecallContact)
+            .filter(RecallContact.org_id == org_id, RecallContact.recall_id == drill.id)
+            .order_by(RecallContact.customer_name, RecallContact.product_name)
+            .all()
+        )
         for contact in contacts[:2]:
             recalls.record_notice_sent(db, org_id, user.id, drill.id, contact.id, channel="email", sent_at=now)
         if contacts:
