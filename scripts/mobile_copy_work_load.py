@@ -33,6 +33,16 @@ def load_sql(folder: Path) -> str:
     parts.extend(
         (
             "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM stage_pages) OR NOT EXISTS (SELECT 1 FROM stage_text) THEN RAISE EXCEPTION 'empty mobile copy scan'; END IF; END $$;",
+            """CREATE TEMP TABLE legacy_text_decisions ON COMMIT DROP AS
+               SELECT page_key,element_tag,text_source,desktop_text,mobile_treatment,mobile_text,review_state,
+                 count(*) OVER (PARTITION BY page_key,element_tag,text_source,desktop_text) AS matches
+               FROM work.mobile_copy_text
+               WHERE review_state <> 'unreviewed' OR mobile_treatment IS NOT NULL OR mobile_text IS NOT NULL;""",
+            """CREATE TEMP TABLE legacy_container_decisions ON COMMIT DROP AS
+               SELECT page_key,desktop_text,mobile_treatment,mobile_text,review_state,
+                 count(*) OVER (PARTITION BY page_key,desktop_text) AS matches
+               FROM work.mobile_copy_containers
+               WHERE review_state <> 'unreviewed' OR mobile_treatment IS NOT NULL OR mobile_text IS NOT NULL;""",
             """INSERT INTO work.mobile_copy_pages(page_key,template_name,route_patterns,page_kind,page_title,source_commit,scanned_at)
                SELECT page_key,template_name,route_patterns,page_kind,page_title,source_commit,now() FROM stage_pages WHERE true
                ON CONFLICT(page_key) DO UPDATE SET template_name=excluded.template_name,
@@ -79,6 +89,27 @@ def load_sql(folder: Path) -> str:
                  mobile_text=CASE WHEN work.mobile_copy_containers.desktop_text IS DISTINCT FROM excluded.desktop_text
                    THEN NULL ELSE work.mobile_copy_containers.mobile_text END,
                  source_commit=excluded.source_commit,scanned_at=now();""",
+            """UPDATE work.mobile_copy_text t SET mobile_treatment=l.mobile_treatment,
+                 mobile_text=l.mobile_text,review_state=l.review_state
+               FROM legacy_text_decisions l
+               WHERE t.review_state='unreviewed' AND l.matches=1
+                 AND t.page_key=l.page_key AND t.element_tag=l.element_tag
+                 AND t.text_source=l.text_source AND t.desktop_text=l.desktop_text
+                 AND (SELECT count(*) FROM stage_text s WHERE s.page_key=t.page_key
+                   AND s.element_tag=t.element_tag AND s.text_source=t.text_source
+                   AND s.desktop_text=t.desktop_text)=1
+                 AND EXISTS (SELECT 1 FROM stage_text s WHERE s.page_key=t.page_key AND s.node_key=t.node_key);""",
+            """UPDATE work.mobile_copy_containers c SET mobile_treatment=l.mobile_treatment,
+                 mobile_text=l.mobile_text,review_state=l.review_state
+               FROM legacy_container_decisions l
+               WHERE c.review_state='unreviewed' AND l.matches=1
+                 AND c.page_key=l.page_key AND c.desktop_text=l.desktop_text
+                 AND (SELECT count(*) FROM work.mobile_copy_containers c2
+                   WHERE c2.page_key=c.page_key AND c2.desktop_text=c.desktop_text
+                     AND EXISTS (SELECT 1 FROM stage_text s2 WHERE s2.page_key=c2.page_key
+                       AND s2.container_key=c2.container_key))=1
+                 AND EXISTS (SELECT 1 FROM stage_text s WHERE s.page_key=c.page_key
+                   AND s.container_key=c.container_key);""",
             """DELETE FROM work.mobile_copy_text t WHERE NOT EXISTS
                (SELECT 1 FROM stage_text s WHERE s.page_key=t.page_key AND s.node_key=t.node_key);""",
             """DELETE FROM work.mobile_copy_containers c WHERE NOT EXISTS
