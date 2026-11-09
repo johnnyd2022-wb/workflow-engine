@@ -4,6 +4,7 @@ import copy
 import hashlib
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 
@@ -114,7 +115,7 @@ def publish_order(db, org_id, actor_id, order_id, data):
             # batch is blocked, so the customer sees a date the producer expects to keep.
             # The customer gets plain words, not the planner's internal reasons, and a date
             # that says when it was true: it's a copy taken at publish (!681 review).
-            as_of = datetime.now(UTC).date().isoformat()
+            as_of = datetime.now(ZoneInfo("Pacific/Auckland")).date().isoformat()  # the producer's day, not UTC's
             timing = {
                 "available": True,
                 "planned_ready_date": ready["planned_ready_date"],
