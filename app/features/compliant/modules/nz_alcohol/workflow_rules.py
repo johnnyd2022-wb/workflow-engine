@@ -234,4 +234,11 @@ class NZAlcoholWorkflowRules:
 
     def workflow_rules(self, session: Session, org_id: UUID, step_id: UUID | None = None) -> tuple[WorkflowRule, ...]:
         profile = session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
-        return rules_for_profile(profile) + step_rules_for_profile(session, org_id, profile, step_id)
+        rules = rules_for_profile(profile) + step_rules_for_profile(session, org_id, profile, step_id)
+        if profile is not None and profile.enabled:
+            from app.features.compliant.modules.nz_alcohol.wine import rules as wine_rules
+
+            rules += wine_rules.rules_for_step(session, org_id, profile.settings or {}, step_id)
+        # A wine bottling step asks for ABV itself; a mapped final product may too. Ask once.
+        seen: set[str] = set()
+        return tuple(rule for rule in rules if not (rule.rule_id in seen or seen.add(rule.rule_id)))

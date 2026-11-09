@@ -37,6 +37,7 @@
     function destination(framework) {
       if (programme(framework)) return '/compliant/nz-alcohol/food-safety';
       if (framework.slug === 'customs-alcohol') return '/compliant/nz-alcohol/customs';
+      if (framework.slug === 'wine-standards') return '/compliant/nz-alcohol/wine';
       return canManage ? '/compliant/nz-alcohol/configuration' : null;
     }
     function link(label, href, className) {
@@ -91,7 +92,7 @@
         body.appendChild(metrics);
         disclosure.appendChild(body);
         card.appendChild(disclosure);
-        if (href) card.appendChild(link(name ? 'Open ' + name : framework.slug === 'customs-alcohol' ? 'Open Customs' : 'Review configuration', href, 'workspace-link compliance-framework-link'));
+        if (href) card.appendChild(link(name ? 'Open ' + name : framework.slug === 'customs-alcohol' ? 'Open Customs' : framework.slug === 'wine-standards' ? 'Open Wine' : 'Review configuration', href, 'workspace-link compliance-framework-link'));
         else card.appendChild(el('p', 'Ask your admin about this framework.', 'workspace-caption'));
         target.appendChild(card);
       });

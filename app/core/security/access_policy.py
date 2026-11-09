@@ -421,6 +421,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_cca_transfers.*", None, "compliance.record"),
     ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
     ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
+    ("compliant.compliant_wine.*", _READ, "compliance.view"),
+    ("compliant.compliant_wine.*", None, "compliance.manage"),
     ("compliant.compliant_premises.*", _READ, "compliance.view"),
     ("compliant.compliant_premises.*", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),
