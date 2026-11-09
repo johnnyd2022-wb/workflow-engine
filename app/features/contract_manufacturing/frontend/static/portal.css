@@ -14,3 +14,5 @@ nav { display: flex; gap: 20px; align-items: center; }
 code, p, h1, h2, h3 { overflow-wrap: anywhere; }
 footer, .shared-at, .access-key { font-size: .85rem; }
 [data-error] { color: #a32121; }
+
+.portal-ready { margin: 0 0 6px; font-size: 16px; }
