@@ -865,7 +865,9 @@
     // GL-P02: releasing a hold is its own permission (compliance.manage): a Compliance role
     // that can't edit stock still gets the Release button.
     var canReleaseThis = !!(window.BizeHold && item.quality_hold && canRelease);
-    els.drawerFoot.hidden = !canAdjust && !canReleaseThis;
+    // GL-P03: starting a recall holds stock across the business, so it's for compliance.manage too.
+    var canRecallThis = !!(window.BizeRecall && canRelease);
+    els.drawerFoot.hidden = !canAdjust && !canReleaseThis && !canRecallThis;
     if (canAdjust) {
       // inventory-adjust.js opens its edit sheet for any .inv-adj-btn and reads these attributes.
       var edit = el('button', 'workspace-button workspace-button--primary inv-adj-btn inv-drawer__edit', 'Edit this line');
@@ -913,6 +915,12 @@
       releaseBtn.type = 'button';
       releaseBtn.addEventListener('click', function () { window.BizeHold.release(item, { onDone: function () { load(); } }); });
       els.drawerFoot.insertBefore(releaseBtn, els.drawerFoot.firstChild);
+    }
+    if (canRecallThis) {
+      var recallBtn = el('button', 'workspace-button inv-drawer__recall', 'Recall…');
+      recallBtn.type = 'button';
+      recallBtn.addEventListener('click', function () { window.BizeRecall.start(item); });
+      els.drawerFoot.insertBefore(recallBtn, els.drawerFoot.firstChild);
     }
   }
 

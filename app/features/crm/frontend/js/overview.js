@@ -82,6 +82,8 @@ function crmOverview() {
     pendingReturnNotes: {},
     pendingReturnErrors: {},
     pendingReturnBusyId: null,
+    returnForms: {},
+    returnPlaces: [],
 
     async init() {
       this.loading = true;
@@ -124,6 +126,7 @@ function crmOverview() {
         this.loadWidgetLayout();
         await this.refreshCustomWidgets();
         this.loadPendingReturns(true);
+        this.loadReturnPlaces();
       } catch (e) {
         this.error = e.message || 'Failed to load Sales overview.';
         this.loadError = true;
@@ -155,12 +158,64 @@ function crmOverview() {
       try {
         const data = await CRMAPI.getPendingReturns(page);
         this.pendingReturns = reset ? (data.items || []) : this.pendingReturns.concat(data.items || []);
+        this.pendingReturns.forEach((item) => this.returnForm(item));
         this.pendingReturnsPage = page;
         this.pendingReturnsHasMore = data.has_more === true;
       } catch (e) {
         this.pendingReturnsError = e.message || 'Credit-note return items could not be loaded.';
       } finally {
         this.pendingReturnsLoading = false;
+      }
+    },
+
+    // GL-P01b: what physically came back. Only this moves stock; the credit note never does.
+    // The page runs Alpine's CSP build: templates can't call globals such as Number(), so
+    // every figure is worked out here and each form is a plain object the template binds to.
+    returnForm(item) {
+      if (!this.returnForms[item.line_id]) {
+        const left = Math.max(Number(item.quantity || 0) - Number(item.returned || 0), 0);
+        const today = new Date().toLocaleDateString('en-CA');
+        this.returnForms[item.line_id] = { quantity: left ? String(left) : '', condition: 'resaleable', received_on: today, note: '', location_id: '' };
+      }
+      return this.returnForms[item.line_id];
+    },
+
+    async loadReturnPlaces() {
+      try { this.returnPlaces = (await CRMAPI.getReturnPlaces()).places || []; } catch (_) { this.returnPlaces = []; }
+    },
+    placeLabel(place) { return place.in_bond ? `${place.name} (in bond)` : `${place.name} (duty paid)`; },
+
+    hasReturned(item) { return Number(item.returned || 0) > 0; },
+    returnedHint(item) { return `${Number(item.returned || 0)} of ${Number(item.quantity || 0)} already back`; },
+    creditLineSummary(item) {
+      const qty = item.quantity ? ` · Qty ${Number(item.quantity)}` : '';
+      return `${item.date || 'Date not recorded'} · ${item.description || item.item_code || 'Credit line'}${qty}`;
+    },
+    creditLineAmount(item) { return this.formatInvoiceCurrency(Number(item.line_amount || 0), item.currency); },
+
+    async recordReturn(item) {
+      const form = this.returnForm(item);
+      if (!(Number(form.quantity) > 0)) {
+        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: 'Enter how many came back.' };
+        return;
+      }
+      this.pendingReturnBusyId = item.line_id;
+      this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: '' };
+      try {
+        await CRMAPI.recordCustomerReturn({
+          credit_note_line_id: item.line_id,
+          quantity: form.quantity,
+          condition: form.condition,
+          received_on: form.received_on,
+          note: form.note,
+          location_id: form.location_id || null,
+        });
+        delete this.returnForms[item.line_id];
+        await this.loadPendingReturns(true);
+      } catch (e) {
+        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: e.message || 'The return could not be saved.' };
+      } finally {
+        this.pendingReturnBusyId = null;
       }
     },
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.utils.time import utc_now
@@ -103,6 +103,14 @@ class XeroCreditNoteRepository:
         )
 
     def pending_returns(self, org_id: UUID, *, page: int = 1, page_size: int = 25) -> tuple[list[tuple], int]:
+        from app.features.crm.models.sales_return import SalesReturn
+
+        returned = (
+            select(func.sum(SalesReturn.quantity))
+            .where(SalesReturn.org_id == org_id, SalesReturn.credit_note_line_id == XeroCreditNoteLine.id)
+            .correlate(XeroCreditNoteLine)
+            .scalar_subquery()
+        )
         query = (
             self.db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping)
             .join(
@@ -121,6 +129,8 @@ class XeroCreditNoteRepository:
                 XeroCreditNoteLine.product_mapping_id.isnot(None),
                 XeroCreditNoteLine.no_return_at.is_(None),
                 XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
+                # GL-P01b: a line stays pending until what came back covers what was credited.
+                func.coalesce(returned, 0) < func.coalesce(func.abs(XeroCreditNoteLine.quantity), 1),
             )
         )
         total = query.with_entities(func.count(XeroCreditNoteLine.id)).scalar() or 0

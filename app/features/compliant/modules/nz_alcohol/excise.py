@@ -126,6 +126,7 @@ class Removal:
     customer: str | None = None
     transfer: dict | None = None  # for "cca_transfer": destination and register status
     frozen_basis: dict | None = None  # immutable tasting removal facts
+    received_at: dict | None = None  # customer return: the site/location it was received into (GL-P01b)
 
 
 def _licensed(item: InventoryItem, locations: dict) -> bool:
@@ -253,7 +254,11 @@ def _cca_removals(session: Session, org_id: UUID, start: date, end: date, licenc
             if source.get("id") == str(licence_id):
                 out.append(removal)
             continue
-        if removal.kind in ("moved_out", "returned") and removal.item.id in transfers:
+        received_at = removal.received_at if removal.kind == "returned" else None
+        if received_at is not None:
+            # A customer return belongs to the licence covering where it was received (GL-P01b).
+            owner = area(received_at["site_id"], received_at["location_id"], removal.occurred_on)
+        elif removal.kind in ("moved_out", "returned") and removal.item.id in transfers:
             move = transfers[removal.item.id]
             # Out of the licensed area: the place it left. Back in: the place it arrived.
             place = move.from_location_id if removal.kind == "moved_out" else move.to_location_id
@@ -397,7 +402,51 @@ def _removals(session: Session, org_id: UUID, start: date, end: date, licensed_o
 
     out.extend(legacy_removals(session, org_id, start, end))
     out.extend(_outing_returns(session, org_id, start, end))
+    out.extend(_customer_returns(session, org_id, start, end, locations, licensed_only))
     out.extend(_contract_dispatches(session, org_id, start, end, locations, licensed_only))
+    return out
+
+
+def _customer_returns(
+    session: Session, org_id: UUID, start: date, end: date, locations: dict, licensed_only: bool = True
+) -> list[Removal]:
+    """Goods a customer sent back into stock (GL-P01b). Duty was recorded when they were sold,
+    so a return received into the licensed area is listed as a possible credit to raise with
+    Customs, never deducted. Classified by where it was *received* (stored on the return), not
+    where the lot sits now. Destroyed returns put nothing back, so they are not listed."""
+    from app.features.crm.models.sales_return import SalesReturn
+
+    rows = (
+        session.query(SalesReturn, InventoryItem)
+        .join(
+            InventoryItem,
+            (InventoryItem.org_id == SalesReturn.org_id) & (InventoryItem.id == SalesReturn.resulting_lot_id),
+        )
+        .filter(
+            SalesReturn.org_id == org_id,
+            SalesReturn.received_on >= start,
+            SalesReturn.received_on < end,
+            SalesReturn.condition != "destroyed",
+        )
+        .all()
+    )
+    out = []
+    for ret, item in rows:
+        place = locations.get(ret.location_id) if ret.location_id else None
+        in_bond = ret.location_id is None or bool(place and place.inside_licensed_area)
+        if licensed_only and not in_bond:
+            continue
+        out.append(
+            Removal(
+                kind="returned",
+                occurred_on=ret.received_on,
+                recorded_at=ret.created_at,
+                item=item,
+                quantity=Decimal(str(ret.quantity)),
+                reference=f"Customer return: {ret.product_name} ({ret.condition})",
+                received_at={"site_id": ret.site_id, "location_id": ret.location_id},
+            )
+        )
     return out
 
 
