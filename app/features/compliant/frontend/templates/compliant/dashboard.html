@@ -4,9 +4,20 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/compliance-overview.css">{% endblock %}
 {% set section_head_is_page_title = true %}
 {% block section_actions %}
+{# Same right-aligned placement as Production and Sales: everyday doors, then one primary.
+   The primary is in the page from first paint; compliance-overview.js points it at the
+   framework that most needs evidence once readiness loads. #}
 <div class="compliance-header-actions">
+  <a class="workspace-button" href="/compliant/tools">Tools</a>
   <a class="workspace-button" href="/compliant/nz-alcohol/premises" hx-boost="false">Premises</a>
-  <a class="workspace-button workspace-button--primary" data-compliance-primary hx-boost="false" hidden></a>
+  {# First-paint destination from the org's own setup, matching compliance-overview.js's pick:
+     its food programme when it has one, otherwise Customs (every alcohol producer has it).
+     Hidden until Compliance is switched on: the script then offers "Set up Compliance". #}
+  {% set first_href = '/compliant/nz-alcohol/food-safety' if food_control_programme in ('np1', 'np2', 'np3') else '/compliant/nz-alcohol/customs' %}
+  <a class="workspace-button workspace-button--primary compliance-primary" data-compliance-primary hx-boost="false" href="{{ first_href }}"{% if not compliance_enabled %} hidden{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+    <span data-compliance-primary-label>Review evidence</span>
+  </a>
 </div>
 {% endblock %}
 {% block content %}

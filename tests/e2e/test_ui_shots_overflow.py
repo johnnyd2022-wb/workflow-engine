@@ -23,15 +23,15 @@ SCROLLS_INSIDE = (
 
 
 @pytest.fixture(scope="module")
-def browser():
-    sync_api = pytest.importorskip("playwright.sync_api")
-    with sync_api.sync_playwright() as playwright:
-        try:
-            browser = playwright.chromium.launch()
-        except Exception as error:  # an absent browser is a skip with a reason, not a failure
-            pytest.skip(f"Playwright Chromium not installed: {error}")
-        yield browser
-        browser.close()
+def browser(playwright):
+    # Share pytest-playwright's driver; starting another sync driver while its
+    # event loop is active raises before any overflow assertion can run.
+    try:
+        browser = playwright.chromium.launch()
+    except Exception as error:  # an absent browser is a skip with a reason, not a failure
+        pytest.skip(f"Playwright Chromium not installed: {error}")
+    yield browser
+    browser.close()
 
 
 @pytest.fixture

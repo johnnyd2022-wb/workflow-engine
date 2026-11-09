@@ -304,6 +304,13 @@ def run_idempotent_command(
 # ---------------------------------------------------------------------------
 
 
+def _person_name(user) -> str | None:
+    if user is None:
+        return None
+    name = " ".join(x for x in (getattr(user, "first_name", None), getattr(user, "last_name", None)) if x).strip()
+    return name or user.email
+
+
 def serialize_case_compact(case: OperationalCase) -> dict:
     owner = getattr(case, "owner", None)
     return {
@@ -314,6 +321,9 @@ def serialize_case_compact(case: OperationalCase) -> dict:
         "owner_id": str(case.owner_id) if case.owner_id else None,
         "owner_active": bool(owner and owner.is_active),
         "owner_email": owner.email if owner is not None else None,
+        # What the pages show: the owner's name as People and roles shows it, the email only when
+        # no name is set (UX-SWEEP: the queue and detail showed the raw email).
+        "owner_name": _person_name(owner),
         "due_at": case.due_at.isoformat(),
         "next_action": case.next_action[:120],
         "version": case.version,

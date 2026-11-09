@@ -212,7 +212,8 @@ def test_access_errors_offer_sign_in_or_admin_instead_of_retry(compliance_page, 
         expect(page.get_by_role("link", name="Sign in", exact=True)).not_to_be_visible()
 
 
-def test_np2_and_customs_links_boot_their_destination_scripts(compliance_page):
+@pytest.mark.parametrize("boosted", [False, True], ids=["full", "boosted"])
+def test_np2_and_customs_links_boot_their_destination_scripts(compliance_page, boosted):
     page = compliance_page
     _open(page)
     page.get_by_role("link", name="Open NP2", exact=True).click()
@@ -220,9 +221,23 @@ def test_np2_and_customs_links_boot_their_destination_scripts(compliance_page):
     # The food safety page is now a summary; the register of checks is on its Checks tab.
     expect(page.locator("[data-np3-health-cards]")).not_to_be_empty()
     _open(page)
-    page.get_by_role("link", name="Open Customs", exact=True).click()
+    page.evaluate("window.__customsDestinationVisit = 'same window'")
+    customs = page.get_by_role("link", name="Open Customs", exact=True)
+    if boosted:
+        from tests.e2e.test_boosted_navigation import _BOOSTED_CLICK_JS
+
+        page.evaluate(_BOOSTED_CLICK_JS, customs.get_attribute("href"))
+        page.wait_for_function("window.__boostSettled === true")
+    else:
+        customs.click()
+    expect(page).to_have_url(re.compile(r"/compliant/nz-alcohol/customs$"))
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
-    expect(page.locator("[data-control-select] option")).not_to_have_count(0)
+    # Customs opens the entry screen; the old records-control selector now lives
+    # on the separate records view. Check content built by the entry controller.
+    expect(page.get_by_role("list", name="Lodgement periods").get_by_role("button").first).to_be_visible()
+    expect(page.locator("[data-excise-draft] .customs-entry-head")).to_be_visible()
+    expect(page.locator("[data-customs-position] .customs-position__facts")).to_be_visible()
+    assert page.evaluate("window.__customsDestinationVisit") == ("same window" if boosted else None)
 
 
 def test_non_manager_has_no_configuration_action(browser, app_url, fresh_user, db):
@@ -401,3 +416,25 @@ def test_framework_row_states_each_count_once_with_a_status_word(compliance_page
         assert text.count(f"{attention}") == 1 or attention == framework["summary_health"]["total_controls"]
         assert "with current evidence" not in text
         assert len(re.findall(r"to review", text)) == 1
+
+
+@pytest.mark.parametrize(
+    ("programme", "expected"),
+    [("np2", "/compliant/nz-alcohol/food-safety"), ("none", "/compliant/nz-alcohol/customs")],
+)
+def test_primary_points_somewhere_real_before_readiness_loads(compliance_page, programme, expected):
+    """!678 review: the first-paint primary must not promise Food safety to an org without a
+    food programme, even while the readiness API is slow or the script hasn't run."""
+    page = compliance_page
+    saved = page.request.put(
+        "/api/compliant/profile",
+        headers=csrf_headers(page),
+        data={"enabled": True, "settings": {"food_control_programme": programme, "alcohol_product_types": ["spirits"]}},
+    )
+    assert saved.ok, saved.text()
+    page.route("**/api/compliant/overview", lambda route: None)  # never answers: readiness stays loading
+    page.goto("/compliant/nz-alcohol", wait_until="domcontentloaded")
+    primary = page.locator("[data-compliance-primary]")
+    expect(primary).to_be_visible()
+    expect(primary).to_have_attribute("href", expected)
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "true")

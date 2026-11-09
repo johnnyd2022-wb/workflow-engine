@@ -395,8 +395,10 @@
     matrix.rows.forEach(function (row) {
       var tr = document.createElement('tr');
       tr.appendChild(text('th', row.label));
-      row.dates.forEach(function (dates) {
-        tr.appendChild(text('td', dates.length ? dates.map(shortDate).join(', ') : '—'));
+      row.dates.forEach(function (dates, i) {
+        var cell = text('td', dates.length ? dates.map(shortDate).join(', ') : '—');
+        cell.setAttribute('data-label', matrix.people[i]);  // the column's name, for the phone layout
+        tr.appendChild(cell);
       });
       body.appendChild(tr);
     });

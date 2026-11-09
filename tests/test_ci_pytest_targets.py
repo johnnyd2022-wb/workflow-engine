@@ -53,3 +53,18 @@ def test_path_rules_output_still_becomes_one_target_per_line(tmp_path):
     targets = "tests/test_crm.py tests/test_xero_sync_service.py\n"
 
     assert run(conversion_lines(), targets, tmp_path) == ["tests/test_crm.py", "tests/test_xero_sync_service.py"]
+
+
+def test_job_runtime_gates_follow_the_final_tia_targets(tmp_path):
+    text = (ROOT / ".gitlab-ci.yml").read_text()
+    job = text[text.index("\nrelevant_tests:") : text.index("\nmr_e2e:")]
+    (tmp_path / "relevant-pytest-targets").write_text(
+        "tests/test_ci_health.py\ntests/e2e/test_session_expiry.py::test_expiry[with spaces]\n"
+    )
+    gates = [line.strip()[3:-6] for line in job.splitlines() if "--needs-" in line]
+    assert len(gates) == 6  # database, Node, browser, server, E2E, cleanup
+    for gate in gates:
+        result = subprocess.run(
+            ["bash", "-c", gate.replace("/tmp/", f"{tmp_path}/")], cwd=ROOT, capture_output=True
+        )
+        assert result.returncode == (1 if "--needs-node" in gate else 0), result.stderr

@@ -147,11 +147,11 @@
       body.replaceChildren();
       s.verifications.forEach(function (v) {
         body.append(el('tr', {}, [
-          el('td', { text: fmt(v.verified_on) }),
-          el('td', { text: v.verifier_name + (v.verifier_agency ? ' (' + v.verifier_agency + ')' : '') }),
-          el('td', { text: v.outcome + (v.initial ? ' · initial' : '') }),
-          el('td', { text: v.frequency }),
-          el('td', { text: v.next_due ? fmt(v.next_due) : '—' })
+          el('td', { text: fmt(v.verified_on), 'data-label': 'Date' }),
+          el('td', { text: v.verifier_name + (v.verifier_agency ? ' (' + v.verifier_agency + ')' : ''), 'data-label': 'Verifier' }),
+          el('td', { text: v.outcome + (v.initial ? ' · initial' : ''), 'data-label': 'Outcome' }),
+          el('td', { text: v.frequency, 'data-label': 'Frequency set' }),
+          el('td', { text: v.next_due ? fmt(v.next_due) : '—', 'data-label': 'Next due' })
         ]));
       });
       $('[data-verification-history-wrap]').hidden = !s.verifications.length;

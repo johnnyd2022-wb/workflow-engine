@@ -357,6 +357,14 @@
         apply();
     }
 
+    // The API sends quantities as fixed-point strings ("40.0000"); show them as people write them
+    // ("40", "12.5"). Anything that isn't a number is shown as sent.
+    function plainQuantity(value) {
+        var n = Number(value);
+        if (value === null || value === undefined || value === '' || !isFinite(n)) return String(value);
+        return n.toLocaleString('en-NZ', { maximumFractionDigits: 4 });
+    }
+
     function renderPlannedWork(root, work) {
         var list = byData(root, '[data-planned-work-list]');
         if (!list) return;
@@ -374,7 +382,7 @@
             var title = document.createElement('strong');
             title.textContent = batch.reference + ' · Batch ' + batch.batch_number;
             var detail = document.createElement('p');
-            detail.textContent = batch.quantity + ' ' + batch.unit + ' · ' + batch.product_name + ' · ' + batch.site_name;
+            detail.textContent = plainQuantity(batch.quantity) + ' ' + batch.unit + ' · ' + batch.product_name + ' · ' + batch.site_name;
             var state = document.createElement('p');
             state.textContent = 'Priority ' + batch.priority + ' · Proposed ' + batch.proposed_start_date
                 + (batch.overdue ? ' · Overdue' : '') + (batch.pinned ? ' · Pinned' : '')

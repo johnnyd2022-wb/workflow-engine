@@ -907,3 +907,13 @@ html[data-spa-theme="dark"] .bize-help {
   --ui-accent: #2dd4bf;
 }
 html[data-spa-theme="dark"] .bize-help::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+/* primary_card pages (add inventory, dispose) in Style 1: section titles read as headings in
+   sentence case, not small uppercase labels (UX-SWEEP). */
+#page-content .primary-task h3.spa-form-section-title,
+#page-content .primary-task .spa-form-section-title { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .primary-task__card { padding: 20px 24px; }
+@media (max-width: 600px) { #page-content .primary-task__card { padding: 16px; } }
+/* The page wrapper around a primary_card already pads the page; the header and card start where
+   the breadcrumb does, as on every other page. */
+#page-content .max-content:has(> .primary-task) { padding-inline: 0; }

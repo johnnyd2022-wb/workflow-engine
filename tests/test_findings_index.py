@@ -575,6 +575,47 @@ def test_heading_that_declares_itself_fixed_does_not_open_a_section(tmp_path, mo
     assert fi.parse_doc(path) == []
 
 
+def test_mr_findings_addressed_heading_does_not_index_the_fix_list():
+    """Real misfire, !663: `## Architect review findings addressed` lists what that MR
+    *fixes*. `\\bfindings?\\b` opened it as an open `finding` section, so both numbered
+    fixes were indexed as outstanding debt and re-offered to the daily sweep while the
+    MR that closes them waited for review. The heading says they are addressed; it must
+    close like "fixed"/"resolved" do."""
+    body = """## Summary
+
+Follow-up to an earlier MR.
+
+## Architect review findings addressed
+
+1. A later planned batch started first remains reserved when checking an earlier batch.
+2. A recorded `NaN` quantity yields a blocker rather than an `InvalidOperation`/500.
+
+## Verification
+
+- 27 passed.
+"""
+    assert fi._parse_mr_description(body, "gitlab:!663") == []
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Findings not addressed",
+        "Findings not yet addressed",
+        "Findings still to be addressed",
+        "Review findings (to be addressed before merge)",
+        "Unaddressed findings",
+    ],
+)
+def test_findings_heading_that_says_it_is_not_addressed_stays_open(heading):
+    """The opposite phrasing owes work, so adding "addressed" as a closing cue must not
+    close it: a negated or future-tense "addressed" is exactly a section of open findings."""
+    body = f"## {heading}\n\n- the export endpoint has no rate limit and could be abused for a DoS\n"
+    items = fi._parse_mr_description(body, "gitlab:!1")
+    assert len(items) == 1
+    assert items[0].kind == "finding"
+
+
 def test_heading_checkbox_marker_closes_a_section_with_no_textual_cue(tmp_path, monkeypatch):
     """Real misfire, docs/workflows-load-performance.md:80: `### 1. Slim the
     `system-findings` banner payload -- `[x]` (commit: system_findings_cache

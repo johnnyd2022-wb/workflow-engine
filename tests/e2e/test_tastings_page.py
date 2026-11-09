@@ -303,8 +303,6 @@ def test_invalid_end_time_keeps_the_form_open_and_explains_the_problem(logged_in
     expect(page.locator(".tasks-card")).to_have_count(before)
 
 
-perf_instrumentation = perf.perf_instrumentation
-
 MEASURE = perf.BUDGETS["feature_measure"]["tastings"]
 
 

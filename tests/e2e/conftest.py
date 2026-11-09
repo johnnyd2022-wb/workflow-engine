@@ -540,6 +540,11 @@ class PageProbe:
     def _on_console(self, msg) -> None:
         if msg.type == "error" and not self._RESOURCE_STATUS_NOISE.search(msg.text):
             self.console_errors.append(msg.text)
+        # Alpine reports a template expression that throws (a CSP build calling a global such as
+        # Number(), a typo'd property) as a *warning*, and the part of the page it drives silently
+        # stops working. Every page test should fail on it.
+        elif msg.type == "warning" and "Alpine Expression Error" in msg.text:
+            self.console_errors.append(msg.text)
 
     def _on_page_error(self, exc) -> None:
         self.console_errors.append(f"uncaught: {exc}")
@@ -597,3 +602,15 @@ def assert_clean_page(page) -> None:
 
     if problems:
         raise AssertionError(f"page not clean: {page.url}\n\n" + "\n\n".join(problems))
+
+
+@pytest.fixture(scope="session")
+def perf_instrumentation(app_url):
+    """One set of performance listeners shared by every browser test module.
+
+    Registering a session fixture separately in each module attaches the same
+    Flask/SQLAlchemy listeners twice when both modules run in a suite.
+    """
+    from tests.e2e.test_perf_budgets import instrument_performance
+
+    yield from instrument_performance()

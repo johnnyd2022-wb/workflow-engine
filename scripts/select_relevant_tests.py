@@ -403,20 +403,30 @@ def select(paths: list[str]) -> dict[str, Any]:
         }
 
     tests = sorted(selected)
-    needs_e2e = any(test.startswith("tests/e2e/") for test in tests)
-    needs_server = needs_e2e or any(
-        "pytest.mark.live_server" in (REPO_ROOT / test).read_text(encoding="utf-8") for test in tests
-    )
     return {
         "changed_paths": normalized,
         "mode": "selected" if tests else "none",
         "tests": tests,
         "reasons": {test: sorted(reasons) for test, reasons in sorted(selected.items())},
+        **runtime_requirements(tests),
+    }
+
+
+def runtime_requirements(targets: list[str]) -> dict[str, bool]:
+    """Requirements of the final targets, including a narrowed TIA selection."""
+    tests = {target.split("::", 1)[0] for target in targets}
+    needs_e2e = any(test.startswith("tests/e2e/") for test in tests)
+    needs_server = needs_e2e or any(
+        path.is_file() and "pytest.mark.live_server" in path.read_text(encoding="utf-8")
+        for test in tests
+        for path in [REPO_ROOT / test]
+    )
+    return {
         "needs_browser": needs_e2e,
         "needs_server": needs_server,
         "needs_e2e": needs_e2e,
-        "needs_database": bool(tests) and (needs_e2e or not set(tests).issubset(DATABASE_FREE_TESTS)),
-        "needs_node": bool(set(tests) & NODE_TESTS),
+        "needs_database": bool(tests) and (needs_e2e or not tests.issubset(DATABASE_FREE_TESTS)),
+        "needs_node": "tests/" in tests or bool(tests & NODE_TESTS),
     }
 
 
@@ -460,6 +470,7 @@ def main() -> int:
     )
     parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
     parser.add_argument("--fast-eligible", action="store_true", help="Exit 0 only for an approved ci::fast MR diff.")
+    parser.add_argument("--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements.")
     args = parser.parse_args()
 
     if args.fast_eligible and not fast_requested():
@@ -467,15 +478,25 @@ def main() -> int:
         return 1
 
     try:
-        paths = args.paths if args.paths is not None else changed_paths(args.base, args.head)
-        fast = fast_plan(paths, args.base, args.head)
-        if args.fast_eligible:
-            if fast:
-                print("ci::fast: approved low-impact diff; expensive MR checks are omitted.")
-                return 0
-            print("Normal CI: ci::fast absent or diff outside the low-impact allow-list.")
-            return 1
-        plan = fast or select(paths)
+        if args.targets_file:
+            targets = [line.strip() for line in args.targets_file.read_text().splitlines() if line.strip()]
+            plan = {
+                "mode": "selected" if targets else "none",
+                "changed_paths": [],
+                "reasons": {target: ["final pytest target"] for target in targets},
+                "tests": targets,
+                **runtime_requirements(targets),
+            }
+        else:
+            paths = args.paths if args.paths is not None else changed_paths(args.base, args.head)
+            fast = fast_plan(paths, args.base, args.head)
+            if args.fast_eligible:
+                if fast:
+                    print("ci::fast: approved low-impact diff; expensive MR checks are omitted.")
+                    return 0
+                print("Normal CI: ci::fast absent or diff outside the low-impact allow-list.")
+                return 1
+            plan = fast or select(paths)
     except RuntimeError as exc:
         print(f"test selection failed: {exc}", file=sys.stderr)
         return 2

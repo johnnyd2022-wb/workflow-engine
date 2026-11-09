@@ -1,6 +1,6 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Add Inventory via Barcode{% endblock %}
+{% block title %}Add inventory by barcode{% endblock %}
 {% block body_class %}inventory-barcode-page{% endblock %}
 
 {% block head_extras %}
@@ -13,7 +13,7 @@
 
 
     {% call primary_card(
-      title="Add Inventory via Barcode",
+      title="Add inventory by barcode",
       subtitle="Scan or enter a barcode, then complete the item details below."
     ) %}
       <div class="spa-card-form" id="barcode-spa-root">
@@ -63,7 +63,7 @@
             <input type="hidden" name="barcode" id="barcode-inv-barcode-input" value="">
 
             <section class="spa-form-section" aria-labelledby="barcode-inv-section-basic">
-              <h3 id="barcode-inv-section-basic" class="spa-form-section-title">Basic Information</h3>
+              <h3 id="barcode-inv-section-basic" class="spa-form-section-title">Basic information</h3>
               <div>
                 <label class="spa-field-label" for="barcode-inv-name">Item name</label>
                 <input type="text" name="name" id="barcode-inv-name" required class="spa-inp" placeholder="e.g., Juniper berries">

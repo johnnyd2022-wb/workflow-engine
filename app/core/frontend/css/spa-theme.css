@@ -69,72 +69,74 @@ html[data-spa-theme="dark"] #page-content svg {
 
 html[data-spa-theme="dark"] #page-content .btn svg,
 html[data-spa-theme="dark"] #page-content .btn-primary svg,
-html[data-spa-theme="dark"] #page-content .btn-secondary svg {
-  color: var(--spa-on-yellow);
-}
-
+html[data-spa-theme="dark"] #page-content .btn-secondary svg,
 html[data-spa-theme="dark"] #page-content .btn-ghost svg {
-  color: var(--spa-yellow);
+  color: currentColor;
 }
 
-/* All content buttons: same mustard treatment as shell accents */
-html[data-spa-theme="dark"] #page-content .btn-primary,
+/* Content buttons in the dark theme follow Style 1 (Home): primary is the teal accent with dark
+   text, secondary an outlined surface, ghost accent text. They were mustard, the shell's accent,
+   which made every older page's buttons look unlike the redesigned ones (UX-SWEEP). */
+html[data-spa-theme="dark"] #page-content .btn-primary {
+  background: var(--ui-accent, #2dd4bf);
+  color: #042f2e;
+  border: 1px solid var(--ui-accent, #2dd4bf);
+  box-shadow: none;
+}
+
+html[data-spa-theme="dark"] #page-content .btn-primary:hover {
+  background: var(--ui-accent-strong, #5eead4);
+  border-color: var(--ui-accent-strong, #5eead4);
+  color: #042f2e;
+  box-shadow: none;
+}
+
 html[data-spa-theme="dark"] #page-content .btn-secondary {
-  background: linear-gradient(145deg, var(--spa-yellow) 0%, var(--spa-yellow-mid) 45%, var(--spa-yellow-deep) 100%);
-  color: var(--spa-on-yellow);
-  border: none;
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(255, 225, 120, 0.18);
+  background: var(--ui-surface, #17232f);
+  color: var(--ui-text, #e5eef6);
+  border: 1px solid var(--ui-border, rgb(255 255 255 / 14%));
+  box-shadow: none;
 }
 
-html[data-spa-theme="dark"] #page-content .btn-primary:hover,
 html[data-spa-theme="dark"] #page-content .btn-secondary:hover {
-  background: linear-gradient(145deg, #ffe680 0%, #f1c40f 45%, #c47f00 100%);
-  color: var(--spa-on-yellow);
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.38),
-    0 0 0 1px rgba(255, 225, 120, 0.25);
+  background: var(--ui-surface-subtle, #101a25);
+  color: var(--ui-text, #e5eef6);
+  border-color: var(--ui-accent, #2dd4bf);
+  box-shadow: none;
 }
 
 html[data-spa-theme="dark"] #page-content .btn-ghost {
   background: transparent;
-  color: var(--spa-yellow);
-  border: 1px solid rgba(246, 208, 76, 0.45);
+  color: var(--ui-accent-strong, #5eead4);
+  border: 1px solid var(--ui-border, rgb(255 255 255 / 14%));
 }
 
 html[data-spa-theme="dark"] #page-content .btn-ghost:hover {
-  background: rgba(246, 208, 76, 0.1);
-  color: #ffe680;
-  border-color: rgba(246, 208, 76, 0.6);
+  background: var(--ui-accent-soft, rgb(45 212 191 / 14%));
+  color: var(--ui-accent-strong, #5eead4);
+  border-color: var(--ui-accent, #2dd4bf);
 }
 
-/* Dashboard-specific button rules (blue/purple in dashboard_spa) */
-html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-primary,
-html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-secondary {
-  background: linear-gradient(145deg, var(--spa-yellow) 0%, var(--spa-yellow-mid) 45%, var(--spa-yellow-deep) 100%);
-  color: var(--spa-on-yellow);
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(255, 225, 120, 0.18);
+/* Dashboard-specific button rules: the same Style 1 treatment as above. */
+html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-primary {
+  background: var(--ui-accent, #2dd4bf);
+  color: #042f2e;
+  box-shadow: none;
 }
 
-html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-primary:hover,
-html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-secondary:hover {
-  background: linear-gradient(145deg, #ffe680 0%, #f1c40f 45%, #c47f00 100%);
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.38),
-    0 0 0 1px rgba(255, 225, 120, 0.25);
+html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-primary:hover {
+  background: var(--ui-accent-strong, #5eead4);
+  box-shadow: none;
 }
 
 html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-ghost {
-  color: var(--spa-yellow);
-  border-color: rgba(246, 208, 76, 0.45);
+  color: var(--ui-accent-strong, #5eead4);
+  border-color: var(--ui-border, rgb(255 255 255 / 14%));
 }
 
 html[data-spa-theme="dark"] #page-content .workflow-dashboard .btn-ghost:hover {
-  background: rgba(246, 208, 76, 0.1);
-  color: #ffe680;
+  background: var(--ui-accent-soft, rgb(45 212 191 / 14%));
+  color: var(--ui-accent-strong, #5eead4);
 }
 
 /* Explicit headings / titles */
@@ -234,6 +236,12 @@ html[data-spa-theme="dark"] #page-content .long-session-banner {
 
 html[data-spa-theme="dark"] #page-content .long-session-banner-message {
   color: #ffffff;
+}
+
+/* Under a short page the body shows through: on a phone .main-content is transparent above the tab
+   bar, so without this the dark theme ended in a light band (UX-SWEEP). */
+html[data-spa-theme="dark"] body {
+  background-color: #030303;
 }
 
 /* Mobile: tab-bar inset — match deep black */
