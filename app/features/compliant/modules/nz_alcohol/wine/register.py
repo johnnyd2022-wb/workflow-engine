@@ -469,10 +469,10 @@ def add_eligibility(
 
 
 def add_consignment(
-    session: Session, org_id: UUID, user_id, settings: dict, data: dict, today: date, lots: dict[str, dict]
+    session: Session, org_id: UUID, user_id, settings: dict, data: dict, today: date, lot_lookup
 ) -> ComplianceRecord:
-    """Record a shipment. `lots` is the org's current wine lots by id (role, released), from the
-    overview. Every consignment names its lot, trade samples included, and the lot must be
+    """Record a shipment. `lot_lookup(lot_id)` returns the wine lot (role, released) whatever its
+    stock, since a consignment is usually recorded after the wine has gone out. Every consignment names its lot, trade samples included, and the lot must be
     released and not on hold. Commercial and small-trade shipments draw on an eligibility,
     whose row is locked while its balance is recounted, so two shipments can't overdraw it."""
     if ((settings.get("wine_plan") or {}).get("mode")) == "exempt":
@@ -499,7 +499,7 @@ def add_consignment(
 
     eligibility_row = None
     if kind == "trade_sample":
-        lot = lots.get(str((data or {}).get("lot_id") or ""))
+        lot = lot_lookup((data or {}).get("lot_id"))
     else:
         try:
             eligibility_id = UUID(str((data or {}).get("eligibility_id")))
@@ -522,7 +522,9 @@ def add_consignment(
         if eligibility_row is None:
             raise RegisterError("Choose the export eligibility this wine ships under")
         d = eligibility_row.details or {}
-        lot = lots.get(str(d.get("lot_id") or ""))
+        lot = lot_lookup(d.get("lot_id"))
+        if lot is None:
+            raise RegisterError("The wine lot this eligibility was granted for no longer exists")
         expires = date.fromisoformat(d["expires_on"]) if d.get("expires_on") else None
         if expires and shipped_on > expires:
             raise RegisterError(f"That eligibility expired on {expires.isoformat()}: re-apply before shipping")

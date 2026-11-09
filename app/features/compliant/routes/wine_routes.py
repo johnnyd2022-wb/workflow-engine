@@ -71,10 +71,6 @@ def _refused(exc):
     return jsonify({"error": str(exc)}), 400
 
 
-def _lot(lot_id: str, overview: dict) -> dict | None:
-    return next((lot for lot in overview.get("lots", []) if lot["id"] == lot_id), None)
-
-
 @wine_bp.post("/api/compliant/wine/records")
 @requires_auth
 @requires_org_scope
@@ -153,7 +149,7 @@ def add_eligibility():
     from app.features.compliant.modules.nz_alcohol.wine import register
 
     data = _body()
-    lot = _lot(str(data.get("lot_id") or ""), wine.overview(db_session, _org()))
+    lot = wine.lot_info(db_session, _org(), data.get("lot_id"))
     if lot is None:
         return jsonify({"error": "Choose a wine lot"}), 400
     try:
@@ -172,8 +168,10 @@ def add_consignment():
     from app.features.compliant.modules.nz_alcohol.wine import register
 
     try:
-        lots = {lot["id"]: lot for lot in wine.overview(db_session, _org()).get("lots", [])}
-        row = register.add_consignment(db_session, _org(), g.current_user.id, _settings(), _body(), date.today(), lots)
+        row = register.add_consignment(
+            db_session, _org(), g.current_user.id, _settings(), _body(), date.today(),
+            lambda lot_id: wine.lot_info(db_session, _org(), lot_id),
+        )  # fmt: skip
     except ValueError as exc:
         return _refused(exc)
     return _done({"record": register.record_dict(row)})

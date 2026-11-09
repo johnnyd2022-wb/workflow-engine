@@ -535,17 +535,24 @@ def test_concurrent_consignments_cannot_overdraw_an_eligibility(db, wine_org):
     from app.core.db import SessionLocal
     from app.core.db.models.user import User
     from app.features.compliant.modules.nz_alcohol.wine import register
+    from app.features.compliant.modules.nz_alcohol.wine import service as wine_service
 
     org, client = wine_org
     _lot, elig = _exporter_with_eligibility(db, client, org.id)
-    lots = {row["id"]: row for row in client.get("/api/compliant/wine").get_json()["lots"]}
+
     user_id = db.query(User.id).filter(User.org_id == org.id).first()[0]
     settings = {"wine_exporter": True, "wine_plan": {"mode": "registered"}}
     first, second = SessionLocal(), SessionLocal()
     outcome = {}
     try:
         register.add_consignment(
-            first, org.id, user_id, settings, _consignment(litres="300", eligibility_id=elig), date.today(), lots
+            first,
+            org.id,
+            user_id,
+            settings,
+            _consignment(litres="300", eligibility_id=elig),
+            date.today(),
+            lambda lot_id: wine_service.lot_info(first, org.id, lot_id),
         )
 
         def race():
@@ -558,7 +565,7 @@ def test_concurrent_consignments_cannot_overdraw_an_eligibility(db, wine_org):
                     settings,
                     _consignment(litres="300", eligibility_id=elig),
                     date.today(),
-                    lots,
+                    lambda lot_id: wine_service.lot_info(second, org.id, lot_id),
                 )
                 second.commit()
                 outcome["result"] = "recorded"
@@ -599,3 +606,23 @@ def test_a_malformed_stored_volume_does_not_break_the_register(db, wine_org):
     assert response.status_code == 200
     (row,) = response.get_json()["export"]["eligibilities"]
     assert row["eligible_litres"] == 0.0 and row["current"] is False
+
+
+def test_a_shipped_out_lot_can_still_be_recorded_against_its_eligibility(db, wine_org):
+    """!679 round-3 review: the consignment is usually recorded after the stock has gone out,
+    so the lot is looked up by id, not from the page's current-stock list."""
+    from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
+
+    org, client = wine_org
+    lot, elig = _exporter_with_eligibility(db, client, org.id)
+    with allow_inventory_quantity_write(InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION):
+        lot.quantity = 0
+        db.flush()
+    db.commit()
+    shipped = client.post("/api/compliant/wine/export/consignments", json=_consignment(eligibility_id=elig))
+    assert shipped.status_code == 201, shipped.get_json()
+    sample = client.post(
+        "/api/compliant/wine/export/consignments",
+        json=_consignment(kind="trade_sample", litres="10", lot_id=str(lot.id), not_for_sale_marked=True),
+    )
+    assert sample.status_code == 201, sample.get_json()

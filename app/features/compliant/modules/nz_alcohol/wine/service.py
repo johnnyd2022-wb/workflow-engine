@@ -322,3 +322,34 @@ def update_plan(session: Session, org_id: UUID, data: dict) -> dict:
         settings[flag] = _flag((data or {}).get(flag)) and not (flag == "wine_exporter" and clean["mode"] == "exempt")
     service.upsert_profile(org_id, {"settings": settings})
     return {**clean, **{flag: settings[flag] for flag in register.SETTING_FLAGS}}
+
+
+def lot_info(session: Session, org_id: UUID, lot_id) -> dict | None:
+    """One wine lot by id, whatever its stock: export and label checks need lots that have
+    already shipped, which the page's lot list (current stock only) leaves out."""
+    try:
+        lot_uuid = UUID(str(lot_id))
+    except (TypeError, ValueError):
+        return None
+    item = (
+        session.query(InventoryItem).filter(InventoryItem.org_id == org_id, InventoryItem.id == lot_uuid).one_or_none()
+    )
+    if item is None:
+        return None
+    step = (
+        session.query(ExecutionStep)
+        .filter(ExecutionStep.org_id == org_id, ExecutionStep.id == item.source_execution_step_id)
+        .one_or_none()
+        if item.source_execution_step_id
+        else None
+    )
+    profile = _profile(session, org_id)
+    role = (
+        roles.role_for_step(session, org_id, step.step_id, (profile.settings if profile else None) or {})
+        if step
+        else None
+    )
+    out = {"id": str(item.id), "name": item.name, "role": role}
+    if role == "bottle":
+        out["released"] = str((step.execution_data or {}).get(rules.RELEASE) or "") == rules.RELEASE_YES
+    return out
