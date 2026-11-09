@@ -416,3 +416,25 @@ def test_framework_row_states_each_count_once_with_a_status_word(compliance_page
         assert text.count(f"{attention}") == 1 or attention == framework["summary_health"]["total_controls"]
         assert "with current evidence" not in text
         assert len(re.findall(r"to review", text)) == 1
+
+
+@pytest.mark.parametrize(
+    ("programme", "expected"),
+    [("np2", "/compliant/nz-alcohol/food-safety"), ("none", "/compliant/nz-alcohol/customs")],
+)
+def test_primary_points_somewhere_real_before_readiness_loads(compliance_page, programme, expected):
+    """!678 review: the first-paint primary must not promise Food safety to an org without a
+    food programme, even while the readiness API is slow or the script hasn't run."""
+    page = compliance_page
+    saved = page.request.put(
+        "/api/compliant/profile",
+        headers=csrf_headers(page),
+        data={"enabled": True, "settings": {"food_control_programme": programme, "alcohol_product_types": ["spirits"]}},
+    )
+    assert saved.ok, saved.text()
+    page.route("**/api/compliant/overview", lambda route: None)  # never answers: readiness stays loading
+    page.goto("/compliant/nz-alcohol", wait_until="domcontentloaded")
+    primary = page.locator("[data-compliance-primary]")
+    expect(primary).to_be_visible()
+    expect(primary).to_have_attribute("href", expected)
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "true")

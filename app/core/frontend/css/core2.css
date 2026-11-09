@@ -2779,3 +2779,17 @@ body.core2-sheet-open {
     margin-left: 0;
   }
 }
+
+/* Live inventory's view and type switches in Style 1 (UX-SWEEP): the same pill switch as People
+   and roles and the Customs pages, not a solid blue bar. */
+#page-content .core2-live-inv__mode,
+#page-content .core2-live-inv__type-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; background: var(--ui-surface, #fff); box-shadow: none; }
+#page-content .core2-live-inv__type-tabs { display: flex; }
+#page-content .core2-live-inv__mode .flow-mode-segment,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment { flex: 1 1 auto; border: 0; border-radius: 999px; background: none; box-shadow: none; color: var(--ui-text-muted, #64748b); font-weight: 600; }
+#page-content .core2-live-inv__mode .flow-mode-segment + .flow-mode-segment,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment + .flow-mode-segment { border-left: 0; }
+#page-content .core2-live-inv__mode .flow-mode-segment--active,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment--active,
+#page-content .core2-live-inv__mode .flow-mode-segment--active:hover,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment--active:hover { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }

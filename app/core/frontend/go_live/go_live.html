@@ -37,6 +37,16 @@
     .gl-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
     .gl-table th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); padding: 8px 10px; border-bottom: 1px solid var(--border-default); }
     .gl-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    /* A phone: each opening-stock row is a card, each value under its column's name (UX-SWEEP). */
+    @media (max-width: 600px) {
+      .gl-table-wrap { overflow: visible; }
+      .gl-table { min-width: 0; }
+      .gl-table thead { display: none; }
+      .gl-table, .gl-table tbody, .gl-table tr, .gl-table td { display: block; width: auto; }
+      .gl-table tr { padding: 10px 0; border-bottom: 1px solid var(--border-default); }
+      .gl-table td { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border: 0; text-align: right; }
+      .gl-table td::before { content: attr(data-label); color: var(--text-secondary); text-align: left; }
+    }
     .gl-actions { display: flex; flex-wrap: wrap; gap: 10px; }
     @media (max-width: 720px) {
       .gl-desktop { display: none; }
