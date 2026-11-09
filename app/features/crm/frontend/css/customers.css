@@ -51,6 +51,7 @@
 #customers-page .customers-preview dd { margin: 5px 0 0; font-size: 14px; overflow-wrap: anywhere; }
 #customers-page .customers-preview dd a { color: var(--ui-accent-strong); }
 #customers-page .customers-preview-note { margin-top: 20px; }
+#customers-page .customers-import a { color: var(--ui-accent-strong, #087f72); }
 @media (max-width: 700px) {
   #page-content #customers-page { padding: 20px 16px 100px; }
   #customers-page .workspace-header { align-items: flex-start; gap: 18px; }

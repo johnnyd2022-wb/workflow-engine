@@ -5,30 +5,64 @@
 
 {% block content %}
 {% set categories = [
-  ('general', 'General — excise & labelling'),
+  ('general', 'Excise & labelling'),
   ('beer', 'Beer & brewing'),
   ('wine', 'Wine & cider'),
   ('vessel', 'Vessels & yield'),
 ] %}
-<main class="ct-shell" data-compliant-tools-root>
-  <header class="ct-hero">
-    <p class="ct-eyebrow">COMPLIANT / NZ ALCOHOL</p>
-    <h1>Tools</h1>
-    <p>Quick calculators for the numbers you reach for every day. Each is an operational
-      aid — results carry their source and a disclaimer, and anything feeding a legal
-      obligation should be confirmed against the instrument or the regulator.</p>
-    <p><a href="/compliant/nz-alcohol" class="ct-back">← NZ Alcohol dashboard</a></p>
+{# Plain names for catalogue fields. The unit sits inside the input, so it is not repeated here. #}
+{% set labels = {
+  'starting_abv': 'Starting ABV', 'starting_volume_ml': 'Starting volume', 'final_abv': 'Target ABV',
+  'final_volume_ml': 'Final volume', 'volume_l': 'Volume', 'abv_pct': 'ABV', 'lal': 'Absolute alcohol',
+  'volume_ml': 'Volume', 'standard_drinks': 'Standard drinks', 'abw_pct': 'ABW', 'solution_sg': 'Specific gravity',
+  'sg': 'Specific gravity', 'plato': 'Plato', 'brix': 'Brix', 'baume': 'Baumé', 'og_sg': 'Original gravity',
+  'fg_sg': 'Final gravity', 'diameter_m': 'Diameter', 'cyl_height_m': 'Straight-wall height',
+  'cone_height_m': 'Cone height', 'fill_height_m': 'Fill height', 'start_volume_l': 'Starting volume',
+  'steps': 'Steps', 'name': 'Step', 'loss_pct': 'Loss %', 'loss_l': 'Loss L', 'gravity_plato': 'Gravity',
+  'pitch_rate_m_per_ml_per_p': 'Pitch rate', 'pack_billion': 'Cells per pack', 'available_l': 'Volume available',
+  'keg_size_l': 'Keg size', 'fill_loss_pct': 'Fill loss',
+} %}
+{% set blurbs = {
+  'dilution': 'Bring spirit down to strength. Pick what to solve for.',
+  'lal': 'The basis of excise duty. Fill any two.',
+  'standard_drinks': 'The standard drinks figure for a label.',
+  'abv_abw': 'Alcohol by volume to alcohol by weight, and back.',
+  'gravity_convert': 'Convert between SG, Plato, Brix and Baumé. Fill one.',
+  'abv_from_og_fg': 'Estimate strength from original and final gravity.',
+  'yeast_pitch': 'How much yeast a batch needs.',
+  'tank_volume': 'Liquid in a coned tank from its size and fill height.',
+  'yield_loss': 'Where volume goes between steps.',
+  'keg_fill': 'How many kegs a volume fills.',
+} %}
+{% macro label_for(name) %}{{ labels.get(name) or (name.replace('_', ' ') | capitalize) }}{% endmacro %}
+<main class="max-content workspace-overview workspace-page ct-shell" data-compliant-tools-root>
+  {# Style 1 (UX-SWEEP): the shared page header. The breadcrumb and back button lead to Compliance. #}
+  <header class="workspace-header ct-hero">
+    <div>
+      <h1>Tools</h1>
+      <p class="workspace-caption">Quick calculators for the numbers you reach for every day.</p>
+    </div>
   </header>
 
-  {% for cat_key, cat_label in categories %}
+  {% set present = [] %}
+  {% for cat_key, cat_label in categories %}{% if calculators | selectattr('category', 'equalto', cat_key) | list %}{% set _ = present.append((cat_key, cat_label)) %}{% endif %}{% endfor %}
+  {% if present | length > 1 %}
+  <nav class="ct-jump" aria-label="Tool categories">
+    {% for cat_key, cat_label in present %}<a href="#tools-{{ cat_key }}" hx-boost="false">{{ cat_label }}</a>{% endfor %}
+  </nav>
+  {% endif %}
+
+  {% for cat_key, cat_label in present %}
     {% set cat_calcs = calculators | selectattr('category', 'equalto', cat_key) | list %}
-    {% if cat_calcs %}
-    <section class="ct-category" aria-label="{{ cat_label }}">
-      <h2>{{ cat_label }}</h2>
+    <section class="ct-category" id="tools-{{ cat_key }}" aria-labelledby="tools-{{ cat_key }}-title">
+      <h2 id="tools-{{ cat_key }}-title">{{ cat_label }}</h2>
       <div class="ct-grid">
         {% for calc in cat_calcs %}
-        <article class="ct-card">
-          <h3>{{ calc.title }}</h3>
+        <article class="ct-card workspace-card" aria-labelledby="tool-{{ calc.key }}-title">
+          <header class="ct-card__head">
+            <h3 id="tool-{{ calc.key }}-title">{{ calc.title }}</h3>
+            {% if blurbs.get(calc.key) %}<p>{{ blurbs[calc.key] }}</p>{% endif %}
+          </header>
           {# hx-boost="false": base_spa.html sets hx-boost="true" on <body>, so htmx
              otherwise intercepts this submit and fires its own boosted GET back to this
              page (query params in the URL), instead of letting tools-page.js's
@@ -36,11 +70,11 @@
           <form data-calculator="{{ calc.key }}" autocomplete="off" hx-boost="false">
             <div data-fields class="ct-fields">
               {% if calc.solve and calc.solve.field %}
-              <label class="ct-field">
+              <label class="ct-field ct-field--solve">
                 <span>Solve for</span>
                 <select name="{{ calc.solve.field }}">
                   {% for opt in calc.solve.enum %}
-                  <option value="{{ opt }}"{% if opt == calc.solve.default %} selected{% endif %}>{{ opt.replace('_', ' ') }}</option>
+                  <option value="{{ opt }}"{% if opt == calc.solve.default %} selected{% endif %}>{{ label_for(opt) }}</option>
                   {% endfor %}
                 </select>
               </label>
@@ -48,44 +82,48 @@
               {% for name, d in calc.inputs.items() %}
                 {% if d.type == 'array' %}
                 <div class="ct-array" data-array-field="{{ name }}">
-                  <span class="ct-array-label">{{ name.replace('_', ' ') | title }}</span>
+                  <span class="ct-array-label">{{ label_for(name) }}</span>
                   <div data-rows>
                     <div class="ct-array-row">
                       {% for item_name, item_d in d.item_fields.items() %}
                       <label class="ct-field">
-                        <span>{{ item_name.replace('_', ' ') | title }}{% if item_d.unit %} ({{ item_d.unit }}){% endif %}</span>
-                        <input data-item="{{ item_name }}" type="{{ 'text' if item_d.type == 'text' else 'number' }}"{% if item_d.type != 'text' %} step="any"{% endif %}>
+                        <span>{{ label_for(item_name) }}</span>
+                        <input data-item="{{ item_name }}" type="{{ 'text' if item_d.type == 'text' else 'number' }}"{% if item_d.type != 'text' %} step="any" inputmode="decimal"{% endif %}>
                       </label>
                       {% endfor %}
                     </div>
                   </div>
-                  <button type="button" class="ct-array-add">+ add row</button>
+                  <button type="button" class="ct-array-add">Add a step</button>
                 </div>
                 {% elif d.type == 'enum' %}
                 <label class="ct-field">
-                  <span>{{ name.replace('_', ' ') | title }}</span>
+                  <span>{{ label_for(name) }}</span>
                   <select name="{{ name }}">
                     {% for opt in d.enum %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
                   </select>
                 </label>
                 {% else %}
                 <label class="ct-field">
-                  <span>{{ name.replace('_', ' ') | title }}{% if d.unit %} ({{ d.unit }}){% endif %}</span>
-                  <input name="{{ name }}" type="{{ 'text' if d.type == 'text' else 'number' }}"{% if d.type != 'text' %} step="any"{% endif %}
-                    {%- if d.help %} placeholder="{{ d.help }}"{% endif %}>
+                  <span>{{ label_for(name) }}{% if d.unit %}<span class="ct-sr"> ({{ d.unit }})</span>{% endif %}</span>
+                  <span class="ct-input">
+                    <input name="{{ name }}" type="{{ 'text' if d.type == 'text' else 'number' }}"{% if d.type != 'text' %} step="any" inputmode="decimal"{% endif %}
+                      {%- if d.help and not (calc.solve and calc.solve.one_provided_of) %} placeholder="{{ d.help }}"{% endif %}>
+                    {% if d.unit %}<span class="ct-unit" aria-hidden="true">{{ d.unit }}</span>{% endif %}
+                  </span>
                 </label>
                 {% endif %}
               {% endfor %}
             </div>
-            <button type="submit" class="ct-submit">Calculate</button>
+            <div class="ct-actions"><button type="submit" class="ct-submit workspace-button workspace-button--primary">Calculate</button></div>
           </form>
           <div data-result class="ct-result-wrap" aria-live="polite"></div>
         </article>
         {% endfor %}
       </div>
     </section>
-    {% endif %}
   {% endfor %}
+
+  <p class="ct-note">Each result shows its source. These are operational aids: confirm anything that feeds a legal obligation, such as an excise return or a label, against the instrument or the regulator.</p>
 </main>
 
 <script nonce="{{ csp_nonce() }}">

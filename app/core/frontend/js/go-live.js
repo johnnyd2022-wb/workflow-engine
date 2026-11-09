@@ -20,6 +20,12 @@
     return data;
   }
 
+  // Quantities arrive as fixed-point strings ("40.0000"): show them as people write them.
+  function plainQuantity(value) {
+    var n = Number(value);
+    return isFinite(n) ? n.toLocaleString('en-NZ', { maximumFractionDigits: 4 }) : String(value);
+  }
+
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (k) {
@@ -107,10 +113,10 @@
       body.replaceChildren();
       (items || []).forEach(function (i) {
         body.append(el('tr', {}, [
-          el('td', { text: i.name }), el('td', { text: i.batch_id || '—' }),
-          el('td', { text: i.quantity + ' ' + ({ l: 'L', ml: 'mL' }[String(i.unit).toLowerCase()] || i.unit) }),
-          el('td', { text: i.abv_percent ? i.abv_percent + '%' : '—' }),
-          el('td', { text: i.bottled_on || '—' })
+          el('td', { text: i.name, 'data-label': 'Item' }), el('td', { text: i.batch_id || '—', 'data-label': 'Batch' }),
+          el('td', { text: plainQuantity(i.quantity) + ' ' + ({ l: 'L', ml: 'mL' }[String(i.unit).toLowerCase()] || i.unit), 'data-label': 'Quantity' }),
+          el('td', { text: i.abv_percent ? plainQuantity(i.abv_percent) + '%' : '—', 'data-label': 'ABV' }),
+          el('td', { text: i.bottled_on || '—', 'data-label': 'Bottled' })
         ]));
       });
       wrap.hidden = !(items && items.length);

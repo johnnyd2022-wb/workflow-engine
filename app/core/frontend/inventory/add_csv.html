@@ -1,6 +1,6 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Add Inventory via CSV{% endblock %}
+{% block title %}Add inventory from a file{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="Upload a CSV file to add multiple inventory items at once.">
@@ -12,8 +12,8 @@
 
 
     {% call primary_card(
-      title="Add Inventory via CSV",
-      subtitle="Upload a CSV file to add multiple inventory items at once"
+      title="Add inventory from a file",
+      subtitle="Upload a CSV file to add many inventory items at once."
     ) %}
       <div class="spa-card-form">
         <section class="spa-form-section" aria-labelledby="csv-spa-intro">
@@ -302,7 +302,7 @@
             warn +
             dupSummary +
             '<section class="spa-form-section" aria-labelledby="csv-rev-basic">' +
-              '<h3 id="csv-rev-basic" class="spa-form-section-title">Basic Information</h3>' +
+              '<h3 id="csv-rev-basic" class="spa-form-section-title">Basic information</h3>' +
               '<div class="csv-review-field-wrap">' +
                 '<label class="spa-field-label" for="csv-review-name">Item name</label>' +
                 '<input type="text" id="csv-review-name" class="' + nameInpClass + '"' + dupInpAria + ' value="' + escapeHtml(row.name || '') + '" placeholder="e.g., Juniper berries" autocomplete="off">' +

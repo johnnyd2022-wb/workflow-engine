@@ -258,6 +258,15 @@ RESOLVED_MARKERS = re.compile(
 # inherits the ancestor's open kind forever. Checked before FINDING_HEADINGS opens a
 # section, so "Known Issues Fixed" does not get read as an open "known-issue" section.
 #
+# "Addressed" is the same cue in review-round wording -- "## Architect review findings
+# addressed" (verbatim in !663) lists what that MR fixes, and `\bfindings?\b` opened it, so
+# both fixes were indexed as owed debt while the MR that closes them waited for review. The
+# future and negated forms owe work and are carved out in NEGATED_CLOSURE_RE ("not (yet)
+# addressed", "to be addressed"); "unaddressed" and the verb "address" never match.
+# Known limit, shared with "fixed"/"closed": the cue is the word in the title, so a hedged
+# title ("Findings partially addressed", "Findings: 3 addressed, 2 open") closes too. No such
+# heading exists in the repo (checked 2026-11-09); add a negation here if one ever does.
+#
 # Also covers this repo's "checked, nothing here" convention -- "## Not findings
 # (checked, no issue)", "## Other checks performed (no issues found)", "### CSP note
 # (not a finding -- ...)". `\bfindings?\b` alone would open these as a `finding` section
@@ -306,7 +315,7 @@ RESOLVED_MARKERS = re.compile(
 # correction" (still owed) and a bare "corrections".
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
-    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
+    r"\b(?:fix(?:ed|es)|closed|resolved|addressed)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
     r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
@@ -319,7 +328,9 @@ CLOSED_HEADING_RE = re.compile(
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
 NEGATED_CLOSURE_RE = re.compile(
-    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b", re.I
+    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved|addressed)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b"
+    r"|\bto\s+be\s+addressed\b",
+    re.I,
 )
 
 # A checked checkbox or checkmark in a heading's own title -- this repo's numbered

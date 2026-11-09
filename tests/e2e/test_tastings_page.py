@@ -10,7 +10,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.e2e import test_perf_budgets as perf
-from tests.e2e.conftest import assert_clean_page
+from tests.e2e.conftest import assert_clean_page, attach_probe
 
 pytestmark = pytest.mark.e2e
 NZ = ZoneInfo("Pacific/Auckland")
@@ -233,8 +233,26 @@ def test_fractional_litre_line_keeps_unit_and_identity_after_second_stock_search
     assert_clean_page(page)
 
 
-def test_tasting_is_inline_in_shared_tasks_and_survives_boosted_round_trip(logged_in_page, tasting_world):
-    page = logged_in_page
+@pytest.fixture()
+def nz_logged_in_page(browser, storage_state_path, app_url):
+    """The seeded tasting uses NZ today; the week view must see that same local week."""
+    context = browser.new_context(
+        base_url=app_url,
+        ignore_https_errors=True,
+        storage_state=storage_state_path,
+        timezone_id="Pacific/Auckland",
+    )
+    page = context.new_page()
+    attach_probe(page)
+    try:
+        yield page
+    finally:
+        context.close()
+
+
+def test_tasting_is_inline_in_shared_tasks_and_survives_boosted_round_trip(nz_logged_in_page, tasting_world):
+    page = nz_logged_in_page
+    assert page.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone") == "Pacific/Auckland"
     _open(page, "3")
     page.get_by_role("button").filter(has_text="Bottle-store brand tasting").first.click()
     expect(page.locator("#tasting-detail")).to_be_visible()
@@ -251,9 +269,9 @@ def test_tasting_is_inline_in_shared_tasks_and_survives_boosted_round_trip(logge
         page.evaluate("window.__tastingHistoryDocument = true")
         page.go_back(wait_until="commit")
         page.wait_for_url(target, wait_until="commit")
-        page.wait_for_function("!window.__tastingHistoryDocument && document.readyState === 'complete'")
+        page.wait_for_function("() => !window.__tastingHistoryDocument && document.readyState === 'complete'")
     expect(page.locator("#tasks-page")).to_have_attribute("aria-busy", "false")
-    page.wait_for_function("!!document.querySelector('#tasks-search')?._x_model")
+    page.wait_for_function("() => !!document.querySelector('#tasks-search')?._x_model")
     page.get_by_role("searchbox", name="Search tasks", exact=True).fill("Nobody matches this restored search")
     expect(page.get_by_text("No open tasks match.")).to_be_visible()
     page.get_by_role("button", name="Clear", exact=True).click()
@@ -302,8 +320,6 @@ def test_invalid_end_time_keeps_the_form_open_and_explains_the_problem(logged_in
     expect(page.locator("#tasting-editor")).to_be_visible()
     expect(page.locator(".tasks-card")).to_have_count(before)
 
-
-perf_instrumentation = perf.perf_instrumentation
 
 MEASURE = perf.BUDGETS["feature_measure"]["tastings"]
 

@@ -42,6 +42,11 @@
 #page-content .section-head__actions { flex: 0 0 auto; min-width: 0; padding-bottom: 10px; }
 #page-content .section-tabs { flex: 0 1 auto; box-sizing: border-box; width: auto; max-width: 100%; margin: 0; padding: 0; overflow-x: auto; scrollbar-width: none; }
 #page-content .section-tabs::-webkit-scrollbar { display: none; }
+/* More tabs past an edge (section-tabs.js sets these): fade that edge so the strip reads as
+   scrollable rather than cut off. */
+#page-content .section-tabs[data-more-end] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+#page-content .section-tabs[data-more-start] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+#page-content .section-tabs[data-more-start][data-more-end] { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 #page-content .section-tabs .flow-mode-segmented { display: flex; width: auto; max-width: none; gap: 0; padding: 0; border: 0; border-radius: 0; background: none; overflow: visible; }
 #page-content .section-tabs .flow-mode-segment { flex: 0 0 auto; min-width: 0; min-height: 46px; box-sizing: border-box; margin-bottom: -1px; padding: 10px 16px 11px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; box-shadow: none; color: var(--ui-text-muted, #64748b); font-size: 15px; font-weight: 500; }
 #page-content .section-tabs .flow-mode-segment:first-child { padding-left: 2px; }

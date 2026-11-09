@@ -93,6 +93,16 @@ def test_sales_overview_records_credit_only_return_decision(sales_page, db, org)
     page.goto("https://crm.test/crm")
     section = page.get_by_role("region", name="Did stock come back?")
     expect(section.get_by_text("Dry gin 700ml", exact=True)).to_be_visible()
+    expect(section.locator(".sales-returns-pending__intro-desktop")).to_be_visible()
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(section.locator(".sales-returns-pending__intro-desktop")).to_be_hidden()
+    expect(section.locator(".sales-returns-pending__intro-mobile > p")).to_contain_text("Record what came back")
+    explanation = section.locator(".sales-returns-pending__intro-mobile details")
+    expect(explanation.locator("p")).to_be_hidden()
+    explanation.locator("summary").click()
+    expect(explanation.locator("p")).to_contain_text("goods back into bond")
+    explanation.locator("summary").click()
+    page.set_viewport_size({"width": 1440, "height": 900})
     screenshot_dir = os.environ.get("CRM_SHOTS_DIR")
     if screenshot_dir:
         destination = Path(screenshot_dir)
@@ -107,10 +117,20 @@ def test_sales_overview_records_credit_only_return_decision(sales_page, db, org)
             page.evaluate("mode => document.documentElement.setAttribute('data-spa-theme', mode)", theme_name)
             page.wait_for_timeout(300)
             page.screenshot(path=str(destination / f"credit-note-returns-{name}.png"), full_page=True)
-    section.get_by_label("Why no goods returned for Dry gin 700ml").fill("Customer kept the goods")
     section.get_by_role("button", name="Credit only · no goods").click()
-    expect(section.get_by_text("Dry gin 700ml", exact=True)).to_have_count(0)
-    expect(section.get_by_text("No mapped credit-note lines need a return decision.")).to_be_visible()
+    expect(section.get_by_role("alert")).to_contain_text("Choose why no goods were returned")
+    section.get_by_label("Why no goods returned for Dry gin 700ml").select_option("liquidation")
+    section.get_by_label("No-return details for Dry gin 700ml").fill("Buyer entered liquidation before collection")
+    if screenshot_dir:
+        page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'light')")
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.screenshot(path=str(destination / "credit-note-liquidation-desktop.png"), full_page=True)
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.screenshot(path=str(destination / "credit-note-liquidation-phone.png"), full_page=True)
+    section.get_by_role("button", name="Credit only · no goods").click()
+    expect(section).to_be_hidden()
+    db.refresh(line)
+    assert line.no_return_note == "Customer went into liquidation; goods were not returned — Buyer entered liquidation before collection"
 
 
 def test_sales_overview_records_goods_that_came_back(sales_page, db, org):  # noqa: F811
@@ -201,7 +221,7 @@ def test_sales_overview_records_goods_that_came_back(sales_page, db, org):  # no
 
     section.get_by_label("Condition of returned Dry gin 700ml").select_option("destroyed")
     section.get_by_role("button", name="Record return").click()
-    expect(section.get_by_text("No mapped credit-note lines need a return decision.")).to_be_visible()
+    expect(section).to_be_hidden()
 
 
 def test_customer_page_records_a_return_from_an_invoice_and_lists_it(sales_page, db, org):  # noqa: F811

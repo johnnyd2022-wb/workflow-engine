@@ -88,6 +88,25 @@ def _shot(page, name):
         page.screenshot(path=os.path.join(SHOTS, name + ".png"), full_page=True)
 
 
+def test_sales_overview_creation_actions_open_existing_forms(xero, sales_page, db, org):
+    page = sales_page
+    page.goto("https://crm.test/crm")
+    actions = page.locator(".sales-header-actions")
+    expect(actions.get_by_role("link", name="New customer")).to_be_visible()
+    expect(actions.get_by_role("link", name="New task")).to_be_visible()
+    expect(page.get_by_role("region", name="Did stock come back?")).to_be_hidden()
+    _shot(page, "sales-overview-actions-desktop")
+
+    actions.get_by_role("link", name="New customer").click()
+    expect(page.get_by_role("dialog", name="New customer")).to_be_visible()
+
+    page.goto("https://crm.test/crm")
+    page.set_viewport_size({"width": 390, "height": 844})
+    _shot(page, "sales-overview-actions-phone")
+    page.locator(".sales-header-actions").get_by_role("link", name="New task").click()
+    expect(page.get_by_role("dialog", name="New task")).to_be_visible()
+
+
 def test_add_a_customer_that_stays_in_bize(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
@@ -169,6 +188,51 @@ def test_a_failed_send_shows_why_and_try_again_sends_it(xero, sales_page, db, or
     page.goto("https://crm.test/crm/customers")
     row = page.locator("tbody tr").filter(has_text="Harbour Spirits Co.")
     expect(row.get_by_text("Not sent to Xero")).to_be_hidden()
+
+
+def test_import_customers_from_spreadsheet_previews_and_saves_notes(sales_page, db, org):
+    from app.features.crm.models.crm_note import CRMNote
+
+    page = sales_page
+    page.goto("https://crm.test/crm/customers")
+    page.get_by_role("button", name="Import customers").click()
+    section = page.get_by_role("region", name="Import customers")
+    expect(section).to_be_visible()
+    section.get_by_label("Import from").select_option("tsv")
+    section.get_by_label("Paste rows copied from Excel or Google Sheets, including the header").fill(
+        "name\temail_address\tnote\nCellar Club\tclub@example.nz\tMet at tasting\n"
+    )
+    section.get_by_role("button", name="Preview import").click()
+    expect(section).to_contain_text("1 ready")
+    expect(section).to_contain_text("Row 2 · Cellar Club")
+    assert db.query(CRMNote).filter(CRMNote.org_id == org.id).count() == 0
+    _shot(page, "import-preview-desktop")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
+    _shot(page, "import-preview-desktop-dark")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'light')")
+    page.set_viewport_size({"width": 390, "height": 844})
+    _shot(page, "import-preview-phone")
+    page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
+    _shot(page, "import-preview-phone-dark")
+    section.get_by_role("button", name="Import ready rows").click()
+    expect(section).to_contain_text("1 imported")
+    expect(page.locator("tbody tr").filter(has_text="Cellar Club")).to_be_visible()
+    note = db.query(CRMNote).filter(CRMNote.org_id == org.id).one()
+    assert note.content == "Met at tasting"
+
+    section.get_by_label("Import from").select_option("csv")
+    section.get_by_label("CSV file (up to 1 MB and 500 customers)").set_input_files(
+        {
+            "name": "contacts.csv",
+            "mimeType": "text/csv",
+            "buffer": b"name,email_address,note\nBottle Shop,shop@example.nz,Wholesale lead\n",
+        }
+    )
+    section.get_by_role("button", name="Preview import").click()
+    expect(section).to_contain_text("1 ready")
+    section.get_by_role("button", name="Import ready rows").click()
+    expect(section).to_contain_text("1 imported")
+    expect(page.locator("tbody tr").filter(has_text="Bottle Shop")).to_be_visible()
 
 
 def test_the_sales_default_sends_waiting_customers(xero, sales_page, db, org):

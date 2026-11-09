@@ -30,11 +30,16 @@ function crmCustomers() {
     xeroStatus: null,
     syncing: false,
     newCustomer: { open: false, saving: false, error: '', hint: '', form: blankCustomerForm() },
+    importer: { open: false, format: 'csv', text: '', fileName: '', busy: false, error: '', result: null, saved: false },
 
     async init() {
-      this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
+      const params = new URLSearchParams(window.location.search);
+      this.missingContactOnly = params.get('missing_contact') === '1';
       await this.loadXeroStatus();
       await this.loadCustomers();
+      if (params.get('new') === '1' && this.$el.querySelector('[data-new-customer]')) {
+        await this.openNewCustomer();
+      }
     },
 
     async loadXeroStatus() {
@@ -46,6 +51,14 @@ function crmCustomers() {
     },
 
     get isConnected() { return this.xeroStatus?.connected === true; },
+    get importReady() { return this.importer.result ? this.importer.result.ready : 0; },
+    get importCreated() { return this.importer.result ? this.importer.result.created : 0; },
+    get importRejected() { return this.importer.result ? this.importer.result.rejected : 0; },
+    get importProblems() { return this.importer.result ? this.importer.result.problems : []; },
+    get importPreview() { return this.importer.result ? this.importer.result.preview.slice(0, 20) : []; },
+    get importMore() { return Math.max(0, this.importReady - 20); },
+    get hasImportResult() { return Boolean(this.importer.result); },
+    get canCommitImport() { return this.hasImportResult && !this.importer.saved && !this.importer.busy && this.importReady > 0; },
 
     get syncSubtitle() {
       if (!this.xeroStatus) return 'Loading…';
@@ -148,6 +161,61 @@ function crmCustomers() {
     nextPage() { if (this.page < this.totalPages) { this.page++; this.loadCustomers(); } },
 
     openCustomer(id) { CRMAPI.navigate(this.customerUrl(id)); },
+
+    openImport() {
+      this.importer = { open: true, format: 'csv', text: '', fileName: '', busy: false, error: '', result: null, saved: false };
+      this.$nextTick(() => document.getElementById('crm-import-file')?.focus());
+    },
+
+    async importFile(event) {
+      const file = event.target.files?.[0];
+      this.importer.result = null;
+      this.importer.error = '';
+      this.importer.saved = false;
+      this.importer.text = '';
+      if (!file) return;
+      if (file.size > 1000000) { this.importer.error = 'Choose a CSV file smaller than 1 MB.'; return; }
+      this.importer.text = await file.text();
+      this.importer.fileName = file.name;
+      this.importer.format = 'csv';
+    },
+
+    async runImport(commit = false) {
+      if (this.importer.busy) return;
+      if (!this.importer.text.trim()) { this.importer.error = 'Choose a CSV file or paste spreadsheet rows.'; return; }
+      this.importer.busy = true;
+      this.importer.error = '';
+      try {
+        const result = await CRMAPI.importCustomers(this.importer.text, this.importer.format, commit);
+        this.importer.result = result;
+        this.importer.saved = commit;
+        if (commit) await this.loadCustomers();
+      } catch (e) {
+        this.importer.error = e.message || 'Could not read the import.';
+        this.importer.result = null;
+      } finally {
+        this.importer.busy = false;
+      }
+    },
+
+    downloadImportProblems() {
+      const problems = this.importer.result?.problems || [];
+      if (!problems.length) return;
+      const cell = (value) => {
+        let text = String(value ?? '');
+        if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
+        return '"' + text.replaceAll('"', '""') + '"';
+      };
+      const headers = this.importer.result.headers || [];
+      const rows = [[...headers, 'import_error'], ...problems.map((item) => [...headers.map((header) => item.data?.[header] || ''), item.error])];
+      const blob = new Blob([rows.map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'crm-import-problems.csv';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
 
     async openNewCustomer() {
       let settings = { sync_contacts_to_xero: false, xero: { connected: false, can_write_contacts: false } };

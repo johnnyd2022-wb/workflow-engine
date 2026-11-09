@@ -63,6 +63,7 @@ class FakeXeroInvoices:
         self.downloaded: list[str] = []
         self.fail_row_action_with: Exception | None = None
         self.unfaked: list[str] = []
+        self.credit_note_syncs: list[dict] = []
         self._xero_invoices: list[SimpleNamespace] = []
 
     def install(self, monkeypatch):
@@ -126,6 +127,12 @@ class FakeXeroInvoices:
             fake.unfaked.append("a Xero API client was built for a call the fake does not answer")
             raise AssertionError(fake.unfaked[-1])
 
+        def fetch_all_credit_notes(_client, **kwargs):
+            # Invoice refresh also syncs credits. This scenario has no credit notes;
+            # keep the real-client guard for every other unexpected API call.
+            fake.credit_note_syncs.append(kwargs)
+            return []
+
         xero_client = xero_api_client_module.XeroAPIClient
         monkeypatch.setattr(xero_client, "create_invoice", create_invoice)
         monkeypatch.setattr(xero_client, "authorise_invoice", authorise_invoice)
@@ -133,6 +140,7 @@ class FakeXeroInvoices:
         monkeypatch.setattr(xero_client, "get_invoice_pdf", get_invoice_pdf)
         monkeypatch.setattr(xero_client, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_client, "get_all_invoices", lambda self, **kw: list(fake._xero_invoices))
+        monkeypatch.setattr(xero_client, "fetch_all_credit_notes", fetch_all_credit_notes)
         monkeypatch.setattr(xero_client, "get_contact_payment_terms", lambda self, contact_xero_id: None)
         monkeypatch.setattr(xero_client, "_get_api_client", unfaked)
         return self
@@ -195,6 +203,7 @@ def test_a_draft_invoice_reaches_xero_as_typed_and_is_listed(xero_invoices, sale
     expect(row.locator(".crm-badge")).to_have_text("DRAFT")
 
     (sent,) = xero_invoices.created
+    assert xero_invoices.credit_note_syncs, "invoice refresh must include the credit-note stream"
     assert sent["status"] == "DRAFT"
     assert sent["contact_xero_id"] == contact.xero_contact_id
     assert [(line["description"], line["quantity"], line["unit_amount"]) for line in sent["line_items"]] == [

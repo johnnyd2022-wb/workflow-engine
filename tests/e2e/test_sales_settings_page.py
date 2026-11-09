@@ -6,6 +6,9 @@ Requests are routed into the Flask test client (see test_crm_contact_sync_ui), a
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import expect
 
@@ -76,6 +79,32 @@ def test_the_page_fits_without_sideways_scroll(xero, sales_page, width):  # noqa
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     for section in ("#xero", "#mappings", "#matching", "#customers", "#revenue", "#tasks"):
         expect(sales_page.locator(section)).to_be_visible()
+
+
+def test_phone_guidance_keeps_the_full_explanation_available(xero, sales_page):  # noqa: F811
+    _open(sales_page, width=390)
+    for section_id, summary, detail in (
+        ("#matching", "When does this take effect?", "including sales already imported"),
+        ("#customers", "How does this work?", "Each customer can override"),
+    ):
+        section = sales_page.locator(section_id)
+        expect(section.locator(".ss-intro__desktop")).to_be_hidden()
+        expect(section.locator(".ss-intro__mobile > p")).to_be_visible()
+        explanation = section.locator(".ss-intro__mobile details")
+        expect(explanation.locator("p")).to_be_hidden()
+        explanation.get_by_text(summary).click()
+        expect(explanation.locator("p")).to_contain_text(detail)
+        explanation.get_by_text(summary).click()
+    if folder := os.environ.get("CRM_SHOTS_DIR"):
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        sales_page.screenshot(path=str(Path(folder) / "sales-settings-phone.png"), full_page=True)
+    sales_page.set_viewport_size({"width": 1440, "height": 900})
+    for section_id in ("#matching", "#customers"):
+        section = sales_page.locator(section_id)
+        expect(section.locator(".ss-intro__desktop")).to_be_visible()
+        expect(section.locator(".ss-intro__mobile")).to_be_hidden()
+    if folder := os.environ.get("CRM_SHOTS_DIR"):
+        sales_page.screenshot(path=str(Path(folder) / "sales-settings-desktop.png"), full_page=True)
 
 
 @pytest.fixture()

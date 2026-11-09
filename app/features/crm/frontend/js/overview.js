@@ -79,6 +79,7 @@ function crmOverview() {
     pendingReturnsError: null,
     pendingReturnsPage: 1,
     pendingReturnsHasMore: false,
+    pendingReturnReasons: {},
     pendingReturnNotes: {},
     pendingReturnErrors: {},
     pendingReturnBusyId: null,
@@ -219,12 +220,31 @@ function crmOverview() {
       }
     },
 
+    clearNoReturnError(lineId) {
+      this.pendingReturnErrors = { ...this.pendingReturnErrors, [lineId]: '' };
+    },
+
+    setNoReturnDetail(lineId, value) {
+      this.pendingReturnNotes = { ...this.pendingReturnNotes, [lineId]: value };
+      this.clearNoReturnError(lineId);
+    },
+
     async recordNoReturn(item) {
-      const note = String(this.pendingReturnNotes[item.line_id] || '').trim();
-      if (!note) {
-        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: 'Add a note before recording this decision.' };
+      const reason = this.pendingReturnReasons[item.line_id];
+      const detail = String(this.pendingReturnNotes[item.line_id] || '').trim();
+      const labels = {
+        retained: 'Customer kept the goods',
+        liquidation: 'Customer went into liquidation; goods were not returned',
+      };
+      if (!labels[reason] && reason !== 'other') {
+        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: 'Choose why no goods were returned.' };
         return;
       }
+      if (reason === 'other' && !detail) {
+        this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: 'Add details for the other reason.' };
+        return;
+      }
+      const note = [labels[reason], detail].filter(Boolean).join(' — ');
       this.pendingReturnBusyId = item.line_id;
       this.pendingReturnErrors = { ...this.pendingReturnErrors, [item.line_id]: '' };
       try {

@@ -5,7 +5,7 @@ from io import BytesIO
 from uuid import UUID
 
 import requests
-from flask import Blueprint, abort, g, jsonify, request, send_file
+from flask import Blueprint, Response, abort, g, jsonify, request, send_file
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from xero_python.exceptions import OpenApiException
 
@@ -57,6 +57,43 @@ def _page_args(default_page_size: int) -> tuple[int, int] | None:
 # ------------------------------------------------------------------
 # Customers
 # ------------------------------------------------------------------
+
+
+@api_bp.route("/api/crm/customers/import-template", methods=["GET"])
+@requires_auth
+def customer_import_template():
+    from app.features.crm.services.contact_import import template
+
+    return Response(
+        template(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="crm-customers-template.csv"'},
+    )
+
+
+@api_bp.route("/api/crm/customers/import", methods=["POST"])
+@requires_auth
+@requires_permission("sales.record")
+def customer_import():
+    from app.features.crm.services.contact_import import import_contacts
+
+    if request.content_length and request.content_length > 1_200_000:
+        return jsonify({"error": "Import text must be at most 1 MB"}), 413
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("text"), str):
+        return jsonify({"error": "Send import text and format"}), 400
+    try:
+        result = import_contacts(
+            db_session(),
+            UUID(g.org_id),
+            data["text"],
+            data.get("format", "csv"),
+            commit=data.get("commit") is True,
+            actor_id=_actor(),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result), 200
 
 
 @api_bp.route("/api/crm/customers", methods=["GET"])

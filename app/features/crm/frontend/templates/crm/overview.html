@@ -7,7 +7,10 @@
 {% block section_actions %}
 <div class="sales-header-actions">
 <button type="button" class="workspace-button" x-data @click="$dispatch('sales-add-widget')">Add widget</button>
+{% if can('sales.record') %}
+<a href="/crm/customers?new=1" class="workspace-button">New customer</a>
 <a href="/crm/tasks?new=1" class="workspace-button workspace-button--primary sales-primary">New task</a>
+{% endif %}
 </div>
 {% endblock %}
 
@@ -59,14 +62,21 @@
     </div>
     </section>
 
-    <section class="workspace-card sales-returns-pending" aria-labelledby="sales-returns-pending-title">
+    <section class="workspace-card sales-returns-pending" aria-labelledby="sales-returns-pending-title"
+             x-show="pendingReturnsLoading || pendingReturnsError || pendingReturns.length > 0" x-cloak>
       <h2 id="sales-returns-pending-title">Did stock come back?</h2>
-      <p class="sales-returns-pending__intro">A credit note is money, not stock. For each credited product, record what physically came back (only that changes stock, and goods back into bond show on the excise draft as a possible credit), or that it was a credit only.</p>
+      <div class="sales-returns-pending__intro">
+        <p class="sales-returns-pending__intro-desktop">A credit note is money, not stock. For each credited product, record what physically came back (only that changes stock, and goods back into bond show on the excise draft as a possible credit), or that it was a credit only.</p>
+        <div class="sales-returns-pending__intro-mobile">
+          <p>A credit note changes money, not stock. Record what came back, or why nothing did.</p>
+          <details>
+            <summary>Why this matters</summary>
+            <p>A credit note is money, not stock. For each credited product, record what physically came back (only that changes stock, and goods back into bond show on the excise draft as a possible credit), or that it was a credit only.</p>
+          </details>
+        </div>
+      </div>
       <p class="sales-returns-pending__message" x-show="pendingReturnsLoading" role="status">Loading credit-note lines…</p>
       <p class="sales-returns-pending__message" x-show="pendingReturnsError" x-text="pendingReturnsError" role="alert"></p>
-      <template x-if="!pendingReturnsLoading && !pendingReturnsError && pendingReturns.length === 0">
-        <p class="sales-returns-pending__message">No mapped credit-note lines need a return decision.</p>
-      </template>
       <div class="sales-returns-pending__list" x-show="pendingReturns.length > 0" x-cloak>
         <template x-for="item in pendingReturns" :key="item.line_id">
           <article class="sales-returns-pending__item">
@@ -105,7 +115,16 @@
               <p class="sales-returns-pending__or" aria-hidden="true">or</p>
               <label class="sales-returns-pending__note-label">
                 <span>Why were no goods returned?</span>
-                <textarea maxlength="500" rows="2" required :aria-label="'Why no goods returned for ' + item.product_name" :value="pendingReturnNotes[item.line_id] || ''" @input="pendingReturnNotes[item.line_id] = $event.target.value"></textarea>
+                <select :aria-label="'Why no goods returned for ' + item.product_name" x-model="pendingReturnReasons[item.line_id]" @change="clearNoReturnError(item.line_id)" required>
+                  <option value="">Choose a reason</option>
+                  <option value="retained">Customer kept the goods</option>
+                  <option value="liquidation">Customer went into liquidation; goods stayed with them</option>
+                  <option value="other">Other reason</option>
+                </select>
+              </label>
+              <label class="sales-returns-pending__note-label">
+                <span>Details <span x-text="pendingReturnReasons[item.line_id] === 'other' ? '(required)' : '(optional)'"></span></span>
+                <textarea maxlength="430" rows="2" :aria-label="'No-return details for ' + item.product_name" :value="pendingReturnNotes[item.line_id] || ''" @input="setNoReturnDetail(item.line_id, $event.target.value)"></textarea>
               </label>
               <p class="sales-returns-pending__error" x-show="pendingReturnErrors[item.line_id]" x-text="pendingReturnErrors[item.line_id]" role="alert"></p>
               <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :disabled="pendingReturnBusyId === item.line_id" @click="recordNoReturn(item)" x-text="pendingReturnBusyId === item.line_id ? 'Saving…' : 'Credit only · no goods'"></button>
