@@ -33,7 +33,6 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Every row here is exactly SKILL.md Step 2's table. Adding a new mechanical case means
@@ -41,7 +40,6 @@ from pathlib import Path
 # never one without the other.
 _LEDGER_UNION_PATTERNS = (".agents/metrics/*.jsonl", ".agents/history/*.jsonl")
 _FEATURE_INDEX_PATH = ".agents/feature-index.md"
-_PERF_LAST_RUN_PATH = ".agents/reports/perf/last-run.json"
 _UV_LOCK_PATH = "uv.lock"
 _PYPROJECT_PATH = "pyproject.toml"
 
@@ -112,74 +110,6 @@ def _classify_feature_index(worktree: Path, path: str) -> dict:
     }
 
 
-def _parse_aware_timestamp(value: object) -> datetime | None:
-    """Parse `value` as a timezone-AWARE ISO-8601 datetime, or None if it can't be
-    trusted for a chronological comparison. ISO-8601 strings are only lexically
-    sortable when every offset is identical -- `2026-08-03T10:00:00+12:00` reads as
-    "later" than `2026-08-03T09:30:00+00:00` by raw string comparison while actually
-    being 11.5 hours earlier in UTC. A naive (offset-less) value is rejected too: there
-    is no safe way to compare it against an aware one, and guessing UTC would be a
-    silent correctness bug, not a conservative default."""
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
-def _classify_perf_last_run(worktree: Path, path: str) -> dict:
-    """Mechanical: it's a cached measurement, not a decision -- keep whichever side has
-    the newer `generated` timestamp, whole. Any timestamp this function can't parse and
-    compare with confidence fails closed to semantic -- a wrong pick here silently
-    discards a real measurement, which is worse than an escalation a human clears in
-    five seconds."""
-    sides = {}
-    for stage, label in (("2", "ours"), ("3", "theirs")):
-        proc = _run_git(worktree, "show", f":{stage}:{path}")
-        if proc.returncode != 0:
-            return {"path": path, "class": "semantic", "reason": f"could not read {label} side: {proc.stderr.strip()}"}
-        try:
-            decoded = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            return {"path": path, "class": "semantic", "reason": f"{label} side is not valid JSON: {exc}"}
-        if not isinstance(decoded, dict):
-            # Valid JSON is not necessarily the expected object schema -- a list or a
-            # bare scalar parses fine and then crashes the next .get() call. An
-            # unattended classifier must fail closed here, never raise.
-            return {
-                "path": path,
-                "class": "semantic",
-                "reason": f"{label} side is valid JSON but not an object (got {type(decoded).__name__})",
-            }
-        sides[label] = decoded
-
-    parsed: dict[str, datetime] = {}
-    for label in ("ours", "theirs"):
-        raw = sides[label].get("generated")
-        dt = _parse_aware_timestamp(raw)
-        if dt is None:
-            return {
-                "path": path,
-                "class": "semantic",
-                "reason": (
-                    f"{label} side's 'generated' value ({raw!r}) is missing, not a string, "
-                    "unparseable, or timezone-naive -- cannot compare with confidence"
-                ),
-            }
-        parsed[label] = dt
-
-    winner = "theirs" if parsed["theirs"] > parsed["ours"] else "ours"
-    stage = "3" if winner == "theirs" else "2"
-    return {
-        "path": path,
-        "class": "mechanical",
-        "reason": f"{winner} side is newer ({sides[winner]['generated']})",
-        "resolution": [f"git show :{stage}:{path} > {path}", f"git add {path}"],
-    }
-
-
 def _classify_uv_lock(path: str, conflicted: set[str]) -> dict:
     if _PYPROJECT_PATH in conflicted:
         return {
@@ -205,8 +135,6 @@ def classify_file(worktree: Path, path: str, conflicted: set[str]) -> dict:
         return {"path": path, "class": "semantic", "reason": "union-merge ledger still conflicted (broken driver?)"}
     if path == _FEATURE_INDEX_PATH:
         return _classify_feature_index(worktree, path)
-    if path == _PERF_LAST_RUN_PATH:
-        return _classify_perf_last_run(worktree, path)
     if path == _UV_LOCK_PATH:
         return _classify_uv_lock(path, conflicted)
     return {"path": path, "class": "semantic", "reason": "not in the mechanical allow-list"}

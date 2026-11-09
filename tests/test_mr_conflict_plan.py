@@ -147,94 +147,25 @@ def test_feature_index_marker_like_content_cannot_hide_semantic_lines(tmp_path):
     assert plan["conflicted"][0]["class"] == "semantic"
 
 
-# --- perf last-run.json -------------------------------------------------------------
+# --- perf last-run.json (retired) ----------------------------------------------------
 
 
-def test_perf_last_run_keeps_the_newer_timestamp(tmp_path):
+def test_perf_last_run_is_no_longer_mechanical(tmp_path):
+    """Perf results live in bize_dev now and the file is gitignored, so it should never
+    conflict. If it ever does, something re-committed it: a human should look."""
     repo = _init_repo(tmp_path)
-    older = json.dumps({"generated": "2026-08-01T00:00:00+00:00", "results": ["old"]})
-    newer = json.dumps({"generated": "2026-08-02T00:00:00+00:00", "results": ["new"]})
     _conflicting_merge(
         repo,
         ".agents/reports/perf/last-run.json",
         json.dumps({"generated": "2026-07-01T00:00:00+00:00"}),
-        older,
-        newer,
-    )
-
-    plan = mcp.build_plan(repo)
-
-    assert plan["verdict"] == "mechanical"
-    entry = plan["conflicted"][0]
-    assert entry["class"] == "mechanical"
-    assert "theirs" in entry["reason"]  # theirs (the feature branch) is newer here
-
-
-def test_perf_last_run_invalid_json_is_semantic(tmp_path):
-    repo = _init_repo(tmp_path)
-    _conflicting_merge(
-        repo,
-        ".agents/reports/perf/last-run.json",
-        json.dumps({"generated": "x"}),
-        "{not valid json",
+        json.dumps({"generated": "2026-08-01T00:00:00+00:00"}),
         json.dumps({"generated": "2026-08-02T00:00:00+00:00"}),
     )
 
     plan = mcp.build_plan(repo)
 
     assert plan["verdict"] == "semantic"
-
-
-def test_perf_last_run_compares_timezone_offsets_chronologically(tmp_path):
-    """ISO-8601 strings are only lexically sortable when their offsets are normalized.
-    Here ours looks later as text but is eleven and a half hours earlier in UTC."""
-    repo = _init_repo(tmp_path)
-    ours = json.dumps({"generated": "2026-08-03T10:00:00+12:00", "results": ["ours"]})
-    theirs = json.dumps({"generated": "2026-08-03T09:30:00+00:00", "results": ["theirs"]})
-    _conflicting_merge(
-        repo,
-        ".agents/reports/perf/last-run.json",
-        json.dumps({"generated": "2026-07-01T00:00:00+00:00"}),
-        ours,
-        theirs,
-    )
-
-    plan = mcp.build_plan(repo)
-
-    assert plan["verdict"] == "mechanical"
-    assert "theirs" in plan["conflicted"][0]["reason"]
-
-
-def test_perf_last_run_malformed_timestamp_is_semantic(tmp_path):
-    repo = _init_repo(tmp_path)
-    _conflicting_merge(
-        repo,
-        ".agents/reports/perf/last-run.json",
-        json.dumps({"generated": "2026-07-01T00:00:00+00:00"}),
-        json.dumps({"generated": "not-a-timestamp", "results": ["ours"]}),
-        json.dumps({"generated": "2026-08-03T09:30:00+00:00", "results": ["theirs"]}),
-    )
-
-    plan = mcp.build_plan(repo)
-
-    assert plan["verdict"] == "semantic"
-
-
-def test_perf_last_run_valid_json_with_non_object_root_is_semantic(tmp_path):
-    """Valid JSON is not necessarily the expected object schema; lists and scalars
-    must fail closed rather than crashing the unattended classifier."""
-    repo = _init_repo(tmp_path)
-    _conflicting_merge(
-        repo,
-        ".agents/reports/perf/last-run.json",
-        json.dumps({"generated": "2026-07-01T00:00:00+00:00"}),
-        json.dumps(["valid JSON", "wrong schema"]),
-        json.dumps({"generated": "2026-08-03T09:30:00+00:00", "results": ["theirs"]}),
-    )
-
-    plan = mcp.build_plan(repo)
-
-    assert plan["verdict"] == "semantic"
+    assert plan["conflicted"][0]["class"] == "semantic"
 
 
 # --- uv.lock -------------------------------------------------------------------------

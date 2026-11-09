@@ -5,12 +5,18 @@ The verification chain can tell you a run happened; it cannot tell you whether t
 was *worth it*. "Is security-audit finding real bugs or crying wolf?" and "which skill's
 findings actually get merged?" are unanswerable today because nothing is written down.
 This tool is the ledger that makes the AER evaluation layer real without any ML: two
-append-only JSONL files and a deterministic group-by.
+append-only tables and a deterministic group-by.
 
-Two files under the metrics dir (default `.agents/metrics/`, override with $METRICS_DIR):
+Two tables in the `bize_dev` database, schema `metrics` (see scripts/metrics_db.py):
 
-  runs.jsonl      one line per skill run           (who ran, what they found, verdict)
-  outcomes.jsonl  one line per resolved run/MR      (merged | closed | amended | escaped)
+  skill_runs      one row per skill run            (who ran, what they found, verdict)
+  skill_outcomes  one row per resolved run/MR       (merged | closed | amended | escaped)
+
+They used to be repo files (.agents/metrics/*.jsonl) that every MR rewrote and so conflicted.
+If the DB is unreachable a write is spooled locally and flushed by the next successful call,
+so a skill never loses its run and never fails because of an outage. Setting $METRICS_DIR
+switches to the legacy JSONL files in that directory -- the hook the unit tests use, and a
+fully offline fallback.
 
 A run and its outcome are joined on `ref` — the MR ref (`!123`) or the branch name. The
 agent that opens the MR records the run; whoever later sees it merged/closed records the
@@ -116,6 +122,51 @@ def _read(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _db():
+    """scripts/metrics_db.py, imported lazily so the file backend stays stdlib-only."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        import metrics_db  # noqa: PLC0415
+    finally:
+        sys.path.pop(0)
+    return metrics_db
+
+
+class LedgerUnavailableError(ValueError):
+    """The metrics DB cannot be reached. A ValueError so existing handlers still catch it."""
+
+
+_last_destination = "unknown"
+
+
+def _use_files() -> bool:
+    return bool(os.environ.get("METRICS_DIR"))
+
+
+def _persist(kind: str, rec: dict[str, Any]) -> str:
+    """Write a run/outcome to the DB (or $METRICS_DIR files). Returns where it landed."""
+    global _last_destination
+    if _use_files():
+        _append(runs_path() if kind == "run" else outcomes_path(), rec)
+        _last_destination = "file"
+    else:
+        _last_destination = _db().store(kind, rec)
+    return _last_destination
+
+
+def _load() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(runs, outcomes). Raises ValueError (what callers already handle) when unreadable."""
+    if _use_files():
+        return _read(runs_path()), _read(outcomes_path())
+    db = _db()
+    try:
+        return db.fetch("run"), db.fetch("outcome")
+    except db.MetricsDBUnavailableError as e:
+        raise LedgerUnavailableError(
+            f"metrics DB unavailable ({e}); locally spooled writes are kept and will sync later"
+        ) from e
+
+
 def runs_path() -> Path:
     return metrics_dir() / "runs.jsonl"
 
@@ -153,7 +204,7 @@ def record_run(
         "duration_s": duration_s,
         "notes": notes,
     }
-    _append(runs_path(), rec)
+    _persist("run", rec)
     return rec
 
 
@@ -163,7 +214,7 @@ def record_outcome(
     if outcome not in OUTCOMES:
         raise ValueError(f"outcome must be one of {sorted(OUTCOMES)}, got {outcome!r}")
     rec = {"ts": ts or _now(), "ref": ref, "outcome": outcome, "skill": skill, "notes": notes}
-    _append(outcomes_path(), rec)
+    _persist("outcome", rec)
     return rec
 
 
@@ -487,6 +538,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args = ap.parse_args(argv)
 
+    if args.check and not _use_files():
+        return _db().cmd_check()  # the table constraints reject malformed rows; verify the DB instead
     if args.check:
         problems = check(runs_path(), outcomes_path())
         if problems:
@@ -513,7 +566,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        print(f"recorded run: {rec_out['skill']} {rec_out['verdict']} ({rec_out['findings']} findings)")
+        where = " [DB unreachable: spooled locally, will sync]" if _last_destination == "spooled" else ""
+        print(f"recorded run: {rec_out['skill']} {rec_out['verdict']} ({rec_out['findings']} findings){where}")
         return 0
 
     if args.cmd == "outcome":
@@ -524,12 +578,13 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        print(f"recorded outcome: {rec_out['ref']} -> {rec_out['outcome']}")
+        where = " [DB unreachable: spooled locally, will sync]" if _last_destination == "spooled" else ""
+        print(f"recorded outcome: {rec_out['ref']} -> {rec_out['outcome']}{where}")
         return 0
 
     if args.cmd == "scorecard":
         try:
-            card = scorecard(_read(runs_path()), _read(outcomes_path()))
+            card = scorecard(*_load())
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -541,8 +596,10 @@ def main(argv: list[str] | None = None) -> int:
             print("glab not on PATH — nothing swept (an open loop, not an error)", file=sys.stderr)
             return 0
         try:
-            runs = _read(runs_path())
-            outcomes = _read(outcomes_path())
+            runs, outcomes = _load()
+        except LedgerUnavailableError as e:
+            print(f"{e} -- nothing swept", file=sys.stderr)
+            return 0
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -561,7 +618,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "digest":
         try:
-            d = digest(_read(runs_path()), _read(outcomes_path()))
+            d = digest(*_load())
+        except LedgerUnavailableError as e:
+            print(f"digest skipped: {e}", file=sys.stderr)
+            return 0  # preflight shows this every session; an outage must not break it
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
