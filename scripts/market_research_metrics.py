@@ -2,8 +2,8 @@
 """Record sourced market indicator observations in the shared development metrics DB.
 
 Usage:
-  python3 scripts/market_research_metrics.py record --file observations.json
-  python3 scripts/market_research_metrics.py history --scope craft-spirits-new-zealand
+  uv run python scripts/market_research_metrics.py record --file observations.json
+  uv run python scripts/market_research_metrics.py history --scope craft-spirits-new-zealand
 
 The input is a JSON object with scope_key, report_path, and indicators (an array).
 Each indicator needs metric_key, measured_on, unit, geography, source_ref, confidence,
@@ -26,6 +26,7 @@ REQUIRED = ("metric_key", "measured_on", "unit", "geography", "source_ref", "con
 DATES = ("measured_on", "period_start", "period_end", "source_published_on")
 NUMBERS = ("value", "lower_bound", "upper_bound", "threshold_value")
 FIELDS = set(metrics_db._INDICATOR_COLS)
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _nonempty(value: Any, field: str) -> str:
@@ -34,11 +35,20 @@ def _nonempty(value: Any, field: str) -> str:
     return value.strip()
 
 
+def _report_path(value: Any) -> str:
+    raw = Path(_nonempty(value, "report_path"))
+    resolved = (raw if raw.is_absolute() else REPO_ROOT / raw).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError as e:
+        raise ValueError("report_path must be within this repository; save a local copy first") from e
+
+
 def parse_batch(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, dict):
         raise ValueError("input must be a JSON object")
     scope = _nonempty(raw.get("scope_key"), "scope_key")
-    report = _nonempty(raw.get("report_path"), "report_path")
+    report = _report_path(raw.get("report_path"))
     items = raw.get("indicators")
     if not isinstance(items, list) or not items:
         raise ValueError("indicators must be a non-empty array")
@@ -112,12 +122,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"valid: {len(rows)} indicators")
                 return 0
             destinations = [metrics_db.store("indicator", row) for row in rows]
-            print(f"recorded: {destinations.count('db')} in DB, {destinations.count('spooled')} spooled")
+            print(
+                f"recorded: {destinations.count('inserted')} inserted, "
+                f"{destinations.count('already-present')} already present, "
+                f"{destinations.count('spooled')} spooled"
+            )
         else:
             rows = metrics_db.market_indicator_history(_nonempty(args.scope, "scope"))
             print(json.dumps(rows, default=str, indent=2))
         return 0
-    except (ValueError, OSError, json.JSONDecodeError, metrics_db.MetricsDBUnavailableError) as e:
+    except (
+        ValueError,
+        OSError,
+        json.JSONDecodeError,
+        metrics_db.MetricsDBUnavailableError,
+        metrics_db.IndicatorConflictError,
+    ) as e:
         print(f"market_research_metrics: {e}", file=sys.stderr)
         return 1
 

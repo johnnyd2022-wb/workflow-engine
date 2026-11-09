@@ -120,7 +120,6 @@ CREATE TABLE IF NOT EXISTS market_indicators (
     CHECK ((threshold_operator IS NULL) = (threshold_value IS NULL)),
     CHECK (period_start IS NULL OR period_end IS NULL OR period_start <= period_end)
 );
-ALTER TABLE market_indicators ADD COLUMN IF NOT EXISTS refresh_cadence text;
 CREATE UNIQUE INDEX IF NOT EXISTS market_indicators_identity
     ON market_indicators (report_path, metric_key);
 CREATE INDEX IF NOT EXISTS market_indicators_history

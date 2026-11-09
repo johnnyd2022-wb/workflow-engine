@@ -58,10 +58,15 @@ source reference, source publication date, confidence, method, report path, cade
 above/below threshold. The pair `(report_path, metric_key)` prevents duplicate imports of
 the same report. A revised estimate belongs in a new dated report, preserving history.
 
-The skill records through `python3 scripts/market_research_metrics.py record --file <path>`
-and reads a scope through `python3 scripts/market_research_metrics.py history --scope <slug>`.
+The skill records through `uv run python scripts/market_research_metrics.py record --file <path>`
+and reads a scope through `uv run python scripts/market_research_metrics.py history --scope <slug>`.
 The recording command validates the whole batch before writing; if the DB is unavailable,
-rows use the same local spool as skill runs. Apply `python3 scripts/metrics_db.py migrate`
+rows go to `~/.local/state/bize-metrics/spool.jsonl.indicators`, separate from the skill-run
+spool so older worktrees cannot choke on the new record kind. Re-recording identical data
+reports `already present`; a changed value for the same report/metric fails visibly and
+needs a new dated report. If an offline queued value later conflicts, it is moved to
+`spool.jsonl.indicators.rejected` with a warning, while valid queued values continue.
+Review that file and publish a new dated report for any correction. Apply `uv run python scripts/metrics_db.py migrate`
 once to create the table and grant the existing read/append role access.
 
 ## `skill_runs` columns
