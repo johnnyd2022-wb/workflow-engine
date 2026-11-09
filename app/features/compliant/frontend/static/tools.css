@@ -1,9 +1,6 @@
-.ct-shell { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
-.ct-eyebrow { font-size: .72rem; letter-spacing: .12em; color: var(--text-secondary, #6b7280); margin: 0 0 6px; }
-.ct-hero h1 { font-size: 1.7rem; margin: 0 0 8px; }
-.ct-hero p { color: var(--text-secondary, #4b5563); max-width: 60ch; }
-.ct-back { color: #0f766e; font-weight: 600; text-decoration: none; }
-.ct-category { margin-top: 36px; }
+.ct-shell { padding-bottom: 64px; }
+.ct-hero .workspace-caption { max-width: 72ch; }
+.ct-category { margin-top: 28px; }
 .ct-category > h2 { font-size: 1.05rem; margin: 0 0 14px; }
 .ct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .ct-card { border: 1px solid var(--ui-border, #e5e7eb); border-radius: 12px; padding: 18px; background: var(--ui-surface, #fff); }

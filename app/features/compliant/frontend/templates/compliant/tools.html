@@ -10,14 +10,15 @@
   ('wine', 'Wine & cider'),
   ('vessel', 'Vessels & yield'),
 ] %}
-<main class="ct-shell" data-compliant-tools-root>
-  <header class="ct-hero">
-    <p class="ct-eyebrow">COMPLIANT / NZ ALCOHOL</p>
-    <h1>Tools</h1>
-    <p>Quick calculators for the numbers you reach for every day. Each is an operational
-      aid — results carry their source and a disclaimer, and anything feeding a legal
-      obligation should be confirmed against the instrument or the regulator.</p>
-    <p><a href="/compliant/nz-alcohol" class="ct-back">← NZ Alcohol dashboard</a></p>
+<main class="max-content workspace-overview workspace-page ct-shell" data-compliant-tools-root>
+  {# Style 1 (UX-SWEEP): the shared page header. The breadcrumb and back button lead to Compliance. #}
+  <header class="workspace-header ct-hero">
+    <div>
+      <h1>Tools</h1>
+      <p class="workspace-caption">Quick calculators for the numbers you reach for every day. Each is an operational
+        aid — results carry their source and a disclaimer, and anything feeding a legal
+        obligation should be confirmed against the instrument or the regulator.</p>
+    </div>
   </header>
 
   {% for cat_key, cat_label in categories %}

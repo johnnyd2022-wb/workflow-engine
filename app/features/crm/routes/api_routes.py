@@ -5,7 +5,7 @@ from io import BytesIO
 from uuid import UUID
 
 import requests
-from flask import Blueprint, abort, g, jsonify, request, send_file
+from flask import Blueprint, Response, abort, g, jsonify, request, send_file
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from xero_python.exceptions import OpenApiException
 
@@ -57,6 +57,43 @@ def _page_args(default_page_size: int) -> tuple[int, int] | None:
 # ------------------------------------------------------------------
 # Customers
 # ------------------------------------------------------------------
+
+
+@api_bp.route("/api/crm/customers/import-template", methods=["GET"])
+@requires_auth
+def customer_import_template():
+    from app.features.crm.services.contact_import import template
+
+    return Response(
+        template(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="crm-customers-template.csv"'},
+    )
+
+
+@api_bp.route("/api/crm/customers/import", methods=["POST"])
+@requires_auth
+@requires_permission("sales.record")
+def customer_import():
+    from app.features.crm.services.contact_import import import_contacts
+
+    if request.content_length and request.content_length > 1_200_000:
+        return jsonify({"error": "Import text must be at most 1 MB"}), 413
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("text"), str):
+        return jsonify({"error": "Send import text and format"}), 400
+    try:
+        result = import_contacts(
+            db_session(),
+            UUID(g.org_id),
+            data["text"],
+            data.get("format", "csv"),
+            commit=data.get("commit") is True,
+            actor_id=_actor(),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result), 200
 
 
 @api_bp.route("/api/crm/customers", methods=["GET"])
@@ -306,6 +343,114 @@ def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
     except ValueError as e:
         db_session().rollback()
         return jsonify({"error": str(e)}), 400
+
+
+@api_bp.route("/api/crm/returns", methods=["GET"])
+@requires_auth
+def list_customer_returns():
+    """GL-P01b: goods customers sent back, newest first."""
+    from app.features.crm.services.sales_returns import recent, serialise
+
+    contact_id = None
+    if request.args.get("contact_id"):
+        contact_id = _uuid_or_none(request.args.get("contact_id"))
+        if contact_id is None:
+            return jsonify({"returns": []}), 200
+    rows = recent(db_session(), UUID(g.org_id), contact_id=contact_id)
+    return jsonify({"returns": [serialise(r) for r in rows]}), 200
+
+
+@api_bp.route("/api/crm/returns/places", methods=["GET"])
+@requires_auth
+def list_return_places():
+    """GL-P01b: the stock areas a return can be received into, and whether each is in bond."""
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+
+    org_id = UUID(g.org_id)
+    sites = {s.id: s.name for s in db_session().query(Site).filter(Site.org_id == org_id).all()}
+    rows = (
+        db_session()
+        .query(StockLocation)
+        .filter(StockLocation.org_id == org_id, StockLocation.is_active.is_(True))
+        .order_by(StockLocation.name)
+        .all()
+    )
+    places = [
+        {
+            "id": str(loc.id),
+            "name": f"{sites[loc.site_id]} · {loc.name}" if len(sites) > 1 and loc.site_id in sites else loc.name,
+            "in_bond": bool(loc.inside_licensed_area),
+        }
+        for loc in rows
+    ]
+    return jsonify({"places": places}), 200
+
+
+@api_bp.route("/api/crm/invoices/<xero_invoice_id>/returnable", methods=["GET"])
+@requires_auth
+def list_returnable_sale_lines(xero_invoice_id: str):
+    """GL-P01b: the sale lines on an invoice that goods could come back from."""
+    from app.features.crm.services.sales_returns import returnable_sale_lines
+
+    if not xero_invoice_id or len(xero_invoice_id) > 100:
+        return jsonify({"lines": []}), 200
+    return jsonify({"lines": returnable_sale_lines(db_session(), UUID(g.org_id), xero_invoice_id)}), 200
+
+
+@api_bp.route("/api/crm/returns", methods=["POST"])
+@requires_auth
+def record_customer_return():
+    """GL-P01b: record what physically came back. Only this moves stock; a credit note never does."""
+    from datetime import date
+
+    from app.features.crm.services.sales_returns import ReturnConflictError, ReturnError, record_return, serialise
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send the return as JSON"}), 400
+    ids = {}
+    for key, missing in (
+        ("credit_note_line_id", "Credit note line not found"),
+        ("allocation_id", "Sale line not found"),
+        ("location_id", "Stock area not found"),
+    ):
+        ids[key] = None
+        if data.get(key) not in (None, ""):
+            ids[key] = _uuid_or_none(str(data.get(key)))
+            if ids[key] is None:
+                return jsonify({"error": missing}), 404
+    try:
+        received_on = date.fromisoformat(str(data.get("received_on") or date.today().isoformat()))
+    except ValueError:
+        return jsonify({"error": "Received date must be YYYY-MM-DD"}), 400
+    session = db_session()
+    try:
+        ret = record_return(
+            session,
+            UUID(g.org_id),
+            UUID(g.user_id),
+            condition=str(data.get("condition") or ""),
+            quantity=data.get("quantity"),
+            received_on=received_on,
+            note=data.get("note") if isinstance(data.get("note"), str) else None,
+            credit_note_line_id=ids["credit_note_line_id"],
+            allocation_id=ids["allocation_id"],
+            location_id=ids["location_id"],
+            product_name=data.get("product_name") if isinstance(data.get("product_name"), str) else None,
+            unit=data.get("unit") if isinstance(data.get("unit"), str) else None,
+        )
+        session.commit()
+    except LookupError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 404
+    except ReturnConflictError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 409
+    except ReturnError as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"return": serialise(ret)}), 201
 
 
 @api_bp.route("/api/crm/invoices/<invoice_id>/trace-items", methods=["GET"])

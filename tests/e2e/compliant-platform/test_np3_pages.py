@@ -237,3 +237,57 @@ def test_each_page_fits_without_sideways_scroll(browser, app_url, np3_org, path,
     overflow = page.evaluate("() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth")
     assert overflow <= 1, f"{path} scrolls sideways by {overflow}px at {viewport['width']}px"
     page.context.close()
+
+
+def test_the_training_register_stacks_on_a_phone(browser, app_url, np3_org):
+    """UX-SWEEP: the training matrix (a column per person) used to scroll sideways inside the card
+    on a phone. There it is now one card per category, each date under the person's name."""
+    from app.core.db import db_session
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_TRAINING_CATEGORIES, np3_log_template
+
+    db = db_session()
+    template = np3_log_template("staff-competency")
+    org_id, user_id = uuid.UUID(np3_org["org_id"]), uuid.UUID(np3_org["user_id"])
+    day = date.today() - timedelta(days=5)
+    at = datetime.combine(day, datetime.min.time(), tzinfo=UTC)
+    people = ["Aroha Wilson-Ngata", "Priya Shah", "Tom Baker", "Mere Tane"]
+    for person in people:
+        for key, _label, _controls in NP3_TRAINING_CATEGORIES[:3]:
+            db.add(
+                ComplianceRecord(
+                    org_id=org_id,
+                    framework_slug="np3-food-control",
+                    control_id="staff-competency",
+                    record_type=template["record_type"],
+                    status="complete",
+                    title="NP3 log: Staff training register",
+                    period_start=day,
+                    source_refs=[],
+                    details={
+                        "np3_log_type": template["key"],
+                        "log_fields": {"training_topic": key, "employee_name": person, "event_date": day.isoformat()},
+                    },
+                    created_by_user_id=user_id,
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+    db.commit()
+
+    page = _open(
+        browser,
+        app_url,
+        np3_org,
+        path=CHECK + "staff-competency",
+        ready=CHECK_READY,
+        viewport={"width": 390, "height": 844},
+    )
+    table = page.locator(".np3-training-table").first
+    table.wait_for()
+    fit = table.evaluate("el => ({scroll: el.scrollWidth, client: el.clientWidth})")
+    assert fit["scroll"] <= fit["client"] + 1, f"training register scrolls sideways on a phone: {fit}"
+    labels = table.locator("tbody tr").first.locator("td").evaluate_all("tds => tds.map(td => td.dataset.label)")
+    assert labels == sorted(people, key=str.lower)
+    assert_clean_page(page)
+    page.context.close()

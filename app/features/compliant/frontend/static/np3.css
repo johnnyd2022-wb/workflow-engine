@@ -225,3 +225,17 @@ html[data-spa-theme="dark"] #page-content .np3-chip.is-active { background: rgba
   #page-content .np3-evidence__facts { grid-template-columns: 1fr; gap: 0; }
   #page-content .np3-evidence__facts dd { margin-bottom: 8px; }
 }
+
+/* On a phone the training matrix and verification history are stacked: one card per row, its
+   heading first, then each cell under its column's name (data-label). No sideways scrolling. */
+@media (max-width: 600px) {
+  #page-content .np3-training-table { overflow: visible; }
+  #page-content .np3-training-table table, #page-content .np3-training-table tbody,
+  #page-content .np3-training-table tr, #page-content .np3-training-table th,
+  #page-content .np3-training-table td { display: block; width: auto; }
+  #page-content .np3-training-table thead { display: none; }
+  #page-content .np3-training-table tr { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 10px; }
+  #page-content .np3-training-table tbody th { padding: 0 0 6px; border: 0; font-weight: 600; }
+  #page-content .np3-training-table td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; white-space: normal; text-align: right; }
+  #page-content .np3-training-table td::before { content: attr(data-label); color: var(--ui-text-muted, #64748b); text-align: left; }
+}

@@ -125,12 +125,11 @@ REGISTRY = _Registry()
 RESULTS: list[dict] = []
 
 
-@pytest.fixture(scope="session")
-def perf_instrumentation(app_url):
+def instrument_performance():
     """Attach Flask signals and a SQLAlchemy cursor listener; write the report on teardown.
 
-    Safe to attach after boot: signals and engine events bind to global objects, not to
-    Flask's setup phase, so this never hits the setup-after-first-request guard. Counters
+    Called by the shared session fixture after boot. Signals and engine events bind to
+    global objects, not Flask's setup phase, so this never hits the setup-after-first-request guard. Counters
     live on `g`, so concurrent requests on the threaded dev server cannot cross-count.
     """
     from flask import g, has_request_context, request, request_finished, request_started

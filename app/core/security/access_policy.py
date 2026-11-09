@@ -304,6 +304,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.inventory_dispose*", None, "production.record"),
     ("core.*task*", _READ, "production.view"),
     ("core.*task*", None, "production.record"),
+    # GL-P03 recalls: opening one holds stock (compliance.manage); working the customer list is
+    # sales or compliance work; anyone who sees production, sales or compliance can read it.
+    ("recalls.open_recall", None, "compliance.manage"),
+    ("recalls.*", _READ, ("production.view", "sales.view", "compliance.view")),
+    ("recalls.*", None, ("compliance.manage", "sales.record")),
     ("operational_cases.*", _READ, "production.view"),
     ("operational_cases.*", None, "production.record"),
     # --- stock
@@ -381,6 +386,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("crm.crm_api.*traceability_config", None, "sales.manage"),
     ("crm.crm_api.list_pending_returns", _READ, "sales.view"),
     ("crm.crm_api.record_credit_note_line_no_return", None, "sales.record"),
+    ("crm.crm_api.list_customer_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_customer_return", None, "sales.record"),  # GL-P01b: moves stock back
     ("tastings.*", _READ, "sales.view"),
     ("tastings.*", None, "sales.record"),
     ("crm.*", _READ, "sales.view"),

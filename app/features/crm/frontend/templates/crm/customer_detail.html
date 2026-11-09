@@ -11,7 +11,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customer-detail.css') }}">
 {# Alpine calls init() itself; an x-init="init()" here loaded the customer twice. #}
-<div class="max-content crm-root workspace-overview customer-page" x-data="crmCustomerDetail('{{ contact_id }}')"
+<div class="max-content crm-root workspace-overview customer-page" x-data="crmCustomerDetail('{{ contact_id }}')" data-can-record-returns="{{ 'true' if can('sales.record') else 'false' }}"
      :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
 
   {# Loading #}
@@ -232,6 +232,19 @@
          INVOICES
          ══════════════════════════════════════════════ #}
       <div class="cd-panel cd-panel--invoices" data-cd-panel="invoices" id="cd-panel-invoices" role="tabpanel" aria-labelledby="cd-tab-invoices" x-show="activeTab === 'invoices'" x-cloak>
+        {# GL-P01b: goods this customer sent back. A credit note (money) is in Xero; this is the stock. #}
+        <section class="crm-card cd-returns" aria-labelledby="cd-returns-title" x-show="customerReturns.length > 0" x-cloak>
+          <h3 id="cd-returns-title">Returns</h3>
+          <ul class="cd-returns__list">
+            <template x-for="r in customerReturns" :key="r.id">
+              <li class="cd-returns__item">
+                <span class="cd-returns__what" x-text="returnSummary(r)"></span>
+                <span class="crm-badge" :class="returnBadgeClass(r)" x-text="returnOutcome(r)"></span>
+                <span class="cd-returns__when" x-text="formatDate(r.received_on)"></span>
+              </li>
+            </template>
+          </ul>
+        </section>
         <div class="crm-card">
           <p class="crm-empty" role="status" x-show="invoicesLoading">Loading invoices…</p>
           <div class="crm-error-banner" role="alert" x-show="invoiceError" x-cloak><span x-text="invoiceError"></span> <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="loadInvoices(invoicePage)">Retry</button></div>
@@ -312,6 +325,42 @@
                     <span style="color:var(--text-secondary,#6b7280);">Tax: <strong x-text="formatCurrency(inv.total_tax, inv.currency_code)"></strong></span>
                     <span style="font-weight:700; color:var(--text-primary,#111827);">Total: <strong x-text="formatCurrency(inv.total, inv.currency_code)"></strong></span>
                   </div>
+                </div>
+                <div class="cd-return-entry" x-show="canRecordReturns" x-cloak>
+                  <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" x-show="returnInvoiceId !== inv.id" @click.stop="openReturn(inv)">Record a return</button>
+                  <form class="cd-return-form" x-show="returnInvoiceId === inv.id" @submit.prevent="submitReturn(inv)" hx-boost="false" novalidate>
+                    <h4>Goods back from this invoice</h4>
+                    <p class="cd-return-form__hint" x-show="returnLinesLoading">Loading what was sold…</p>
+                    <p class="cd-return-form__hint" x-show="!returnLinesLoading && returnLines.length === 0">Nothing on this invoice was matched to a batch, so there is nothing to return against.</p>
+                    <div class="cd-return-form__fields" x-show="returnLines.length > 0">
+                      <label><span>Product</span>
+                        <select aria-label="Product that came back" x-model="returnDraft.allocation_id">
+                          <template x-for="line in returnLines" :key="line.allocation_id"><option :value="line.allocation_id" x-text="returnLineLabel(line)"></option></template>
+                        </select>
+                      </label>
+                      <label><span>How many</span><input type="number" min="0" step="any" inputmode="decimal" aria-label="How many came back" x-model="returnDraft.quantity"></label>
+                      <label><span>Condition</span>
+                        <select aria-label="Condition it came back in" x-model="returnDraft.condition">
+                          <option value="resaleable">Fine: back into stock</option>
+                          <option value="damaged">Damaged: back on quality hold</option>
+                          <option value="destroyed">Destroyed: nothing back</option>
+                        </select>
+                      </label>
+                      <label><span>Received</span><input type="date" aria-label="Date it came back" x-model="returnDraft.received_on"></label>
+                      <label x-show="returnPlaces.length > 0"><span>Received into</span>
+                        <select aria-label="Where it was received" x-model="returnDraft.location_id">
+                          <option value="">Where it was sold from</option>
+                          <template x-for="place in returnPlaces" :key="place.id"><option :value="place.id" x-text="placeLabel(place)"></option></template>
+                        </select>
+                      </label>
+                      <label class="cd-return-form__note"><span>Note (optional)</span><input type="text" maxlength="500" aria-label="Note on the return" x-model="returnDraft.note"></label>
+                    </div>
+                    <p class="cd-return-form__error" role="alert" x-show="returnError" x-text="returnError"></p>
+                    <div class="cd-return-form__actions">
+                      <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="closeReturn()">Cancel</button>
+                      <button type="submit" class="crm-btn crm-btn--primary crm-btn--sm" x-show="returnLines.length > 0" :disabled="returnSaving" x-text="returnSaving ? 'Saving…' : 'Record return'"></button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>

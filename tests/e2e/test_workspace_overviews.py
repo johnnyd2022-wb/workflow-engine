@@ -314,6 +314,8 @@ def test_sales_overview_keeps_figures_in_card_and_actions_in_header(browser, app
         glance = page.get_by_role("region", name="At a glance", exact=True)
         tools = page.locator(".sales-header-actions")
         expect(glance.get_by_role("button").first).to_be_visible()
+        expect(tools.get_by_role("button", name="Add widget", exact=True)).to_be_visible()
+        page.wait_for_load_state("networkidle")
         outer = glance.bounding_box()
         for figure in glance.get_by_role("button").all():
             if figure.is_visible():
@@ -392,12 +394,15 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
         expected = ["Account information", "Password", "Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
-        assert headings[-1] == "Appearance"
+        assert "Appearance" in headings
+        assert headings[-1] == "Download all your records"
         assert "Notification preferences" not in headings
         assert "Manage sites" not in headings
         # One category at a time, under the Settings tab row.
         categories = page.get_by_role("navigation", name="Account sections", exact=True)
-        expect(categories.get_by_role("link")).to_have_text(["Profile", "Security and sign-in", "Preferences"])
+        expect(categories.get_by_role("link")).to_have_text(
+            ["Profile", "Security and sign-in", "Preferences", "Your records"]
+        )
         expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
         account = page.locator('[data-settings-group="account"]').bounding_box()
         assert row.bounding_box()["y"] + row.bounding_box()["height"] <= categories.bounding_box()["y"]

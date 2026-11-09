@@ -170,6 +170,10 @@ def create_app():
     from app.features.data_export.routes import bp as data_export_bp
 
     app.register_blueprint(data_export_bp)
+    # GL-P03: product recall cases (on operational cases).
+    from app.features.recalls.routes import bp as recalls_bp
+
+    app.register_blueprint(recalls_bp)
     # Getting started (GL-P09): the guided first-day path.
     from app.core.backend.getting_started import getting_started_bp
 
