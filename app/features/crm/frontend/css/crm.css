@@ -1237,6 +1237,8 @@ html:not([data-spa-theme="dark"]) .crm-badge--medium { color: #b45309; }
 
 /* ── Sales → Excise ─────────────────────────────────────────── */
 .ex-lede { margin: -4px 0 18px; color: var(--text-secondary, #6b7280); font-size: .92rem; }
+.ex-copy-desktop, .ex-copy-mobile p { margin: 0; }
+.ex-copy-mobile { display: none; }
 .ex-empty { padding: 22px 20px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; color: var(--text-secondary, #6b7280); }
 .ex-empty strong { color: var(--text-primary, #111827); }
 .ex-empty--flat { padding: 18px 20px; }
@@ -1278,6 +1280,11 @@ html:not([data-spa-theme="dark"]) .crm-badge--medium { color: #b45309; }
 .ex-lodge-link { display: inline-flex; margin: 0 0 12px; }
 .ex-foot { font-size: .78rem; color: var(--text-secondary, #6b7280); line-height: 1.5; max-width: 72ch; }
 @media (max-width: 720px) {
+  .ex-copy-desktop { display: none; }
+  .ex-copy-mobile { display: block; }
+  .ex-copy-mobile summary { min-height: 44px; padding: 12px 0; color: var(--crm-teal); font-weight: 600; cursor: pointer; }
+  .ex-copy-mobile summary:focus-visible { outline: 2px solid var(--crm-teal); outline-offset: 2px; }
+  .ex-copy-mobile details p { margin: 0 0 8px; }
   .ex-figures { grid-template-columns: 1fr; }
   .ex-figure__value { font-size: 1.3rem; }
   /* Each product becomes a small card: name on top, its four figures in a 2x2 grid. */

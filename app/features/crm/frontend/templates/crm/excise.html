@@ -10,7 +10,13 @@
 <div class="max-content crm-root ex-root" x-data="crmExcise()">
   {% set crm_heading = "Excise estimate" %}
   {% include "crm/_crm_banner.html" %}
-  <p class="ex-lede">What you sold each month, its litres of alcohol, and a <strong>sales estimate</strong> of the duty and levy on it. The return you lodge is the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>, built from what left your licensed area.</p>
+  <div class="ex-lede">
+    <p class="ex-copy-desktop">What you sold each month, its litres of alcohol, and a <strong>sales estimate</strong> of the duty and levy on it. The return you lodge is the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>, built from what left your licensed area.</p>
+    <div class="ex-copy-mobile">
+      <p>This is a sales estimate. Use the <a href="/compliant/nz-alcohol/customs">Customs filing draft</a> to lodge excise.</p>
+      <details><summary>Why the figures can differ</summary><p>What you sold each month, its litres of alcohol, and a sales estimate of duty and levy. The Customs filing draft uses what left your licensed area.</p></details>
+    </div>
+  </div>
 
   <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span></div>
 
@@ -119,17 +125,23 @@
           </div>
 
           <a class="crm-btn crm-btn--secondary crm-btn--sm ex-lodge-link" x-show="report.complete" :href="('/compliant/nz-alcohol/customs?period=' + (report.month) + '-01')">Lodged it? Record it in Customs →</a>
-          <p class="ex-foot">
-            An estimate from <span x-text="sources.join(' and ') || 'your'"></span> sales, using Customs rates in force on the 1st of the month.
-            Duty is charged on alcohol removed from your licensed area, so the filing draft can differ: stock poured at
-            tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after
-            the stock left. Lodge from the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>.
+          <div class="ex-foot">
+            <p class="ex-copy-desktop">
+              An estimate from <span x-text="sources.join(' and ') || 'your'"></span> sales, using Customs rates in force on the 1st of the month.
+              Duty is charged on alcohol removed from your licensed area, so the filing draft can differ: stock poured at
+              tastings, samples and moves under bond leave without an invoice, and an invoice can be dated before or after
+              the stock left. Lodge from the <a href="/compliant/nz-alcohol/customs">filing draft in Compliance → Customs</a>.
+            </p>
+            <div class="ex-copy-mobile">
+              <p>Duty follows stock leaving your licensed area. A sales estimate can differ from the <a href="/compliant/nz-alcohol/customs">Customs filing draft</a>.</p>
+              <details><summary>See why they differ</summary><p>Sales use Customs rates in force on the 1st of the month. Tastings, samples and moves under bond can remove stock without an invoice, and invoice dates can differ from stock movement dates. Lodge from the Customs filing draft.</p></details>
+            </div>
             <template x-if="ratesSource">
               <span>Rates: <a :href="ratesSource.excise.url" target="_blank" rel="noopener">excise</a> and
                 <a :href="ratesSource.levy.url" target="_blank" rel="noopener">alcohol levy</a>, checked
                 <span x-text="ratesSource.excise.checked"></span>.</span>
             </template>
-          </p>
+          </div>
         </section>
       </template>
     </div>
