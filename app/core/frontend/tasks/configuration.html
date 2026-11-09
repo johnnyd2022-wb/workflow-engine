@@ -42,7 +42,7 @@
             <label class="ts-field"><span>Period</span><select id="ts-due-unit" x-model="draft.due.notification_lead_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label>
           </div>
           <div class="ts-actions">
-            <button type="submit" class="workspace-button ts-save" :disabled="saving.due === true" x-text="saving.due ? 'Saving…' : 'Save'">Save</button>
+            <button type="submit" class="workspace-button workspace-button--primary ts-save" :disabled="saving.due === true" x-text="saving.due ? 'Saving…' : 'Save'">Save</button>
           </div>
           <p class="ts-section-error" role="alert" x-show="sectionError.due" x-text="sectionError.due" x-cloak></p>
         </form>
@@ -66,7 +66,7 @@
             <label class="ts-field"><span>Period</span><select id="ts-archive-unit" x-model="draft.archive.done_archive_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label>
           </div>
           <div class="ts-actions">
-            <button type="submit" class="workspace-button ts-save" :disabled="saving.archive === true" x-text="saving.archive ? 'Saving…' : 'Save'">Save</button>
+            <button type="submit" class="workspace-button workspace-button--primary ts-save" :disabled="saving.archive === true" x-text="saving.archive ? 'Saving…' : 'Save'">Save</button>
           </div>
           <p class="ts-section-error" role="alert" x-show="sectionError.archive" x-text="sectionError.archive" x-cloak></p>
         </form>
