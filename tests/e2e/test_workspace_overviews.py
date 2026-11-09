@@ -314,6 +314,8 @@ def test_sales_overview_keeps_figures_in_card_and_actions_in_header(browser, app
         glance = page.get_by_role("region", name="At a glance", exact=True)
         tools = page.locator(".sales-header-actions")
         expect(glance.get_by_role("button").first).to_be_visible()
+        # Widgets load and reflow after the first paint; a slower CI runner measured mid-reflow
+        # (glance above the header actions at 1024, the two actions a row apart at 1440).
         expect(tools.get_by_role("button", name="Add widget", exact=True)).to_be_visible()
         page.wait_for_load_state("networkidle")
         outer = glance.bounding_box()
