@@ -231,6 +231,7 @@
     form.querySelector('[data-needs-eligibility]').hidden = kind === 'trade_sample';
     form.querySelector('[data-needs-entry]').hidden = kind !== 'commercial';
     form.querySelector('[data-sample-only]').hidden = kind !== 'trade_sample';
+    form.querySelector('[data-sample-lot]').hidden = kind !== 'trade_sample';
   }
 
   function openDialog(root, name, setup) {

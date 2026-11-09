@@ -78,6 +78,16 @@ def _litres(data: dict, key: str, label: str) -> Decimal:
     return value
 
 
+def _stored(value) -> Decimal:
+    """A stored quantity as a finite Decimal; anything unreadable (NaN, text) counts as 0, so a
+    bad row can't break the register or make a comparison raise."""
+    try:
+        number = Decimal(str(value if value is not None else 0).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(0)
+    return number if number.is_finite() else Decimal(0)
+
+
 def _records(session: Session, org_id: UUID, framework: str, control: str | None = None) -> list[ComplianceRecord]:
     query = session.query(ComplianceRecord).filter(
         ComplianceRecord.org_id == org_id, ComplianceRecord.framework_slug == framework
@@ -356,11 +366,11 @@ def export_register(session: Session, org_id: UUID, today: date) -> dict:
     for row in consignments:
         key = (row.details or {}).get("eligibility_id")
         if key and (row.details or {}).get("kind") != "trade_sample":
-            shipped[key] = shipped.get(key, Decimal(0)) + Decimal(str((row.details or {}).get("litres") or 0))
+            shipped[key] = shipped.get(key, Decimal(0)) + _stored((row.details or {}).get("litres"))
     rows = []
     for row in eligibilities:
         d = row.details or {}
-        eligible = Decimal(str(d.get("eligible_litres") or 0))
+        eligible = _stored(d.get("eligible_litres"))
         used = shipped.get(str(row.id), Decimal(0))
         expires = date.fromisoformat(d["expires_on"]) if d.get("expires_on") else None
         rows.append(
@@ -378,7 +388,7 @@ def export_register(session: Session, org_id: UUID, today: date) -> dict:
     start, end = _levy_year(today)
     year_l = sum(
         (
-            Decimal(str((r.details or {}).get("litres") or 0))
+            _stored((r.details or {}).get("litres"))
             for r in consignments
             if r.period_start and start <= r.period_start <= end and (r.details or {}).get("kind") == "commercial"
         ),
@@ -399,6 +409,21 @@ def export_register(session: Session, org_id: UUID, today: date) -> dict:
     }
 
 
+def _assert_exportable(session: Session, org_id: UUID, lot: dict | None) -> None:
+    """Fail closed: wine that is on quality hold, or bottled and not released, isn't exported.
+    The hold guard on stock writes can't catch this, because recording an export moves no stock."""
+    from app.core.services.lot_holds import open_holds
+
+    if lot is None:
+        raise RegisterError("Choose the wine lot being exported")
+    if lot.get("role") == "bottle" and lot.get("released") is not True:
+        raise RegisterError(f"{lot['name']} isn't released for sale yet, so it can't be exported")
+    held = open_holds(session, org_id, [UUID(lot["id"])])
+    if held:
+        reason = next(iter(held.values())).reason
+        raise RegisterError(f"{lot['name']} is on quality hold ({reason}), so it can't be exported")
+
+
 def add_eligibility(
     session: Session, org_id: UUID, user_id, settings: dict, lot: dict, data: dict, today: date
 ) -> ComplianceRecord:
@@ -406,8 +431,9 @@ def add_eligibility(
         raise RegisterError("Wine made under the small winemaker exemption can't be exported")
     if not settings.get("wine_exporter"):
         raise RegisterError("Turn on exporting in your wine plan first")
-    if lot.get("role") == "bottle" and lot.get("released") is False:
+    if lot.get("role") == "bottle" and lot.get("released") is not True:
         raise RegisterError("Release this lot for sale at bottling before applying for export eligibility")
+    _assert_exportable(session, org_id, lot)
     form = (data or {}).get("form")
     if form not in ELIGIBLE_FOR:
         raise RegisterError("Say whether the wine is packaged or bulk")
@@ -443,8 +469,12 @@ def add_eligibility(
 
 
 def add_consignment(
-    session: Session, org_id: UUID, user_id, settings: dict, data: dict, today: date
+    session: Session, org_id: UUID, user_id, settings: dict, data: dict, today: date, lots: dict[str, dict]
 ) -> ComplianceRecord:
+    """Record a shipment. `lots` is the org's current wine lots by id (role, released), from the
+    overview. Every consignment names its lot, trade samples included, and the lot must be
+    released and not on hold. Commercial and small-trade shipments draw on an eligibility,
+    whose row is locked while its balance is recounted, so two shipments can't overdraw it."""
     if ((settings.get("wine_plan") or {}).get("mode")) == "exempt":
         raise RegisterError("Wine made under the small winemaker exemption can't be exported")
     kind = (data or {}).get("kind")
@@ -459,23 +489,6 @@ def add_consignment(
     if kind == "small_trade" and litres > SMALL_TRADE_MAX_L:
         raise RegisterError("The small trade consignment exemption is up to 27 L")
     customs_ref = _text(data, "customs_entry", "Customs export entry", required=kind == "commercial", max_len=120)
-    eligibility = None
-    if kind != "trade_sample":
-        try:
-            eligibility_id = UUID(str((data or {}).get("eligibility_id")))
-        except ValueError:
-            raise RegisterError("Choose the export eligibility this wine ships under") from None
-        register = {row["id"]: row for row in export_register(session, org_id, today)["eligibilities"]}
-        eligibility = register.get(str(eligibility_id))
-        if eligibility is None:
-            raise RegisterError("Choose the export eligibility this wine ships under")
-        if eligibility["expires_on"] and shipped_on > date.fromisoformat(eligibility["expires_on"]):
-            raise RegisterError(f"That eligibility expired on {eligibility['expires_on']}: re-apply before shipping")
-        markets = eligibility["details"].get("markets") or []
-        if markets and market not in markets:
-            raise RegisterError(f"That eligibility doesn't cover {market}")
-        if litres > Decimal(str(eligibility["remaining_litres"])):
-            raise RegisterError(f"Only {eligibility['remaining_litres']:g} L of that eligibility is left")
     if kind == "trade_sample" and str((data or {}).get("not_for_sale_marked") or "").lower() not in (
         "1",
         "true",
@@ -483,6 +496,51 @@ def add_consignment(
         "on",
     ):
         raise RegisterError("Trade sample bottles must be marked “not for sale”")
+
+    eligibility_row = None
+    if kind == "trade_sample":
+        lot = lots.get(str((data or {}).get("lot_id") or ""))
+    else:
+        try:
+            eligibility_id = UUID(str((data or {}).get("eligibility_id")))
+        except ValueError:
+            raise RegisterError("Choose the export eligibility this wine ships under") from None
+        # Serialise shipments against this eligibility: a second request waits here until the
+        # first commits, then recounts and sees its litres.
+        eligibility_row = (
+            session.query(ComplianceRecord)
+            .filter(
+                ComplianceRecord.org_id == org_id,
+                ComplianceRecord.id == eligibility_id,
+                ComplianceRecord.framework_slug == "wine-export",
+                ComplianceRecord.control_id == "batch-eligibility",
+                ComplianceRecord.status != "superseded",
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if eligibility_row is None:
+            raise RegisterError("Choose the export eligibility this wine ships under")
+        d = eligibility_row.details or {}
+        lot = lots.get(str(d.get("lot_id") or ""))
+        expires = date.fromisoformat(d["expires_on"]) if d.get("expires_on") else None
+        if expires and shipped_on > expires:
+            raise RegisterError(f"That eligibility expired on {expires.isoformat()}: re-apply before shipping")
+        markets = d.get("markets") or []
+        if markets and market not in markets:
+            raise RegisterError(f"That eligibility doesn't cover {market}")
+        used = sum(
+            (
+                _stored((row.details or {}).get("litres"))
+                for row in _records(session, org_id, "wine-export", "customs-export-clearance")
+                if row.status != "superseded" and (row.details or {}).get("eligibility_id") == str(eligibility_row.id)
+            ),
+            Decimal(0),
+        )
+        remaining = max(Decimal(0), _stored(d.get("eligible_litres")) - used)
+        if litres > remaining:
+            raise RegisterError(f"Only {remaining:g} L of that eligibility is left")
+    _assert_exportable(session, org_id, lot)
     return _add(
         session,
         org_id,
@@ -494,12 +552,13 @@ def add_consignment(
         title=f"{litres:g} L to {consignee}, {market}"[:255],
         period_start=shipped_on,
         evidence_reference=customs_ref,
-        source_refs=[eligibility["lot_id"]] if eligibility and eligibility.get("lot_id") else [],
+        source_refs=[lot["id"]],
         details={
             "kind": kind,
             "litres": str(litres),
             "market": market,
             "consignee": consignee,
-            "eligibility_id": eligibility["id"] if eligibility else None,
+            "lot_id": lot["id"],
+            "eligibility_id": str(eligibility_row.id) if eligibility_row else None,
         },
     )

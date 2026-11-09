@@ -296,7 +296,9 @@ def test_bottling_refuses_without_a_release_decision(db, wine_org):
 
 def test_checklist_reads_production_and_records(db, wine_org):
     org, client = wine_org
-    client.put("/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "verifier": "AsureQuality"})
+    client.put(
+        "/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "verifier": "AsureQuality"}
+    )
     _bottled_org(db, client, org.id)
     body = client.get("/api/compliant/wine").get_json()
     (wsmp,) = [g for g in body["checklist"] if g["framework"] == "wine-standards"]
@@ -317,7 +319,9 @@ def test_checklist_reads_production_and_records(db, wine_org):
     assert saved.status_code == 201, saved.get_json()
     items = {i["control"]: i for i in client.get("/api/compliant/wine").get_json()["checklist"][0]["items"]}
     assert items["water"]["status"] == "ok"
-    bad = client.post("/api/compliant/wine/records", json={"framework": "wine-export", "control": "batch-eligibility", "title": "x"})
+    bad = client.post(
+        "/api/compliant/wine/records", json={"framework": "wine-export", "control": "batch-eligibility", "title": "x"}
+    )
     assert bad.status_code == 400 and "doesn't apply" in bad.get_json()["error"]
 
 
@@ -333,8 +337,15 @@ def test_a_problem_report_starts_the_24_hour_clock_and_holds_the_wine(db, wine_o
     assert reported.status_code == 201, reported.get_json()
     body = reported.get_json()
     assert body["held"] is True and body["record"]["status"] == "open"
-    assert body["record"]["due_date"] == (date.today() + timedelta(days=1)).isoformat() or body["record"]["due_date"] == date.today().isoformat()
-    hold = db.query(LotHold).filter(LotHold.org_id == org.id, LotHold.inventory_item_id == lot.id, LotHold.released_at.is_(None)).one()
+    assert (
+        body["record"]["due_date"] == (date.today() + timedelta(days=1)).isoformat()
+        or body["record"]["due_date"] == date.today().isoformat()
+    )
+    hold = (
+        db.query(LotHold)
+        .filter(LotHold.org_id == org.id, LotHold.inventory_item_id == lot.id, LotHold.released_at.is_(None))
+        .one()
+    )
     assert "Glass fragment" in hold.reason
     items = {i["control"]: i for i in client.get("/api/compliant/wine").get_json()["checklist"][0]["items"]}
     assert items["nonconformance"]["status"] in ("due", "overdue")
@@ -366,7 +377,9 @@ def test_export_register_enforces_eligibility_volume_expiry_and_samples(db, wine
     lot = _bottled_org(db, client, org.id)
     refused = client.post("/api/compliant/wine/export/eligibility", json={"lot_id": str(lot.id)})
     assert "Turn on exporting" in refused.get_json()["error"]
-    client.put("/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "wine_exporter": True})
+    client.put(
+        "/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "wine_exporter": True}
+    )
     granted = (date.today() - timedelta(days=10)).isoformat()
     ok = client.post(
         "/api/compliant/wine/export/eligibility",
@@ -388,11 +401,16 @@ def test_export_register_enforces_eligibility_volume_expiry_and_samples(db, wine
     assert "Customs export entry" in ship(customs_entry="", litres="10").get_json()["error"]
     late = (date.today() + timedelta(days=800)).isoformat()
     assert "expired" in ship(shipped_on=late, litres="10").get_json()["error"]
-    big_sample = ship(kind="trade_sample", litres="111", eligibility_id=None, not_for_sale_marked=True)
+    big_sample = ship(
+        kind="trade_sample", litres="111", eligibility_id=None, not_for_sale_marked=True, lot_id=str(lot.id)
+    )
     assert "110 L" in big_sample.get_json()["error"]
-    unmarked = ship(kind="trade_sample", litres="20", eligibility_id=None)
+    unmarked = ship(kind="trade_sample", litres="20", eligibility_id=None, lot_id=str(lot.id))
     assert "not for sale" in unmarked.get_json()["error"]
-    assert ship(kind="trade_sample", litres="20", eligibility_id=None, not_for_sale_marked=True).status_code == 201
+    no_lot = ship(kind="trade_sample", litres="20", eligibility_id=None, not_for_sale_marked=True)
+    assert "Choose the wine lot" in no_lot.get_json()["error"]
+    sample = ship(kind="trade_sample", litres="20", eligibility_id=None, not_for_sale_marked=True, lot_id=str(lot.id))
+    assert sample.status_code == 201
     assert "27 L" in ship(kind="small_trade", litres="28").get_json()["error"]
     reg = client.get("/api/compliant/wine").get_json()["export"]
     (row,) = reg["eligibilities"]
@@ -404,7 +422,9 @@ def test_exempt_makers_cannot_export(db, wine_org):
     org, client = wine_org
     lot = _bottled_org(db, client, org.id)
     start = date(date.today().year - 1, 3, 1).isoformat()
-    refused = client.put("/api/compliant/wine/plan", json={"mode": "exempt", "exemption_start": start, "wine_exporter": True})
+    refused = client.put(
+        "/api/compliant/wine/plan", json={"mode": "exempt", "exemption_start": start, "wine_exporter": True}
+    )
     assert refused.status_code == 400 and "can't be exported" in refused.get_json()["error"]
     client.put("/api/compliant/wine/plan", json={"mode": "exempt", "exemption_start": start})
     no = client.post(
@@ -443,6 +463,139 @@ def test_trace_and_mass_balance_for_a_wine_officer(db, wine_org):
 
 def test_optional_frameworks_follow_their_switches(db, wine_org):
     _org, client = wine_org
-    client.put("/api/compliant/wine/plan", json={"mode": "registered", "wine_exporter": True, "wine_swnz": True, "wine_organic": True})
+    client.put(
+        "/api/compliant/wine/plan",
+        json={"mode": "registered", "wine_exporter": True, "wine_swnz": True, "wine_organic": True},
+    )
     names = {g["framework"] for g in client.get("/api/compliant/wine").get_json()["checklist"]}
     assert names == {"wine-standards", "wine-export", "swnz", "organic-wine"}
+
+
+def _exporter_with_eligibility(db, client, org_id, litres="500", release=rules.RELEASE_YES):
+    lot = _bottled_org(db, client, org_id, release=release)
+    client.put(
+        "/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "wine_exporter": True}
+    )
+    elig = None
+    if release == rules.RELEASE_YES:
+        made = client.post(
+            "/api/compliant/wine/export/eligibility",
+            json={"lot_id": str(lot.id), "form": "packaged", "granted_on": date.today().isoformat(),
+                  "ees_reference": "EES-1", "eligible_litres": litres},
+        )  # fmt: skip
+        assert made.status_code == 201, made.get_json()
+        elig = made.get_json()["record"]["id"]
+    return lot, elig
+
+
+def _consignment(**kw):
+    return {"kind": "commercial", "litres": "100", "shipped_on": date.today().isoformat(), "market": "GB",
+            "consignee": "London Wines", "customs_entry": "TSW-1", **kw}  # fmt: skip
+
+
+def test_held_wine_cannot_be_recorded_as_exported(db, wine_org):
+    """!679 review P1: a quality hold moves no stock here, so the export routes check it themselves."""
+    org, client = wine_org
+    lot, elig = _exporter_with_eligibility(db, client, org.id)
+    held = client.post(
+        "/api/compliant/wine/problems", json={"kind": "export", "description": "Wrong closure", "lot_id": str(lot.id)}
+    )
+    assert held.get_json()["held"] is True
+    url = "/api/compliant/wine/export/consignments"
+    commercial = client.post(url, json=_consignment(eligibility_id=elig))
+    assert commercial.status_code == 400 and "quality hold" in commercial.get_json()["error"]
+    sample = client.post(
+        url, json=_consignment(kind="trade_sample", litres="10", lot_id=str(lot.id), not_for_sale_marked=True)
+    )
+    assert sample.status_code == 400 and "quality hold" in sample.get_json()["error"]
+    again = client.post(
+        "/api/compliant/wine/export/eligibility",
+        json={"lot_id": str(lot.id), "form": "packaged", "granted_on": date.today().isoformat(),
+              "ees_reference": "EES-2", "eligible_litres": "10"},
+    )  # fmt: skip
+    assert again.status_code == 400 and "quality hold" in again.get_json()["error"]
+
+
+def test_unreleased_wine_cannot_ship_as_trade_samples(db, wine_org):
+    org, client = wine_org
+    lot, _ = _exporter_with_eligibility(db, client, org.id, release=rules.RELEASE_NOT_YET)
+    sample = client.post(
+        "/api/compliant/wine/export/consignments",
+        json=_consignment(kind="trade_sample", litres="10", lot_id=str(lot.id), not_for_sale_marked=True),
+    )
+    assert sample.status_code == 400 and "isn't released" in sample.get_json()["error"]
+
+
+def test_concurrent_consignments_cannot_overdraw_an_eligibility(db, wine_org):
+    """!679 review P1: the eligibility row is locked while its balance is recounted, so the
+    second of two 300 L shipments against 500 L waits for the first and is then refused."""
+    import threading
+    import time
+
+    from app.core.db import SessionLocal
+    from app.core.db.models.user import User
+    from app.features.compliant.modules.nz_alcohol.wine import register
+
+    org, client = wine_org
+    _lot, elig = _exporter_with_eligibility(db, client, org.id)
+    lots = {row["id"]: row for row in client.get("/api/compliant/wine").get_json()["lots"]}
+    user_id = db.query(User.id).filter(User.org_id == org.id).first()[0]
+    settings = {"wine_exporter": True, "wine_plan": {"mode": "registered"}}
+    first, second = SessionLocal(), SessionLocal()
+    outcome = {}
+    try:
+        register.add_consignment(
+            first, org.id, user_id, settings, _consignment(litres="300", eligibility_id=elig), date.today(), lots
+        )
+
+        def race():
+            started = time.monotonic()
+            try:
+                register.add_consignment(
+                    second,
+                    org.id,
+                    user_id,
+                    settings,
+                    _consignment(litres="300", eligibility_id=elig),
+                    date.today(),
+                    lots,
+                )
+                second.commit()
+                outcome["result"] = "recorded"
+            except register.RegisterError as exc:
+                second.rollback()
+                outcome["result"] = str(exc)
+            outcome["waited"] = time.monotonic() - started
+
+        thread = threading.Thread(target=race)
+        thread.start()
+        time.sleep(0.5)  # the second session is now blocked on the eligibility's row lock
+        first.commit()
+        thread.join(10)
+    finally:
+        first.close()
+        second.close()
+    assert outcome["result"] == "Only 200 L of that eligibility is left"
+    assert outcome["waited"] >= 0.4, "the second shipment should have waited for the first"
+    (row,) = client.get("/api/compliant/wine").get_json()["export"]["eligibilities"]
+    assert row["exported_litres"] == 300.0
+
+
+def test_a_malformed_stored_volume_does_not_break_the_register(db, wine_org):
+    """!679 review: stored numbers are checked finite before any comparison."""
+    from app.features.compliant.models import ComplianceRecord
+
+    org, client = wine_org
+    client.put("/api/compliant/wine/plan", json={"mode": "registered", "wine_exporter": True})
+    db.add(
+        ComplianceRecord(
+            org_id=org.id, framework_slug="wine-export", control_id="batch-eligibility", record_type="attestation",
+            status="complete", title="bad", period_start=date.today(), source_refs=[],
+            details={"lot_id": None, "eligible_litres": "NaN", "expires_on": date.today().isoformat()},
+        )
+    )  # fmt: skip
+    db.commit()
+    response = client.get("/api/compliant/wine")
+    assert response.status_code == 200
+    (row,) = response.get_json()["export"]["eligibilities"]
+    assert row["eligible_litres"] == 0.0 and row["current"] is False

@@ -172,7 +172,8 @@ def add_consignment():
     from app.features.compliant.modules.nz_alcohol.wine import register
 
     try:
-        row = register.add_consignment(db_session, _org(), g.current_user.id, _settings(), _body(), date.today())
+        lots = {lot["id"]: lot for lot in wine.overview(db_session, _org()).get("lots", [])}
+        row = register.add_consignment(db_session, _org(), g.current_user.id, _settings(), _body(), date.today(), lots)
     except ValueError as exc:
         return _refused(exc)
     return _done({"record": register.record_dict(row)})
