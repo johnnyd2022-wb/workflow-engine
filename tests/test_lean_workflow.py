@@ -169,3 +169,14 @@ def test_lean_routing_keeps_the_reviewer_read_only():
     assert agent_launch.check(routing) == []
     routing["stages"]["lean-review"]["access"] = "write"
     assert any("lean-review" in p for p in agent_launch.check(routing))
+
+
+def test_committing_the_same_content_keeps_a_receipt_fresh(repo):
+    """The digest is the tree's content, not HEAD: a commit with no file change isn't stale."""
+    store = repo / ".agents" / "tmp" / "receipts"
+    receipt.run("unit", [sys.executable, "-c", "pass"], cwd=repo, store=store)
+    subprocess.run(["git", "add", "code.py"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "same"], cwd=repo, check=True
+    )
+    assert [r["state"] for r in receipt.status(cwd=repo, store=store)] == ["passed"]

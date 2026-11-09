@@ -17,7 +17,6 @@ not-collected run is recorded as what it was: exit 5 from pytest is "no tests ra
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import subprocess
 import sys
@@ -35,19 +34,24 @@ def _git(*args: str, cwd: Path = REPO) -> str:
 
 
 def tree_digest(cwd: Path = REPO) -> str:
-    """HEAD plus every uncommitted change (staged, unstaged, untracked file contents)."""
-    h = hashlib.sha256()
-    h.update(_git("rev-parse", "HEAD", cwd=cwd).encode())
-    h.update(_git("diff", "HEAD", "--binary", cwd=cwd).encode())
-    for path in sorted(p for p in _git("ls-files", "--others", "--exclude-standard", cwd=cwd).splitlines() if p):
-        if path.startswith(".agents/tmp/"):
-            continue  # the receipts themselves, and other scratch
-        h.update(path.encode())
-        try:
-            h.update((cwd / path).read_bytes())
-        except OSError:
-            pass
-    return h.hexdigest()[:16]
+    """The content of the working tree (tracked changes and untracked files), as a git tree id.
+
+    Content, not history: committing the same files keeps the digest, so a receipt stays fresh
+    across a commit and goes stale only when a file actually changes. Built in a throwaway
+    index, so the real index is untouched. Scratch under .agents/tmp/ is left out.
+    """
+    import os
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+
+        def git(*args: str) -> str:
+            return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
+
+        git("read-tree", "HEAD")
+        git("add", "-A", "--", ".", ":(exclude).agents/tmp")
+        return git("write-tree").strip()[:16]
 
 
 def _verdict(exit_code: int) -> str:
