@@ -626,3 +626,37 @@ def test_a_shipped_out_lot_can_still_be_recorded_against_its_eligibility(db, win
         json=_consignment(kind="trade_sample", litres="10", lot_id=str(lot.id), not_for_sale_marked=True),
     )
     assert sample.status_code == 201, sample.get_json()
+
+
+def test_only_wine_lots_can_enter_the_export_register(db, wine_org):
+    """!679 round-4 review: a gin lot, or grapes at intake, isn't wine to export."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    org, client = wine_org
+    _lot, _elig = _exporter_with_eligibility(db, client, org.id)
+    gin = InventoryRepository(db).create_inventory_item(
+        org_id=org.id, name="Bottled gin", quantity="50", unit="L", inventory_type="final_product"
+    )
+    db.commit()
+    for lot_id in (str(gin.id), "not-a-uuid"):
+        sample = client.post(
+            "/api/compliant/wine/export/consignments",
+            json=_consignment(kind="trade_sample", litres="10", lot_id=lot_id, not_for_sale_marked=True),
+        )
+        assert sample.status_code == 400 and "Choose the wine lot" in sample.get_json()["error"]
+        elig = client.post(
+            "/api/compliant/wine/export/eligibility",
+            json={"lot_id": lot_id, "form": "packaged", "granted_on": date.today().isoformat(), "ees_reference": "E",
+                  "eligible_litres": "5"},
+        )  # fmt: skip
+        assert elig.status_code == 400, elig.get_json()
+    intake_lot = next(
+        i
+        for i in db.query(InventoryItem).filter(InventoryItem.org_id == org.id).all()
+        if i.name.startswith("Grape lot")
+    )
+    grapes = client.post(
+        "/api/compliant/wine/export/consignments",
+        json=_consignment(kind="trade_sample", litres="10", lot_id=str(intake_lot.id), not_for_sale_marked=True),
+    )
+    assert grapes.status_code == 400 and "Choose the wine lot" in grapes.get_json()["error"]

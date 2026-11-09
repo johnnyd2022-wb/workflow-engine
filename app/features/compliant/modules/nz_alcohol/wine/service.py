@@ -22,6 +22,7 @@ EXEMPTION_YEARS: Final = 2
 _MODES: Final = ("registered", "exempt")
 _PLAN_FIELDS: Final = ("mode", "plan_reference", "verifier", "next_verification", "exemption_start")
 _LOT_LIMIT: Final = 60
+EXPORTABLE_ROLES: Final = ("crush", "ferment", "blend", "cellar", "bottle")
 
 
 def _profile(session: Session, org_id: UUID) -> ComplianceProfile | None:
@@ -326,7 +327,8 @@ def update_plan(session: Session, org_id: UUID, data: dict) -> dict:
 
 def lot_info(session: Session, org_id: UUID, lot_id) -> dict | None:
     """One wine lot by id, whatever its stock: export and label checks need lots that have
-    already shipped, which the page's lot list (current stock only) leaves out."""
+    already shipped, which the page's lot list (current stock only) leaves out. Only lots a
+    winemaking step made (not fruit at intake) count: anything else returns None."""
     try:
         lot_uuid = UUID(str(lot_id))
     except (TypeError, ValueError):
@@ -349,6 +351,8 @@ def lot_info(session: Session, org_id: UUID, lot_id) -> dict | None:
         if step
         else None
     )
+    if role not in EXPORTABLE_ROLES:
+        return None  # not wine: fruit at intake, or anything a winemaking step didn't make (gin, packaging)
     out = {"id": str(item.id), "name": item.name, "role": role}
     if role == "bottle":
         out["released"] = str((step.execution_data or {}).get(rules.RELEASE) or "") == rules.RELEASE_YES
