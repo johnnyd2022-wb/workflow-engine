@@ -95,6 +95,7 @@ Read first: `context/whistlebird.md`, `context/offers-pricing.md`, `context/audi
 
 ## Handoffs
 
+- ← **Market Research:** category, consumer, and retail evidence for Whistlebird launch decisions.
 - → **Project Manager:** launch project brief (use `product-launch-plan.md`).
 - → **Marketing Director / Content Producer:** positioning + launch content.
 - → **Sales Manager:** retail/distributor outreach + reorder plan.

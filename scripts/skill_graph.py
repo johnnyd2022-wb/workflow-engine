@@ -98,6 +98,7 @@ ROOTS = {
     "finance-advisor",
     "licence-study-coach",
     "marketing-director",
+    "market-research",
     "outbound-sales",
     "project-manager",
     "release-manager",

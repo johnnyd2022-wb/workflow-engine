@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-10-10
-skill_count: 54
+last_synced: 2026-11-10
+skill_count: 56
 
 ## Wiring
 
@@ -62,6 +62,7 @@ html-review
 js-review
 lean-change
 licence-study-coach
+market-research
 marketing-director
 merge-request
 migration-safety
@@ -185,6 +186,7 @@ Front door for "what should I work on" / weekly review / overwhelm: **`business-
 | Daily subreddit/community scan for Biz-E angles | `community-triage` |
 | Debrief a demo/discovery call transcript | `discovery-synthesis` |
 | Weekly competitor pricing/changelog/review check | `competitor-watch` |
+| "Research this market", size TAM/SAM, find buyers or channels, monthly market pulse | `market-research` (sourced baseline/repeat pulse; for Whistlebird launch decisions use `distillery-strategy-advisor`, for Biz-E roadmap decisions use `bize-product-manager`) |
 
 ### 7. Whistlebird-specific
 

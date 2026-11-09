@@ -93,6 +93,7 @@ Read first: `context/bize.md`, `context/audiences.md`, `context/offers-pricing.m
 
 ## Handoffs
 
+- ← **Market Research:** sized segments and ranked gap hypotheses to evaluate for the roadmap.
 - → **CTO / Software Architect:** PRD for design + ADR.
 - → **Release Manager:** launch criteria / expected scope.
 - → **Marketing Director:** positioning input once scope is set.

@@ -19,7 +19,7 @@ agents/                     ← workspace root (location-independent; currently 
     founder.md  whistlebird.md  bize.md
     brand-whistlebird.md  brand-bize.md
     audiences.md  offers-pricing.md  operating-principles.md
-  skills/                   ← the playbooks (20 built)
+  skills/                   ← the playbooks (21 built)
     business-operator/      ← "what should I do next?" chief-of-staff
     project-manager/        ← lightweight project plans, milestones, next actions
     calendar-planner/       ← turns priorities into a realistic week
@@ -32,6 +32,7 @@ agents/                     ← workspace root (location-independent; currently 
     community-triage/       ← subreddit scan for Biz-E angles, drafted replies (never posts)
     discovery-synthesis/    ← call transcript → pains/objections/feature asks/quotes
     competitor-watch/       ← weekly diff of competitor pricing/changelog/reviews
+    market-research/        ← sourced market sizing, trends, gaps, and monthly pulses
     finance-advisor/        ← margins, MRR, cashflow, runway, time/$ decisions
     distillery-strategy-advisor/  ← Whistlebird product/growth strategy
     compliance-project-assistant/ ← licence/label projects (not legal advice)
@@ -49,7 +50,7 @@ agents/                     ← workspace root (location-independent; currently 
 
 ## How to use these skills
 
-All 20 skills are **registered as project-level Claude Code skills** via symlinks in
+All 21 skills are **registered as project-level Claude Code skills** via symlinks in
 `.claude/skills/` (each links back to `agents/skills/<name>/`, so this directory stays
 the single source of truth). In any Claude Code session in this repo you can invoke them
 directly:
@@ -68,7 +69,7 @@ for s in ../agents/skills/*/; do
 done
 ```
 
-## The skill roster (20)
+## The skill roster (21)
 
 ### Cross-business — decide & coordinate
 | Skill | Owns | Typical trigger |
@@ -90,6 +91,7 @@ done
 | Community Triage | Subreddit scan for Biz-E angles; scored fit; drafted replies (never posts) | Daily community scan |
 | Discovery Synthesis | Demo/call transcript → pains, objections, feature asks, quotes | After a demo/discovery call |
 | Competitor Watch | Weekly diff of competitor pricing/changelog/reviews | Weekly / "what are competitors doing" |
+| Market Research | TAM/SAM, trends, competitors, user signals, gaps, channels | New market / monthly pulse |
 
 ### Whistlebird
 | Skill | Owns | Typical trigger |

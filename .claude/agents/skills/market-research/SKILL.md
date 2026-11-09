@@ -1,0 +1,54 @@
+---
+name: market-research
+description: "Research any product or field for launch or opportunity discovery: 'research this market', 'size TAM/SAM', 'market trends', 'who else does X', 'where do buyers hang out', 'go-to-market channels', or a monthly market pulse. Produces a sourced baseline or change report. Not for Biz-E's weekly competitor watch (competitor-watch), a customer interview (discovery-synthesis), a Whistlebird launch decision (distillery-strategy-advisor), Biz-E roadmap scoping (bize-product-manager), or campaign drafting (marketing-director)."
+metadata:
+  business: any
+  owns: market sizing, trends, competitive landscape, user signals, positioning and channel research
+  triggers: [research this market, size the opportunity, TAM/SAM, market trends, who else does X, where do buyers hang out, go-to-market channels, monthly market pulse]
+---
+
+# Market Research
+
+This skill turns scattered market claims into a decision-ready, repeatable research record. It exists so a first look can expose a credible opportunity and a later look can distinguish real change from a different search result or a louder forum thread.
+
+Read `.agents/autonomy.md` for this repository's operating policy. For Whistlebird or Biz-E, also read `.claude/agents/AGENTS.md` and relevant business context; do not assume either business when the user names another product or field.
+
+## Workflow
+
+1. **Define the decision and boundary.** Record the product/category, buyer versus end user, use case, geography, currency, demographic or firmographic segment, price/volume unit, and the decision the report should inform. Use the user's scope. Where unspecified, make a practical explicit assumption and identify which conclusions depend on it. State the research date and the time periods used; distinguish 10-year, 5-year, and last 12–24-month views. A narrow or new category may lack a 10-year series; use a clearly labeled proxy or say it is unavailable. For a scheduled run, reuse the previous report's exact scope and definitions without asking the user.
+2. **Collect comparable evidence.** Search current primary sources first: official statistics and time series, regulator/trade data, company pricing/product pages, filings, search trend data, marketplace/category counts, and platform audience/ad data where available. Add reputable industry research with its methodology and date. Search review sites, communities, forums, and social platforms for user language, unmet needs, objections, and where people linger. Identify the actual active communities and links; do not presume Reddit or a particular review site is relevant. Record publication date, period measured, geography, units, and URL for each material claim. Check whether apparently independent articles repeat one underlying estimate. If browsing is unavailable, use supplied/connected sources and mark the report `evidence-limited`; do not present stale knowledge as current research.
+3. **Size the market with visible arithmetic.** Define TAM as spend or units across the full relevant problem, SAM as the portion reachable under the stated geography, segment, product, and constraints. Add SOM only if there is evidence for a plausible capture scenario. Prefer a bottom-up model (eligible buyers × expected annual spend, or transactions × value), triangulated with a top-down source when possible. Show inputs, source dates, conversions, exclusions, assumptions, sensitivity range, and whether estimates measure revenue, spend, users, or volume. Avoid mixing global category revenue with a local product's reachable market. Report a range and confidence level; if inputs cannot support an estimate, say `not defensible` and list the missing inputs.
+4. **Describe change over time.** For each horizon, show measured direction and magnitude when comparable data exists, plus structural drivers, discontinuities, and relevant macro factors: inflation, interest rates, employment/income, business investment, regulation, demographics, trade, technology, or distribution as applicable to the region and buyer. Distinguish nominal from inflation-adjusted growth. Separate observed history from forecasts. Use actual series or dated snapshots; do not infer a ten-year trend from two current articles. Explain contradictory indicators.
+5. **Map alternatives and their messages.** Include direct competitors, adjacent substitutes, and the current workaround. For each material player, capture target customer, offer, price or pricing model if public, main promise, proof, distribution, and a differentiator supported by its own pages or customer evidence. Identify claims repeated across players and genuinely distinct claims, then test whether users value those differences. Note missing or opaque prices rather than guessing. A few well-chosen competitors with evidence beat a long unsourced directory.
+6. **Listen for demand and gaps.** Sample multiple relevant communities, reviews, search queries, job posts, or procurement discussions where available. Capture recurring jobs, frustrations, willingness-to-pay clues, switching barriers, and counterevidence (satisfied users, falling demand, high acquisition cost). Treat forum posts as qualitative signals, not a population survey. Record platform, date window, approximate sample, selection bias, and links to representative threads; quote sparingly and protect private or identifying information. Rank candidate gaps by severity, frequency, addressable segment, competitor coverage, monetization plausibility, and evidence quality. Label unvalidated gaps as hypotheses and propose the cheapest test.
+7. **Recommend positioning and channels.** State the most promising segment and its problem, the proposed message angle, proof needed to make it credible, and where that segment actually discovers/evaluates solutions. Compare likely channels by audience fit, observed competitor activity, reach, intent, cost or effort, and measurement feasibility. Recommend the first one or two output formats and placements (for example, a buyer guide in a specific trade newsletter, a comparison page for a named search intent, or a demo in an active community) with a test metric and stop/continue threshold. Do not treat a community as permission to advertise; check its posting rules before suggesting participation.
+8. **Write and preserve the report.** Use the report contract below. Save at the user's path, or `.claude/agents/outputs/market-research/<slug>/<YYYY-MM-DD>.md` in this repo, where `<slug>` is kebab-case `<product-or-category>-<geography>`. Before choosing a new slug, inspect the parent directory for an existing report on the same scope and reuse its slug. Record the slug in the report. On a repeat run, read the last report first. Keep scope, definitions, units, source series, and method comparable; show a dated change table for market estimates, signals, competitors, messaging, channel evidence, and confidence. Separate real changes from revised assumptions, methodology, or source coverage. If no material change is supported, say so. Keep a concise source ledger so the next run can refresh the same series. Provide an honest verdict: `actionable`, `promising-but-unvalidated`, or `evidence-limited`.
+
+## Report contract
+
+Lead with a short executive summary: decision recommendation, strongest evidence, largest uncertainty, and one next test. Then use these sections, adapting depth to the available evidence:
+
+1. Scope, date, geography, segment, definitions, and assumptions
+2. TAM/SAM (and SOM only if justified): calculation table, range, confidence, and exclusions
+3. Demand and macro trends: 10 years, 5 years, 12–24 months; measured data versus forecast
+4. Competitor and substitute matrix; common messages and distinct claims
+5. User signals: recurring needs, objections, online gathering places, sample and bias
+6. Market gaps and ranked opportunity hypotheses, including counterevidence
+7. Positioning and channel recommendation with first output/test and success metric
+8. Change since previous run (or `First run: baseline`)
+9. Source ledger: title/organization, URL, publication date, measured period, geography, metric, access date, and limitations
+10. Verdict, unresolved questions, and concrete next actions with owner and date where known; name the downstream owner or skill for each handoff
+
+Put a link beside every consequential number and claim. Mark each conclusion as observed, calculated, inferred, or hypothetical. Do not silently substitute a proxy for the target market, invent TAM/SAM from a headline, promote anecdotes to prevalence, or claim an absence of competition based on an incomplete search.
+
+## Rules
+
+- Do not invent figures or use undated model knowledge as current evidence. Mark missing data and a blocked web search honestly.
+- Research public discussion without posting, contacting users, or treating public comments as permission to quote identifying details. Route outreach to the relevant owner.
+- Keep proprietary formulas, customer details, and nonpublic pricing out of a report that may be shared. Follow `.claude/agents/AGENTS.md` when reporting on Whistlebird or Biz-E.
+- A monthly pulse must still check the full set of decision-critical indicators; summarize unchanged sections rather than silently dropping them.
+
+## Handoffs
+
+- ← User brief, previous market-research report, and relevant business/project context.
+- → `marketing-director` for positioning and channel hypotheses; `bize-product-manager` or the relevant product owner for ranked product gaps; `distillery-strategy-advisor` for a Whistlebird launch decision; `competitor-watch` for named Biz-E competitors worth recurring monitoring. These skills decide and execute their own follow-up work; this report supplies evidence and proposed tests.
