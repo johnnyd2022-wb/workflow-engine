@@ -32,6 +32,14 @@ import workflow_trial  # noqa: E402
         (["app/features/compliant/modules/nz_alcohol/excise.py"], "C"),
         ([".gitlab-ci.yml"], "C"),
         (["uv.lock"], "C"),
+        (["app/api/middleware/tenant_context.py"], "C"),
+        (["app/utils/config_loader.py"], "C"),
+        ([".agents/verification-chain.md"], "C"),
+        ([".agents/verification-tiers.md"], "C"),
+        ([".claude/skills/fix-bug/SKILL.md"], "B"),
+        ([".agents/templates/lean-review.md"], "B"),
+        (["CLAUDE.md"], "B"),
+        ([".agents/model-routing.json"], "B"),
         (["docs/a.md", "app/core/db/migrations/versions/y.py"], "C"),
         ([], "A"),
     ],
@@ -180,3 +188,25 @@ def test_committing_the_same_content_keeps_a_receipt_fresh(repo):
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "same"], cwd=repo, check=True
     )
     assert [r["state"] for r in receipt.status(cwd=repo, store=store)] == ["passed"]
+
+
+def test_removing_a_tenant_filter_is_tier_c(tmp_path):
+    """!683 review: dropping `.filter(X.org_id == org_id)` is the one-line leak to catch, and
+    only the removed line mentions org_id."""
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    target = tmp_path / "app" / "features" / "crm" / "services" / "contact_import.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("def names(db, org_id):\n    return db.query(Name).filter(Name.org_id == org_id).all()\n")
+    subprocess.run([*git, "add", "."], cwd=tmp_path, check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "base"], cwd=tmp_path, check=True)
+    target.write_text("def names(db, scope):\n    return db.query(Name).all()\n")
+    result = risk_tier.classify(*risk_tier.changes_against("HEAD", cwd=tmp_path))
+    assert result["tier"] == "C" and any("org_id" in r for r in result["reasons"])
+
+
+def test_lean_review_is_advisory_with_a_read_only_claude_fallback():
+    routing = json.loads((ROOT / ".agents/model-routing.json").read_text())
+    assert routing["stages"]["lean-review"]["blocking"] is False
+    fallback = routing["stages"]["lean-review-claude"]
+    assert fallback["engine"] == "claude" and fallback["access"] == "read"

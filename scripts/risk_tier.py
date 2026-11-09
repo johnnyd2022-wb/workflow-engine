@@ -30,6 +30,9 @@ REPO = Path(__file__).resolve().parent.parent
 TIER_C_PATHS: tuple[tuple[str, str], ...] = (
     ("app/core/db/migrations/*", "schema or data migration"),
     ("app/core/security/*", "auth, roles or access policy"),
+    ("app/api/middleware/*", "tenant context, session security, HTTPS"),
+    ("app/utils/config_loader.py", "secret and config loading"),
+    ("scripts/local_secrets.py", "secret loading"),
     ("app/api/routes/auth_routes.py", "sign-in and 2FA"),
     ("app/core/db/models/tenant_mixin.py", "tenant scoping"),
     ("app/core/db/tenant*", "tenant scoping"),
@@ -75,6 +78,19 @@ TIER_C_LINES: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"\bDecimal\(|is_finite\("), "numeric correctness"),
 )
 
+# The agents' own process: rewording a skill can drop a gate, so these are never Tier A.
+# The two verification contracts decide what every change must pass: Tier C.
+PROCESS_C_PATHS: tuple[str, ...] = (".agents/verification-chain.md", ".agents/verification-tiers.md")
+PROCESS_B_PATHS: tuple[str, ...] = (
+    ".claude/skills/*",
+    ".claude/agents/*/SKILL.md",
+    ".agents/templates/*",
+    ".agents/*.md",
+    ".agents/*.json",
+    "CLAUDE.md",
+    "AGENTS.md",
+)
+
 # Tier A: nothing that runs. Anything else, including an unknown path, is at least B.
 TIER_A_PATHS: tuple[str, ...] = (
     "*.md",
@@ -105,6 +121,15 @@ def classify(paths: list[str], added_lines: dict[str, list[str]] | None = None) 
             reasons.append(f"{path}: {hit}")
             tier = "C"
             continue
+        if path in PROCESS_C_PATHS:
+            reasons.append(f"{path}: the verification contract itself")
+            tier = "C"
+            continue
+        if any(_match(path, pattern) for pattern in PROCESS_B_PATHS):
+            reasons.append(f"{path}: agent process (skills, routing, templates)")
+            if tier == "A":
+                tier = "B"
+            continue
         is_code = not any(_match(path, pattern) for pattern in TIER_A_PATHS)
         if path.startswith("tests/"):
             # Tests can't break the product, but a weakened assertion can hide a break: B.
@@ -128,27 +153,32 @@ def classify(paths: list[str], added_lines: dict[str, list[str]] | None = None) 
     return {"tier": tier, "reasons": list(dict.fromkeys(reasons))}
 
 
-def _git(*args: str) -> str:
-    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=True).stdout
+def _git(*args: str, cwd: Path = REPO) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout
 
 
-def changes_against(base: str) -> tuple[list[str], dict[str, list[str]]]:
-    """Changed paths (committed, staged, unstaged and untracked) and each one's added lines."""
-    merge_base = _git("merge-base", base, "HEAD").strip()
-    paths = [p for p in _git("diff", "--name-only", merge_base).splitlines() if p]
-    paths += [p for p in _git("ls-files", "--others", "--exclude-standard").splitlines() if p]
+def changes_against(base: str, cwd: Path = REPO) -> tuple[list[str], dict[str, list[str]]]:
+    """Changed paths (committed, staged, unstaged and untracked) and each one's changed lines
+    (added and removed)."""
+    merge_base = _git("merge-base", base, "HEAD", cwd=cwd).strip()
+    paths = [p for p in _git("diff", "--name-only", merge_base, cwd=cwd).splitlines() if p]
+    paths += [p for p in _git("ls-files", "--others", "--exclude-standard", cwd=cwd).splitlines() if p]
     paths = list(dict.fromkeys(paths))
     added: dict[str, list[str]] = {}
     current = None
-    for line in _git("diff", "--unified=0", merge_base).splitlines():
-        if line.startswith("+++ b/"):
+    for line in _git("diff", "--unified=0", merge_base, cwd=cwd).splitlines():
+        if line.startswith("--- a/"):
             current = line[6:]
-        elif line.startswith("+") and not line.startswith("+++") and current:
+        elif line.startswith("+++ b/"):
+            current = line[6:]
+        elif line[:1] in "+-" and not line.startswith(("+++", "---")) and current:
+            # Removed lines matter as much as added ones: dropping `.filter(X.org_id == org_id)`
+            # is the one-line tenant leak this script exists to catch.
             added.setdefault(current, []).append(line[1:])
     for path in paths:
-        if path not in added and (REPO / path).is_file():
+        if path not in added and (cwd / path).is_file():
             try:
-                added[path] = (REPO / path).read_text(encoding="utf-8").splitlines()
+                added[path] = (cwd / path).read_text(encoding="utf-8").splitlines()
             except UnicodeDecodeError:
                 added[path] = []
     return paths, added

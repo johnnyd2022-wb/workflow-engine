@@ -26,8 +26,11 @@ is `.agents/verification-tiers.md`; read it first. The switch is `.agents/workfl
    `python3 scripts/receipt.py status` must be all `passed` (fresh) before review.
 6. **Review (Tier B/C).** Fill `.agents/templates/lean-review.md` and send it to one reviewer:
    Codex read-only (`python3 scripts/agent_launch.py launch lean-review --scope <slug> --prompt-file <file>`,
-   or the Breaker pane via `herdr-multi-agent-collab`). Codex out of quota: an independent Claude
-   pane that didn't write the diff, named in the MR. Tier A: read your own diff carefully; no reviewer.
+   or the Breaker pane via `herdr-multi-agent-collab`). Codex out of quota:
+   `agent_launch.py launch lean-review-claude ...` or an independent Claude pane that didn't write
+   the diff, named in the MR. Tier A: read your own diff carefully; no reviewer.
+   Paste the script's **actual** `risk_tier.py` output into the assignment, not a summary, so the
+   reviewer sees which files it counted.
 7. **Fix, re-review only the fixes.** At most 3 rounds; list anything left in the MR.
 8. **MR** via `merge-request`: tier + reasons, receipts, reviewer and rounds.
 9. **Record for the trial:**
