@@ -14,7 +14,9 @@ The orgs:
                                         gin and limoncello batches traced to Xero sales, excise
                                         periods (two lodged, a backlog), a sale to a duty free
                                         shop, NP3 evidence, licences, contract orders, a
-                                        stocktake. For specific questions.
+                                        stocktake, and the exception loop: a lot on quality
+                                        hold, a credit note with goods back damaged, and a
+                                        recall drill half worked. For specific questions.
 
 Both are built from the screenshot harness's seeds (scripts/ui_shots.py), which are realistic
 but synthetic. Whistlebird's own replay (scripts/replay_whistlebird.sh) has real customers and
@@ -47,6 +49,147 @@ ESTABLISHED_SEEDS = (
     "stock", "lineage", "sales", "customers", "suppliers", "compliance", "excise", "transfers",
     "production", "planner", "contracts", "np3", "licensing", "tasks",
 )  # fmt: skip
+
+
+def _seed_exceptions(db, org_id, user) -> None:
+    """The exception loop (GL-C06): a quality hold and one released, a credit note with goods
+    back damaged and one line still to decide, and a recall drill half worked. Built through
+    the real services, on stock and sales the other seeds made."""
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.services import lot_holds
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_credit_note import XeroCreditNote
+    from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.services import sales_returns
+    from app.features.recalls import service as recalls
+    from app.features.recalls.models import RecallContact
+
+    now = datetime.now(UTC)
+    sold = (
+        db.query(SalesFifoAllocation, XeroInvoice)
+        .join(
+            XeroInvoice,
+            (XeroInvoice.org_id == SalesFifoAllocation.org_id)
+            & (XeroInvoice.xero_invoice_id == SalesFifoAllocation.xero_invoice_id),
+        )
+        .filter(SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.tasting_allocation_id.is_(None))
+        .order_by(SalesFifoAllocation.created_at.desc())
+        .all()
+    )
+    finished = (
+        db.query(InventoryItem)
+        .filter(
+            InventoryItem.org_id == org_id,
+            InventoryItem.inventory_type == "final_product",
+            InventoryItem.quantity > 0,
+        )
+        .order_by(InventoryItem.created_at)
+        .all()
+    )
+    sold_lots = {a.inventory_item_id for a, _ in sold}
+
+    # Quality: one lot on hold now, one held last month and released with a note.
+    unsold = [i for i in finished if i.id not in sold_lots] or finished
+    if unsold:
+        lot_holds.place_hold(db, org_id, unsold[0].id, "Haze after bottling; waiting on a lab turbidity check", user.id)
+    if len(unsold) > 1:
+        old = lot_holds.place_hold(db, org_id, unsold[1].id, "Label batch code smudged", user.id)[0]
+        old.placed_at = now - timedelta(days=30)
+        released = lot_holds.release_hold(db, org_id, old.id, "Relabelled and checked by the duty manager", user.id)
+        # release_hold stamps now; the script calls it last month's hold, so date it then.
+        released.released_at = now - timedelta(days=25)
+    db.flush()
+
+    # Money and goods: a credit note on a real sale, two cases' worth credited, one back damaged.
+    # The script promises one bottle back damaged and one still to decide: that needs a sale
+    # of at least two. Fail loudly rather than seed a demo that contradicts its own script.
+    returnable = [(a, inv) for a, inv in sold if Decimal(str(a.quantity)) >= 2]
+    if sold and not returnable:
+        raise RuntimeError("demo seed: no sale of 2+ bottles to credit; the exception loop needs one")
+    if returnable:
+        allocation, invoice = returnable[0]
+        mapping = (
+            db.query(ProductMapping)
+            .filter(ProductMapping.org_id == org_id, ProductMapping.biz_e_product_name == allocation.product_name)
+            .first()
+        )
+        if mapping is None:
+            mapping = ProductMapping(
+                org_id=org_id,
+                biz_e_product_name=allocation.product_name,
+                xero_description_pattern=allocation.product_name,
+                match_type="exact",
+            )
+            db.add(mapping)
+            db.flush()
+        qty = Decimal("2")
+        note = XeroCreditNote(
+            org_id=org_id,
+            xero_credit_note_id=f"demo-cn-{uuid.uuid4().hex[:8]}",
+            xero_tenant_id="demo",
+            number="CN-0007",
+            contact="Demo customer",
+            date=(now - timedelta(days=3)).date(),
+            status="AUTHORISED",
+            total=Decimal("96.00"),
+            allocated_invoice_ids=[invoice.xero_invoice_id],
+        )
+        db.add(note)
+        db.flush()
+        line = XeroCreditNoteLine(
+            org_id=org_id,
+            credit_note_id=note.id,
+            line_key="demo-line-1",
+            description=allocation.product_name,
+            quantity=qty,
+            line_amount=Decimal("96.00"),
+            product_mapping_id=mapping.id,
+        )
+        db.add(line)
+        db.flush()
+        sales_returns.record_return(
+            db,
+            org_id,
+            user.id,
+            condition="damaged",
+            quantity="1",
+            received_on=(now - timedelta(days=1)).date(),
+            note="Carton crushed in transit",
+            credit_note_line_id=line.id,
+        )
+    db.flush()
+
+    # A recall drill on a sold lot: two customers' notices sent, one acknowledged.
+    if sold:
+        drill = recalls.open_recall(
+            db,
+            org_id,
+            user,
+            lot_id=sold[-1][0].inventory_item_id,
+            reason="Supplier warns of possible glass in one pallet of bottles (drill)",
+            risk="health",
+            owner_id=user.id,
+            due_at=now + timedelta(days=2),
+            is_drill=True,
+        )
+        contacts = (
+            db.query(RecallContact)
+            .filter(RecallContact.org_id == org_id, RecallContact.recall_id == drill.id)
+            .order_by(RecallContact.customer_name, RecallContact.product_name)
+            .all()
+        )
+        for contact in contacts[:2]:
+            recalls.record_notice_sent(db, org_id, user.id, drill.id, contact.id, channel="email", sent_at=now)
+        if contacts:
+            recalls.record_acknowledgement(
+                db, org_id, user.id, drill.id, contacts[0].id, by="Store manager", note="Pulled from shelf", at=now
+            )
+    db.commit()
 
 
 def say(*parts) -> None:
@@ -91,6 +234,8 @@ def cmd_load(_args) -> int:
     for kind in ESTABLISHED_SEEDS:
         getattr(ui_shots, f"_seed_{kind}")(db, org.id, inv)
         say(f"seeded {kind}")
+    _seed_exceptions(db, org.id, user)
+    say("seeded exceptions (hold, credit and return, recall drill)")
     say("ready. Sign in at /, with the password below for both:")
     say(f"  {NEW}: {new_user.email}")
     say(f"  {ESTABLISHED}: {user.email}")
