@@ -120,6 +120,8 @@ def _material_blockers(db, org_id, batch, today):
             for used, used_unit in pending.get(str(lot_id), ()):
                 have -= convert_quantity_decimal(Decimal(str(used)), used_unit, lot.unit)
             have -= claimed.get(lot_id, Decimal(0))
+            if not (want.is_finite() and have.is_finite()):
+                raise InvalidOperation  # a NaN recorded use would make every comparison raise
         except (TypeError, ValueError, InvalidOperation):
             reasons.append(f"The {name} lot's quantity can't be read; check materials again")
             continue
@@ -215,14 +217,21 @@ def _claimed_elsewhere(db, org_id, batch, lots):
         except (TypeError, ValueError, InvalidOperation):
             continue
         owed[(execution_id, lot.id)] = owed.get((execution_id, lot.id), Decimal(0)) + amount
-    for (execution_id, lot_id), outstanding in owed.items():
+    for (execution_id, lot_id), owed_total in owed.items():
         lot = lots[lot_id]
+        outstanding = owed_total
         try:
             for quantity, unit in recorded.get((execution_id, str(lot_id)), ()):
-                outstanding -= convert_quantity_decimal(Decimal(str(quantity)), unit, lot.unit)
+                used = convert_quantity_decimal(Decimal(str(quantity)), unit, lot.unit)
+                if not used.is_finite():
+                    raise InvalidOperation
+                outstanding -= used
         except (TypeError, ValueError, InvalidOperation):
-            continue
-        if outstanding > 0:
+            # A recorded use we can't read (NaN, Infinity, text) is unknown, not zero: keep
+            # the whole commitment claimed so the start is blocked rather than over-promised
+            # (or crashed comparing NaN) (!663).
+            outstanding = owed_total
+        if outstanding.is_finite() and outstanding > 0:
             add(lot_id, outstanding, lot.unit)
     return claimed
 
