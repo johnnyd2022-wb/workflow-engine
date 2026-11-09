@@ -52,9 +52,13 @@ shelf.
 
 - Inputs made by another workflow (intermediates) still aren't planned.
 - A started batch's inputs are held only once its steps record them.
-- The start check (`evaluate_start`) stays closed until B4.
 - Consuming or selling committed stock through other screens doesn't warn yet; only disposal
   does.
+
+The start check (`evaluate_start`) was closed in B2 and is a real check as of B4: it reads the
+batch's live commitments, the site's capacity and the installed compliance module, and returns
+plain-sentence blockers (`app/features/planning/start_service.py`, pinned by
+`tests/features/planning/test_capacity_start_replan.py`) (verified 2026-11-10 by findings-sweep).
 
 ## Checks
 

@@ -142,6 +142,15 @@ deployment:
    header alone breaks those components. It needs the CSP-safe Alpine build
    (`@alpinejs/csp`) plus each `x-data` expression rewritten to its object form — the
    same "inline code to versioned modules" migration this item already calls for.
+   **Resolved by the GL-S03 migration (!578, !588, !590, !621)** (verified 2026-11-10 by
+   findings-sweep): the enforced policy on app pages is `script-src 'self' 'nonce-…'` plus
+   Cloudflare's beacon, with `script-src-attr 'none'`, and no `'unsafe-inline'` or
+   `'unsafe-eval'` in script-src (`app/core/security/csp.py`, pinned by
+   `tests/test_csp.py`). Alpine runs on its CSP build. What remains is deliberate and
+   recorded in `docs/csp-migration-plan.md`: `style-src 'unsafe-inline'` (inline style can't
+   run script). Also deliberate: the separate `/landing-diagram` bundle policy in
+   `app/api/app_factory.py`, which still allows both in script-src (noted in
+   `docs/go-live-checklist.md` GL-S03 and `tests/test_csp.py`).
 4. `/auth/verify-2fa` has no brute-force throttle. It carries no `@limiter.limit` and no
    attempt counter, so a caller who already holds a user's password can submit unlimited
    TOTP guesses for the 5-minute pending-2FA window (`app/api/routes/auth_routes.py:707`,

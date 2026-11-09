@@ -16,7 +16,7 @@
       title="Add inventory by barcode",
       subtitle="Scan or enter a barcode, then complete the item details below."
     ) %}
-      <div class="spa-card-form" id="barcode-spa-root">
+      <div class="spa-card-form" id="barcode-spa-root" data-zxing-src="{{ url_for('core.serve_core_js', filename='zxing-library.min.js') }}">
         <div id="barcode-step-scan">
           <section class="spa-form-section" aria-labelledby="barcode-spa-scan-heading">
             <h3 id="barcode-spa-scan-heading" class="spa-form-section-title">Scan</h3>
