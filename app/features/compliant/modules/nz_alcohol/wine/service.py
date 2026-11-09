@@ -14,7 +14,7 @@ from app.core.db.models.inventory_item import InventoryItem
 from app.features.compliant.models import ComplianceProfile
 
 from . import composition as comp_mod
-from . import label, roles, rules
+from . import label, register, roles, rules
 
 PLAN_SETTING: Final = "wine_plan"
 EXEMPTION_LIMIT_L: Final = Decimal(20000)  # Wine Regulations 2021 reg 19: < 20,000 L over 2 years
@@ -77,7 +77,13 @@ def validate_plan(data: dict) -> dict:
             out[key] = parsed.isoformat()
     if mode == "exempt" and "exemption_start" not in out:
         raise ValueError("Enter the date your exemption started")
+    if mode == "exempt" and data.get("wine_exporter"):
+        raise ValueError("Wine made under the small winemaker exemption can't be exported")
     return out
+
+
+def _flag(value) -> bool:
+    return value is True or str(value).lower() in ("1", "true", "yes", "on")
 
 
 def plan_status(session: Session, org_id: UUID, settings: dict, role_map: dict[UUID, str], today: date) -> dict:
@@ -166,6 +172,7 @@ def overview(session: Session, org_id: UUID, today: date | None = None) -> dict:
     bottled = [(i, s) for i, s in produced if role_map.get(s.step_id) == "bottle"]
 
     lots, preflights = [], []
+    approvals = register.latest_label_approvals(session, org_id)
     # Wine that exists now: a consumed juice or young-wine lot is history, already part of
     # whatever it became. Bottled lots stay while any stock is left.
     current = [p for p in produced if role_map.get(p[1].step_id) != "intake" and (p[0].quantity or 0) > 0]
@@ -182,13 +189,51 @@ def overview(session: Session, org_id: UUID, today: date | None = None) -> dict:
             "made_at": step.completed_at.isoformat() if step.completed_at else None,
             "composition": comp.as_dict() if comp else None,
         }
-        lots.append(entry)
         if role == "bottle":
-            preflights.append({"lot": entry, **label.preflight(step.execution_data or {}, comp)})
+            data = step.execution_data or {}
+            entry["released"] = str(data.get(rules.RELEASE) or "") == rules.RELEASE_YES
+            pf = label.preflight(data, comp, today)
+            pf["fingerprint"] = register.label_fingerprint(pf)
+            approval = approvals.get(entry["id"])
+            if approval and approval["fingerprint"] == pf["fingerprint"]:
+                pf["items"].append(label._item("label-approval", "Label approval", "ok", approval["title"]))
+            elif approval:
+                pf["items"].append(
+                    label._item(
+                        "label-approval",
+                        "Label approval",
+                        "review",
+                        "Approval lapsed: what's in the bottle changed since. Re-check and approve again.",
+                    )
+                )
+            else:
+                pf["items"].append(label._item("label-approval", "Label approval", "review", "Not approved yet."))
+            pf["status"] = label._overall(pf["items"])
+            preflights.append({"lot": entry, **pf})
+        lots.append(entry)
 
+    last_recall = _last_drill(session, org_id)
+    live = _live_controls(this_vintage, by_role, lots, preflights, last_recall, today)
+    plan = plan_status(session, org_id, settings, role_map, today)
+    if plan.get("mode") == "registered":
+        live["wsmp-registration"] = (
+            ("ok", f"{plan.get('plan_reference')}, verifier {plan.get('verifier') or 'not recorded'}")
+            if plan.get("plan_reference")
+            else ("missing", "Add your plan reference in Plan details")
+        )
+    elif plan.get("mode") == "exempt":
+        live["small-winemaker-exemption"] = (
+            ("due" if plan["exemption_warning"] else "ok"),
+            f"{plan['litres_made']:,.0f} L of 20,000 L; ends {plan['exemption_expires']}",
+        )
+    else:
+        live["wsmp-registration"] = ("missing", "Tell Biz-E your plan in Plan details")
     return {
         "enabled": True,
-        "plan": plan_status(session, org_id, settings, role_map, today),
+        "settings": {flag: bool(settings.get(flag)) for flag in register.SETTING_FLAGS},
+        "checklist": register.checklist(session, org_id, settings, live, today),
+        "export": register.export_register(session, org_id, today) if settings.get("wine_exporter") else None,
+        "plan": plan,
         "vintage": {
             "year": vintage,
             "intake_lots": len(this_vintage),
@@ -203,8 +248,64 @@ def overview(session: Session, org_id: UUID, today: date | None = None) -> dict:
         ],
         "lots": lots,
         "preflight": preflights,
-        "last_recall": _last_drill(session, org_id),
+        "last_recall": last_recall,
     }
+
+
+def _live_controls(this_vintage, by_role, lots, preflights, last_recall, today) -> dict[str, tuple[str, str]]:
+    """Checks production already answers, so nobody records them twice."""
+    live: dict[str, tuple[str, str]] = {}
+    if this_vintage:
+        declared = sum(
+            1
+            for _, s in this_vintage
+            if str((s.execution_data or {}).get(rules.SPRAY_DIARY) or "") in ("Yes", "Own block (on file)")
+        )
+        status = "ok" if declared == len(this_vintage) else "review"
+        live["grape-intake"] = (status, f"{declared} of {len(this_vintage)} grape lots this vintage have a spray diary")
+    else:
+        live["grape-intake"] = ("review", "No grape intake recorded this vintage yet")
+    cellar_steps = len(by_role.get("cellar", [])) + len(by_role.get("blend", []))
+    live["inputs-processing-aids"] = (
+        ("ok", "Additions are recorded on each cellar step")
+        if cellar_steps
+        else ("review", "No cellar steps in your workflows yet")
+    )
+    bottled = preflights
+    unreleased = [p for p in bottled if not p["lot"].get("released")]
+    live["lab-release"] = (
+        ("ok", f"All {len(bottled)} bottled lots released at bottling")
+        if bottled and not unreleased
+        else ("review", f"{len(unreleased)} bottled lot(s) not released")
+        if unreleased
+        else ("review", "No bottled lots yet")
+    )
+    traced = sum(1 for lot in lots if lot.get("composition"))
+    live["trace-mass-balance"] = (
+        ("ok", f"{traced} wine lot(s) trace back to their grapes")
+        if traced
+        else ("review", "No wine lots to trace yet")
+    )
+    ready = sum(1 for p in preflights if p["status"] == "ready")
+    live["label-claims"] = (
+        ("ok", f"All {len(preflights)} bottled lots' labels checked and approved")
+        if preflights and ready == len(preflights)
+        else ("review", f"{len(preflights) - ready} label(s) to check or approve")
+        if preflights
+        else ("review", "No bottled lots yet")
+    )
+    if last_recall:
+        age = (today - date.fromisoformat(last_recall[:10])).days
+        live["recall"] = (
+            ("ok", f"Last recall or drill {age} days ago")
+            if age <= 335
+            else ("due", f"Drill due: the last was {age} days ago")
+            if age <= 365
+            else ("overdue", f"No drill in {age} days: the plan needs one every 12 months")
+        )
+    else:
+        live["recall"] = ("missing", "No recall drill yet: run one from Trace and recall")
+    return live
 
 
 def update_plan(session: Session, org_id: UUID, data: dict) -> dict:
@@ -217,5 +318,7 @@ def update_plan(session: Session, org_id: UUID, data: dict) -> dict:
         raise ValueError("Switch on Compliance first")
     settings = dict(profile.settings or {})
     settings[PLAN_SETTING] = clean
+    for flag in register.SETTING_FLAGS:
+        settings[flag] = _flag((data or {}).get(flag)) and not (flag == "wine_exporter" and clean["mode"] == "exempt")
     service.upsert_profile(org_id, {"settings": settings})
-    return clean
+    return {**clean, **{flag: settings[flag] for flag in register.SETTING_FLAGS}}

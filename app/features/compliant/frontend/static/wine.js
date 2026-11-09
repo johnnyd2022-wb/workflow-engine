@@ -24,10 +24,10 @@
   var ITEM_TEXT = { ok: 'Fine', declare: 'On the label', review: 'Check', missing: 'Missing' };
   var OVERALL = { ready: ['ok', 'Ready'], review: ['review', 'Check'], missing: ['missing', 'Missing records'] };
 
-  async function api(path, body) {
+  async function api(path, body, method) {
     var csrf = document.querySelector('meta[name="csrf-token"]');
     var response = await fetch(path, {
-      method: body ? 'PUT' : 'GET', credentials: 'same-origin',
+      method: method || (body ? 'PUT' : 'GET'), credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf ? csrf.content : '' },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -83,6 +83,10 @@
     return parts.join(' · ') || 'No intake records traced';
   }
 
+  function traceButton(lot) {
+    return el('button', { type: 'button', className: 'workspace-link wine-link', 'data-trace': lot.id, 'data-trace-name': lot.name, text: 'Trace' });
+  }
+
   function renderClaims(root, lots) {
     var list = root.querySelector('[data-claims]');
     list.replaceChildren();
@@ -99,6 +103,7 @@
         chips.append(chip(claim.status === 'pass' ? 'ok' : claim.status === 'unknown' ? 'muted' : 'review',
           attr.charAt(0).toUpperCase() + attr.slice(1) + ': ' + CLAIM_TEXT[claim.status]));
       });
+      chips.append(traceButton(lot));
       var meta = [lot.stage, num(lot.quantity, 1) + ' ' + (lot.unit || '')];
       if (c.estimated) meta.push('partly estimated');
       list.append(el('li', { className: 'wine-row' }, [
@@ -119,6 +124,7 @@
       wrap.append(el('p', { className: 'wine-empty-row', text: 'Bottled lots appear here with their label checklist.' }));
       return;
     }
+    var canManage = root.dataset.canManage === '1';
     var order = { missing: 0, review: 1, ready: 2 };
     preflight.slice().sort(function (a, b) { return order[a.status] - order[b.status]; }).forEach(function (pf) {
       var overall = OVERALL[pf.status] || OVERALL.review;
@@ -130,22 +136,84 @@
           chip(item.status === 'declare' ? 'declare' : item.status, ITEM_TEXT[item.status] || item.status),
         ]));
       });
+      var approval = pf.items.find(function (i) { return i.key === 'label-approval'; });
+      var actions = el('div', { className: 'wine-preflight__actions' }, [traceButton(pf.lot)]);
+      if (canManage && approval && approval.status !== 'ok') {
+        actions.append(el('button', { type: 'button', className: 'workspace-button', 'data-approve': pf.lot.id, text: 'Approve label' }));
+      }
       wrap.append(el('article', { className: 'wine-preflight' }, [
         el('div', { className: 'wine-preflight__head' }, [
           el('div', {}, [el('h3', { text: pf.lot.name }), el('p', { text: num(pf.lot.quantity) + ' ' + (pf.lot.unit || '') + (pf.lot.made_at ? ' · bottled ' + fmtDate(pf.lot.made_at) : '') })]),
           chip(overall[0], overall[1]),
         ]),
         items,
+        actions,
       ]));
     });
   }
 
-  function openPlan(root, plan) {
+  var CHECK_TEXT = { ok: 'Done', due: 'Due soon', overdue: 'Overdue', missing: 'Not recorded', review: 'Check' };
+  var CHECK_CHIP = { ok: 'ok', due: 'review', overdue: 'missing', missing: 'missing', review: 'review' };
+
+  function renderChecklist(root, groups) {
+    var wrap = root.querySelector('[data-checklist]');
+    wrap.replaceChildren();
+    var canRecord = root.dataset.canRecord === '1';
+    groups.forEach(function (group) {
+      var list = el('ul', { className: 'wine-rows' });
+      group.items.forEach(function (item) {
+        var side = el('div', { className: 'wine-row__chips' }, [chip(CHECK_CHIP[item.status] || 'review', CHECK_TEXT[item.status] || item.status)]);
+        var forms = { eligibility: 'Add eligibility', consignment: 'Record a consignment', problem: 'Report a problem' };
+        if (item.source === 'production') side.append(el('span', { className: 'wine-row__meta', text: 'From production' }));
+        else if (forms[item.source] && canRecord) side.append(el('button', { type: 'button', className: 'workspace-link wine-link', 'data-open-dialog': item.source, text: forms[item.source] }));
+        else if (canRecord) side.append(el('button', { type: 'button', className: 'workspace-link wine-link', 'data-record': item.control, 'data-framework': item.framework, 'data-text': item.text, text: 'Record' }));
+        list.append(el('li', { className: 'wine-row' }, [
+          el('div', { className: 'wine-row__main' }, [
+            el('strong', { text: item.text }),
+            el('span', { className: 'wine-row__meta', text: item.detail }),
+          ]),
+          side,
+        ]));
+      });
+      var open = group.items.filter(function (i) { return i.status !== 'ok'; }).length;
+      wrap.append(el('details', { className: 'wine-group', open: '' }, [
+        el('summary', {}, [el('span', { text: group.name }), el('span', { className: 'wine-row__meta', text: open ? open + ' to do' : 'All done' })]),
+        list,
+      ]));
+    });
+  }
+
+  function renderExport(root, register) {
+    var card = root.querySelector('[data-export-card]');
+    card.hidden = !register;
+    if (!register) return;
+    var levy = register.levy;
+    root.querySelector('[data-levy]').textContent = num(levy.litres_exported) + ' L exported since ' + fmtDate(levy.year_start)
+      + '. The first ' + num(levy.levy_free_litres) + ' L are levy-free; levy due so far: $' + Number(levy.levy_due).toFixed(2) + '.';
+    var list = root.querySelector('[data-eligibilities]');
+    list.replaceChildren();
+    if (!register.eligibilities.length) {
+      list.append(el('li', { className: 'wine-empty-row', text: 'No export eligibility recorded yet.' }));
+    }
+    register.eligibilities.forEach(function (row) {
+      list.append(el('li', { className: 'wine-row' }, [
+        el('div', { className: 'wine-row__main' }, [
+          el('strong', { text: (row.lot_name || 'Wine lot') + ' · ' + (row.evidence_reference || '') }),
+          el('span', { className: 'wine-row__summary', text: num(row.exported_litres) + ' of ' + num(row.eligible_litres) + ' L shipped, ' + num(row.remaining_litres) + ' L left' }),
+          el('span', { className: 'wine-row__meta', text: (row.details.form === 'bulk' ? 'Bulk' : 'Packaged') + ' · eligible until ' + fmtDate(row.expires_on) + ((row.details.markets || []).length ? ' · ' + row.details.markets.join(', ') : '') }),
+        ]),
+        el('div', { className: 'wine-row__chips' }, [chip(row.current ? 'ok' : 'missing', row.current ? 'Current' : 'Used or expired')]),
+      ]));
+    });
+  }
+
+  function openPlan(root, plan, flags) {
     var dialog = root.querySelector('[data-plan-dialog]');
     if (!dialog) return;
     var form = dialog.querySelector('form');
     form.reset();
     ['plan_reference', 'verifier', 'next_verification', 'exemption_start'].forEach(function (k) { if (plan && plan[k]) form.elements[k].value = plan[k]; });
+    Object.keys(flags || {}).forEach(function (k) { if (form.elements[k]) form.elements[k].checked = !!flags[k]; });
     var mode = (plan && plan.mode) || 'registered';
     form.querySelector('input[name="mode"][value="' + mode + '"]').checked = true;
     syncMode(form);
@@ -155,16 +223,64 @@
   function syncMode(form) {
     var mode = (form.querySelector('input[name="mode"]:checked') || {}).value;
     form.querySelectorAll('[data-when]').forEach(function (g) { g.hidden = g.dataset.when !== mode; });
+    var exporter = form.querySelector('[data-exporter]');
+    if (exporter) { exporter.disabled = mode === 'exempt'; if (mode === 'exempt') exporter.checked = false; }
+  }
+  function syncConsignment(form) {
+    var kind = (form.querySelector('input[name="kind"]:checked') || {}).value;
+    form.querySelector('[data-needs-eligibility]').hidden = kind === 'trade_sample';
+    form.querySelector('[data-needs-entry]').hidden = kind !== 'commercial';
+    form.querySelector('[data-sample-only]').hidden = kind !== 'trade_sample';
+  }
+
+  function openDialog(root, name, setup) {
+    var dialog = root.querySelector('[data-dialog="' + name + '"]');
+    if (!dialog) return null;
+    var form = dialog.querySelector('form');
+    if (form) { form.reset(); var err = form.querySelector('[data-form-error]'); if (err) err.hidden = true; }
+    if (setup) setup(dialog, form);
+    dialog.showModal();
+    return dialog;
+  }
+
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function renderTrace(root, trace) {
+    var body = root.querySelector('[data-trace-body]');
+    body.replaceChildren();
+    var table = el('table', { className: 'wine-trace__table' });
+    table.append(el('thead', {}, [el('tr', {}, ['Stage', 'Lot', 'Used', 'Made', 'Loss', 'When'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
+    var tbody = el('tbody');
+    trace.steps.forEach(function (row) {
+      var src = row.source;
+      var lotCell = el('td', {}, [el('strong', { text: row.lot })]);
+      if (src) lotCell.append(el('span', { className: 'wine-row__meta', text: [src.grower, src.variety, src.vintage, src.region, src.spray_diary ? 'spray diary: ' + src.spray_diary : null].filter(Boolean).join(' · ') }));
+      if (row.flag) lotCell.append(el('span', { className: 'wine-trace__flag', text: row.flag }));
+      tbody.append(el('tr', {}, [
+        el('td', { text: row.stage }),
+        lotCell,
+        el('td', { text: row.used ? num(row.used, 1) + ' ' + (row.used_unit || '') : '–' }),
+        el('td', { text: num(row.made, 1) + ' ' + (row.made_unit || '') }),
+        el('td', { text: row.loss_pct == null ? '–' : row.loss_pct + '%' }),
+        el('td', { text: row.completed_at ? fmtDate(row.completed_at) : '' }),
+      ]));
+    });
+    table.append(tbody);
+    body.append(el('div', { className: 'wine-trace__scroll' }, [table]));
   }
 
   function init(root) {
-    var state = { plan: null };
+    var state = { plan: null, flags: {}, data: null };
     var error = root.querySelector('[data-wine-error]');
 
     async function load() {
       root.setAttribute('aria-busy', 'true');
       try {
         var data = await api('/api/compliant/wine');
+        state.data = data;
         error.hidden = true;
         if (!data.enabled) {
           root.classList.add('wine-off');
@@ -173,6 +289,7 @@
           return;
         }
         state.plan = data.plan;
+        state.flags = data.settings || {};
         root.querySelector('[data-vintage-year]').textContent = data.vintage.year;
         Object.keys(data.vintage).forEach(function (k) {
           var dd = root.querySelector('[data-stat="' + k + '"]');
@@ -184,8 +301,23 @@
           ? 'Last recall or drill opened ' + fmtDate(data.last_recall) + '. Run a drill at least once a year.'
           : 'No recall drill yet. Your plan expects one at least once a year: start one from Trace and recall.';
         renderPlan(root, data.plan);
+        renderChecklist(root, data.checklist || []);
+        renderExport(root, data.export);
         renderClaims(root, data.lots);
         renderPreflight(root, data.preflight);
+        root.querySelectorAll('[data-lot-select]').forEach(function (select) {
+          var keep = select.querySelector('option[value=""]');
+          select.replaceChildren();
+          if (keep) select.append(keep);
+          data.lots.forEach(function (lot) { select.append(el('option', { value: lot.id, text: lot.name })); });
+        });
+        var elig = root.querySelector('[data-eligibility-select]');
+        if (elig && data.export) {
+          elig.replaceChildren();
+          data.export.eligibilities.filter(function (r) { return r.current; }).forEach(function (r) {
+            elig.append(el('option', { value: r.id, text: (r.lot_name || 'Wine lot') + ' · ' + r.evidence_reference + ' (' + num(r.remaining_litres) + ' L left)' }));
+          });
+        }
         root.querySelector('[data-wine-empty]').hidden = data.steps.length > 0;
       } catch (e) {
         error.textContent = e.message;
@@ -195,10 +327,65 @@
       }
     }
 
+    async function showTrace(id, name) {
+      var dialog = openDialog(root, 'trace');
+      if (!dialog) return;
+      root.querySelector('[data-trace-lot]').textContent = name + ': every step back to the grapes, with what each used and made.';
+      root.querySelector('[data-trace-csv]').href = '/api/compliant/wine/lots/' + encodeURIComponent(id) + '/trace?format=csv';
+      root.querySelector('[data-trace-body]').replaceChildren(el('p', { className: 'wine-note', text: 'Loading…' }));
+      try { renderTrace(root, await api('/api/compliant/wine/lots/' + encodeURIComponent(id) + '/trace')); } catch (e) {
+        root.querySelector('[data-trace-body]').replaceChildren(el('p', { className: 'wine-form__error', text: e.message }));
+      }
+    }
+
     root.addEventListener('click', function (event) {
-      if (event.target.closest('[data-open-plan]')) openPlan(root, state.plan);
-      if (event.target.closest('[data-dialog-close]')) event.target.closest('dialog').close();
+      var t = event.target;
+      if (t.closest('[data-open-plan]')) openPlan(root, state.plan, state.flags);
+      if (t.closest('[data-dialog-close]')) t.closest('dialog').close();
+      var opener = t.closest('[data-open-dialog]');
+      if (opener) openDialog(root, opener.dataset.openDialog, function (dialog, form) {
+        if (form && form.elements.shipped_on) form.elements.shipped_on.value = todayIso();
+        if (form && form.dataset.form === 'consignment') syncConsignment(form);
+      });
+      var rec = t.closest('[data-record]');
+      if (rec) openDialog(root, 'record', function (dialog, form) {
+        form.elements.framework.value = rec.dataset.framework;
+        form.elements.control.value = rec.dataset.record;
+        form.elements.done_on.value = todayIso();
+        dialog.querySelector('[data-record-what]').textContent = rec.dataset.text;
+      });
+      var appr = t.closest('[data-approve]');
+      if (appr) openDialog(root, 'approve', function (dialog, form) { form.elements.lot_id.value = appr.dataset.approve; });
+      var tr = t.closest('[data-trace]');
+      if (tr) showTrace(tr.dataset.trace, tr.dataset.traceName);
     });
+
+    var ENDPOINTS = {
+      record: function () { return ['/api/compliant/wine/records', 'POST']; },
+      problem: function () { return ['/api/compliant/wine/problems', 'POST']; },
+      consignment: function () { return ['/api/compliant/wine/export/consignments', 'POST']; },
+      eligibility: function () { return ['/api/compliant/wine/export/eligibility', 'POST']; },
+      approve: function (data) { return ['/api/compliant/wine/lots/' + encodeURIComponent(data.lot_id) + '/label-approval', 'POST']; },
+    };
+    root.querySelectorAll('form[data-form]').forEach(function (form) {
+      if (form.dataset.form === 'consignment') form.addEventListener('change', function () { syncConsignment(form); });
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var data = {};
+        new FormData(form).forEach(function (v, k) { if (String(v).trim()) data[k] = String(v).trim(); });
+        var err = form.querySelector('[data-form-error]');
+        var target = ENDPOINTS[form.dataset.form](data);
+        try {
+          await api(target[0], data, target[1]);
+          form.closest('dialog').close();
+          load();
+        } catch (e) {
+          err.textContent = e.message;
+          err.hidden = false;
+        }
+      });
+    });
+
     var form = root.querySelector('[data-plan-form]');
     if (form) {
       form.addEventListener('change', function () { syncMode(form); });
@@ -206,6 +393,7 @@
         event.preventDefault();
         var data = {};
         new FormData(form).forEach(function (v, k) { if (String(v).trim()) data[k] = String(v).trim(); });
+        ['wine_exporter', 'wine_swnz', 'wine_organic'].forEach(function (k) { data[k] = !!(form.elements[k] && form.elements[k].checked); });
         var err = form.querySelector('[data-form-error]');
         try {
           await api('/api/compliant/wine/plan', data);

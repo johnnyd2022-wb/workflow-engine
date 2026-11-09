@@ -8,6 +8,7 @@ be checked; it doesn't review artwork, and it says "review" rather than inventin
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Final
 
@@ -17,6 +18,7 @@ from . import rules
 SULPHITE_THRESHOLD_MG_PER_L: Final = Decimal(10)  # FSANZ Standard 1.2.3: added sulphites >= 10 mg/kg
 PREGNANCY_WARNING_ABV: Final = Decimal("1.15")  # FSANZ: packaged alcohol for retail above 1.15% ABV
 ETHANOL_DENSITY: Final = Decimal("0.789")
+ENERGY_STATEMENT_FROM: Final = date(2028, 8, 13)  # FSANZ alcohol energy labelling, end of transition
 
 
 def standard_drinks(volume_ml: Decimal, abv: Decimal) -> Decimal:
@@ -28,7 +30,7 @@ def _item(key: str, label: str, status: str, detail: str) -> dict:
     return {"key": key, "label": label, "status": status, "detail": detail}
 
 
-def preflight(bottle_data: dict, comp: comp_mod.Composition | None) -> dict:
+def preflight(bottle_data: dict, comp: comp_mod.Composition | None, today: date | None = None) -> dict:
     """Statuses: ok (nothing to do), declare (must be on the label), review, missing."""
     from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
 
@@ -53,6 +55,30 @@ def preflight(bottle_data: dict, comp: comp_mod.Composition | None) -> dict:
         items.append(_item("standard-drinks", "Standard drinks", "missing", "Needs ABV and bottle size from bottling."))
     if abv is None or abv > PREGNANCY_WARNING_ABV:
         items.append(_item("pregnancy", "Pregnancy warning", "declare", "Required on packaged alcohol over 1.15% ABV."))
+    today = today or date.today()
+    if today >= ENERGY_STATEMENT_FROM:
+        items.append(_item("energy", "Energy statement", "declare", "Required on alcohol labels from 13 Aug 2028."))
+    else:
+        items.append(
+            _item(
+                "energy",
+                "Energy statement",
+                "review",
+                "Required from 13 Aug 2028: add it when this label is next reprinted.",
+            )
+        )
+    release = str(bottle_data.get(rules.RELEASE) or "").strip()
+    if release == rules.RELEASE_YES:
+        who = bottle_data.get("completed_by") or bottle_data.get("completed_by_email")
+        items.append(
+            _item("release", "Release for sale", "ok", "Released" + (f" by {who}" if who else "") + " at bottling.")
+        )
+    elif release:
+        items.append(
+            _item("release", "Release for sale", "review", "Not released yet: don't sell or export it until it is.")
+        )
+    else:
+        items.append(_item("release", "Release for sale", "missing", "No release decision was recorded at bottling."))
 
     if comp is None:
         items.append(

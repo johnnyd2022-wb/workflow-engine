@@ -9,7 +9,8 @@
 {# Style 1 (docs/wine-compliance-plan.md §3.4): everything here is read from production
    records. The only thing typed on this page is the plan itself. #}
 <main class="max-content workspace-overview workspace-page wine-page" data-wine-root aria-busy="true"
-      data-can-manage="{{ '1' if can('compliance.manage') else '0' }}">
+      data-can-manage="{{ '1' if can('compliance.manage') else '0' }}"
+      data-can-record="{{ '1' if can('compliance.record') else '0' }}">
   <header class="workspace-header">
     <div>
       <h1>Wine</h1>
@@ -17,6 +18,7 @@
     </div>
     <div class="workspace-header__actions wine-header-actions">
       <a class="workspace-button" href="/compliant/tools">Tools</a>
+      {% if can('compliance.record') %}<button type="button" class="workspace-button" data-open-dialog="problem">Report a problem</button>{% endif %}
       {% if can('compliance.manage') %}<button type="button" class="workspace-button" data-open-plan>Plan details</button>{% endif %}
       {% if can('production.record') %}
       <a class="workspace-button workspace-button--primary wine-primary" href="/core/record">
@@ -44,6 +46,27 @@
       <p class="wine-note" data-recall-note></p>
     </section>
   </div>
+
+  <section class="workspace-card" aria-labelledby="wine-checklist-title">
+    <div class="wine-card__head">
+      <div><h2 id="wine-checklist-title">Your plan's checks</h2>
+      <p class="workspace-caption">Everything your WSMP and your other wine programmes ask for. Checks production already answers fill themselves in.</p></div>
+    </div>
+    <div class="wine-checklist" data-checklist></div>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="wine-export-title" data-export-card hidden>
+    <div class="wine-card__head">
+      <div><h2 id="wine-export-title">Export</h2>
+      <p class="workspace-caption">Each batch's MPI eligibility, what's shipped against it, and this year's export levy. Customs clearance is recorded on each consignment.</p></div>
+      <div class="wine-card__actions">
+        {% if can('compliance.manage') %}<button type="button" class="workspace-button" data-open-dialog="eligibility">Add eligibility</button>{% endif %}
+        {% if can('compliance.record') %}<button type="button" class="workspace-button workspace-button--primary wine-small-primary" data-open-dialog="consignment">Record a consignment</button>{% endif %}
+      </div>
+    </div>
+    <p class="wine-levy" data-levy></p>
+    <ul class="wine-rows" data-eligibilities></ul>
+  </section>
 
   <section class="workspace-card" aria-labelledby="wine-claims-title">
     <div class="wine-card__head">
@@ -76,6 +99,12 @@
         <label class="wine-mode"><input type="radio" name="mode" value="registered" required><span><strong>A registered WSMP</strong><small>Most winemakers who sell wine.</small></span></label>
         <label class="wine-mode"><input type="radio" name="mode" value="exempt"><span><strong>Small winemaker exemption</strong><small>Under 20,000 L over two years, notified to MPI, no export.</small></span></label>
       </fieldset>
+      <fieldset class="wine-flags">
+        <legend>Also applies</legend>
+        <label><input type="checkbox" name="wine_exporter" value="1" data-exporter> We export wine</label>
+        <label><input type="checkbox" name="wine_swnz" value="1"> We're in Sustainable Winegrowing NZ</label>
+        <label><input type="checkbox" name="wine_organic" value="1"> We make or claim organic wine</label>
+      </fieldset>
       <div class="wine-form__grid" data-when="registered">
         <label>Plan reference<input name="plan_reference" maxlength="200" placeholder="e.g. WSMP 1234 or NZ Winegrowers CoP"></label>
         <label>Verifier<input name="verifier" maxlength="200" placeholder="Agency or person"></label>
@@ -89,6 +118,99 @@
     </form>
   </dialog>
   {% endif %}
+
+  {% if can('compliance.record') %}
+  <dialog class="wine-dialog" data-dialog="record" aria-labelledby="wine-record-title">
+    <form data-form="record" hx-boost="false" class="wine-form">
+      <h2 id="wine-record-title">Record a check</h2>
+      <p class="workspace-caption" data-record-what></p>
+      <input type="hidden" name="framework"><input type="hidden" name="control">
+      <label>What was done<input name="title" maxlength="255" required placeholder="e.g. Annual water test: within limits"></label>
+      <div class="wine-form__grid">
+        <label>Done on<input name="done_on" type="date" required></label>
+        <label>Next due (optional)<input name="next_due" type="date"></label>
+      </div>
+      <label>Evidence (optional)<input name="evidence_reference" maxlength="1024" placeholder="Report number, file name or where it's kept"></label>
+      <p class="wine-form__error" role="alert" data-form-error hidden></p>
+      <div class="wine-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog class="wine-dialog" data-dialog="problem" aria-labelledby="wine-problem-title">
+    <form data-form="problem" hx-boost="false" class="wine-form">
+      <h2 id="wine-problem-title">Report a problem</h2>
+      <p class="workspace-caption">MPI needs to hear within 24 hours. Choosing a lot puts it on hold so it can't be used, sold or dispatched until someone releases it.</p>
+      <fieldset class="wine-modes">
+        <legend>What happened?</legend>
+        <label class="wine-mode"><input type="radio" name="kind" value="critical" required><span><strong>Critical non-compliance</strong><small>A risk to safety or suitability.</small></span></label>
+        <label class="wine-mode"><input type="radio" name="kind" value="export"><span><strong>Export non-compliance</strong><small>Wine that doesn't meet an export requirement.</small></span></label>
+        <label class="wine-mode"><input type="radio" name="kind" value="recall"><span><strong>We've decided to recall</strong><small>Notify within 24 hours of deciding.</small></span></label>
+      </fieldset>
+      <label>Wine lot affected<select name="lot_id" data-lot-select><option value="">Not lot-specific</option></select></label>
+      <label>What happened<input name="description" maxlength="500" required placeholder="e.g. Glass fragment found in a bottle"></label>
+      <p class="wine-form__error" role="alert" data-form-error hidden></p>
+      <div class="wine-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Record and hold</button></div>
+    </form>
+  </dialog>
+  <dialog class="wine-dialog" data-dialog="consignment" aria-labelledby="wine-consignment-title">
+    <form data-form="consignment" hx-boost="false" class="wine-form">
+      <h2 id="wine-consignment-title">Record a consignment</h2>
+      <fieldset class="wine-modes">
+        <legend>Kind</legend>
+        <label class="wine-mode"><input type="radio" name="kind" value="commercial" required checked><span><strong>Commercial</strong><small>Ships under a batch's eligibility.</small></span></label>
+        <label class="wine-mode"><input type="radio" name="kind" value="small_trade"><span><strong>Small trade consignment</strong><small>Up to 27 L, from a batch with current eligibility.</small></span></label>
+        <label class="wine-mode"><input type="radio" name="kind" value="trade_sample"><span><strong>Trade samples</strong><small>Up to 110 L, not for sale.</small></span></label>
+      </fieldset>
+      <label data-needs-eligibility>Eligibility<select name="eligibility_id" data-eligibility-select></select></label>
+      <div class="wine-form__grid">
+        <label>Litres<input name="litres" type="number" step="any" min="0" required></label>
+        <label>Ship date<input name="shipped_on" type="date" required></label>
+        <label>Market<input name="market" maxlength="80" required placeholder="e.g. GB"></label>
+        <label>Consignee<input name="consignee" maxlength="200" required></label>
+      </div>
+      <label data-needs-entry>Customs export entry (TSW)<input name="customs_entry" maxlength="120"></label>
+      <label class="wine-check-label" data-sample-only hidden><input type="checkbox" name="not_for_sale_marked" value="1"> Bottles are marked “not for sale”</label>
+      <p class="wine-form__error" role="alert" data-form-error hidden></p>
+      <div class="wine-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Record consignment</button></div>
+    </form>
+  </dialog>
+  {% endif %}
+  {% if can('compliance.manage') %}
+  <dialog class="wine-dialog" data-dialog="eligibility" aria-labelledby="wine-eligibility-title">
+    <form data-form="eligibility" hx-boost="false" class="wine-form">
+      <h2 id="wine-eligibility-title">Add export eligibility</h2>
+      <p class="workspace-caption">From MPI Trade Certification. Packaged wine stays eligible for two years, bulk for three months.</p>
+      <label>Wine lot<select name="lot_id" data-lot-select required></select></label>
+      <div class="wine-form__grid">
+        <label>EES reference<input name="ees_reference" maxlength="120" required></label>
+        <label>Eligible from<input name="granted_on" type="date" required></label>
+        <label>Eligible litres<input name="eligible_litres" type="number" step="any" min="0" required></label>
+        <label>Form<select name="form"><option value="packaged">Packaged</option><option value="bulk">Bulk</option></select></label>
+      </div>
+      <label>Markets (optional)<input name="markets" maxlength="300" placeholder="e.g. GB, AU, US"></label>
+      <p class="wine-form__error" role="alert" data-form-error hidden></p>
+      <div class="wine-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Add eligibility</button></div>
+    </form>
+  </dialog>
+  <dialog class="wine-dialog" data-dialog="approve" aria-labelledby="wine-approve-title">
+    <form data-form="approve" hx-boost="false" class="wine-form">
+      <h2 id="wine-approve-title">Approve the label</h2>
+      <p class="workspace-caption">You've checked the artwork against the pre-flight. If anything behind it changes (ABV, sulphites, the blend), this approval lapses.</p>
+      <input type="hidden" name="lot_id">
+      <label>Artwork version<input name="label_version" maxlength="120" required placeholder="e.g. SB26 back label v3"></label>
+      <label>Artwork file (optional)<input name="evidence_reference" maxlength="1024"></label>
+      <p class="wine-form__error" role="alert" data-form-error hidden></p>
+      <div class="wine-form__actions"><button type="button" class="workspace-button" data-dialog-close>Cancel</button><button type="submit" class="workspace-button workspace-button--primary">Approve</button></div>
+    </form>
+  </dialog>
+  {% endif %}
+  <dialog class="wine-dialog wine-dialog--wide" data-dialog="trace" aria-labelledby="wine-trace-title">
+    <div class="wine-form">
+      <h2 id="wine-trace-title">Trace and mass balance</h2>
+      <p class="workspace-caption" data-trace-lot></p>
+      <div class="wine-trace" data-trace-body></div>
+      <div class="wine-form__actions"><a class="workspace-button" data-trace-csv download>Download CSV</a><button type="button" class="workspace-button workspace-button--primary" data-dialog-close>Done</button></div>
+    </div>
+  </dialog>
 </main>
 {% endblock %}
 {% block scripts %}{{ super() }}<script src="/compliant/static/wine.js"></script>{% endblock %}

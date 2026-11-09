@@ -281,17 +281,107 @@ NZ_ALCOHOL_FRAMEWORKS = (
         ),
     },
     {
+        # The WSMP model's record families (MPI integrated WSMP model; Wine Regulations 2021 as
+        # amended 28 Aug 2026). docs/wine-compliance-plan.md §6 maps each to the research.
         "slug": "wine-standards",
         "name": "Wine Standards Management Plan",
-        "version": "wine-act-current",
+        "version": "wine-regs-2021-amend-2026-08-28",
         "source_title": "Ministry for Primary Industries — Wine Standards Management Plans",
         "source_url": "https://www.mpi.govt.nz/food-business/winemaking-standards-requirements-and-testing/wine-standards-management-plans",
         "applies_to": ("wine",),
         "controls": (
-            ("wsmp-registration", "Record the registered Wine Standards Management Plan, scope and verifier."),
-            ("wine-risk-controls", "Record the plan's risk controls and verification evidence for winemaking."),
-            ("wine-trace-and-recall", "Maintain traceability, recall and corrective-action evidence for wine."),
-            ("wine-returns", "Record required Wine Act records, returns and export evidence where applicable."),
+            (
+                "wsmp-registration",
+                "Keep the registered WSMP, its scope, operator, day-to-day manager and verifier current.",
+            ),
+            ("wsmp-verification", "Record each verification visit, its report and the corrective actions closed."),
+            (
+                "wsmp-changes",
+                "Notify MPI of significant and minor plan changes by their deadlines, and keep the change log.",
+            ),
+            (
+                "small-winemaker-exemption",
+                "If exempt: notified to MPI, under 20,000 L over two years, no export, renewed before expiry.",
+            ),
+            ("premises-equipment", "Maintain premises, equipment and calibration, with records of maintenance."),
+            ("water", "Show water used is suitable: source, treatment, testing and corrective action."),
+            ("cleaning-chemicals", "Clean and sanitise to schedule; store maintenance compounds and chemicals safely."),
+            ("pest-waste", "Control pests, waste, drains and other contamination pathways."),
+            ("staff-hygiene", "Train staff; manage illness, hygiene and personnel contamination controls."),
+            (
+                "grape-intake",
+                "At intake, record the supplier, block, variety, vintage, quantity, condition and spray/withholding declaration.",
+            ),
+            ("inputs-processing-aids", "Record every addition and processing aid against the wine it went into."),
+            ("lab-release", "Sample and test to specification; record the release decision and who made it."),
+            ("contractors", "Show contract makers, bottlers and off-site work are covered by a plan."),
+            (
+                "trace-mass-balance",
+                "Trace any wine from source to recipient and reconcile its volumes; produce trace records within 24 hours.",
+            ),
+            ("recall", "Keep a recall procedure and run a simulated recall at least every 12 months."),
+            (
+                "nonconformance",
+                "Notify MPI within 24 hours of a critical or export non-compliance or a recall decision; hold affected wine.",
+            ),
+            (
+                "label-claims",
+                "Label each wine correctly: mandatory statements, allergens, and variety/vintage/region claims of at least 85%.",
+            ),
+            ("record-retention", "Keep records for at least seven years, accurate and retrievable."),
+            ("nzw-levy", "File New Zealand Winegrowers levy returns where grapes or wine are sold."),
+        ),
+    },
+    {
+        "slug": "wine-export",
+        "name": "Wine export eligibility",
+        "version": "wine-export-notice-2026-07-01",
+        "source_title": "Ministry for Primary Industries — Steps to exporting New Zealand grape wine",
+        "source_url": "https://www.mpi.govt.nz/export/food/exporting-new-zealand-grape-wine/steps-to-exporting-new-zealand-grape-wine",
+        "applies_to": "wine-exporter",
+        "controls": (
+            ("exporter-registration", "Register as a wine exporter where the product type requires it."),
+            (
+                "batch-eligibility",
+                "Hold a current export eligibility (EES) for each batch and never export more than its eligible volume.",
+            ),
+            ("market-requirements", "Record each destination's OMAR version and the documents it needs."),
+            (
+                "customs-export-clearance",
+                "Clear each consignment with Customs (TSW export entry), separately from MPI eligibility.",
+            ),
+            (
+                "export-levy-fees",
+                "Pay the export levy ($0.0037/L after the first 200,000 L) and MPI Trade Certification fees.",
+            ),
+        ),
+    },
+    {
+        "slug": "swnz",
+        "name": "Sustainable Winegrowing New Zealand",
+        "version": "swnz-standard-2026-05",
+        "source_title": "New Zealand Winegrowers — SWNZ standard (May 2026)",
+        "source_url": "https://www.nzwine.com/en/sustainability/swnz/",
+        "applies_to": "wine-swnz",
+        "controls": (
+            ("swnz-certification", "Keep SWNZ certification current and record each audit."),
+            ("swnz-records", "Keep the vineyard and winery records the SWNZ standard asks for."),
+        ),
+    },
+    {
+        "slug": "organic-wine",
+        "name": "Organic wine",
+        "version": "ooap-2026",
+        "source_title": "Ministry for Primary Industries — Official Organic Assurance Programme",
+        "source_url": "https://www.mpi.govt.nz/export/food/organics/export-under-the-official-organic-assurance-programme",
+        "applies_to": "wine-organic",
+        "controls": (
+            (
+                "organic-certification",
+                "Hold organic certification for the vineyard and winery before claiming organic.",
+            ),
+            ("organic-chain-of-custody", "Keep organic inputs, lots and processing separate and traceable."),
+            ("organic-assurance", "Get official organic assurance for each export market that needs it."),
         ),
     },
     {
@@ -338,6 +428,19 @@ _extend_national_programmes()
 
 
 CONTROL_REQUIREMENTS = {
+    ("wine-standards", "wsmp-verification"): {"evidence": True, "due_date": True},
+    ("wine-standards", "wsmp-changes"): {"record_types": ("lodgement",), "evidence": True, "due_date": True},
+    ("wine-standards", "water"): {"record_types": ("reading", "attestation"), "evidence": True, "due_date": True},
+    ("wine-standards", "staff-hygiene"): {"record_types": ("competency",), "evidence": True, "due_date": True},
+    ("wine-standards", "recall"): {"evidence": True, "due_date": True},
+    ("wine-standards", "nonconformance"): {"record_types": ("incident",), "due_date": True},
+    ("wine-standards", "nzw-levy"): {"record_types": ("lodgement",), "period": True, "evidence": True},
+    ("wine-export", "batch-eligibility"): {"evidence": True, "source_refs": True},
+    ("wine-export", "customs-export-clearance"): {
+        "record_types": ("lodgement",),
+        "evidence": True,
+        "source_refs": True,
+    },
     ("customs-alcohol", "period-lodgement"): {"record_types": ("lodgement",), "period": True, "evidence": True},
     ("customs-alcohol", "reconciliation"): {
         "record_types": ("reading", "attestation"),
@@ -411,6 +514,12 @@ def framework_applies(
         return selected == f"np{applies_to[0].removeprefix('national-programme-')}" and (
             not product_types or bool(product_types.intersection(applies_to[1:]))
         )
+    if isinstance(applies_to, str) and applies_to.startswith("wine-"):
+        settings = profile_settings or {}
+        if "wine" not in (settings.get("alcohol_product_types") or []):
+            return False
+        flag = {"wine-exporter": "wine_exporter", "wine-swnz": "wine_swnz", "wine-organic": "wine_organic"}[applies_to]
+        return bool(settings.get(flag))
     if applies_to == "liquor-licence-required":
         return bool((profile_settings or {}).get("liquor_licence_types"))
     if isinstance(applies_to, tuple):

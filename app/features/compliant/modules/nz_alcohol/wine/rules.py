@@ -30,6 +30,9 @@ SPRAY_DIARY: Final = "Spray diary received"
 SO2_ADDED: Final = "SO2 added"
 FINING: Final = "Fining agent"
 BOTTLE_SIZE: Final = "Bottle size"
+RELEASE: Final = "Released for sale"
+RELEASE_YES: Final = "Yes, analysis checked"
+RELEASE_NOT_YET: Final = "Not yet"
 
 VARIETIES: Final = (
     "Sauvignon blanc", "Pinot noir", "Chardonnay", "Pinot gris", "Riesling", "Merlot", "Syrah",
@@ -169,6 +172,18 @@ def _bottle_rules() -> tuple[WorkflowRule, ...]:
                 "default": 750,
                 "help": "Used to work out standard drinks for the label.",
             },
+        ),
+        _rule(
+            "bottle.release",
+            {
+                "type": "select",
+                "label": RELEASE,
+                "required": True,
+                "options": [RELEASE_YES, RELEASE_NOT_YET],
+                "help": "Your plan's release decision: has the analysis been checked against spec? "
+                "\u201cNot yet\u201d keeps it out of export until it is.",
+            },
+            _required(RELEASE, "Record whether this wine is released for sale.", "Choose yes or not yet."),
         ),
     )
 

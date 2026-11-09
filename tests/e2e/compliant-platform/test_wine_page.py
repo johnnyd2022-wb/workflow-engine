@@ -53,3 +53,30 @@ def test_wine_tab_page_and_exemption_plan(admin_page: Page):
 def test_wine_page_says_so_when_wine_is_off(admin_page: Page):
     admin_page.goto("/compliant/nz-alcohol/wine")
     expect(admin_page.locator("[data-wine-error]")).to_contain_text("Wine isn’t one of your product types")
+
+
+def test_checklist_record_and_problem_report_from_the_page(admin_page: Page):
+    page = admin_page
+    errors: list[str] = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    _switch_on_wine(page)
+    page.goto("/compliant/nz-alcohol/wine")
+    expect(page.locator("[data-wine-root]")).to_have_attribute("aria-busy", "false")
+    checklist = page.locator("[data-checklist]")
+    water = checklist.locator(".wine-row", has_text="Show water used is suitable")
+    expect(water).to_contain_text("Not recorded")
+    water.get_by_role("button", name="Record").click()
+    dialog = page.get_by_role("dialog", name="Record a check")
+    dialog.get_by_label("What was done").fill("Bore water test: within limits")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog).to_be_hidden()
+    expect(checklist.locator(".wine-row", has_text="Show water used is suitable")).to_contain_text("Done")
+
+    page.get_by_role("button", name="Report a problem").first.click()
+    problem = page.get_by_role("dialog", name="Report a problem")
+    problem.get_by_text("Critical non-compliance").click()
+    problem.get_by_label("What happened", exact=True).fill("Cleaning chemical found in a tank line")
+    problem.get_by_role("button", name="Record and hold").click()
+    expect(problem).to_be_hidden()
+    expect(checklist.locator(".wine-row", has_text="Notify MPI within 24 hours")).to_contain_text("Due soon")
+    assert not [e for e in errors if "Alpine Expression Error" in e or "Content Security Policy" in e], errors

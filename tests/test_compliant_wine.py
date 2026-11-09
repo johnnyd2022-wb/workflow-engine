@@ -8,7 +8,7 @@ actually consumed -- no blend sheet typed anywhere.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -75,6 +75,13 @@ def wine_org(db, flask_app):  # noqa: F811
     try:
         yield org, client
     finally:
+        from app.core.db.models.lot_hold import LotHold
+        from app.features.compliant.models import ComplianceRecord
+
+        db.rollback()
+        db.query(LotHold).filter(LotHold.org_id == org.id).delete(synchronize_session=False)
+        db.query(ComplianceRecord).filter(ComplianceRecord.org_id == org.id).delete(synchronize_session=False)
+        db.commit()
         clear_org_synthetic_data(db, org.id)
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
@@ -193,7 +200,8 @@ def test_blend_composition_and_label_preflight_come_from_the_trace(db, wine_org)
             "Crush and press": {"_qty": "700"},
             "Ferment": {"_qty": "650"},
             "Cellar": {rules.SO2_ADDED: "35", rules.FINING: "Egg (albumin)", "_qty": "640"},
-            "Bottle": {ABV_PROMPT_LABEL: "12.5", rules.BOTTLE_SIZE: "750", "_qty": "850"},
+            "Bottle": {ABV_PROMPT_LABEL: "12.5", rules.BOTTLE_SIZE: "750", rules.RELEASE: rules.RELEASE_YES,
+                       "_qty": "850"},
         },
         {"Crush and press": crush_inputs},
     )  # fmt: skip
@@ -249,3 +257,192 @@ def test_plan_validation_and_exemption_meter(db, wine_org):
     plan = client.get("/api/compliant/wine").get_json()["plan"]
     assert plan["mode"] == "exempt" and plan["exemption_limit_l"] == 20000.0
     assert plan["exemption_expires"].startswith(str(date.today().year + 1))
+
+
+# ---------------------------------------------------------------------------------------
+# Every-requirement register (plan §6)
+# ---------------------------------------------------------------------------------------
+
+
+def _bottled_org(db, client, org_id, release=rules.RELEASE_YES):
+    intake_p, wine_p, _s, _g = _workflows(db, org_id)
+    lot = _run(
+        db, client, org_id, intake_p.id,
+        {"Grape intake": {rules.GROWER: "Block 1", rules.VARIETY: "Pinot noir", rules.VINTAGE: str(rules.current_vintage()),
+                          rules.REGION: "Central Otago", rules.SPRAY_DIARY: "Yes", "_qty": "1000"}},
+    )["Grape intake"]  # fmt: skip
+    lots = _run(
+        db, client, org_id, wine_p.id,
+        {"Crush and press": {"_qty": "700"}, "Ferment": {"_qty": "650"}, "Cellar": {rules.SO2_ADDED: "30", "_qty": "640"},
+         "Bottle": {ABV_PROMPT_LABEL: "13.5", rules.BOTTLE_SIZE: "750", rules.RELEASE: release, "_qty": "850"}},
+        {"Crush and press": [{"inventory_item_id": str(lot.id), "name": lot.name, "quantity": "1000", "unit": "kg"}]},
+    )  # fmt: skip
+    return lots["Bottle"]
+
+
+def test_bottling_refuses_without_a_release_decision(db, wine_org):
+    org, client = wine_org
+    _i, wine_p, _s, _g = _workflows(db, org.id)
+    execution = ExecutionRepository(db).create_execution(org_id=org.id, process_id=wine_p.id)
+    db.commit()
+    rows = sorted(execution.execution_steps, key=lambda s: s.step.position)
+    for es in rows[:3]:
+        assert client.post(f"/api/core/executions/{execution.id}/steps/{es.id}/complete", json=BODY).status_code == 200
+    bottle = rows[3]
+    url = f"/api/core/executions/{execution.id}/steps/{bottle.id}/complete"
+    refused = client.post(url, json={**BODY, "execution_data": {ABV_PROMPT_LABEL: "13", rules.BOTTLE_SIZE: "750"}})
+    assert refused.status_code == 409 and "released for sale" in refused.get_json()["error"]
+
+
+def test_checklist_reads_production_and_records(db, wine_org):
+    org, client = wine_org
+    client.put("/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "verifier": "AsureQuality"})
+    _bottled_org(db, client, org.id)
+    body = client.get("/api/compliant/wine").get_json()
+    (wsmp,) = [g for g in body["checklist"] if g["framework"] == "wine-standards"]
+    items = {i["control"]: i for i in wsmp["items"]}
+    assert "small-winemaker-exemption" not in items  # registered, not exempt
+    assert items["wsmp-registration"]["status"] == "ok" and items["wsmp-registration"]["source"] == "production"
+    assert items["grape-intake"]["status"] == "ok" and "1 of 1" in items["grape-intake"]["detail"]
+    assert items["lab-release"]["status"] == "ok"
+    assert items["recall"]["status"] == "missing"
+    assert items["water"]["status"] == "missing"
+    assert {g["framework"] for g in body["checklist"]} == {"wine-standards"}  # no export/SWNZ/organic switched on
+
+    saved = client.post(
+        "/api/compliant/wine/records",
+        json={"framework": "wine-standards", "control": "water", "title": "Bore water test: clear",
+              "next_due": (date.today().replace(year=date.today().year + 1)).isoformat(), "evidence_reference": "Lab 4471"},
+    )  # fmt: skip
+    assert saved.status_code == 201, saved.get_json()
+    items = {i["control"]: i for i in client.get("/api/compliant/wine").get_json()["checklist"][0]["items"]}
+    assert items["water"]["status"] == "ok"
+    bad = client.post("/api/compliant/wine/records", json={"framework": "wine-export", "control": "batch-eligibility", "title": "x"})
+    assert bad.status_code == 400 and "doesn't apply" in bad.get_json()["error"]
+
+
+def test_a_problem_report_starts_the_24_hour_clock_and_holds_the_wine(db, wine_org):
+    from app.core.db.models.lot_hold import LotHold
+
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id)
+    reported = client.post(
+        "/api/compliant/wine/problems",
+        json={"kind": "critical", "description": "Glass fragment found in a bottle", "lot_id": str(lot.id)},
+    )
+    assert reported.status_code == 201, reported.get_json()
+    body = reported.get_json()
+    assert body["held"] is True and body["record"]["status"] == "open"
+    assert body["record"]["due_date"] == (date.today() + timedelta(days=1)).isoformat() or body["record"]["due_date"] == date.today().isoformat()
+    hold = db.query(LotHold).filter(LotHold.org_id == org.id, LotHold.inventory_item_id == lot.id, LotHold.released_at.is_(None)).one()
+    assert "Glass fragment" in hold.reason
+    items = {i["control"]: i for i in client.get("/api/compliant/wine").get_json()["checklist"][0]["items"]}
+    assert items["nonconformance"]["status"] in ("due", "overdue")
+
+
+def test_label_approval_lapses_when_the_wine_changes(db, wine_org):
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id)
+
+    def approval():
+        (pf,) = client.get("/api/compliant/wine").get_json()["preflight"]
+        return next(i for i in pf["items"] if i["key"] == "label-approval")
+
+    assert approval()["detail"] == "Not approved yet."
+    ok = client.post(f"/api/compliant/wine/lots/{lot.id}/label-approval", json={"label_version": "v3"})
+    assert ok.status_code == 201, ok.get_json()
+    assert approval()["status"] == "ok"
+    # Something behind the label changes: the recorded ABV is corrected.
+    from app.core.db.models.execution_step import ExecutionStep
+
+    step = db.query(ExecutionStep).filter(ExecutionStep.id == lot.source_execution_step_id).one()
+    step.execution_data = {**step.execution_data, ABV_PROMPT_LABEL: "14"}
+    db.commit()
+    assert approval()["status"] == "review" and "lapsed" in approval()["detail"]
+
+
+def test_export_register_enforces_eligibility_volume_expiry_and_samples(db, wine_org):
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id)
+    refused = client.post("/api/compliant/wine/export/eligibility", json={"lot_id": str(lot.id)})
+    assert "Turn on exporting" in refused.get_json()["error"]
+    client.put("/api/compliant/wine/plan", json={"mode": "registered", "plan_reference": "WSMP 9", "wine_exporter": True})
+    granted = (date.today() - timedelta(days=10)).isoformat()
+    ok = client.post(
+        "/api/compliant/wine/export/eligibility",
+        json={"lot_id": str(lot.id), "form": "packaged", "granted_on": granted, "ees_reference": "EES-1",
+              "eligible_litres": "500", "markets": "GB, AU"},
+    )  # fmt: skip
+    assert ok.status_code == 201, ok.get_json()
+    elig = ok.get_json()["record"]["id"]
+
+    def ship(**kw):
+        body = {"kind": "commercial", "litres": "300", "shipped_on": date.today().isoformat(), "market": "GB",
+                "consignee": "London Wines", "customs_entry": "TSW-1", "eligibility_id": elig, **kw}  # fmt: skip
+        return client.post("/api/compliant/wine/export/consignments", json=body)
+
+    assert ship().status_code == 201
+    over = ship()  # 300 more would pass 500 eligible
+    assert over.status_code == 400 and "200 L" in over.get_json()["error"]
+    assert "doesn't cover US" in ship(market="US", litres="10").get_json()["error"]
+    assert "Customs export entry" in ship(customs_entry="", litres="10").get_json()["error"]
+    late = (date.today() + timedelta(days=800)).isoformat()
+    assert "expired" in ship(shipped_on=late, litres="10").get_json()["error"]
+    big_sample = ship(kind="trade_sample", litres="111", eligibility_id=None, not_for_sale_marked=True)
+    assert "110 L" in big_sample.get_json()["error"]
+    unmarked = ship(kind="trade_sample", litres="20", eligibility_id=None)
+    assert "not for sale" in unmarked.get_json()["error"]
+    assert ship(kind="trade_sample", litres="20", eligibility_id=None, not_for_sale_marked=True).status_code == 201
+    assert "27 L" in ship(kind="small_trade", litres="28").get_json()["error"]
+    reg = client.get("/api/compliant/wine").get_json()["export"]
+    (row,) = reg["eligibilities"]
+    assert row["exported_litres"] == 300.0 and row["remaining_litres"] == 200.0  # samples don't use eligibility
+    assert reg["levy"]["litres_exported"] == 300.0 and reg["levy"]["levy_due"] == 0.0
+
+
+def test_exempt_makers_cannot_export(db, wine_org):
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id)
+    start = date(date.today().year - 1, 3, 1).isoformat()
+    refused = client.put("/api/compliant/wine/plan", json={"mode": "exempt", "exemption_start": start, "wine_exporter": True})
+    assert refused.status_code == 400 and "can't be exported" in refused.get_json()["error"]
+    client.put("/api/compliant/wine/plan", json={"mode": "exempt", "exemption_start": start})
+    no = client.post(
+        "/api/compliant/wine/export/eligibility",
+        json={"lot_id": str(lot.id), "form": "bulk", "granted_on": start, "ees_reference": "E", "eligible_litres": "5"},
+    )
+    assert no.status_code == 400 and "can't be exported" in no.get_json()["error"]
+
+
+def test_unreleased_wine_cannot_get_export_eligibility(db, wine_org):
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id, release=rules.RELEASE_NOT_YET)
+    client.put("/api/compliant/wine/plan", json={"mode": "registered", "wine_exporter": True})
+    no = client.post(
+        "/api/compliant/wine/export/eligibility",
+        json={"lot_id": str(lot.id), "form": "packaged", "granted_on": date.today().isoformat(), "ees_reference": "E",
+              "eligible_litres": "5"},
+    )  # fmt: skip
+    assert no.status_code == 400 and "Release this lot" in no.get_json()["error"]
+
+
+def test_trace_and_mass_balance_for_a_wine_officer(db, wine_org):
+    org, client = wine_org
+    lot = _bottled_org(db, client, org.id)
+    body = client.get(f"/api/compliant/wine/lots/{lot.id}/trace").get_json()
+    stages = [s["stage"] for s in body["steps"]]
+    assert stages[0] == "Bottle" and stages[-1] == "Grape intake"
+    ferment = next(s for s in body["steps"] if s["stage"] == "Ferment")
+    assert ferment["used"] == 700.0 and ferment["made"] == 650.0 and ferment["loss_pct"] == 7.1
+    intake = body["steps"][-1]
+    assert intake["source"]["grower"] == "Block 1" and intake["source"]["spray_diary"] == "Yes"
+    csv_text = client.get(f"/api/compliant/wine/lots/{lot.id}/trace?format=csv").get_data(as_text=True)
+    assert csv_text.splitlines()[0].startswith("Lot,Stage") and "Block 1" in csv_text
+    assert client.get("/api/compliant/wine/lots/not-a-uuid/trace").status_code == 404
+
+
+def test_optional_frameworks_follow_their_switches(db, wine_org):
+    _org, client = wine_org
+    client.put("/api/compliant/wine/plan", json={"mode": "registered", "wine_exporter": True, "wine_swnz": True, "wine_organic": True})
+    names = {g["framework"] for g in client.get("/api/compliant/wine").get_json()["checklist"]}
+    assert names == {"wine-standards", "wine-export", "swnz", "organic-wine"}

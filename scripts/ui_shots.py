@@ -1954,6 +1954,7 @@ def _seed_wine(db, org_id, inv) -> None:
     from datetime import UTC, datetime
 
     from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.process import ProcessCategory
     from app.core.db.repositories.execution_repo import ExecutionRepository
     from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
@@ -1973,6 +1974,7 @@ def _seed_wine(db, org_id, inv) -> None:
     profile.settings = {
         **(profile.settings or {}),
         "alcohol_product_types": sorted({*((profile.settings or {}).get("alcohol_product_types") or []), "wine"}),
+        "wine_exporter": True,
         "wine_plan": {
             "mode": "registered",
             "plan_reference": "NZW CoP WSMP 4471",
@@ -2052,9 +2054,33 @@ def _seed_wine(db, org_id, inv) -> None:
         sauv,
         [(f"SB {year} juice", 7350, "L", {}), (f"SB {year} young wine", 7050, "L", {}),
          (f"SB {year} finished", 6980, "L", {wine.SO2_ADDED: "40", wine.FINING: "Egg (albumin)"}),
-         (f"Marlborough Sauvignon blanc {year}", 9240, "units", {ABV_PROMPT_LABEL: "13", wine.BOTTLE_SIZE: "750"})],
+         (f"Marlborough Sauvignon blanc {year}", 9240, "units", {ABV_PROMPT_LABEL: "13", wine.BOTTLE_SIZE: "750",
+                                                                 wine.RELEASE: wine.RELEASE_YES})],
         crush_in, days_ago=200,
     )  # fmt: skip
+    from app.features.compliant.models import ComplianceRecord as _Record
+
+    bottled = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == f"Marlborough Sauvignon blanc {year}")
+        .one()
+    )
+    elig = _Record(
+        org_id=org_id, framework_slug="wine-export", control_id="batch-eligibility", record_type="attestation",
+        status="complete", title=f"Export eligibility EES-26-0412 for {bottled.name}", period_start=date.today() - timedelta(days=40),
+        due_date=date.today() + timedelta(days=690), evidence_reference="EES-26-0412", source_refs=[str(bottled.id)],
+        details={"lot_id": str(bottled.id), "lot_name": bottled.name, "form": "packaged", "eligible_litres": "4500",
+                 "expires_on": (date.today() + timedelta(days=690)).isoformat(), "markets": ["GB", "AU"]},
+    )  # fmt: skip
+    db.add(elig)
+    db.flush()
+    db.add(_Record(
+        org_id=org_id, framework_slug="wine-export", control_id="customs-export-clearance", record_type="lodgement",
+        status="complete", title="1,800 L to Thames Cellars, GB", period_start=date.today() - timedelta(days=20),
+        evidence_reference="TSW-EX-77812", source_refs=[str(bottled.id)],
+        details={"kind": "commercial", "litres": "1800", "market": "GB", "consignee": "Thames Cellars", "eligibility_id": str(elig.id)},
+    ))  # fmt: skip
+    db.commit()
     pinot = process(
         f"Pinot noir {year}",
         [("Crush and destem", "Must", "L"), ("Ferment", "Young wine", "L"), ("Barrel maturation", "Pinot in barrel", "L")],

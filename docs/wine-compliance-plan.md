@@ -118,3 +118,58 @@ winery checking them would be guessing.
 - Retention defaults to 7 years but isn't enforced, because I couldn't confirm the period.
 - Rules aren't effective-dated yet: the 85% and 10 mg/kg thresholds are constants with their
   source cited. Effective-dating comes with W2's rule calendar.
+
+## 6. Requirement coverage (every requirement in the research → where Biz-E meets it)
+
+Founder, 2026-11-09: wine compliance must cover *every* requirement in !662, not a first slice.
+Each row is a requirement from the research, the feature that meets it, and how the
+winemaker meets it without extra work. "Record" means a dated compliance record with
+evidence, owner and due date (`ComplianceRecord`, the same evidence register Customs and
+NP use), shown on the Wine page's WSMP checklist.
+
+| § | Requirement (research) | Type | Where Biz-E meets it | How |
+|---|---|---|---|---|
+| 3.1 | Activity/product scope matches what's made, packed, stored, exported | Law | Compliance configuration + Wine plan dialog | Product types, exporter, SWNZ, organic switches; frameworks apply from them |
+| 3.2 | Registered WSMP (operator, site, plan, verifier) | Law | Wine → plan card; control `wsmp-registration` | Plan reference, verifier, next verification; record with the registration evidence |
+| 3.2 | Records accurate, who/what/when, kept ≥7 years | Law | Every production record (actor, timestamp); control `record-retention` | Automatic; Biz-E never deletes production records |
+| 3.2 | Trace records retrievable within 24 h; other records within 2 working days | Law | Wine → each lot's **trace and mass balance**, CSV | One click per lot |
+| 3.2 | Significant-change and minor-change notifications (2026 amendment) | Law | Control `wsmp-changes` | Record each notification with its due date; overdue shows on the checklist |
+| 3.2 | Small winemaker exemption: <20,000 L / 2 yrs, notified, no export, 2-yr expiry | Law | Wine → exemption meter; export refused while exempt | Litres from ferment steps; amber at 80% or 60 days to expiry |
+| 3.3 | 2026 amendments effective-dated (28 Aug 2026; export fees 1 Jul 2026) | Law | Rule constants carry their source and start date | Shown in the checklist and export levy |
+| 4.1 | Premises, equipment, maintenance, calibration | Law (WSMP) | Control `premises-equipment` | Record with evidence and next due |
+| 4.1 | Water suitable for use (source, treatment, testing) | Law (WSMP, 2026 amendment) | Control `water` | Record test results, due date |
+| 4.1 | Cleaning, sanitation, maintenance compounds, chemicals | Law (WSMP) | Control `cleaning-chemicals` | Record; production evidence photos also count |
+| 4.1 | Pest, waste, drains, contamination pathways | Law (WSMP) | Control `pest-waste` | Record |
+| 4.1 | Staff illness, hygiene, training, protective clothing | Law (WSMP, 2026 amendment) | Control `staff-hygiene` | Competency record per person, due date |
+| 4.1 | Grape supplier spray/withholding info; intake identity, condition, accept/reject | Law (WSMP) | **Intake step** fields; control `grape-intake` (live) | Asked at every intake; the checklist shows the share of this vintage's lots with a spray diary |
+| 4.1 | Inputs and processing aids recorded per batch | Law (WSMP) | **Cellar step** SO₂ and fining; step inputs | Asked in production; composition carries them to the label |
+| 4.1 | Specifications, sampling/testing, non-conforming product, release decision | Law (WSMP) | **Bottle step** release field; control `lab-release` | "Released for sale" asked at bottling; lab file on the step |
+| 4.1 | Contractors, cross-site and off-site work covered | Law (WSMP) | Control `contractors` | Record each contractor's coverage evidence |
+| 4.2 | Separate Food Act activities (cellar-door food) | Law | Compliance → Food registrations (existing) | Unchanged; linked from the Wine checklist |
+| 4.3 | Sulphites ≥10 mg/kg declared; allergen fining assessed | Law (FSANZ) | **Bottling pre-flight** | Worked out from cellar records |
+| 5.1 | Source-to-recipient trace: vineyard, intake, making, packaging, movement, distribution | Law | Trace graph (existing) + intake fields + sales | Every step already links lots; Wine adds grower/variety/vintage/region |
+| 5.1 | Mass balance: inputs reconcile to stock, loss, samples, sales | Good practice / recall | Wine → **trace and mass balance** per lot | In vs out per step, loss %, flagged when out > in |
+| 5.3 | Recall procedure; simulated recall at least every 12 months | Law | Recalls and drills (GL-P03, existing); control `recall` (live) | Checklist goes amber at 11 months, red at 12 |
+| 5.3 | Notify within 24 h of deciding to recall; CNC/ENC within 24 h | Law | Wine → **Report a problem** | Records the incident with a 24-hour due date and **places a quality hold** on the lot |
+| 6.1 | Mandatory label: identity, ABV, standard drinks, pregnancy warning, allergens, lot ID, business details | Law (FSANZ) | **Bottling pre-flight** | Worked out per lot; lot ID is the bottled lot |
+| 6.1 | Alcohol energy statement (transition ends 13 Aug 2028) | Law (FSANZ) | **Bottling pre-flight** | "Review" now, "On the label" from 13 Aug 2028 |
+| 6.2 | 85% variety / vintage / region claims; GI is a separate layer | Law | **Label claims** | Worked out from the trace; region list is the registered GIs |
+| 6.3 | Label approval stored, invalidated when composition, ABV or claims change | Recommended | **Approve label** on the pre-flight | Approval fingerprints the facts; any change lapses it |
+| 7.1–7.3 | CCA licence, boundaries, movement ledger, duty classification, monthly or 6/12-month entries, nil returns | Law | Compliance → Customs (existing, product-agnostic; grape, fortified and fruit wine tariff items exist) | Unchanged |
+| 7.4 | Export clearance through TSW is separate from MPI eligibility | Law | **Export register**: consignment records the Customs entry reference separately | Required field |
+| 8.1 | Export eligibility per batch and volume; EES before shipment; quantity ≤ eligible volume; packaged ≤2 yrs, bulk ≤3 months | Law | **Export register** | Eligibility per lot with EES reference; consignments refused over the balance, after expiry, or for an unreleased or exempt lot |
+| 8.1 | Trade samples ≤110 L (not for sale) and ≤27 L consignments with current eligibility | Law | **Export register** | Recorded as such; the limits are checked |
+| 8.2 | Fruit wine, cider, mead and non-NZ grape wine export path; exporter registration | Law | Framework `wine-export`, control `exporter-registration` | Record registration |
+| 8.3 | OMARs and market documents per destination | Market access | Framework `wine-export`, control `market-requirements` | Record each market's OMAR version and documents |
+| 8.4 | Organic official assurance; organic claims need evidence | Market/industry | Framework `organic` (when switched on) | Certificate, chain of custody and OOAP records |
+| 3.3 / 10.2 | Export levy $0.0037/L after the first 200,000 L per exporter; MPI document fees | Law | **Export register** levy summary | Running litres and levy for the year |
+| 9.1–9.2 | Alcohol licences, managers, cellar-door tasting, remote sales | Law | Compliance → Licensing (existing) | Unchanged; linked from the checklist |
+| 10.1 | SWNZ certification and records | Industry | Framework `swnz` (when switched on) | Certification and audit records |
+| 10.2 | NZ Winegrowers levy | Law (levy order) | Control `nzw-levy` | Record each return |
+| 10.3 | Water, waste, H&S, hazardous substances, biosecurity | Adjacent | Trade waste (existing); out of the wine module's scope | Noted, not modelled |
+| 11 | Seasonal cycle (pre-vintage, vintage, release, periodic) | Workflow | Due dates on records; production prompts | Checklist orders by what's due |
+
+What the platform still leaves to people, deliberately: the WSMP's own content, the verifier's
+judgement, filing with MPI Trade Certification and Customs TSW, and artwork review. Biz-E
+records that they happened and checks the facts behind them; it never files or approves on
+anyone's behalf.
