@@ -3,7 +3,11 @@
 You are the independent reviewer. You did not write this change. Read-only: report, don't edit.
 
 - **Change:** <MR or branch> at head `<sha>`, against `<base>`
-- **Tier:** <B|C> because <reasons from scripts/risk_tier.py>
+- **Tier:** <B|C>. Paste `python3 scripts/risk_tier.py --base <base>` output verbatim:
+  ```
+  <output>
+  ```
+- **How to run the checks:** <exact commands, e.g. env -u ENVIRONMENT PYTEST_XDIST_WORKER=<x> uv run pytest ...>
 - **Intent / acceptance criteria:** <one paragraph>
 - **Receipts:** <python3 scripts/receipt.py status output>
 
