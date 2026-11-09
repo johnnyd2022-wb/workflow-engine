@@ -387,6 +387,7 @@ ENDPOINT_COVERAGE = {
     ("planning.add_demand", "POST"): "blocked",
     ("planning.cancel_demand", "POST"): "blocked",
     ("planning.get_demands", "GET"): "blocked",
+    ("planning.get_promise", "GET"): "blocked",
     ("planning.get_capacity", "GET"): "blocked",
     ("planning.save_capacity", "POST"): "blocked",
     ("planning.get_material_assessment", "GET"): "blocked",

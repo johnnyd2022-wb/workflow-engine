@@ -516,3 +516,17 @@ def get_replan_events():
             ]
         }
     )
+
+
+@planning_bp.get("/api/core/planner/promise")
+@requires_auth
+@requires_org_scope
+def get_promise():
+    """When could a new order for n be ready? (GL-P07 B5)"""
+    from app.features.planning.promise import promise
+
+    try:
+        result = promise(db_session, _org_id(), request.args.to_dict(), today=date.today())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)

@@ -6,6 +6,8 @@
 <main class="contract-workspace">
   <a href="{{ url_for('contracts.home') }}">Contract orders</a>
   <header><h1>{{ order.reference }}</h1><p>{{ order.customer_name }} · Due {{ order.due_date }} · {{ order.status|capitalize }}</p></header>
+  {# GL-P07 B5: the planner's date for this order, and what it rests on. #}
+  <p class="contract-ready" data-ready>{% if order.forecast_ready_date %}<strong>Can be ready {{ order.forecast_ready_date }}</strong>{% elif order.planned_ready_date %}<strong>Planned for {{ order.planned_ready_date }}</strong> (not yet promised){% else %}<strong>No ready date yet</strong>{% endif %} · {{ order.ready_reason }}</p>
   {% if can('production.record', 'users.manage') %}<p><a href="{{ url_for('contracts.portal_sharing_page', order_id=order.id) }}">Customer portal sharing</a></p>{% endif %}
   <p class="contract-error" role="alert" hidden></p>
   <section class="contract-card">

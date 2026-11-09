@@ -34,6 +34,19 @@ def service():
     return ContractOrderService(db_session(), UUID(g.org_id))
 
 
+def _orders_out(rows):
+    """Orders with their ready dates from the planner (GL-P07 B5)."""
+    from app.features.planning.promise import dates_for_orders
+
+    rows = list(rows)
+    dates = dates_for_orders(db_session(), UUID(g.org_id), rows)
+    return [serialize_order(row, production_access(), dates.get(str(row.id))) for row in rows]
+
+
+def _order_out(row):
+    return _orders_out([row])[0]
+
+
 def sync_planner():
     """Confirmed order lines are planner demand; keep it in step after the save commits."""
     from app.features.planning.contract_sync import sync_after_order_change
@@ -107,12 +120,9 @@ def update_customer(customer_id):
 def list_orders():
     return jsonify(
         {
-            "orders": [
-                serialize_order(row, production_access())
-                for row in service().orders(
-                    customer_id=request.args.get("customer_id"), status=request.args.get("status")
-                )
-            ]
+            "orders": _orders_out(
+                service().orders(customer_id=request.args.get("customer_id"), status=request.args.get("status"))
+            )
         }
     )
 
@@ -126,14 +136,14 @@ def create_order():
     row = service().create_order(data)
     db_session.commit()
     sync_planner()
-    return jsonify({"order": serialize_order(row, production_access())}), 201
+    return jsonify({"order": _order_out(row)}), 201
 
 
 @bp.get("/api/core/contract-orders/<uuid:order_id>")
 @requires_auth
 @handled
 def get_order(order_id):
-    return jsonify({"order": serialize_order(service().order(order_id), production_access())})
+    return jsonify({"order": _order_out(service().order(order_id))})
 
 
 @bp.patch("/api/core/contract-orders/<uuid:order_id>")
@@ -143,7 +153,7 @@ def update_order(order_id):
     row = service().update_order(order_id, request.get_json(silent=True))
     db_session.commit()
     sync_planner()
-    return jsonify({"order": serialize_order(row, production_access())})
+    return jsonify({"order": _order_out(row)})
 
 
 @bp.post("/api/core/contract-orders/<uuid:order_id>/lines")
@@ -247,7 +257,7 @@ def home():
     customers = service().customers() if has_permission(g.current_user, "sales.view") else []
     return render_template(
         "contracts/home.html",
-        orders=[serialize_order(row, production_access()) for row in orders],
+        orders=_orders_out(orders),
         customers=[serialize_customer(row) for row in customers],
         **page_context(),
     )
@@ -257,6 +267,4 @@ def home():
 @requires_auth
 @handled
 def order_page(order_id):
-    return render_template(
-        "contracts/order.html", order=serialize_order(service().order(order_id), production_access()), **page_context()
-    )
+    return render_template("contracts/order.html", order=_order_out(service().order(order_id)), **page_context())
