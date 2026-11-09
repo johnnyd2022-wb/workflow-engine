@@ -153,6 +153,37 @@ def spool_read() -> list[dict[str, Any]]:
     return out
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _adopt_orphaned_claims(path: Path) -> None:
+    """Return a dead flusher's claimed lines to the spool.
+
+    A flush that dies between claiming the spool and unlinking its claim leaves
+    `spool.jsonl.<pid>.<ns>.flushing` behind, which nothing else would read. A claim whose pid
+    is gone is renamed to this process's own name first (only one adopter wins the rename),
+    then appended back. Re-inserting lines that did reach the DB is safe: inserts are idempotent."""
+    for orphan in path.parent.glob(f"{path.name}.*.flushing"):
+        parts = orphan.name[len(path.name) + 1 :].split(".")
+        if len(parts) != 3 or not parts[0].isdigit() or _pid_alive(int(parts[0])):
+            continue
+        mine = orphan.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.adopting")
+        try:
+            os.replace(orphan, mine)
+        except FileNotFoundError:
+            continue  # another flusher adopted it
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(mine.read_text(encoding="utf-8"))
+        mine.unlink(missing_ok=True)
+
+
 def spool_flush(conn) -> int:
     """Insert spooled records (idempotent via the identity indexes), then drop them.
 
@@ -160,6 +191,7 @@ def spool_flush(conn) -> int:
     line appended between the read and the unlink lands in a fresh spool instead of being
     deleted unflushed. A failed insert puts the claimed lines back for the next flush."""
     path = spool_path()
+    _adopt_orphaned_claims(path)
     claimed = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.flushing")
     try:
         os.replace(path, claimed)

@@ -8,6 +8,7 @@ runs may feed a baseline.
 """
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -165,3 +166,18 @@ def test_spool_flush_puts_lines_back_when_an_insert_fails(outage, monkeypatch):
         metrics_db.spool_flush(object())
     assert [e["record"]["skill"] for e in metrics_db.spool_read()] == ["kept"]
     assert not list(outage.parent.glob("*.flushing"))
+
+
+def test_spool_flush_adopts_a_dead_flushers_claim(outage, monkeypatch):
+    """A flush killed after claiming the spool must not strand its lines in a .flushing file."""
+    dead_pid = 2**22 + 12345  # above pid_max on Linux, so never a live process
+    orphan = outage.with_name(f"{outage.name}.{dead_pid}.1.flushing")
+    orphan.write_text('{"kind": "run", "record": {"skill": "stranded"}}\n', encoding="utf-8")
+    live = outage.with_name(f"{outage.name}.{os.getpid()}.2.flushing")
+    live.write_text('{"kind": "run", "record": {"skill": "in-flight"}}\n', encoding="utf-8")
+    inserted = []
+    monkeypatch.setattr(metrics_db, "_insert", lambda _c, kind, record: inserted.append(record["skill"]))
+    assert metrics_db.spool_flush(object()) == 1
+    assert inserted == ["stranded"]
+    assert not orphan.exists()
+    assert live.exists()  # a live flusher's claim is left alone
