@@ -394,6 +394,9 @@ perf_baseline:
     - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
   script:
     - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_perf_budgets.py -v
+  # Main records the baseline. A ceiling breach here is surfaced (a failed, allowed job), not a
+  # red main: main_green would otherwise hold every MR until someone fixed it.
+  allow_failure: true
   only:
     - main
 

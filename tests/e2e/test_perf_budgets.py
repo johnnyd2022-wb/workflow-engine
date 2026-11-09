@@ -232,10 +232,14 @@ def _evaluate(route: str, kind: str, metrics: dict) -> None:
     if over_budget:
         warnings.warn(f"{route} over budget (advisory, non-blocking): {'; '.join(over_budget)}", stacklevel=1)
     regression = _baseline_regression(route, metrics)
-    if regression and os.environ.get("GITLAB_CI") == "true":
+    # Gate MRs against main's median, never main against itself: a main run that adds
+    # queries would otherwise fail every main pipeline until the median caught up, and
+    # main_green would block every MR meanwhile. Main records; the MR run gates.
+    gated = os.environ.get("GITLAB_CI") == "true" and not metrics_db.provenance()["is_main"]
+    if regression and gated:
         pytest.fail(f"{route}: {regression} -- more queries than main; look for a new N+1")
     if regression:
-        warnings.warn(f"{route}: {regression} (advisory locally; blocking in CI)", stacklevel=1)
+        warnings.warn(f"{route}: {regression} (advisory locally and on main; blocking on MRs)", stacklevel=1)
 
 
 # --------------------------------------------------------------------------------------

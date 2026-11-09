@@ -137,3 +137,31 @@ def test_baseline_regression_threshold(monkeypatch, median, samples, queries, re
         pytest.skip(f"perf module not importable here: {e}")
     monkeypatch.setattr(module, "_BASELINE", {("/r", "queries"): (float(median), samples)})
     assert bool(module._baseline_regression("/r", {"queries": queries})) is regressed
+
+
+def test_spool_flush_keeps_a_line_appended_mid_flush(outage, monkeypatch):
+    """Five agents share the spool: a line written while a flush is inserting must survive."""
+    metrics_db.spool_append("run", {"skill": "first"})
+    inserted = []
+
+    def insert(_conn, kind, record):
+        inserted.append(record["skill"])
+        metrics_db.spool_append("run", {"skill": "late"})  # another agent, mid-flush
+
+    monkeypatch.setattr(metrics_db, "_insert", insert)
+    assert metrics_db.spool_flush(object()) == 1
+    assert inserted == ["first"]
+    assert [e["record"]["skill"] for e in metrics_db.spool_read()] == ["late"]
+
+
+def test_spool_flush_puts_lines_back_when_an_insert_fails(outage, monkeypatch):
+    metrics_db.spool_append("run", {"skill": "kept"})
+
+    def insert(_conn, kind, record):
+        raise RuntimeError("db went away")
+
+    monkeypatch.setattr(metrics_db, "_insert", insert)
+    with pytest.raises(RuntimeError):
+        metrics_db.spool_flush(object())
+    assert [e["record"]["skill"] for e in metrics_db.spool_read()] == ["kept"]
+    assert not list(outage.parent.glob("*.flushing"))

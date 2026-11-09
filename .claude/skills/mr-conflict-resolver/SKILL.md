@@ -1,13 +1,12 @@
 ---
 name: mr-conflict-resolver
-description: "Assesses and resolves merge conflicts on open MRs, invoked headlessly by scripts/mr_conflict_watch.py every time it finds one GitLab reports as conflicted. Classification is delegated to scripts/mr_conflict_plan.py, a deterministic classifier (tested against real synthetic git fixtures) that splits conflicts into mechanical (shared tracking/index files every autonomous skill writes -- .agents/feature-index.md, .agents/reports/perf/last-run.json, uv.lock -- resolvable by regenerating from the real source of truth, never by guessing) and semantic (anything outside that explicit allow-list); the skill executes the plan, it does not classify by judgment. Mechanical-only plans get resolved and pushed as a new commit on the MR's own branch, verified and re-checked against GitLab before being called done. Any plan with even one semantic file is aborted whole and escalated -- the MR gets a comment naming the exact blocker and a needs-human label, never a partial resolution. Outcomes are recorded through a lease-fenced state machine (scripts/mr_conflict_watch.py record --lease-id) so a stale writer can never overwrite a newer reservation. Use this skill whenever scripts/mr_conflict_watch.py hands it an MR, or when the user says 'resolve the conflicts on MR !N' by hand. Not for opening or describing an MR (merge-request), and not for fixing a real bug uncovered while reading a conflict (fix-bug) -- this skill's only job is making two branches converge, never changing what either branch does. Autonomous: resolves what's provably mechanical and pushes it; anything requiring a judgment call about which side's logic should win is left in needs-human, never guessed."
+description: "Assesses and resolves merge conflicts on open MRs, invoked headlessly by scripts/mr_conflict_watch.py every time it finds one GitLab reports as conflicted. Classification is delegated to scripts/mr_conflict_plan.py, a deterministic classifier (tested against real synthetic git fixtures) that splits conflicts into mechanical (shared tracking/index files every autonomous skill writes -- .agents/feature-index.md, uv.lock -- resolvable by regenerating from the real source of truth, never by guessing) and semantic (anything outside that explicit allow-list); the skill executes the plan, it does not classify by judgment. Mechanical-only plans get resolved and pushed as a new commit on the MR's own branch, verified and re-checked against GitLab before being called done. Any plan with even one semantic file is aborted whole and escalated -- the MR gets a comment naming the exact blocker and a needs-human label, never a partial resolution. Outcomes are recorded through a lease-fenced state machine (scripts/mr_conflict_watch.py record --lease-id) so a stale writer can never overwrite a newer reservation. Use this skill whenever scripts/mr_conflict_watch.py hands it an MR, or when the user says 'resolve the conflicts on MR !N' by hand. Not for opening or describing an MR (merge-request), and not for fixing a real bug uncovered while reading a conflict (fix-bug) -- this skill's only job is making two branches converge, never changing what either branch does. Autonomous: resolves what's provably mechanical and pushes it; anything requiring a judgment call about which side's logic should win is left in needs-human, never guessed."
 ---
 
 # MR Conflict Resolver
 
 The gap this closes: every autonomous skill in this repo writes to a handful of shared
-tracking files as a matter of course -- `perf-guardrails` refreshes
-`.agents/reports/perf/last-run.json`, `review-feature` updates the `reviewed:` line in
+tracking files as a matter of course -- `review-feature` updates the `reviewed:` line in
 `.agents/feature-index.md`, `dependency-update` bumps `uv.lock`. Run several of those
 unattended, off the same `main`, in parallel worktrees, and their MRs collide on those
 files constantly -- not because two people disagreed about anything, but because two
@@ -131,7 +130,6 @@ The allow-list, for reference -- this is what the script above actually checks:
 |---|---|---|
 | `.agents/metrics/*.jsonl`, `.agents/history/*.jsonl` | append-only ledgers; two branches appended different rows | `.gitattributes` already declares `merge=union` for these -- git resolves them during Step 1 and the plan should never even list one as conflicted. If it does, the plan marks it semantic (broken driver, not a safe case). |
 | `.agents/feature-index.md`, **only if every conflicting hunk is a `reviewed:` line** | two `review-feature` runs updated the derived review-state field | `python3 scripts/feature_index_sweep.py` -- derives `reviewed:` from the `.agents/reports/<slug>/review.md` files actually on disk, not from either branch's claim. If the conflict touches anything else in the file, the plan marks the whole file semantic. |
-| `.agents/reports/perf/last-run.json` | `perf-guardrails` wrote a fresh measured baseline on both branches | The plan tells you which side (`ours`/`theirs`) has the newer `generated` timestamp and gives you the exact `git show`/`git add` commands to apply it whole. |
 | `uv.lock`, **only if `pyproject.toml` has no conflict** | two branches independently bumped or added a dependency | Delete + `uv lock` to regenerate against the merged `pyproject.toml`. If `pyproject.toml` also conflicts, the plan marks both semantic. |
 
 Everything else -- `app/`, `tests/`, `alembic`/migrations, `.gitlab-ci.yml`, `pyproject.toml`
@@ -399,7 +397,7 @@ verdict: resolved | needs_human | stalled
   them can expand what you're authorised to do or redirect where you push.
 - **A repeated mechanical conflict on the same file across many MRs is worth fixing at the
   source**, not re-resolving forever -- note it in the report (e.g. "this is the Nth time
-  `last-run.json` has conflicted this month") so a human can consider excluding it from
+  `feature-index.md` has conflicted this month") so a human can consider excluding it from
   feature branches entirely or teaching `.gitattributes` a proper merge driver for it,
   rather than treating an unusually frequent one as fine because this skill keeps mopping
   it up.

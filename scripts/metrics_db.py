@@ -33,6 +33,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -153,12 +154,31 @@ def spool_read() -> list[dict[str, Any]]:
 
 
 def spool_flush(conn) -> int:
-    """Insert spooled records (idempotent via the identity indexes), then drop the file."""
-    entries = spool_read()
-    for entry in entries:
-        _insert(conn, entry["kind"], entry["record"])
-    if entries:
-        spool_path().unlink(missing_ok=True)
+    """Insert spooled records (idempotent via the identity indexes), then drop them.
+
+    Several agents append to the spool. Claim it first by renaming it to a private name, so a
+    line appended between the read and the unlink lands in a fresh spool instead of being
+    deleted unflushed. A failed insert puts the claimed lines back for the next flush."""
+    path = spool_path()
+    claimed = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.flushing")
+    try:
+        os.replace(path, claimed)
+    except FileNotFoundError:
+        return 0
+    entries = []
+    for line in claimed.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            with contextlib.suppress(json.JSONDecodeError):
+                entries.append(json.loads(line))
+    try:
+        for entry in entries:
+            _insert(conn, entry["kind"], entry["record"])
+    except Exception:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(claimed.read_text(encoding="utf-8"))
+        claimed.unlink(missing_ok=True)
+        raise
+    claimed.unlink(missing_ok=True)
     return len(entries)
 
 
