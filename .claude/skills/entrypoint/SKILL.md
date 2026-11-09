@@ -202,10 +202,26 @@ details it owns (e.g. spec-first).
 5. **Nothing fits** → say so plainly. A genuinely new kind of request may mean a skill
    is missing — flag it, don't paper over with the closest-but-wrong skill.
 
+### Workflow mode for code front doors (lean vs classic)
+
+Before invoking a code front door for an ask that **didn't name one**, read the switch:
+
+```bash
+python3 -c "import json;print(json.load(open('.agents/workflow-mode.json'))['mode'])"
+```
+
+- `lean` → route bugs, features and reviews to **`lean-change`** (risk tiers, one implementer,
+  one consolidated review: `.agents/verification-tiers.md`). Pass it what you'd have passed the
+  classic front door, plus which of bug/feature/review it is.
+- `classic` (or the file is missing) → `new-feature` / `fix-bug` / `review-feature` as below.
+
+A user who names `/new-feature`, `/fix-bug` or `/review-feature` always gets that skill, in
+either mode. `page-design`, `dependency-update` and `deploy-runner` aren't affected.
+
 ## Step 3: Preflight once, then hand it down
 
 Before invoking any **code** front door (`new-feature`, `review-feature`, `fix-bug`,
-`dependency-update`, `deploy-runner`), run **preflight** — once, here, at the top:
+`lean-change`, `dependency-update`, `deploy-runner`), run **preflight** — once, here, at the top:
 
 ```bash
 python3 scripts/preflight.py --json

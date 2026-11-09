@@ -39,7 +39,7 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 
 # Stages that are chain steps rather than skills of their own. Everything else in the
 # routing table must resolve to a real SKILL.md, or --check fails.
-VIRTUAL_STAGES = {"build", "build-review", "security-tenant-audit", "findings-review"}
+VIRTUAL_STAGES = {"build", "build-review", "security-tenant-audit", "findings-review", "lean-build", "lean-review"}
 
 # The edit tools withheld from a Claude-engine `access: read` stage. Bash is deliberately
 # NOT withheld — graders need it to run semgrep, pytest and git — so this is a guardrail,
@@ -453,6 +453,7 @@ def check(routing: dict[str, Any], skills_dir: Path = SKILLS_DIR) -> list[str]:
         "security-tenant-audit",
         "security-audit",
         "findings-review",
+        "lean-review",
     }
 
     for name in routing.get("stages", {}):

@@ -60,6 +60,7 @@ fix-bug
 herdr-multi-agent-collab
 html-review
 js-review
+lean-change
 licence-study-coach
 marketing-director
 merge-request
@@ -101,6 +102,7 @@ worktree-sweep
 | "Build/add a new feature, endpoint, page, capability" | `new-feature` |
 | "Review/audit/harden an existing feature", "is X solid", "check X before launch" | `review-feature` |
 | "This is broken", a bug report, stack trace, request_id, regression | `fix-bug` |
+| Any of the three above, unnamed, while `.agents/workflow-mode.json` is `lean` | `lean-change` (tiered: one implementer, one consolidated review) |
 | "Make this page cleaner / slick", "redesign <page>", "this page is cluttered", "UX pass on <page>" | `page-design` (research, plan, screenshot loop; also chained by `new-feature` / `review-feature` when a page is built or reshaped) |
 | A CVE/uv-audit finding, "bump this dependency" | `dependency-update` |
 | "Deploy this", "ship to prod/test", "roll this back" | `deploy-runner` (technical) → hands off to `release-manager` |
