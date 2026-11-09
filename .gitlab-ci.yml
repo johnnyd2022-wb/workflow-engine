@@ -289,6 +289,9 @@ relevant_tests:
       fi
     - |
       if python3 scripts/select_relevant_tests.py --targets-file /tmp/relevant-pytest-targets --needs-server; then
+        # Share the isolated signing key with pytest too: browser expiry tests
+        # sign stale sessions which the separately started server must accept.
+        export FLASK_SECRET_KEY="${FLASK_SECRET_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')}"
         ./ci/setup_server.sh
       fi
     - |

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import pytest
 
@@ -36,9 +37,23 @@ def _sign_session(payload: dict) -> str:
 
 
 def _install_expired_session(context, app_url: str, user_id: str) -> None:
+    from app.core.db import db_session
+    from app.core.db.models.user import User
+    from app.core.security.auth_service import auth_stamp
+
+    # The password-change gate runs before the inactivity check. Model a valid
+    # login so this test reaches the timeout branch rather than the unstamped-cookie gate.
+    db = db_session()
+    try:
+        user = db.get(User, UUID(user_id))
+        stamp = auth_stamp(user.password_hash)
+    finally:
+        db.close()
+        db_session.remove()
     stale_activity = (datetime.now(UTC) - timedelta(minutes=_STALE_MINUTES)).isoformat()
     payload = {
         "user_id": user_id,
+        "auth_stamp": stamp,
         "last_activity_at": stale_activity,
         "session_timeout_minutes": _FORGED_TIMEOUT_MINUTES,
     }
