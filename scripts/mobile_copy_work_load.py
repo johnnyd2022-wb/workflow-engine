@@ -39,10 +39,18 @@ def load_sql(folder: Path) -> str:
                FROM work.mobile_copy_text
                WHERE review_state <> 'unreviewed' OR mobile_treatment IS NOT NULL OR mobile_text IS NOT NULL;""",
             """CREATE TEMP TABLE legacy_container_decisions ON COMMIT DROP AS
-               SELECT page_key,desktop_text,mobile_treatment,mobile_text,review_state,
-                 count(*) OVER (PARTITION BY page_key,desktop_text) AS matches
-               FROM work.mobile_copy_containers
-               WHERE review_state <> 'unreviewed' OR mobile_treatment IS NOT NULL OR mobile_text IS NOT NULL;""",
+               SELECT c.page_key,c.mobile_treatment,c.mobile_text,c.review_state,
+                 md5(coalesce(string_agg(t.text_source || ':' || t.desktop_text, ' · '
+                   ORDER BY t.text_source,t.desktop_text) FILTER (WHERE t.text_source='visible'),'')) AS content_key
+               FROM work.mobile_copy_containers c
+               LEFT JOIN work.mobile_copy_text t ON t.page_key=c.page_key AND t.container_key=c.container_key
+               WHERE c.review_state <> 'unreviewed' OR c.mobile_treatment IS NOT NULL OR c.mobile_text IS NOT NULL
+               GROUP BY c.page_key,c.container_key,c.mobile_treatment,c.mobile_text,c.review_state;""",
+            """CREATE TEMP TABLE stage_container_keys ON COMMIT DROP AS
+               SELECT page_key,container_key,
+                 md5(coalesce(string_agg(text_source || ':' || desktop_text, ' · '
+                   ORDER BY text_source,desktop_text) FILTER (WHERE text_source='visible'),'')) AS content_key
+               FROM stage_text GROUP BY page_key,container_key;""",
             """INSERT INTO work.mobile_copy_pages(page_key,template_name,route_patterns,page_kind,page_title,source_commit,scanned_at)
                SELECT page_key,template_name,route_patterns,page_kind,page_title,source_commit,now() FROM stage_pages WHERE true
                ON CONFLICT(page_key) DO UPDATE SET template_name=excluded.template_name,
@@ -101,15 +109,14 @@ def load_sql(folder: Path) -> str:
                  AND EXISTS (SELECT 1 FROM stage_text s WHERE s.page_key=t.page_key AND s.node_key=t.node_key);""",
             """UPDATE work.mobile_copy_containers c SET mobile_treatment=l.mobile_treatment,
                  mobile_text=l.mobile_text,review_state=l.review_state
-               FROM legacy_container_decisions l
-               WHERE c.review_state='unreviewed' AND l.matches=1
-                 AND c.page_key=l.page_key AND c.desktop_text=l.desktop_text
-                 AND (SELECT count(*) FROM work.mobile_copy_containers c2
-                   WHERE c2.page_key=c.page_key AND c2.desktop_text=c.desktop_text
-                     AND EXISTS (SELECT 1 FROM stage_text s2 WHERE s2.page_key=c2.page_key
-                       AND s2.container_key=c2.container_key))=1
-                 AND EXISTS (SELECT 1 FROM stage_text s WHERE s.page_key=c.page_key
-                   AND s.container_key=c.container_key);""",
+               FROM legacy_container_decisions l,stage_container_keys s
+               WHERE c.review_state='unreviewed' AND c.page_key=s.page_key
+                 AND c.container_key=s.container_key AND s.page_key=l.page_key
+                 AND s.content_key=l.content_key
+                 AND (SELECT count(*) FROM legacy_container_decisions l2 WHERE l2.page_key=l.page_key
+                   AND l2.content_key=l.content_key)=1
+                 AND (SELECT count(*) FROM stage_container_keys s2 WHERE s2.page_key=s.page_key
+                   AND s2.content_key=s.content_key)=1;""",
             """DELETE FROM work.mobile_copy_text t WHERE NOT EXISTS
                (SELECT 1 FROM stage_text s WHERE s.page_key=t.page_key AND s.node_key=t.node_key);""",
             """DELETE FROM work.mobile_copy_containers c WHERE NOT EXISTS
