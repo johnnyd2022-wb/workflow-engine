@@ -1,0 +1,10 @@
+{
+  "_comment": "Which flow /entrypoint sends *unnamed* code requests to. 'lean' = the lean-change front door (risk tiers, one implementer, one consolidated review; .agents/verification-tiers.md). 'classic' = the original new-feature / fix-bug / review-feature chain (.agents/verification-chain.md). Explicitly named skills always run as named. To revert, set mode to 'classic' — nothing else changes. Proposal and evidence: !671; trial report: python3 scripts/workflow_trial.py.",
+  "mode": "lean",
+  "since": "2026-11-10",
+  "trial": {
+    "target_tasks": 10,
+    "decide_by": "after 6-10 real tasks across tiers A/B/C",
+    "keep_if": "same acceptance quality and required checks, with less elapsed time or fewer review rounds per accepted task"
+  }
+}

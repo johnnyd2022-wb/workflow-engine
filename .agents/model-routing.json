@@ -64,7 +64,7 @@
       "codex_mode": "exec",
       "access": "read",
       "blocking": false,
-      "why": "Breaker role. Advisory so a Codex quota exhaustion cannot stall an unattended chain. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination — see .agents/reports/inventory/review.md follow-up #2."
+      "why": "Breaker role. Advisory so a Codex quota exhaustion cannot stall an unattended chain. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination \u2014 see .agents/reports/inventory/review.md follow-up #2."
     },
     "migration-safety": {
       "engine": "claude",
@@ -130,7 +130,7 @@
       "codex_mode": "exec",
       "access": "read",
       "blocking": true,
-      "why": "Never grade your own tests. Separate quota pool, and read-only so it cannot 'fix' a test into passing. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination — see .agents/reports/inventory/review.md follow-up #2."
+      "why": "Never grade your own tests. Separate quota pool, and read-only so it cannot 'fix' a test into passing. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination \u2014 see .agents/reports/inventory/review.md follow-up #2."
     },
     "ci-gate": {
       "engine": "claude",
@@ -154,7 +154,7 @@
       "effort": "xhigh",
       "access": "write",
       "blocking": true,
-      "why": "Unattended daily worker that reads .agents/findings-index.md and fixes the top items. Same routing as `build` because it is the same kind of work — writing code against an existing, already-triaged brief. Effort stays xhigh: it runs with nobody watching, and its characteristic failure (closing a finding without really fixing it) is one only careful reasoning catches."
+      "why": "Unattended daily worker that reads .agents/findings-index.md and fixes the top items. Same routing as `build` because it is the same kind of work \u2014 writing code against an existing, already-triaged brief. Effort stays xhigh: it runs with nobody watching, and its characteristic failure (closing a finding without really fixing it) is one only careful reasoning catches."
     },
     "findings-review": {
       "engine": "codex",
@@ -163,7 +163,24 @@
       "codex_mode": "exec",
       "access": "read",
       "blocking": false,
-      "why": "Independent grader for findings-sweep's diffs, on a separate quota pool so a Claude exhaustion cannot also take out the review. Read-only: a grader that can edit the fix it grades is not a grader. Advisory rather than blocking, matching build-review — a Codex quota failure must not stall an unattended timer run. codex_mode is exec, not review, for the same reason the other Codex stages use it: `codex review --base <ref>` rejects a piped prompt (see .agents/reports/inventory/review.md follow-up #2)."
+      "why": "Independent grader for findings-sweep's diffs, on a separate quota pool so a Claude exhaustion cannot also take out the review. Read-only: a grader that can edit the fix it grades is not a grader. Advisory rather than blocking, matching build-review \u2014 a Codex quota failure must not stall an unattended timer run. codex_mode is exec, not review, for the same reason the other Codex stages use it: `codex review --base <ref>` rejects a piped prompt (see .agents/reports/inventory/review.md follow-up #2)."
+    },
+    "lean-build": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "medium",
+      "access": "write",
+      "blocking": true,
+      "why": "Lean flow (.agents/verification-tiers.md): one implementer at medium effort for Tier A/B; raise effort only after a diagnosed failure."
+    },
+    "lean-review": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "medium",
+      "codex_mode": "exec",
+      "access": "read",
+      "blocking": true,
+      "why": "Lean flow: ONE consolidated independent review (correctness, test adequacy, tenant boundaries). Use high effort for Tier C. Read-only: never the author."
     }
   }
 }

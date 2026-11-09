@@ -146,3 +146,6 @@ terraform/**/.ci/
 # Skill metrics and perf results live in the bize_dev metrics DB (scripts/metrics_db.py), not in git.
 .agents/metrics/*.jsonl
 .agents/reports/perf/last-run.json
+
+# Per-checkout scratch: receipts (scripts/receipt.py), MR body drafts
+.agents/tmp/
