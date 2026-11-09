@@ -59,6 +59,9 @@
             help: extensionPrompt.help || '',
             min: extensionPrompt.min,
             max: extensionPrompt.max,
+            unit: extensionPrompt.unit,
+            options: Array.isArray(extensionPrompt.options) ? extensionPrompt.options.slice() : undefined,
+            default: extensionPrompt.default,
           });
         });
       } catch (e) {
@@ -171,6 +174,11 @@
         `;
         // Tie the label to its field, so it is announced and clicking it focuses the field.
         const promptField = promptSection.querySelector('.execute-prompt-input');
+        // A module default (this vintage, a 750 mL bottle, "None" for fining) saves a tap;
+        // it is a starting value the operator can change, never a hidden submission.
+        if (promptField && prompt.default != null && prompt.default !== '' && !promptField.value) {
+          promptField.value = String(prompt.default);
+        }
         const promptLabel = promptSection.querySelector(':scope > label');
         if (promptField && promptLabel) {
           promptField.id = 'execute-prompt-' + (currentStepId || 'step') + '-' + promptIndex;

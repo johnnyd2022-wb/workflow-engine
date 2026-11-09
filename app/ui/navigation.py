@@ -66,7 +66,8 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
             and tab.path == path
             # A section without groups shows every tab, so each tab's page is in the row.
             and (
-                section not in WORKSPACE_TAB_GROUPS or tab.key in {group[0] for group in WORKSPACE_TAB_GROUPS[section]}
+                section not in WORKSPACE_TAB_GROUPS
+                or tab.key in {_lead(section, group) for group in WORKSPACE_TAB_GROUPS[section]}
             )
         )
     ):
@@ -116,15 +117,25 @@ def _with_kept_query(href: str) -> str:
     return href + ("?" + urlencode(kept) if kept else "")
 
 
+def _lead(section: str | None, group: tuple[str, ...]) -> str:
+    """The tab that leads a slot. Normally its first; a winery's Wine leads the food-safety
+    slot, since its plan is a WSMP rather than an NP (docs/wine-compliance-plan.md)."""
+    if section == "compliance" and "wine" in group and has_request_context() and getattr(g, "org_id", None):
+        if _conditions().get("wine"):
+            return "wine"
+    return group[0]
+
+
 def _primary_tab(section: str, tab: Tab | None) -> Tab | None:
     """The primary tab a secondary tab's page sits under, if the signed-in person can open it."""
     if tab is None:
         return None
     group = next((group for group in WORKSPACE_TAB_GROUPS.get(section, ()) if tab.key in group), None)
     # An Overview tab is the section's home, which the trail already starts with.
-    if group is None or group[0] in (tab.key, "overview"):
+    lead = _lead(section, group) if group is not None else None
+    if group is None or lead in (tab.key, "overview"):
         return None
-    primary = next((t for t in SECTION_TABS.get(section, ()) if t.key == group[0]), None)
+    primary = next((t for t in SECTION_TABS.get(section, ()) if t.key == lead), None)
     user = getattr(g, "current_user", None) if has_request_context() else None
     if primary is None or (user is not None and not _permitted(primary, user)):
         return None
@@ -155,6 +166,7 @@ def _conditions() -> dict[str, bool]:
         "licensing": bool(settings.get("liquor_licence_types")),
         "programme": programme,
         "nz_alcohol": nz_alcohol_active(db_session(), org_id) if org_id else False,
+        "wine": "wine" in (settings.get("alcohol_product_types") or []),
         # Settings, Sites: only where the deployment and the organisation's plan allow it.
         "multi_site": entitled(db_session(), UUID(str(org_id))) if org_id else False,
     }
@@ -179,7 +191,9 @@ def section_tabs(section: str | None, user) -> list[Tab]:
         return list(available.values())
     tabs = []
     for group in groups:
-        key = next((key for key in group if key in available), None)
+        lead = _lead(section, group)
+        ordered = (lead,) + tuple(k for k in group if k != lead)
+        key = next((key for key in ordered if key in available), None)
         if key:
             tabs.append(available[key])
     return tabs
@@ -198,9 +212,16 @@ def _workspace_links(section: str | None, key: str | None, user, conditions: dic
     if user is None or request.path not in {tab.path for tab in all_tabs} | {"/compliant"}:
         return []
     groups = WORKSPACE_TAB_GROUPS.get(section or "", ())
-    primary_keys = {group[0] for group in groups}
-    primary = next((group[0] for group in groups if key in group), key)
-    related = {secondary for group in groups if primary == "overview" or primary == group[0] for secondary in group[1:]}
+    leads = {group: _lead(section, group) for group in groups}
+    primary_keys = set(leads.values())
+    primary = next((leads[group] for group in groups if key in group), key)
+    related = {
+        other
+        for group in groups
+        if primary == "overview" or primary == leads[group]
+        for other in group
+        if other != leads[group]
+    }
     links = [
         {
             "key": tab.key,

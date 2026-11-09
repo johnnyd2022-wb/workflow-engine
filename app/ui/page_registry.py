@@ -90,6 +90,7 @@ PAGES: tuple[Page, ...] = (
         "compliant",
     ),
     Page("/compliant/nz-alcohol/customs", "compliance", "customs", "Customs", None, "compliant"),
+    Page("/compliant/nz-alcohol/wine", "compliance", "wine", "Wine", None, "compliant"),
     Page(
         "/compliant/nz-alcohol/customs/stock",
         "compliance",
@@ -214,6 +215,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
         Tab("np3", "Food safety", "/compliant/nz-alcohol/food-safety", ("compliance.view",), when="food_safety"),
         Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
+        # Wine (WSMP) shares the food-safety slot: a winery's plan is its WSMP, not an NP.
+        Tab("wine", "Wine", "/compliant/nz-alcohol/wine", ("compliance.view",), when="wine"),
         Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
         Tab(
             "food-registrations",
@@ -262,7 +265,7 @@ WORKSPACE_TAB_GROUPS = {
     ),
     "compliance": (
         ("overview", "tools", "configuration"),
-        ("np3", "food-registrations"),
+        ("np3", "wine", "food-registrations"),
         ("customs",),
         ("licensing",),
     ),

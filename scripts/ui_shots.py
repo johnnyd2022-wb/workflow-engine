@@ -74,6 +74,7 @@ SEED_KINDS = (
     "np3",
     "licensing",
     "premises",
+    "wine",
     "moves",
     "tasks",
     "customer",
@@ -1946,6 +1947,154 @@ def _seed_board(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_wine(db, org_id, inv) -> None:
+    """A small winery's vintage (docs/wine-compliance-plan.md): three grape deliveries, a
+    Sauvignon blanc blended with a little Pinot gris and bottled, and a Pinot noir in barrel
+    that mixes two vintages, so the Wine page shows a pass, a can't-claim and a pre-flight."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.modules.nz_alcohol.wine import rules as wine
+    from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
+
+    FeatureSubscriptionRepository(db).grant(org_id, "compliant")
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        profile = ComplianceProfile(org_id=org_id)
+        db.add(profile)
+    profile.enabled = True
+    year = wine.current_vintage()
+    profile.settings = {
+        **(profile.settings or {}),
+        "alcohol_product_types": sorted({*((profile.settings or {}).get("alcohol_product_types") or []), "wine"}),
+        "wine_exporter": True,
+        "wine_plan": {
+            "mode": "registered",
+            "plan_reference": "NZW CoP WSMP 4471",
+            "verifier": "AsureQuality",
+            "next_verification": (date.today() + timedelta(days=74)).isoformat(),
+        },
+    }
+    db.commit()
+
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    now = datetime.now(UTC)
+
+    def process(name, steps):
+        made = procs.create_process(org_id, name, category=ProcessCategory.MANUFACTURING, is_draft=False)
+        for number, (step_name, output, unit) in enumerate(steps, start=1):
+            procs.add_step(
+                process_id=made.id, org_id=org_id, step_number=number, position=number * 1000, name=step_name,
+                inputs=[], outputs=[{"name": output, "quantity": 1, "unit": unit}],
+            )  # fmt: skip
+        db.commit()
+        return made
+
+    intake = process("Grape intake", [("Grape intake", "Grape lot", "kg")])
+
+    def run(proc, steps, first_inputs=(), days_ago=30):
+        """steps: [(lot name, quantity, unit, execution_data)], each consuming the previous lot."""
+        execution = execs.create_execution(org_id, proc.id)
+        rows = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+        inputs, lot = list(first_inputs), None
+        for index, (row, (lot_name, qty, unit, data)) in enumerate(zip(rows, steps, strict=True)):
+            when = now - timedelta(days=days_ago - index * 6)
+            outputs = [{"name": lot_name, "quantity": str(qty), "unit": unit}]
+            execs.complete_step(
+                row.id, org_id, actual_inputs=inputs, actual_outputs=outputs, execution_data=data,
+                completed_at_override=when,
+            )  # fmt: skip
+            for used in inputs:  # the step used its inputs, as a recorded step would
+                item = inv.get_inventory_item_by_id(uuid.UUID(used["inventory_item_id"]), org_id)
+                if item is not None:
+                    with allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY):
+                        item.quantity = max(Decimal(0), Decimal(str(item.quantity)) - Decimal(used["quantity"]))
+            lot = inv.create_inventory_item(
+                org_id=org_id, name=lot_name, quantity=str(qty), unit=unit,
+                inventory_type="final_product" if unit == "units" else "work_in_progress",
+                source_execution_id=execution.id, source_execution_step_id=row.id, source_step_name=row.step.name,
+            )  # fmt: skip
+            inputs = [{"inventory_item_id": str(lot.id), "name": lot.name, "quantity": str(qty), "unit": unit}]
+        db.commit()
+        return lot
+
+    def grapes(name, kg, grower, variety, region, vintage, days_ago):
+        data = {wine.GROWER: grower, wine.VARIETY: variety, wine.VINTAGE: str(vintage), wine.REGION: region,
+                wine.SPRAY_DIARY: "Yes"}  # fmt: skip
+        return run(intake, [(name, kg, "kg", data)], days_ago=days_ago)
+
+    sb1 = grapes(f"SB {year} Block 4", 8200, "Block 4 (home)", "Sauvignon blanc", "Marlborough", year, 240)
+    sb2 = grapes(f"SB {year} Awatere", 1600, "Seddon Vineyards", "Sauvignon blanc", "Marlborough", year, 236)
+    pg = grapes(f"PG {year} Moutere", 700, "Moutere Hills", "Pinot gris", "Nelson", year, 234)
+    pn = grapes(f"PN {year} Bannockburn", 3100, "Bannockburn Estate", "Pinot noir", "Central Otago", year, 230)
+    pn_old = grapes(f"PN {year - 1} reserve", 1500, "Bannockburn Estate", "Pinot noir", "Central Otago", year - 1, 220)
+
+    sauv = process(
+        f"Sauvignon blanc {year}",
+        [("Crush and press", "Juice", "L"), ("Ferment", "Young wine", "L"), ("Cellar", "Finished wine", "L"),
+         ("Bottle", "Bottled wine", "units")],
+    )  # fmt: skip
+    crush_in = [
+        {"inventory_item_id": str(lot.id), "name": lot.name, "quantity": q, "unit": "kg"}
+        for lot, q in ((sb1, "8200"), (sb2, "1600"), (pg, "700"))
+    ]
+    run(
+        sauv,
+        [(f"SB {year} juice", 7350, "L", {}), (f"SB {year} young wine", 7050, "L", {}),
+         (f"SB {year} finished", 6980, "L", {wine.SO2_ADDED: "40", wine.FINING: "Egg (albumin)"}),
+         (f"Marlborough Sauvignon blanc {year}", 9240, "units", {ABV_PROMPT_LABEL: "13", wine.BOTTLE_SIZE: "750",
+                                                                 wine.RELEASE: wine.RELEASE_YES})],
+        crush_in, days_ago=200,
+    )  # fmt: skip
+    from app.features.compliant.models import ComplianceRecord as _Record
+
+    bottled = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == f"Marlborough Sauvignon blanc {year}")
+        .one()
+    )
+    elig = _Record(
+        org_id=org_id, framework_slug="wine-export", control_id="batch-eligibility", record_type="attestation",
+        status="complete", title=f"Export eligibility EES-26-0412 for {bottled.name}", period_start=date.today() - timedelta(days=40),
+        due_date=date.today() + timedelta(days=690), evidence_reference="EES-26-0412", source_refs=[str(bottled.id)],
+        details={"lot_id": str(bottled.id), "lot_name": bottled.name, "form": "packaged", "eligible_litres": "4500",
+                 "expires_on": (date.today() + timedelta(days=690)).isoformat(), "markets": ["GB", "AU"]},
+    )  # fmt: skip
+    db.add(elig)
+    db.flush()
+    db.add(_Record(
+        org_id=org_id, framework_slug="wine-export", control_id="customs-export-clearance", record_type="lodgement",
+        status="complete", title="1,800 L to Thames Cellars, GB", period_start=date.today() - timedelta(days=20),
+        evidence_reference="TSW-EX-77812", source_refs=[str(bottled.id)],
+        details={"kind": "commercial", "litres": "1800", "market": "GB", "consignee": "Thames Cellars", "eligibility_id": str(elig.id)},
+    ))  # fmt: skip
+    db.commit()
+    pinot = process(
+        f"Pinot noir {year}",
+        [("Crush and destem", "Must", "L"), ("Ferment", "Young wine", "L"), ("Barrel maturation", "Pinot in barrel", "L")],
+    )  # fmt: skip
+    run(
+        pinot,
+        [(f"PN {year} must", 3200, "L", {}), (f"PN {year} young wine", 3050, "L", {}),
+         (f"PN {year} in barrel", 3000, "L", {wine.SO2_ADDED: "25", wine.FINING: "None"})],
+        [{"inventory_item_id": str(pn.id), "name": pn.name, "quantity": "3100", "unit": "kg"},
+         {"inventory_item_id": str(pn_old.id), "name": pn_old.name, "quantity": "1500", "unit": "kg"}],
+        days_ago=190,
+    )  # fmt: skip
+
+
 def _seed_premises(db, org_id, inv) -> None:
     """Customs licences and the areas they cover, the way a distillery with a bond store has
     them: a manufacturing-area licence over the still house and bottling room, an off-site
@@ -2658,6 +2807,7 @@ def cmd_seed(args) -> int:
             "customer": _seed_customer,
             "tasks": _seed_tasks,
             "premises": _seed_premises,
+            "wine": _seed_wine,
             "moves": _seed_moves,
             "licensing": _seed_licensing,
             "stocktake": _seed_stocktake,
