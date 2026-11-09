@@ -34,6 +34,13 @@ def service():
     return ContractOrderService(db_session(), UUID(g.org_id))
 
 
+def sync_planner():
+    """Confirmed order lines are planner demand; keep it in step after the save commits."""
+    from app.features.planning.contract_sync import sync_after_order_change
+
+    sync_after_order_change(db_session(), UUID(g.org_id), g.current_user.id)
+
+
 def production_access():
     return has_permission(g.current_user, "production.view")
 
@@ -118,6 +125,7 @@ def create_order():
     guard_recipe_write(data)
     row = service().create_order(data)
     db_session.commit()
+    sync_planner()
     return jsonify({"order": serialize_order(row, production_access())}), 201
 
 
@@ -134,6 +142,7 @@ def get_order(order_id):
 def update_order(order_id):
     row = service().update_order(order_id, request.get_json(silent=True))
     db_session.commit()
+    sync_planner()
     return jsonify({"order": serialize_order(row, production_access())})
 
 
@@ -145,6 +154,7 @@ def create_line(order_id):
     guard_recipe_write(data)
     row = service().add_line(order_id, data)
     db_session.commit()
+    sync_planner()
     return jsonify({"line": serialize_line(row, production_access())}), 201
 
 
@@ -156,6 +166,7 @@ def update_line(order_id, line_id):
     guard_recipe_write(data)
     row = service().update_line(order_id, line_id, data)
     db_session.commit()
+    sync_planner()
     return jsonify({"line": serialize_line(row, production_access())})
 
 

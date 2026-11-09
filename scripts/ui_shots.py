@@ -64,6 +64,7 @@ SEED_KINDS = (
     "board",
     "commitments",
     "contracts",
+    "cover",
     "dispatch",
     "stocktake",
     "customers",
@@ -1481,6 +1482,118 @@ def _seed_planner(db, org_id, inv) -> None:
     demand_service.cancel_demand(db, org_id, made[-1].id)
 
 
+def _seed_cover(db, org_id, inv) -> None:
+    """Stock cover on the Planner (GL-P07 B3): 60 weeks of Xero sales for three gins and a
+    limoncello, mapped to their workflow outputs (one product sold with no output, so the
+    "not linked" note shows), finished stock made by real executions, and weeks-of-cover
+    targets so one product suggests a batch. Needs `lineage production planner board` first."""
+    import math
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.step import Step
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.planning import demand_service, forecast_service
+
+    outputs = demand_service.output_catalog(db, org_id)
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not outputs or not contacts:
+        raise SystemExit("ui-shots: `cover` needs `lineage production planner board` before it")
+
+    def pick(word):
+        return next((row for row in outputs if word.lower() in row["name"].lower()), None)
+
+    # (Xero line, output, weekly pace, seasonal swing, finished stock on hand, weeks of cover)
+    products = [
+        ("Navy Strength Gin 700 mL", pick("navy strength gin: bottle"), 38, 0.35, 160, 6),
+        ("Pink Gin 700 mL", pick("pink gin: bottle"), 22, 0.2, 520, 4),
+        ("Limoncello 500 mL", pick("limoncello: bottle"), 9, 0.5, 60, None),
+        ("Gift voucher", None, 2, 0, 0, None),
+    ]
+    for name, output, *_ in products:
+        db.add(
+            ProductMapping(
+                org_id=org_id,
+                biz_e_product_name=name,
+                xero_description_pattern=name,
+                biz_e_source_output_id=uuid.UUID(output["id"]) if output else None,
+            )
+        )
+    today = date.today()
+    for week in range(1, 61):
+        sold_on = today - timedelta(days=7 * week - 2)
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=contacts[week % len(contacts)].id,
+            invoice_number=f"INV-C{week:03d}",
+            invoice_type="ACCREC",
+            status="PAID",
+            date=sold_on,
+        )
+        db.add(invoice)
+        db.flush()
+        season = math.cos(2 * math.pi * (sold_on.timetuple().tm_yday - 350) / 365)  # peaks before Christmas
+        for position, (name, _, pace, swing, *_rest) in enumerate(products, start=1):
+            quantity = max(0, round(pace * (1 + swing * season)))
+            if quantity:
+                db.add(
+                    XeroInvoiceLineItem(
+                        org_id=org_id,
+                        invoice_id=invoice.id,
+                        xero_line_item_id=f"C{position}",
+                        description=name,
+                        quantity=quantity,
+                    )
+                )
+    for name, output, _, _, on_hand, weeks in products:
+        if output is None:
+            continue
+        if on_hand:
+            step = next(
+                row
+                for row in db.query(Step).filter(Step.org_id == org_id).all()
+                if any(isinstance(o, dict) and o.get("id") == output["id"] for o in row.outputs or [])
+            )
+            execution = ExecutionRepository(db).create_execution(org_id, step.process_id, commit=False)
+            made = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step.id)
+                .one()
+            )
+            inv.create_inventory_item(
+                org_id=org_id,
+                name=name,
+                quantity=str(on_hand),
+                unit=output["unit"],
+                inventory_type="final_product",
+                source_execution_id=execution.id,
+                source_execution_step_id=made.id,
+                source_output_id=uuid.UUID(output["id"]),
+                commit=False,
+            )
+        if weeks:
+            forecast_service.save_target(db, org_id, None, {"source_output_id": output["id"], "weeks_of_cover": weeks})
+    # One contract line made by a workflow output, so the planner shows a contract demand.
+    from app.features.contract_manufacturing.models.orders import ContractOrder, ContractOrderLine
+
+    line = (
+        db.query(ContractOrderLine)
+        .join(ContractOrder, ContractOrder.id == ContractOrderLine.order_id)
+        .filter(ContractOrderLine.org_id == org_id, ContractOrder.status == "confirmed")
+        .order_by(ContractOrder.due_date)
+        .first()
+    )
+    if line is not None and products[0][1] is not None:
+        line.source_output_id = uuid.UUID(products[0][1]["id"])
+        line.unit = products[0][1]["unit"]
+    db.commit()
+
+
 def _seed_contracts(db, org_id, inv) -> None:
     """Contract manufacturing: four brand customers (one inactive) with orders overdue, due this
     week, later, completed and cancelled, across producer-, customer- and mixed-supplied lines."""
@@ -2552,6 +2665,7 @@ def cmd_seed(args) -> int:
             "board": _seed_board,
             "commitments": _seed_commitments,
             "contracts": _seed_contracts,
+            "cover": _seed_cover,
             "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,
             "suppliers": _seed_suppliers,

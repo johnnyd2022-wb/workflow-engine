@@ -177,7 +177,122 @@ def plan_production_demand(demand_id):
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
-    return jsonify({"batches": [batches.batch_dict(row) for row in rows]}), 201 if changed else 200
+    return _plan_response(rows, changed)
+
+
+def _plan_response(rows, changed, **extra):
+    body = {"batches": [batches.batch_dict(row) for row in rows], **extra}
+    if not rows:
+        # Stock on hand and batches already planned meet it: nothing new to make.
+        body.update(covered=True, message="Covered by stock on hand")
+    return jsonify(body), 201 if changed else 200
+
+
+@planning_bp.post("/api/core/planner/demand/sync")
+@requires_auth
+@requires_org_scope
+def sync_planning_demand():
+    """Bring contract-order demand up to date. The planner page calls it on load."""
+    from app.features.planning import contract_sync
+
+    try:
+        result = contract_sync.sync_contract_demand(db_session, _org_id())
+        for action, row in result["changes"]:
+            _audit(action, row)
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify(contract_sync.summary(result))
+
+
+def _site_arg(value):
+    return batches.resolve_planning_site(db_session, g.current_org, value or None)
+
+
+@planning_bp.get("/api/core/planner/cover")
+@requires_auth
+@requires_org_scope
+def get_stock_cover():
+    from app.features.planning import forecast_service
+
+    try:
+        weeks = forecast_service.window_weeks(request.args.get("weeks"))
+        site = _site_arg(request.args.get("site_id"))
+        result = forecast_service.cover(db_session, _org_id(), site, today=date.today(), weeks=weeks)
+    except ValueError as exc:
+        return _planning_error(exc)
+    # Which site this is, and the others to choose from when the business runs several.
+    result["site_id"] = str(site.id) if site else None
+    result["sites"] = _planning_sites()
+    return jsonify(result)
+
+
+def _planning_sites():
+    from app.core.db.models.site import Site
+
+    if not g.current_org.multiple_sites_enabled:
+        return []
+    rows = (
+        db_session.query(Site)
+        .filter(Site.org_id == _org_id(), Site.is_active.is_(True))
+        .order_by(Site.is_default.desc(), Site.name)
+        .all()
+    )
+    return [{"id": str(row.id), "name": row.name, "is_default": bool(row.is_default)} for row in rows]
+
+
+@planning_bp.post("/api/core/planner/targets")
+@requires_auth
+@requires_org_scope
+def save_stock_target():
+    from app.features.planning import forecast_service
+
+    data = request.get_json(silent=True)
+    try:
+        site = _site_arg(data.get("site_id") if isinstance(data, dict) else None)
+        row = forecast_service.save_target(db_session, _org_id(), site, data)
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action="planning_stock_target_saved" if row else "planning_stock_target_cleared",
+                entity="planning_stock_target",
+                entity_id=row.id if row else None,
+                meta_data={
+                    "source_output_id": str(data["source_output_id"]),
+                    "weeks_of_cover": str(row.weeks_of_cover) if row else None,
+                },
+            )
+        )
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"target": {"weeks_of_cover": format(row.weeks_of_cover.normalize(), "f")} if row else None})
+
+
+@planning_bp.post("/api/core/planner/cover/plan")
+@requires_auth
+@requires_org_scope
+def plan_stock_cover():
+    """'Plan it' on a stock-cover suggestion: one forecast demand, planned in the same request."""
+    from app.features.planning import forecast_service
+
+    try:
+        demand, rows, changed = forecast_service.plan_forecast(
+            db_session,
+            _org_id(),
+            request.get_json(silent=True),
+            request.headers.get("Idempotency-Key"),
+            today=date.today(),
+        )
+        if changed:
+            _audit("planning_demand_created", demand)
+            for row in rows:
+                _batch_audit("planning_batch_created", row)
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return _plan_response(rows, changed, demand=service.demand_dict(demand))
 
 
 @planning_bp.get("/api/core/planner/batches")
