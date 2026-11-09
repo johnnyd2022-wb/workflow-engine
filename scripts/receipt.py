@@ -50,7 +50,9 @@ def tree_digest(cwd: Path = REPO) -> str:
             return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
 
         git("read-tree", "HEAD")
-        git("add", "-A", "--", ".", ":(exclude).agents/tmp")
+        git("add", "-A", "--", ".")
+        # Scratch (receipts, drafts) never counts, whether or not this repo ignores it.
+        git("rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".agents/tmp")
         return git("write-tree").strip()[:16]
 
 
