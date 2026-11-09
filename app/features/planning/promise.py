@@ -195,6 +195,17 @@ def promise(db, org_id: UUID, data: dict, *, today: date) -> dict:
     shortfall = quantity - in_stock
     batch_size = setting.batch_quantity
     batches = int((shortfall / batch_size).to_integral_value(rounding="ROUND_CEILING")) if batch_size else 1
+    from app.features.planning.material_adapter import MAX_BATCHES
+
+    if batches > MAX_BATCHES:
+        return {
+            "ready_date": None,
+            "from": "too_large",
+            "unit": unit,
+            "in_stock": float(in_stock),
+            "batches": batches,
+            "reason": f"That's {batches} batches, more than can be promised at once: plan it instead",
+        }
     capacity = placement.site_capacity(db, org_id, site.id if site else None)
     # Place every batch the order needs, one after another, on what the site already has
     # booked: the promise is when the *last* one is ready (!681 review).

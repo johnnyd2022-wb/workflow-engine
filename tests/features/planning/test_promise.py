@@ -149,3 +149,14 @@ def test_finished_and_cancelled_lines_dont_erase_an_orders_dates():
     assert out["forecast_ready_date"] == "2026-11-18" == out["planned_ready_date"]
     finished = promise.order_dates(SimpleNamespace(lines=[a]), lines)
     assert finished["ready_reason"] == "Made and finished" and finished["planned_ready_date"] is None
+
+
+def test_a_promise_too_large_to_place_says_plan_it_instead(db, demand_world):
+    """!681 review follow-up: the batch loop is capped, so one request can't run for seconds."""
+    from app.features.planning.material_adapter import MAX_BATCHES
+
+    org_id, output_id, _ = _setup(db, demand_world)  # 250 a batch
+    too_many = 250 * (MAX_BATCHES + 1)
+    result = promise.promise(db, org_id, {"source_output_id": str(output_id), "quantity": str(too_many)}, today=TODAY)
+    assert result["from"] == "too_large" and result["ready_date"] is None
+    assert "plan it instead" in result["reason"]
