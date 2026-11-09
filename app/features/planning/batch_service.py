@@ -19,8 +19,9 @@ from app.core.domain.ready_date_rules import VALID_READY_DATE_UNITS, duration_to
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
 from app.features.planning.demand_service import MAX_QUANTITY
-from app.features.planning.engine import BatchRule, Demand, StepTiming, StockKey, build_plan, workflow_duration
+from app.features.planning.engine import BatchRule, Demand, StepTiming, build_plan, workflow_duration
 from app.features.planning.models import PlanningDemand
+from app.features.planning.stock import demand_owners, on_hand, planned_output, stock_key
 
 MAX_PLAN_BATCHES = 500
 MAX_MINUTES = 525_600
@@ -446,6 +447,46 @@ def _use_by_rule(snapshot):
     }
 
 
+def _netting_inputs(db, org_id, demand, unit, site, *, today):
+    """Every open demand competing for the same stock, and the stock it competes for.
+
+    Earlier-due demand takes stock first (the engine orders them). A forecast demand's quantity
+    already counts stock on hand and planned batches, so it is planned on its own; other demand
+    neither competes with it nor counts its batches.
+    """
+    if demand.source == "forecast":
+        return [demand], [], None
+    owner = demand_owners(db, org_id, [demand])[demand.id]
+    rivals = (
+        db.query(PlanningDemand)
+        .filter(
+            PlanningDemand.org_id == org_id,
+            PlanningDemand.source_output_id == demand.source_output_id,
+            PlanningDemand.unit == unit,
+            PlanningDemand.status == "open",
+            PlanningDemand.source != "forecast",
+            PlanningDemand.id != demand.id,
+        )
+        .all()
+    )
+    owners = demand_owners(db, org_id, rivals)
+    demands = [demand, *(row for row in rivals if owners[row.id] == owner)]
+    stock, _ = on_hand(db, org_id, demand.source_output_id, unit, site, owner, today=today)
+    # The demand's own batches aren't supply for it: they are what it plans (replan re-sizes them).
+    planned = planned_output(
+        db,
+        org_id,
+        demand.source_output_id,
+        unit,
+        site,
+        owner,
+        today=today,
+        sources=("manual", "contract"),
+        exclude_demand_ids=(demand.id,),
+    )
+    return demands, [*stock, *planned], owner
+
+
 def plan_demand(db, org_id, demand_id, data, *, today):
     _body(data, ("site_id",))
     org = _lock_org(db, org_id)
@@ -487,11 +528,12 @@ def plan_demand(db, org_id, demand_id, data, *, today):
     process, steps, output, unit, fingerprint = _workflow(db, org_id, setting.process_id, demand.source_output_id)
     if setting.unit != unit or demand.unit != unit or setting.workflow_fingerprint != fingerprint:
         raise PlanningConflictError("Workflow or output units changed; review demand and planning settings")
-    key = StockKey(str(demand.source_output_id), unit, str(site.id) if site else None)
+    demands, supplies, owner = _netting_inputs(db, org_id, demand, unit, site, today=today)
+    key = stock_key(demand.source_output_id, unit, site, owner)
     try:
         plan = build_plan(
-            (Demand(str(demand.id), key, demand.quantity, demand.due_date, demand.priority),),
-            (),
+            tuple(Demand(str(row.id), key, row.quantity, row.due_date, row.priority) for row in demands),
+            tuple(supplies),
             (
                 BatchRule(
                     key,
@@ -502,9 +544,14 @@ def plan_demand(db, org_id, demand_id, data, *, today):
                 ),
             ),
             today=today,
+            plan_for=frozenset({str(demand.id)}),
         )
     except OverflowError as exc:
         raise ValueError("Workflow timing exceeds the supported calendar") from exc
+    position = next(row for row in plan.positions if row.demand_id == str(demand.id))
+    if not plan.batches:
+        # Stock on hand and batches already planned cover it: nothing new to make.
+        return [], False
     group = plan.batches[0]
     if group.batch_count > MAX_PLAN_BATCHES:
         raise ValueError(f"Plan at most {MAX_PLAN_BATCHES} batches at once; review the demand or batch size")
@@ -514,12 +561,9 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         .scalar()
         or 0
     ) + 1
-    blockers = [
-        *setting.snapshot["readiness_reasons"],
-        "Materials have not been checked",
-        "Capacity has not been checked",
-        "Site compliance has not been checked",
-    ]
+    # Capacity and the site's compliance are checked live by the start check (B4); what's
+    # stored is what only a separate step can clear.
+    blockers = [*setting.snapshot["readiness_reasons"], "Materials have not been checked"]
     version = latest_version(db, org_id, process.id)
     start_reasons = list(setting.snapshot["start_reasons"])
     version_digest = None
@@ -553,13 +597,57 @@ def plan_demand(db, org_id, demand_id, data, *, today):
         "timing_reason": group.reason,
         "elapsed_days": (group.ready_date - group.start_date).days,
         "use_by_date": group.use_by_date.isoformat() if group.use_by_date else None,
+        # What stock on hand and other planned batches already cover of this demand.
+        "covered_quantity": format(position.supplied_quantity, "f"),
+        "shortfall_quantity": format(position.shortfall, "f"),
     }
+    rows = new_batches(
+        db,
+        org_id,
+        demand,
+        setting,
+        process.id,
+        site,
+        unit,
+        snapshot,
+        blockers,
+        generation,
+        range(1, group.batch_count + 1),
+        group.start_date,
+        today=today,
+    )
+    return rows, True
+
+
+def new_batches(
+    db, org_id, demand, setting, process_id, site, unit, snapshot, blockers, generation, numbers, start, *, today
+):
+    """Persist batches of a demand, each placed against the site's capacity (B4) when the site
+    has a capacity setting: on time if any slot fits, else the earliest slot that does."""
+    from app.features.planning import placement
+
+    capacity = placement.site_capacity(db, org_id, site.id) if site else None
+    elapsed = timedelta(days=snapshot["elapsed_days"])
     rows = []
-    for number in range(1, group.batch_count + 1):
+    for number in numbers:
+        batch_start, note, extra = start, None, []
+        if capacity is not None:
+            placed, note = placement.place(capacity, snapshot, start, today=today)
+            if placed is None:
+                extra = [note]
+                note = None
+            else:
+                batch_start = placed
+                placement.add(capacity, snapshot, batch_start)
+        ready = batch_start + elapsed
+        due = date.fromisoformat(snapshot["due_date"])
+        timing = snapshot["timing_reason"]
+        if note:
+            timing = f"{note}; ready {ready.isoformat()}" + (" (late)" if ready > due else "")
         row = PlanningBatch(
             org_id=org_id,
-            demand_id=demand_id,
-            process_id=process.id,
+            demand_id=demand.id,
+            process_id=process_id,
             setting_id=setting.id,
             site_id=site.id if site else None,
             source_output_id=demand.source_output_id,
@@ -570,16 +658,16 @@ def plan_demand(db, org_id, demand_id, data, *, today):
             priority=demand.priority,
             revision=1,
             status="blocked",
-            proposed_start_date=group.start_date,
-            theoretical_ready_date=None if setting.snapshot["readiness_reasons"] else group.ready_date,
+            proposed_start_date=batch_start,
+            theoretical_ready_date=None if snapshot["readiness_reasons"] else ready,
             forecast_ready_date=None,
-            snapshot=snapshot,
-            blockers=blockers,
+            snapshot={**snapshot, "timing_reason": timing},
+            blockers=[*blockers, *extra],
         )
         db.add(row)
         rows.append(row)
     db.flush()
-    return rows, True
+    return rows
 
 
 def batch_dict(row, *, can_start=False):
@@ -632,9 +720,20 @@ def list_batches(db, org_id, start, end):
     from app.features.planning.start_service import can_start_batch
 
     return {
-        "batches": [batch_dict(row, can_start=can_start_batch(db, org_id, row)) for row in rows[:1000]],
+        "batches": [_with_start_check(db, org_id, row, can_start_batch) for row in rows[:1000]],
         "truncated": len(rows) > 1000,
     }
+
+
+def _with_start_check(db, org_id, row, can_start_batch):
+    """The batch, whether it can start, and (for batches due to start within a week) what the
+    live start check says still stops it, in plain words."""
+    item = batch_dict(row, can_start=can_start_batch(db, org_id, row))
+    if row.status in ("blocked", "planned") and row.proposed_start_date <= date.today() + timedelta(days=7):
+        from app.features.planning.start_service import evaluate_start
+
+        item["start_blockers"] = list(evaluate_start(db, org_id, row).blockers)
+    return item
 
 
 def _locked_batch(db, org_id, batch_id):
@@ -696,8 +795,13 @@ def update_batch(db, org_id, batch_id, data, *, today):
         row.theoretical_ready_date = None if row.snapshot["readiness_reasons"] else ready
         row.forecast_ready_date = None
         row.status = "blocked"
+        # Someone chose this day: an automatic replan won't move it for capacity (B4).
+        row.snapshot = {**row.snapshot, "placed_by": "person"}
     elif action == "cancel":
+        from app.features.planning.material_adapter import close_commitments
+
         row.status = "cancelled"
+        close_commitments(db, org_id, row.id, "released")
     row.revision += 1
     db.flush()
     return row, True

@@ -13,3 +13,12 @@
 #page-content .mv-error { margin: 0; padding: 10px 14px; border-radius: 10px; border: 1px solid #fecdca; background: #fef3f2; color: #b42318; font-size: 14px; }
 #page-content .mv-actions { display: flex; justify-content: flex-end; gap: 10px; }
 html[data-spa-theme="dark"] #page-content .mv-error { border-color: rgba(240, 68, 56, .4); background: rgba(240, 68, 56, .12); color: #f97066; }
+/* The quality hold dialog (app/ui/shared/quality-hold.js) shares this look. */
+#page-content .qh-dialog textarea { width: 100%; min-height: 76px; padding: 10px 12px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 10px; background: var(--ui-surface, #fff); color: inherit; font: inherit; font-weight: 400; resize: vertical; }
+#page-content .qh-dialog textarea:focus-visible { outline: 2px solid var(--ui-accent, #0f766e); outline-offset: 1px; }
+#page-content .qh-related { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .qh-related legend { float: left; width: 100%; padding: 0; font-size: 14px; font-weight: 600; }
+#page-content .qh-related legend + * { clear: both; }
+#page-content .qh-related__list { display: flex; flex-direction: column; gap: 6px; max-height: 14rem; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+#page-content .qh-related__item { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: baseline; padding: 8px 10px; border-radius: 10px; background: var(--ui-surface-subtle, #f8fafc); font-size: 14px; }
+#page-content .qh-related__item .mv-hint { grid-column: 2; }

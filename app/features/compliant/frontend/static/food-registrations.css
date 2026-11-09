@@ -1,0 +1,19 @@
+/* Food registrations (compliant/food_registrations.html), Style 1: header, list cards, form cards. */
+#page-content .food-reg__card { margin-top: 16px; padding: 20px 24px; }
+#page-content .food-reg__card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .food-reg__list { display: grid; gap: 0; }
+#page-content .food-reg__list > p { margin: 0; color: var(--ui-text-muted, #64748b); font-size: 14px; }
+#page-content .food-reg__list article { padding: 12px 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .food-reg__list article:first-child { border-top: 0; padding-top: 0; }
+#page-content .food-reg__list h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .food-reg__list article p { margin: 0 0 2px; font-size: 13px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
+#page-content .food-reg__list article a { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--ui-accent-strong, #115e59); }
+#page-content .food-reg__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; max-width: 760px; }
+#page-content .food-reg__form label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .food-reg__form input, #page-content .food-reg__form select { width: 100%; box-sizing: border-box; min-height: 40px; }
+#page-content .food-reg__wide, #page-content .food-reg__actions { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  #page-content .food-reg__card { padding: 16px; }
+  #page-content .food-reg__form { grid-template-columns: 1fr; }
+  #page-content .food-reg__actions .workspace-button { width: 100%; }
+}

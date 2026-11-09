@@ -22,6 +22,7 @@ class XeroSyncJob(TenantScoped, Base):
     completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
     contacts_synced = Column(Integer, nullable=False, default=0)
     invoices_synced = Column(Integer, nullable=False, default=0)
+    credit_notes_synced = Column(Integer, nullable=False, default=0, server_default="0")
     error_message = Column(Text, nullable=True)
     error_details = Column(JSONB, nullable=True)
     triggered_by = Column(String(50), nullable=True)  # manual | oauth_connect | scheduled

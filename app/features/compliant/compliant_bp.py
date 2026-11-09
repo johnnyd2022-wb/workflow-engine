@@ -22,6 +22,7 @@ from app.features.compliant.routes.page_routes import page_bp
 from app.features.compliant.routes.premises_routes import premises_bp
 from app.features.compliant.routes.tools_routes import tools_bp
 from app.features.compliant.routes.verification_routes import verification_bp
+from app.features.compliant.routes.wine_routes import wine_bp
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -41,6 +42,7 @@ def create_compliant_blueprint() -> Blueprint:
     bp.register_blueprint(cca_transfer_bp)
     bp.register_blueprint(page_bp)
     bp.register_blueprint(tools_bp)
+    bp.register_blueprint(wine_bp)
     bp.register_blueprint(verification_bp)
     bp.register_blueprint(licensing_bp)
     bp.register_blueprint(premises_bp)

@@ -562,7 +562,10 @@ def serialize_line(row, production=False):
     return result
 
 
-def serialize_order(row, production=False):
+def serialize_order(row, production=False, dates=None):
+    """`dates`: this order's {planned_ready_date, forecast_ready_date, ready_reason} from
+    planning.promise (GL-P07 B5); without it the order says it isn't planned."""
+    dates = dates or {}
     return {
         "id": str(row.id),
         "customer_id": str(row.customer_id),
@@ -573,6 +576,7 @@ def serialize_order(row, production=False):
         "duty_responsibility": row.duty_responsibility,
         "customer_cca_reference": row.customer_cca_reference,
         "lines": [serialize_line(line, production) for line in row.lines],
-        "planned_ready_date": None,
-        "forecast_ready_date": None,
+        "planned_ready_date": dates.get("planned_ready_date"),
+        "forecast_ready_date": dates.get("forecast_ready_date"),
+        "ready_reason": dates.get("ready_reason") or "Not planned yet",
     }

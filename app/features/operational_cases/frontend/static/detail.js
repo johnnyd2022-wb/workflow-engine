@@ -29,8 +29,17 @@
     try {
       var d = new Date(iso);
       if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleString();
+      // Local time in the same shape as the UTC due date ("12 Nov 2026, 3:28 pm NZDT").
+      return new Intl.DateTimeFormat('en-NZ', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+      }).format(d);
     } catch (e) { return '—'; }
+  }
+
+  // Quantities arrive as fixed-point strings ("40.0000"): show them as people write them.
+  function plainQuantity(value) {
+    var n = Number(value);
+    return isFinite(n) ? n.toLocaleString('en-NZ', { maximumFractionDigits: 4 }) : String(value);
   }
 
   function fmtUtcDate(iso) {
@@ -83,7 +92,7 @@
     document.querySelector('[data-oc-status-badge]').textContent = statusLabel(data.status);
     document.querySelector('[data-oc-overdue-badge]').hidden = !isOverdue(data);
     document.querySelector('[data-oc-title]').textContent = data.title;
-    document.querySelector('[data-oc-owner]').textContent = data.owner_email || data.owner_id;
+    document.querySelector('[data-oc-owner]').textContent = data.owner_name || data.owner_email || data.owner_id;
     document.querySelector('[data-oc-due-utc]').textContent = fmtUtcDate(data.due_at);
     document.querySelector('[data-oc-due-local]').textContent = fmtDate(data.due_at);
     document.querySelector('[data-oc-next-action]').textContent = data.next_action;
@@ -96,6 +105,18 @@
   }
 
   function renderSource(data) {
+    // GL-P03: a recall has no finding to show; its customer checklist takes the source's place.
+    if (data.source_type === 'recall' && window.BizeRecall) {
+      var section = document.querySelector('[data-oc-source-section]');
+      if (section) section.hidden = true;
+      var recallEl = document.querySelector('[data-oc-recall]');
+      var root = document.querySelector('[data-oc-detail-root]');
+      if (recallEl && !recallEl.dataset.rendered) {
+        recallEl.dataset.rendered = '1';
+        window.BizeRecall.render(recallEl, data.id, root && root.dataset.canWorkRecall === 'true');
+      }
+      return;
+    }
     var obs = document.querySelector('[data-oc-source-observation]');
     var state = data.source_observation && data.source_observation.state;
     var observedAt = data.source_observation && data.source_observation.observed_at;
@@ -104,17 +125,17 @@
     var fields = document.querySelector('[data-oc-source-fields]');
     fields.innerHTML = '';
     var snap = data.source_snapshot || {};
-    var nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Correct source');
+    var nav = document.createElement('nav'); nav.className = 'oc-source-links'; nav.setAttribute('aria-label', 'Correct source');
     [['Review stock', '/core/inventory/view?item_id=' + encodeURIComponent(snap.source_entity_id || '')],
      ['Trace source', '/core/sourcemap?show=check-needed'],
      ['Reconcile in process step', '/core/notifications?category=traceability']].forEach(function (entry) {
-      var a = document.createElement('a'); a.textContent = entry[0]; a.href = entry[1]; a.setAttribute('hx-boost', 'false'); a.style.marginRight = '1rem'; nav.appendChild(a);
+      var a = document.createElement('a'); a.textContent = entry[0]; a.href = entry[1]; a.setAttribute('hx-boost', 'false'); nav.appendChild(a);
     });
     fields.appendChild(nav);
     if (state === 'deleted') { var recovery = document.createElement('p'); recovery.textContent = 'Source deleted. Restore it in its workspace or ask an administrator to dismiss this case with a reason.'; fields.appendChild(recovery); }
     var rows = [
       ['Item', snap.item_name],
-      ['Quantity', snap.quantity + ' ' + (snap.unit || '')],
+      ['Quantity', snap.quantity == null || snap.quantity === '' ? null : plainQuantity(snap.quantity) + (snap.unit ? ' ' + snap.unit : '')],
       ['Remaining balance to reconcile', snap.remaining_balance_to_reconcile],
       ['Observed at', snap.observed_at ? fmtDate(snap.observed_at) : null],
     ];
@@ -247,7 +268,7 @@
       }).catch(function () {});
     } else {
       var opt = document.createElement('option');
-      opt.textContent = caseData.owner_email || caseData.owner_id;
+      opt.textContent = caseData.owner_name || caseData.owner_email || caseData.owner_id;
       ownerSelect.appendChild(opt);
     }
     ownerSelect.addEventListener('change', function () { markDirty(true); });
@@ -483,9 +504,18 @@
     var root = document.querySelector('[data-oc-detail-root]');
     if (!root) return;
     caseId = root.getAttribute('data-case-id');
-    var back = document.querySelector('[data-oc-back]');
+    // "Back" keeps the queue filter the case was opened from: the breadcrumb's Cases link and the
+    // shell's back button both go to ?return_to= when it is a Cases queue URL.
     var returnTo = new URLSearchParams(location.search).get('return_to');
-    if (back && returnTo && /^\/core\/cases(?:\?|$)/.test(returnTo) && !returnTo.includes('\\')) back.href = returnTo;
+    if (returnTo && /^\/core\/cases(?:\?|$)/.test(returnTo) && !returnTo.includes('\\')) {
+      document.querySelectorAll('.breadcrumbs a[href="/core/cases"], #spa-banner-back[href="/core/cases"]').forEach(function (a) {
+        a.href = returnTo;
+      });
+      // The shell re-derives its back button from this marker (base_spa.html spaSyncBannerBack).
+      var marker = document.querySelector('#page-content [data-nav-back="/core/cases"]');
+      if (marker) marker.setAttribute('data-nav-back', returnTo);
+      if (typeof window.spaSyncBannerBack === 'function') window.spaSyncBannerBack();
+    }
     bindReloadLatest();
     bindTimelinePagination();
     bindLiveSync();

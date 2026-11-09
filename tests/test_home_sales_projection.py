@@ -97,7 +97,10 @@ def test_home_sales_totals_and_tasks_are_live_isolated_and_constant_query_count(
     event.listen(db.bind, "before_cursor_execute", capture)
     try:
         summary = service.get_dashboard_overview(own_id)
-        assert len(statements) == 4, "Customer names must be joined, not loaded once per task"
+        assert len(statements) == 6, "Two periods each add one credit-note aggregate"
+        assert sum("LEFT OUTER JOIN xero_contacts" in statement for statement in statements) == 1, (
+            "Customer names must be joined, not loaded once per task"
+        )
         assert summary["current_month_revenue"] == 500
         assert summary["outstanding_receivables"] == 100
         assert summary["revenue_vs_last_month_pct"] == 100

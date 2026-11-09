@@ -2,7 +2,7 @@
 
 {% block body_class %}add-inventory-manual-spa{% endblock %}
 
-{% block title %}Add Inventory Manually{% endblock %}
+{% block title %}Add inventory manually{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="Manually add a single inventory item.">
@@ -15,7 +15,7 @@
 
 
     {% call primary_card(
-      title="Add Inventory Manually",
+      title="Add inventory manually",
       subtitle="Enter the details for a single inventory item."
     ) %}
       <p id="add-inv-manual-return-hint" class="add-inv-manual-return-hint" hidden>
@@ -26,7 +26,7 @@
         <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
 
         <section class="spa-form-section" aria-labelledby="add-inv-section-basic">
-          <h3 id="add-inv-section-basic" class="spa-form-section-title">Basic Information</h3>
+          <h3 id="add-inv-section-basic" class="spa-form-section-title">Basic information</h3>
           <div>
             <label class="spa-field-label" for="add-inventory-name">Item name</label>
             <input type="text" name="name" id="add-inventory-name" required class="spa-inp" placeholder="e.g., Juniper berries">

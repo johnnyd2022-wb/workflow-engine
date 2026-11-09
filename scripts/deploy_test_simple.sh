@@ -122,8 +122,47 @@ if [ -n "$DB_PASSWORD" ]; then
     DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
 fi
 
-docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"
+# From here the old app is gone: any failure exits 3 so the CI job rolls back to :test-stable
+# (a "name already in use" or port conflict used to exit 125 and leave test with no app).
+if ! docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"; then
+    echo "❌ Could not start workflow-engine-test after removing the old app."
+    exit 3
+fi
 
-echo "✅ Test environment started on port 8001"
+# Don't report success until the app answers. cd_e2e used to start while the container was
+# still booting and fail on ERR_CONNECTION_REFUSED (main 2026-09-30, 10-14, 10-25; see
+# .agents/reports/ci/pipeline-health-2026-11.md). /healthcheck also proves the database
+# connection. Exit 3 means "the new app is running but never became healthy" -- the old app
+# is already gone, so the CI job rolls back to :test-stable on exactly that code.
+# Probe from INSIDE the app container: deploy-target is a shell executor that itself runs in a
+# container, so 127.0.0.1:8001 from the job is not the Docker host (main went red on 2026-11-07
+# with a healthy app because curl in the job never reached it). The image always has python.
+HEALTH_URL="${DEPLOY_HEALTH_URL:-https://127.0.0.1:8001/healthcheck}"
+HEALTH_PROBE="import ssl,sys,urllib.request
+try:
+    r = urllib.request.urlopen(sys.argv[1], context=ssl._create_unverified_context(), timeout=5)
+    sys.exit(0 if r.status == 200 else 1)
+except Exception:
+    sys.exit(1)"
+echo "Waiting for $HEALTH_URL (probed inside workflow-engine-test) ..."
+healthy=""
+for _ in $(seq 1 "${DEPLOY_HEALTH_ATTEMPTS:-60}"); do
+    if [ "$(docker inspect -f '{{.State.Running}}' workflow-engine-test 2>/dev/null)" != true ]; then
+        echo "❌ workflow-engine-test exited during startup."
+        break
+    fi
+    if docker exec workflow-engine-test python -c "$HEALTH_PROBE" "$HEALTH_URL" >/dev/null 2>&1; then
+        healthy=1
+        break
+    fi
+    sleep "${DEPLOY_HEALTH_INTERVAL:-2}"
+done
+if [ -z "$healthy" ]; then
+    echo "❌ workflow-engine-test did not pass its health check. Last log lines:"
+    docker logs --tail 40 workflow-engine-test 2>&1 || true
+    exit 3
+fi
+
+echo "✅ Test environment started on port 8001 and passed its health check"
 echo "View logs with: docker logs -f workflow-engine-test"
 echo "Browse to: https://test-workflow-engine.whistlebird.co.nz"

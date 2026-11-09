@@ -1,13 +1,19 @@
 """Performance budgets for core pages and API routes. Owned by the perf-guardrails skill.
 
-Budgets live in .agents/perf/budgets.json; results land in
-.agents/reports/perf/last-run.json for scripts/perf_triage.py to fold into the priority
-checklist. Two tiers per spec D2 (.agents/specs/playwright-e2e.md):
+Budgets live in .agents/perf/budgets.json; results are recorded to the `bize_dev` metrics
+database (scripts/metrics_db.py: perf_runs / perf_results, keyed by commit, branch, MR and
+pipeline) for scripts/perf_triage.py to fold into the priority checklist. Two tiers per
+spec D2 (.agents/specs/playwright-e2e.md):
 
 - **ceiling** breaches FAIL (blocking): they are generous enough that only a real
   regression trips them — an N+1 explosion, a hung query, a render stall.
 - **budget** breaches WARN and are reported (advisory): wall-clock on a dev laptop is
   too noisy to block on, and a flaky gate gets disabled within a month.
+- **baseline** regressions FAIL, but only on `queries` and only in CI: the query count is
+  deterministic, so exceeding the rolling median of recent main-branch runs (the
+  `perf_baseline` view) by more than 25% / 2 statements is a real regression. Timings are
+  never gated against a baseline -- runner noise would make that gate flap. Locally the
+  same finding is a warning, because a dev database holds different data than CI's.
 
 What is measured, and why these measures:
 
@@ -27,11 +33,12 @@ What is measured, and why these measures:
 from __future__ import annotations
 
 import json
+import os
 import statistics
+import sys
 import threading
 import time
 import warnings
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -40,7 +47,11 @@ from tests.e2e.conftest import csrf_headers
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUDGETS_FILE = REPO_ROOT / ".agents" / "perf" / "budgets.json"
-REPORT_FILE = REPO_ROOT / ".agents" / "reports" / "perf" / "last-run.json"
+
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import metrics_db  # noqa: E402
+
+MIN_BASELINE_SAMPLES = 5  # main-branch runs needed before a baseline is trusted
 
 pytestmark = [pytest.mark.e2e, pytest.mark.perf]
 
@@ -125,12 +136,11 @@ REGISTRY = _Registry()
 RESULTS: list[dict] = []
 
 
-@pytest.fixture(scope="session")
-def perf_instrumentation(app_url):
+def instrument_performance():
     """Attach Flask signals and a SQLAlchemy cursor listener; write the report on teardown.
 
-    Safe to attach after boot: signals and engine events bind to global objects, not to
-    Flask's setup phase, so this never hits the setup-after-first-request guard. Counters
+    Called by the shared session fixture after boot. Signals and engine events bind to
+    global objects, not Flask's setup phase, so this never hits the setup-after-first-request guard. Counters
     live on `g`, so concurrent requests on the threaded dev server cannot cross-count.
     """
     from flask import g, has_request_context, request, request_finished, request_started
@@ -163,24 +173,38 @@ def perf_instrumentation(app_url):
         request_finished.disconnect(_finished)
         event.remove(engine, "before_cursor_execute", _cursor)
         if RESULTS:
-            REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
-            REPORT_FILE.write_text(
-                json.dumps(
-                    {
-                        "generated": datetime.now(UTC).isoformat(timespec="seconds"),
-                        "budgets_file": str(BUDGETS_FILE.relative_to(REPO_ROOT)),
-                        "results": sorted(RESULTS, key=lambda r: r["route"]),
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            destination = metrics_db.record_perf(RESULTS)
+            print(f"\nperf results recorded: {destination} ({len(RESULTS)} routes)")
 
 
 # --------------------------------------------------------------------------------------
 # Evaluation: ceiling blocks, budget warns (spec D2's two tiers)
 # --------------------------------------------------------------------------------------
+
+
+_BASELINE: dict | None = None
+
+
+def _baseline() -> dict:
+    """{(route, metric): (median, samples)} from main-branch history; {} if the DB is down."""
+    global _BASELINE
+    if _BASELINE is None:
+        try:
+            _BASELINE = metrics_db.perf_baseline()
+        except metrics_db.MetricsDBUnavailableError:
+            _BASELINE = {}
+    return _BASELINE
+
+
+def _baseline_regression(route: str, metrics: dict) -> str | None:
+    median_samples = _baseline().get((route, "queries"))
+    queries = metrics.get("queries")
+    if queries is None or median_samples is None or median_samples[1] < MIN_BASELINE_SAMPLES:
+        return None
+    median = median_samples[0]
+    if queries > max(median * 1.25, median + 2):
+        return f"queries={queries:.0f} vs main baseline median {median:.0f} ({median_samples[1]} runs)"
+    return None
 
 
 def _evaluate(route: str, kind: str, metrics: dict) -> None:
@@ -206,6 +230,15 @@ def _evaluate(route: str, kind: str, metrics: dict) -> None:
         pytest.fail(f"{route}: {'; '.join(over_ceiling)} — a ceiling breach is a real regression (blocking tier)")
     if over_budget:
         warnings.warn(f"{route} over budget (advisory, non-blocking): {'; '.join(over_budget)}", stacklevel=1)
+    regression = _baseline_regression(route, metrics)
+    # Gate MRs against main's median, never main against itself: a main run that adds
+    # queries would otherwise fail every main pipeline until the median caught up, and
+    # main_green would block every MR meanwhile. Main records; the MR run gates.
+    gated = os.environ.get("GITLAB_CI") == "true" and not metrics_db.provenance()["is_main"]
+    if regression and gated:
+        pytest.fail(f"{route}: {regression} -- more queries than main; look for a new N+1")
+    if regression:
+        warnings.warn(f"{route}: {regression} (advisory locally and on main; blocking on MRs)", stacklevel=1)
 
 
 # --------------------------------------------------------------------------------------

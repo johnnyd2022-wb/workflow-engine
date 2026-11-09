@@ -83,6 +83,9 @@ window.CRMAPI = (function () {
   async function getCustomer(id) { return request(`/customers/${id}`); }
   // Contacts created and edited in Biz-E, and their sync to Xero.
   async function createCustomer(data) { return request('/customers', { method: 'POST', body: data }); }
+  async function importCustomers(text, format, commit = false) {
+    return request('/customers/import', { method: 'POST', body: { text, format, commit } });
+  }
   async function updateCustomer(id, data) { return request(`/customers/${id}`, { method: 'PATCH', body: data }); }
   async function setCustomerXeroSync(id, choice) { return request(`/customers/${id}/xero-sync`, { method: 'PUT', body: { sync_to_xero: choice } }); }
   async function retryCustomerXeroSync(id) { return request(`/customers/${id}/xero-sync/retry`, { method: 'POST' }); }
@@ -168,6 +171,16 @@ window.CRMAPI = (function () {
   async function getChurnRisk() { return request('/analytics/churn-risk'); }
   async function getCustomerContact() { return request('/analytics/customer-contact'); }
   async function getOverview() { return request('/overview'); }
+  async function getPendingReturns(page = 1) { return request(`/returns/pending?page=${page}&page_size=25`); }
+  async function recordCreditNoteLineNoReturn(creditNoteId, lineId, note) {
+    return request(`/credit-notes/${encodeURIComponent(creditNoteId)}/lines/${encodeURIComponent(lineId)}/no-return`, {
+      method: 'POST', body: { note },
+    });
+  }
+  async function recordCustomerReturn(data) { return request('/returns', { method: 'POST', body: data }); }
+  async function getReturnPlaces() { return request('/returns/places'); }
+  async function getCustomerReturns(contactId) { return request(`/returns?contact_id=${encodeURIComponent(contactId)}`); }
+  async function getReturnableSaleLines(xeroInvoiceId) { return request(`/invoices/${encodeURIComponent(xeroInvoiceId)}/returnable`); }
   async function getTraceabilityConfig() { return request('/traceability-config'); }
   async function updateTraceabilityConfig(data) { return request('/traceability-config', { method: 'PUT', body: data }); }
   async function getOrgUsers() { return orgRequest('/users'); }
@@ -183,10 +196,10 @@ window.CRMAPI = (function () {
   return {
     request, csrfToken, navigate,
     getXeroStatus, getXeroAuthUrl, triggerSync, disconnectXero,
-    getCustomers, getCustomer, createCustomer, updateCustomer, setCustomerXeroSync, retryCustomerXeroSync, getContactSyncSettings, updateContactSyncSettings, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
+    getCustomers, getCustomer, createCustomer, importCustomers, updateCustomer, setCustomerXeroSync, retryCustomerXeroSync, getContactSyncSettings, updateContactSyncSettings, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
-    getMonthlySales, getCustomerBreakdown, getProductSalesByStore, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
+    getMonthlySales, getCustomerBreakdown, getProductSalesByStore, getRankings, getChurnRisk, getCustomerContact, getOverview, getPendingReturns, recordCreditNoteLineNoReturn, recordCustomerReturn, getReturnPlaces, getCustomerReturns, getReturnableSaleLines, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
     getProductMappings, getFinalProducts, createProductMapping, createProductMappings, updateProductMapping, deleteProductMapping,
   };
 })();

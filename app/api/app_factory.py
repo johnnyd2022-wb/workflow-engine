@@ -162,6 +162,18 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # GL-P02: quality hold and release on a lot.
+    from app.core.backend.lot_holds_routes import lot_holds_bp
+
+    app.register_blueprint(lot_holds_bp)
+    # GL-P10: download every record the business holds as one ZIP.
+    from app.features.data_export.routes import bp as data_export_bp
+
+    app.register_blueprint(data_export_bp)
+    # GL-P03: product recall cases (on operational cases).
+    from app.features.recalls.routes import bp as recalls_bp
+
+    app.register_blueprint(recalls_bp)
     # Getting started (GL-P09): the guided first-day path.
     from app.core.backend.getting_started import getting_started_bp
 
@@ -480,6 +492,9 @@ def create_app():
     install_site_request_validation(app)
     setup_session_security(app)
     setup_observability(app)
+    from app.api.error_pages import register_error_pages
+
+    register_error_pages(app)  # GL-C04: 404/500 say how to get help, with a reference
 
     # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
     # This ensures all connections are encrypted, preventing man-in-the-middle attacks
@@ -543,13 +558,13 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
-            # GL-S03: see app/core/security/csp.py. The strict target goes out report-only on
-            # pages, so the browser tells /csp-report what still needs moving off inline script.
+            # GL-S03: the nonce policy is enforced; report-only remains for regression telemetry.
             framable = response.headers.get("X-Frame-Options") == "SAMEORIGIN"
-            response.headers["Content-Security-Policy"] = csp.enforced_policy(framable=framable)
+            nonce = csp.csp_nonce()
+            response.headers["Content-Security-Policy"] = csp.enforced_policy(nonce, framable=framable)
             if response.mimetype == "text/html":
                 response.headers["Content-Security-Policy-Report-Only"] = csp.report_only_policy(
-                    csp.csp_nonce(), framable=framable
+                    nonce, framable=framable
                 )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
@@ -683,7 +698,7 @@ def create_app():
     # so the CDN edge-caches them after the first hit and the origin stops being in the
     # asset path.
     #
-    # Scope: /static/js, /static/css, /static/inventory, /static/img (+ /crm/static/*
+    # Scope: /static/js, /static/css, /static/inventory, /static/img, /static/fonts (+ /crm/static/*
     # when CRM is on). /ui/shared (per-file auth gate) stays on its Flask route.
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
     # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
@@ -728,6 +743,8 @@ def create_app():
         app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
+    # Self-hosted webfonts (fonts.css): woff2 files plus their licence note, all public.
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "fonts"), prefix="static/fonts/")
     if crm_available:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")

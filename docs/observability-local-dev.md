@@ -158,6 +158,20 @@ Alloy keeps only bounded resource labels (`service`, namespace, and environment)
 in Loki; correlation, user, organisation, span, and trace IDs remain searchable
 JSON fields rather than Loki labels.
 
+## Finding a request from a support reference (GL-C04)
+
+People who ask for help quote an 8-character **reference** (Help and contact in the account
+menu, the 404/500 pages, and `"reference"` in API error JSON). It is the start of the request's
+id: the `X-Request-ID` response header and the `request_id` on every log line for that request
+(`app/observability/reference.py`). Find it in Loki with a prefix match:
+
+```logql
+{service_name="workflow-engine"} | json | request_id =~ "3f9a2c1b.*"
+```
+
+When nobody sent an `X-Request-ID`, the same id is the `correlation_id` of every entity event the
+request wrote, so `entity_events.correlation_id::text LIKE '3f9a2c1b%'` finds what it changed.
+
 ## 4) Basic Health Checks
 
 ```bash

@@ -3,7 +3,7 @@
     "Performance budgets for the perf-guardrails skill. Consumed by",
     "tests/e2e/test_perf_budgets.py (measurement + gating) and scripts/perf_triage.py",
     "(priority checklist). Two levels per metric, per spec D2 (.agents/specs/playwright-e2e.md):",
-    "  budget  \u2014 advisory. A breach is reported in .agents/reports/perf/last-run.json and",
+    "  budget  \u2014 advisory. A breach is recorded in the metrics DB (perf_results) and",
     "            raises the route's priority in the triage checklist. It never fails a test.",
     "  ceiling \u2014 blocking. Generous enough that only a real regression (an N+1 explosion,",
     "            a hung query, a render stall) trips it; a breach fails the perf test.",

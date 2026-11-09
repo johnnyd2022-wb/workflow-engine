@@ -34,7 +34,9 @@ def workspace_user(fresh_user, db):
 
 
 def _page(browser, app_url, user, width):
-    context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": width, "height": 1000})
+    context = browser.new_context(
+        base_url=app_url, ignore_https_errors=True, bypass_csp=True, viewport={"width": width, "height": 1000}
+    )
     page = context.new_page()
     login_through_ui(page, user["email"], user["password"])
     return context, page
@@ -61,7 +63,7 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         for name, path, labels, secondary in [
             ("production", "/core", ["Overview", "Planner", "Workflows", "Inventory"], "Contract orders"),
             ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Tools"),
-            ("sales", "/crm", ["Overview", "Customers", "Tasks", "Analytics"], "Batch matching"),
+            ("sales", "/crm", ["Overview", "Customers", "Sales tasks", "Analytics"], "Batch matching"),
         ]:
             page.goto(path)
             nav = page.get_by_role("navigation", name=f"{name.title()} sections", exact=True)
@@ -384,22 +386,25 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         # Plan 2.5: sites and people are Settings tabs now, not cards in an Organisation category.
         # GL-P07 A1 (!597): Sites shows only for a business with the multi_site subscription.
         row = page.get_by_role("tablist", name="Settings pages")
-        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Integrations", "Tasks"])
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Integrations", "Task settings"])
         FeatureSubscriptionRepository(db).grant(UUID(workspace_user["org_id"]), "multi_site")
         db.commit()
         page.reload()
-        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Tasks"])
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Task settings"])
         expect(row.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(row.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
         expected = ["Account information", "Password", "Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
-        assert headings[-1] == "Appearance"
+        assert "Appearance" in headings
+        assert headings[-1] == "Download all your records"
         assert "Notification preferences" not in headings
         assert "Manage sites" not in headings
         # One category at a time, under the Settings tab row.
         categories = page.get_by_role("navigation", name="Account sections", exact=True)
-        expect(categories.get_by_role("link")).to_have_text(["Profile", "Security and sign-in", "Preferences"])
+        expect(categories.get_by_role("link")).to_have_text(
+            ["Profile", "Security and sign-in", "Preferences", "Your records"]
+        )
         expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
         account = page.locator('[data-settings-group="account"]').bounding_box()
         assert row.bounding_box()["y"] + row.bounding_box()["height"] <= categories.bounding_box()["y"]

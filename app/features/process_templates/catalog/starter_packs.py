@@ -146,7 +146,9 @@ STARTER_PACKS: tuple[StarterPack, ...] = (
                 "Log each grape delivery by block or grower.",
                 TemplateOutput("Grape lot", "kg"),
                 takes_previous=False,
-                prompts=(TemplatePrompt("Vineyard or grower", "text"), TemplatePrompt("Brix at intake", "number")),
+                # Grower, variety, vintage and region come from the NZ Alcohol wine module
+                # (wine/rules.py) whenever wine is switched on, so they aren't repeated here.
+                prompts=(TemplatePrompt("Brix at intake", "number", required=False),),
             ),
             PackStep("Crush and press", "Crush and press to juice or must.", TemplateOutput("Juice or must", "L")),
             PackStep(

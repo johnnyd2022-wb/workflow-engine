@@ -43,6 +43,8 @@ from app.utils.config_loader import config
 
 logger = get_logger(__name__)
 
+RECALL_SOURCE_TYPE = "recall"  # GL-P03: app/features/recalls (kept literal to avoid an import cycle)
+
 SOURCE_TYPE_CORE_FINDING = "core_finding"
 
 _ALLOWED_EVIDENCE_TYPES = {"execution", "execution_evidence", "inventory_item"}
@@ -302,6 +304,13 @@ def run_idempotent_command(
 # ---------------------------------------------------------------------------
 
 
+def _person_name(user) -> str | None:
+    if user is None:
+        return None
+    name = " ".join(x for x in (getattr(user, "first_name", None), getattr(user, "last_name", None)) if x).strip()
+    return name or user.email
+
+
 def serialize_case_compact(case: OperationalCase) -> dict:
     owner = getattr(case, "owner", None)
     return {
@@ -312,6 +321,9 @@ def serialize_case_compact(case: OperationalCase) -> dict:
         "owner_id": str(case.owner_id) if case.owner_id else None,
         "owner_active": bool(owner and owner.is_active),
         "owner_email": owner.email if owner is not None else None,
+        # What the pages show: the owner's name as People and roles shows it, the email only when
+        # no name is set (UX-SWEEP: the queue and detail showed the raw email).
+        "owner_name": _person_name(owner),
         "due_at": case.due_at.isoformat(),
         "next_action": case.next_action[:120],
         "version": case.version,
@@ -380,7 +392,8 @@ def _permitted_actions(session: Session, org_id: UUID, case: OperationalCase, ac
             actions.append("edit")
         if is_admin:
             actions.append("reassign")
-        actions.append("refresh_source")
+        if case.source_type != RECALL_SOURCE_TYPE:
+            actions.append("refresh_source")
         if is_admin:
             actions.append("dismiss")
 
@@ -769,7 +782,18 @@ def _apply_transition(
     _validate_owner(session, org_id, case.owner_id)
     validated = _authorize_and_validate_transition(session, org_id, case, target_status, actor, fields)
 
-    if target_status == CaseStatus.VERIFIED:
+    if case.source_type == RECALL_SOURCE_TYPE and target_status in (
+        CaseStatus.RESOLVED,
+        CaseStatus.VERIFIED,
+        CaseStatus.DISMISSED,
+    ):
+        # GL-P03: a recall closes only when every customer reached has answered and every unit
+        # supplied is accounted for. Dismissing is closing too, so a real recall can't be dismissed
+        # around that check; a drill can (nothing was held and nothing real was sent).
+        from app.features.recalls.service import assert_complete_for_case
+
+        assert_complete_for_case(session, org_id, case, allow_drill=target_status == CaseStatus.DISMISSED)
+    elif target_status == CaseStatus.VERIFIED:
         _source_lock(session, org_id, case.source_type, case.check_id, case.source_entity_type, case.source_entity_id)
         observation = untracked_items_adapter.evaluate(session, org_id, case.source_entity_id)
         if observation.state != untracked_items_adapter.STATE_CLEARED:
@@ -871,6 +895,8 @@ def _apply_refresh_source(
 
     if case.status not in CaseStatus.ACTIVE:
         raise CaseError(409, "case_terminal", "terminal case")
+    if case.source_type == RECALL_SOURCE_TYPE:
+        raise CaseError(409, "not_applicable", "a recall has no finding to refresh; its progress is live")
     _validate_owner(session, org_id, case.owner_id)
     _source_lock(session, org_id, case.source_type, case.check_id, case.source_entity_type, case.source_entity_id)
     observation = untracked_items_adapter.evaluate(session, org_id, case.source_entity_id)

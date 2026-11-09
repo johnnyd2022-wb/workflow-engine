@@ -2,10 +2,10 @@
 {% set breadcrumb_leaf = "Case" %}
 {% block title %}Case — Workflow Engine{% endblock %}
 {% block body_class %}operational-case-detail-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/core/cases/static/cases.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/core/cases/static/cases.css"><link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='recall.css') }}">{% endblock %}
 {% block content %}
-<p><a href="/core/cases" data-oc-back>Back to cases</a></p>
-<main class="oc-shell" data-oc-detail-root data-case-id="{{ case_id }}">
+{# Style 1 (UX-SWEEP): the breadcrumb and the shell's back button lead to Cases, so no raw link. #}
+<main class="max-content workspace-overview workspace-page oc-shell" data-oc-detail-root data-case-id="{{ case_id }}" data-can-work-recall="{{ 'true' if can('sales.record') or can('compliance.manage') else 'false' }}">
   <p class="oc-status oc-status--error" data-oc-error role="alert" hidden></p>
   <div class="oc-conflict-banner" data-oc-conflict hidden>
     This case changed elsewhere. Your edits are kept below — <button type="button" data-oc-reload-latest>Reload latest</button> to reconcile.
@@ -23,7 +23,7 @@
       <p class="oc-freshness" data-oc-freshness></p>
     </header>
 
-    <section class="oc-detail-fields" aria-label="Case summary">
+    <section class="workspace-card oc-detail-fields" aria-label="Case summary">
       <div class="oc-detail-field"><label>Owner</label><div data-oc-owner></div></div>
       <div class="oc-detail-field"><label>Due (UTC)</label><div data-oc-due-utc></div></div>
       <div class="oc-detail-field"><label>Due (local)</label><div data-oc-due-local></div></div>
@@ -33,22 +33,28 @@
     <div class="oc-actions" data-oc-actions></div>
     <div data-oc-action-form></div>
 
-    <section class="oc-section" data-oc-source-section>
+    {# GL-P03: a recall case shows its customer checklist instead of a finding's source. Its
+       content keeps GL-P03's own styling; workspace-card only gives it the same card as the
+       other sections (UX-SWEEP moved the card border from .oc-section to workspace-card). #}
+    <section class="workspace-card oc-section rc-section" data-oc-recall hidden aria-label="Recall"></section>
+
+    <section class="workspace-card oc-section" data-oc-source-section>
       <h2>Source</h2>
       <p class="oc-freshness" data-oc-source-observation></p>
       <div data-oc-source-fields></div>
     </section>
 
-    <section class="oc-section">
+    <section class="workspace-card oc-section">
       <details data-oc-timeline-details><summary>Timeline and evidence</summary>
       <ul class="oc-timeline" data-oc-timeline></ul>
       <div class="oc-pagination" data-oc-timeline-pagination hidden>
-        <button type="button" data-oc-timeline-load-more>Load more</button>
+        <button type="button" class="workspace-button" data-oc-timeline-load-more>Load more</button>
       </div></details>
     </section>
   </div>
 </main>
 {% endblock %}
 {% block scripts %}
+<script src="/ui/shared/recall-case.js"></script>
 <script src="/core/cases/static/detail.js"></script>
 {% endblock %}

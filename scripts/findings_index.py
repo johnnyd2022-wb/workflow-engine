@@ -179,6 +179,34 @@ FINDING_HEADINGS = (
 # pure noise.
 CODE_MARKER_RE = re.compile(r"(?:^|[^\w])(?P<marker>TODO|FIXME|HACK|XXX|BUG)\b[:\s(]*(?P<text>.*)$")
 CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
+# The scanner's own source and tests hold marker words as patterns and sample code, not as
+# work owed, so they are never indexed.
+CODE_MARKER_SELF_PATHS = ("scripts/findings_index.py", "tests/test_findings_index.py")
+# What may precede a marker for it to be a note rather than an identifier or a string:
+# a comment leader (`#`, `//`, `/*`, a block comment's leading `*`, `<!--`, `{#`).
+CODE_MARKER_LEAD_RE = re.compile(r"#|//|/\*|<!--|\{#|^\s*\*")
+
+
+def _is_code_note(content: str, m: re.Match[str]) -> bool:
+    """True when the marker `m` found in `content` is a note, not an identifier.
+
+    Either a comment leader precedes it, or it opens its line in the `TODO:` / `TODO(who):`
+    form a docstring uses -- but not `TODO = "..."`, which is a constant.
+    """
+    lead = content[: m.start("marker")]
+    if CODE_MARKER_LEAD_RE.search(lead):
+        return True
+    return not lead.strip() and content[m.end("marker") : m.end("marker") + 1] in (":", "(")
+
+
+# The bare word is not enough: `DONE, TODO, BLOCKED = "done", "todo", "blocked"` is a status
+# enum, and it was indexed as an unfixable code-marker finding (id de586e6f). A marker is the
+# word inside a comment (`#`, which also opens Jinja's `{#`; `//`; `/*`; `<!--`; or a ` * `
+# block-comment line) or in the explicit `TODO:` / `TODO(who)` syntax, which also covers a
+# docstring. An identifier is neither.
+# Trade-off, stated so it is not discovered later: a marker with no colon outside those comment
+# styles (a docstring line `TODO fix this`, a SQL `-- TODO`, an ini `; TODO`) is not indexed.
+COMMENT_OPENER_RE = re.compile(r"#|//|/\*|<!--|^\s*\*")
 
 # Text that means an item is already dealt with, so it should not enter the worklist.
 #
@@ -230,6 +258,15 @@ RESOLVED_MARKERS = re.compile(
 # inherits the ancestor's open kind forever. Checked before FINDING_HEADINGS opens a
 # section, so "Known Issues Fixed" does not get read as an open "known-issue" section.
 #
+# "Addressed" is the same cue in review-round wording -- "## Architect review findings
+# addressed" (verbatim in !663) lists what that MR fixes, and `\bfindings?\b` opened it, so
+# both fixes were indexed as owed debt while the MR that closes them waited for review. The
+# future and negated forms owe work and are carved out in NEGATED_CLOSURE_RE ("not (yet)
+# addressed", "to be addressed"); "unaddressed" and the verb "address" never match.
+# Known limit, shared with "fixed"/"closed": the cue is the word in the title, so a hedged
+# title ("Findings partially addressed", "Findings: 3 addressed, 2 open") closes too. No such
+# heading exists in the repo (checked 2026-11-09); add a negation here if one ever does.
+#
 # Also covers this repo's "checked, nothing here" convention -- "## Not findings
 # (checked, no issue)", "## Other checks performed (no issues found)", "### CSP note
 # (not a finding -- ...)". `\bfindings?\b` alone would open these as a `finding` section
@@ -278,7 +315,7 @@ RESOLVED_MARKERS = re.compile(
 # correction" (still owed) and a bare "corrections".
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
-    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
+    r"\b(?:fix(?:ed|es)|closed|resolved|addressed)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
     r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
@@ -291,7 +328,9 @@ CLOSED_HEADING_RE = re.compile(
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
 NEGATED_CLOSURE_RE = re.compile(
-    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b", re.I
+    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved|addressed)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b"
+    r"|\bto\s+be\s+addressed\b",
+    re.I,
 )
 
 # A checked checkbox or checkmark in a heading's own title -- this repo's numbered
@@ -909,10 +948,16 @@ def scan_code_markers() -> list[Item] | None:
         m = CODE_MARKER_RE.search(content)
         if not m:
             continue
+        explicit = content[m.end("marker") :].startswith((":", "("))
+        if not explicit and not COMMENT_OPENER_RE.search(content[: m.start("marker")]):
+            continue  # an identifier or string that happens to be spelled TODO
         marker, text = m.group("marker"), m.group("text").strip()
+        # `DONE, TODO, BLOCKED = ...` names a constant, not work owed.
+        if not _is_code_note(content, m):
+            continue
         # A bare marker with no following text says nothing actionable, and a marker
-        # inside this file's own patterns is self-reference.
-        if not text or len(text) < 10 or rel == "scripts/findings_index.py":
+        # inside this file's own patterns or its tests' sample code is self-reference.
+        if not text or len(text) < 10 or rel in CODE_MARKER_SELF_PATHS:
             continue
         if RESOLVED_MARKERS.search(text):
             continue

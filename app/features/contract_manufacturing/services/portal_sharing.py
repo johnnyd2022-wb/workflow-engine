@@ -4,6 +4,7 @@ import copy
 import hashlib
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 
@@ -92,9 +93,39 @@ def publish_order(db, org_id, actor_id, order_id, data):
             "spec_abv",
             "document_ids",
             "bottling_dates",
+            "share_ready_dates",
         },
     )
     order = ContractOrderService(db, org_id).order(order_id, lock=True)
+    share_ready = data.get("share_ready_dates", True)
+    if not isinstance(share_ready, bool):
+        raise OrderError("share_ready_dates must be true or false")
+    timing = {
+        "available": False,
+        "planned_ready_date": None,
+        "forecast_ready_date": None,
+        "reason": "Ready dates have not been shared",
+    }
+    if share_ready:
+        from app.features.planning.promise import dates_for_orders
+
+        ready = dates_for_orders(db, org_id, [order])[str(order.id)]
+        if ready["planned_ready_date"]:
+            # GL-P07 B5: the planner's date, with what was checked. A forecast only when no
+            # batch is blocked, so the customer sees a date the producer expects to keep.
+            # The customer gets plain words, not the planner's internal reasons, and a date
+            # that says when it was true: it's a copy taken at publish (!681 review).
+            as_of = datetime.now(ZoneInfo("Pacific/Auckland")).date().isoformat()  # the producer's day, not UTC's
+            timing = {
+                "available": True,
+                "planned_ready_date": ready["planned_ready_date"],
+                "forecast_ready_date": ready["forecast_ready_date"],
+                "reason": (
+                    f"Expected ready {ready['forecast_ready_date']}, as of {as_of}"
+                    if ready["forecast_ready_date"]
+                    else f"Planned for {ready['planned_ready_date']}, not yet confirmed (as of {as_of})"
+                ),
+            }
     stage = text_value(data.get("stage_label"), "stage_label", 100, False)
     step = text_value(data.get("step_label"), "step_label", 100, False)
     progress = measurement(data.get("progress_percent"), "progress_percent")
@@ -166,12 +197,7 @@ def publish_order(db, org_id, actor_id, order_id, data):
         "shared_at": now.isoformat(),
         "revision": revision,
         "progress": progress_snapshot,
-        "timing": {
-            "available": False,
-            "planned_ready_date": None,
-            "forecast_ready_date": None,
-            "reason": "Ready dates have not been shared",
-        },
+        "timing": timing,
         "quantities": {
             "available": True,
             "lines": [

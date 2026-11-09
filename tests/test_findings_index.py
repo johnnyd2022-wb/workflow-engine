@@ -575,6 +575,47 @@ def test_heading_that_declares_itself_fixed_does_not_open_a_section(tmp_path, mo
     assert fi.parse_doc(path) == []
 
 
+def test_mr_findings_addressed_heading_does_not_index_the_fix_list():
+    """Real misfire, !663: `## Architect review findings addressed` lists what that MR
+    *fixes*. `\\bfindings?\\b` opened it as an open `finding` section, so both numbered
+    fixes were indexed as outstanding debt and re-offered to the daily sweep while the
+    MR that closes them waited for review. The heading says they are addressed; it must
+    close like "fixed"/"resolved" do."""
+    body = """## Summary
+
+Follow-up to an earlier MR.
+
+## Architect review findings addressed
+
+1. A later planned batch started first remains reserved when checking an earlier batch.
+2. A recorded `NaN` quantity yields a blocker rather than an `InvalidOperation`/500.
+
+## Verification
+
+- 27 passed.
+"""
+    assert fi._parse_mr_description(body, "gitlab:!663") == []
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Findings not addressed",
+        "Findings not yet addressed",
+        "Findings still to be addressed",
+        "Review findings (to be addressed before merge)",
+        "Unaddressed findings",
+    ],
+)
+def test_findings_heading_that_says_it_is_not_addressed_stays_open(heading):
+    """The opposite phrasing owes work, so adding "addressed" as a closing cue must not
+    close it: a negated or future-tense "addressed" is exactly a section of open findings."""
+    body = f"## {heading}\n\n- the export endpoint has no rate limit and could be abused for a DoS\n"
+    items = fi._parse_mr_description(body, "gitlab:!1")
+    assert len(items) == 1
+    assert items[0].kind == "finding"
+
+
 def test_heading_checkbox_marker_closes_a_section_with_no_textual_cue(tmp_path, monkeypatch):
     """Real misfire, docs/workflows-load-performance.md:80: `### 1. Slim the
     `system-findings` banner payload -- `[x]` (commit: system_findings_cache
@@ -2450,3 +2491,174 @@ def test_sales_redesign_plan_is_excluded_but_review_docs_are_not():
 
     assert "docs/sales-redesign-plan.md" not in rel
     assert "docs/core-load-performance-design.md" in rel
+
+
+# ---------------------------------------------------------------------------
+# code markers: a marker is a comment, not an identifier that happens to be spelled TODO
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def code_tree(tmp_path, monkeypatch):
+    """A tmp repo whose only code root is `app/`, scanned by the real ripgrep path."""
+    if not fi.shutil.which("rg"):
+        pytest.skip("ripgrep is not installed")
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app",))
+    (tmp_path / "app").mkdir()
+    return tmp_path
+
+
+def _scan_markers(root, **files):
+    for name, text in files.items():
+        (root / "app" / name).write_text(text, encoding="utf-8")
+    return {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+
+def test_a_constant_named_todo_is_not_a_work_marker(code_tree):
+    """`DONE, TODO, BLOCKED = "done", "todo", "blocked"` was indexed as an open P4 item
+    (de586e6f) because only the word was matched; its long tail got past the length gate."""
+    found = _scan_markers(
+        code_tree,
+        **{
+            "states.py": 'DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"\n',
+            "label.py": 'TODO = "the label shown on a step that has not been started"\n',
+            "use.py": 'status = {"state": TODO, "label": "not started yet, nothing to do"}\n',
+        },
+    )
+
+    assert found == set()
+
+
+def test_markers_in_every_comment_style_are_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{
+            "a.py": "x = 1\n# TODO: handle the empty queue properly\n",
+            "b.js": "var y = 2; // FIXME retry on a 502 from the proxy\n",
+            "c.css": "/* HACK: pin the dialog width until the shell is fixed */\n",
+            "d.html": "<!-- TODO: replace this banner with the shared component -->\n",
+            "e.html": "{# XXX: the partial renders twice on boosted navigation #}\n",
+            "f.js": "/**\n * BUG: the tally ignores linked invoices on reopen\n */\n",
+            "g.py": "x = 3  # TODO(johnny): drop this once the importer is rewritten\n",
+        },
+    )
+
+    assert found == {
+        ("app/a.py", 2),
+        ("app/b.js", 1),
+        ("app/c.css", 1),
+        ("app/d.html", 1),
+        ("app/e.html", 1),
+        ("app/f.js", 2),
+        ("app/g.py", 1),
+    }
+
+
+def test_a_marker_leading_a_docstring_line_is_still_found(code_tree):
+    found = _scan_markers(
+        code_tree,
+        **{"doc.py": 'def f():\n    """Do the thing.\n\n    TODO: split this into read and write halves\n    """\n'},
+    )
+
+    assert found == {("app/doc.py", 4)}
+
+
+def test_the_scanners_own_test_fixtures_are_not_indexed_as_work_owed(code_tree, monkeypatch):
+    """The sample comments in this file's own fixtures are real-looking markers; indexing them
+    queued seven phantom P4 items the first time they were written."""
+    monkeypatch.setattr(fi, "CODE_ROOTS", ("app", "tests"))
+    (code_tree / "tests").mkdir()
+    (code_tree / "tests" / "test_findings_index.py").write_text(
+        'SAMPLE = "# TODO: handle the empty queue properly"\n', encoding="utf-8"
+    )
+    (code_tree / "tests" / "test_other.py").write_text("# TODO: cover the empty queue properly\n", encoding="utf-8")
+
+    found = {(i.source_path, i.source_line) for i in fi.scan_code_markers()}
+
+    assert found == {("tests/test_other.py", 1)}
+
+
+@pytest.mark.parametrize(
+    ("line", "is_note"),
+    [
+        ("# TODO: handle the empty queue properly", True),
+        ("x = 3  # TODO(johnny): drop this once the importer is rewritten", True),
+        ("var y = 2; // FIXME retry on a 502 from the proxy", True),
+        ("/* HACK: pin the dialog width until the shell is fixed */", True),
+        ("<!-- TODO: replace this banner with the shared component -->", True),
+        ("{# XXX: the partial renders twice on boosted navigation #}", True),
+        (" * BUG: the tally ignores linked invoices on reopen", True),
+        ("    TODO: split this into read and write halves", True),
+        ('DONE, TODO, BLOCKED = "done", "todo", "blocked", "waiting on something else"', False),
+        ('TODO = "the label shown on a step that has not been started"', False),
+        ('status = {"state": TODO, "label": "not started yet, nothing to do"}', False),
+    ],
+)
+def test_marker_classification_needs_no_ripgrep(line, is_note):
+    """The tree-scan tests above skip where ripgrep is absent (CI's image has none); this pins the
+    same rule on the matcher alone so it is still enforced there."""
+    match = fi.CODE_MARKER_RE.search(line)
+
+    assert match is not None
+    assert fi._is_code_note(line, match) is is_note
+
+
+def test_code_marker_scan_ignores_an_identifier_named_like_a_marker_but_keeps_real_markers(tmp_path, monkeypatch):
+    """`app/core/backend/getting_started.py` declares a status enum whose members include one
+    spelled like the first marker word. The scanner matched the bare word and indexed that
+    line as a code-marker finding nobody can fix (findings-sweep 2026-11-05, id de586e6f). A
+    marker is a comment, or the explicit `WORD:` / `WORD(who)` syntax; an identifier is
+    neither. Every real spelling must still be found, or the fix would quietly shrink the
+    worklist.
+
+    The marker words are bound to names and interpolated into the fixture text, never written
+    inline in a comment here: a comment in this file reading as a marker would be indexed as a
+    finding in this very file.
+    """
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    todo, fixme, hack, xxx, bug = "TODO", "FIXME", "HACK", "XXX", "BUG"
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "status.py").write_text(
+        f'DONE, {todo}, BLOCKED = "done", "todo", "blocked"\n'
+        f'state = {{"status": DONE if finished else {todo}, "note": "pending review of the whole step list"}}\n'
+        f"# {todo} tighten this validation before the pilot customer goes live\n"
+        f"value = compute()  # {fixme}(johnny) this retry loop never backs off between attempts\n"
+        '"""\n'
+        f"{hack}: reuse the cached parser until the importer is rewritten\n"
+        '"""\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "widget.js").write_text(
+        f"const a = 1; // {xxx} replace this polling loop with a server push\n"
+        "/*\n"
+        f" * {bug} the dialog keeps its scroll position after the form resets\n"
+        " */\n"
+        f"x = 1; /* {hack} keep this in step with the server-side limit */\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "page.html").write_text(
+        f"<!-- {todo} replace this banner once the design is settled -->\n"
+        f"{{# {fixme} drop this block when the legacy layout goes #}}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fi, "REPO_ROOT", tmp_path)
+
+    items = fi.scan_code_markers()
+
+    assert items is not None, "scan_code_markers could not run"
+    found = {(i.source_path, i.source_line, i.title.split(":")[0]) for i in items}
+    assert found == {
+        ("app/status.py", 3, todo),
+        ("app/status.py", 4, fixme),
+        ("app/status.py", 6, hack),
+        ("app/widget.js", 1, xxx),
+        ("app/widget.js", 3, bug),
+        ("app/widget.js", 5, hack),
+        ("app/page.html", 1, todo),
+        ("app/page.html", 2, fixme),
+    }, f"the identifier on lines 1-2 must not be indexed and every real marker must be, got: {sorted(found)}"

@@ -1,13 +1,7 @@
 /* Operational cases (A1): queue + detail pages. Scoped to .oc-* so it is inert elsewhere. */
 
-.oc-shell {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
-}
+.oc-shell { padding-bottom: 64px; }
 
-.oc-header h1 { margin: 4px 0 8px; font-size: 1.5rem; }
-.oc-eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; font-weight: 600; color: var(--ui-text-muted, #5d6778); margin: 0; }
 
 .oc-filter-tabs {
   display: flex;
@@ -18,14 +12,16 @@
 .oc-filter-tabs button {
   padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border-light, #e5e7eb);
-  background: transparent;
+  border: 1px solid var(--ui-border, #e2e8f0);
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text-muted, #64748b);
   cursor: pointer;
   font-size: 0.875rem;
+  font-weight: 600;
 }
 .oc-filter-tabs button[aria-selected="true"] {
-  background: var(--surface-emphasis, #111827);
-  color: #fff;
+  background: var(--ui-accent-soft, #ccfbf1);
+  color: var(--ui-accent-strong, #115e59);
   border-color: transparent;
 }
 
@@ -36,63 +32,84 @@
 
 .oc-queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 
-.oc-card { border: 1px solid var(--border-light, #e5e7eb); border-radius: 10px; overflow: hidden; }
+.oc-card { border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; overflow: hidden; background: var(--ui-surface, #fff); }
 .oc-card--overdue { border-color: var(--error, #dc2626); }
 .oc-card__link { display: block; padding: 14px 16px; text-decoration: none; color: inherit; }
 .oc-card__top { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .oc-card__title { margin: 0 0 6px; font-size: 1.05rem; }
-.oc-card__meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-secondary, #4b5563); margin-bottom: 6px; }
-.oc-card__next-action { margin: 0; font-size: 0.9rem; color: var(--text-secondary, #4b5563); }
+.oc-card__meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ui-text-muted, #64748b); margin-bottom: 6px; }
+.oc-card__next-action { margin: 0; font-size: 0.9rem; color: var(--ui-text-muted, #64748b); }
 
 .oc-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.oc-badge[hidden], .oc-shell [hidden] { display: none; }  /* .oc-badge sets display, which beat the hidden attribute: every case showed "Overdue" */
 .oc-badge--critical { background: #fee2e2; color: #991b1b; }
 .oc-badge--overdue { background: #7f1d1d; color: #fff; }
-.oc-badge--status { background: #e5e7eb; color: #111827; }
+.oc-badge--status { background: var(--ui-surface-subtle, #f1f5f9); color: var(--ui-text, #172033); border: 1px solid var(--ui-border, #e2e8f0); }
 .oc-badge--status-verified { background: #dcfce7; color: #166534; }
 .oc-badge--status-dismissed { background: #f3f4f6; color: #6b7280; }
 .oc-badge--status-resolved { background: #fef3c7; color: #92400e; }
 
-.oc-empty, .oc-loading { padding: 24px; text-align: center; color: var(--text-tertiary, #6b7280); }
+.oc-empty, .oc-loading { padding: 24px; text-align: center; color: var(--ui-text-muted, #64748b); }
 
 .oc-pagination { text-align: center; margin-top: 16px; }
-.oc-pagination button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-light, #e5e7eb); background: transparent; cursor: pointer; }
+.oc-pagination button { cursor: pointer; }
 
 /* Detail page */
 .oc-detail-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
 .oc-detail-header__badges { display: flex; gap: 8px; flex-wrap: wrap; }
-.oc-detail-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
-.oc-detail-field label { display: block; font-size: 0.75rem; color: var(--text-tertiary, #6b7280); margin-bottom: 2px; }
-.oc-detail-field div { font-size: 0.95rem; }
+.oc-detail-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 16px 0; padding: 18px 20px; }
+.oc-detail-field label { display: block; font-size: 12px; font-weight: 600; color: var(--ui-text-muted, #64748b); margin-bottom: 4px; }
+.oc-detail-field div { font-size: 15px; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
 
-.oc-section { margin: 24px 0; padding: 16px; border: 1px solid var(--border-light, #e5e7eb); border-radius: 10px; }
-.oc-section h2 { margin-top: 0; font-size: 1.05rem; }
+.oc-section { margin: 16px 0; padding: 18px 20px; }
+.oc-section h2 { margin-top: 0; font-size: 16px; font-weight: 600; color: var(--ui-text, #172033); }
+.oc-section summary { cursor: pointer; font-weight: 600; color: var(--ui-text, #172033); }
 
 .oc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
-.oc-actions button { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-light, #e5e7eb); background: var(--surface, #fff); cursor: pointer; font-size: 0.9rem; }
-.oc-actions button.oc-btn--primary { background: var(--surface-emphasis, #111827); color: #fff; border-color: transparent; }
-.oc-actions button.oc-btn--danger { border-color: #dc2626; color: #dc2626; }
+/* Case actions are buttons in Style 1: an outlined surface, the main one teal, dismiss in red. */
+.oc-actions button, .oc-form-actions button, .oc-section > .oc-form button { min-height: 40px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); color: var(--ui-text, #172033); cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
+.oc-actions button:hover { border-color: var(--ui-accent, #0f766e); }
+.oc-actions button.oc-btn--primary, .oc-form-actions .oc-btn--primary { background: var(--ui-accent, #0f766e); border-color: var(--ui-accent, #0f766e); color: #fff; }
+.oc-actions button.oc-btn--danger { border-color: #dc2626; color: #b91c1c; }
+html[data-spa-theme="dark"] .oc-actions button.oc-btn--primary,
+html[data-spa-theme="dark"] .oc-form-actions .oc-btn--primary { color: #042f2e; }
+html[data-spa-theme="dark"] .oc-actions button.oc-btn--danger { border-color: #f87171; color: #fca5a5; }
 
 .oc-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-.oc-form label { font-size: 0.85rem; font-weight: 600; }
+.oc-form label { font-size: 13px; font-weight: 600; color: var(--ui-text, #172033); }
 .oc-form input, .oc-form select, .oc-form textarea {
-  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); font: inherit;
+  width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); color: var(--ui-text, #172033); font: inherit;
 }
+/* Create case: a card with the two due fields side by side. */
+.oc-form--new { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; max-width: 760px; padding: 20px 24px; }
+.oc-form__field { display: grid; gap: 6px; }
+.oc-form__field--wide { grid-column: 1 / -1; }
+@media (max-width: 600px) { .oc-form--new { grid-template-columns: 1fr; padding: 16px; } }
 .oc-form-error { color: var(--error, #b91c1c); font-size: 0.85rem; }
 .oc-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 4px; }
-.oc-form-actions .oc-btn--primary { padding: 10px 16px; border: 1px solid transparent; border-radius: 8px; background: var(--ui-accent, #0f766e); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-.oc-form-actions a { color: var(--ui-accent-strong, #115e59); font-weight: 600; text-decoration: none; }
-html[data-spa-theme="dark"] .oc-form-actions .oc-btn--primary { color: #042f2e; }
+
 
 .oc-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.oc-timeline li { border-left: 3px solid var(--border-light, #e5e7eb); padding-left: 12px; }
-.oc-timeline time { font-size: 0.75rem; color: var(--text-tertiary, #6b7280); }
+.oc-timeline { margin-top: 12px; }
+.oc-timeline li { border-left: 3px solid var(--ui-border, #e2e8f0); padding-left: 12px; color: var(--ui-text, #172033); }
+.oc-timeline time { font-size: 0.75rem; color: var(--ui-text-muted, #64748b); }
 .oc-timeline .oc-timeline__type { font-weight: 600; }
 
 .oc-conflict-banner { background: #fffbeb; color: #92400e; padding: 12px; border-radius: 8px; margin: 12px 0; }
-.oc-freshness { font-size: 0.8rem; color: var(--text-tertiary, #6b7280); }
+.oc-freshness { font-size: 0.8rem; color: var(--ui-text-muted, #64748b); }
+html[data-spa-theme="dark"] .oc-conflict-banner { background: rgb(252 211 77 / 12%); color: #fcd34d; }
+html[data-spa-theme="dark"] .oc-status--error { background: rgb(248 113 113 / 12%); color: #fca5a5; }
+html[data-spa-theme="dark"] .oc-badge--critical { background: rgb(248 113 113 / 16%); color: #fca5a5; }
 
 @media (max-width: 480px) {
   .oc-detail-fields { grid-template-columns: 1fr; }
   .oc-actions { flex-direction: column; }
   .oc-actions button { width: 100%; }
 }
+
+/* Source shortcuts: accent links, as everywhere else in Style 1 (they were the browser's blue,
+   unreadable on the dark theme). */
+.oc-source-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0; }
+.oc-source-links a { color: var(--ui-accent-strong, #115e59); font-weight: 600; text-decoration: none; }
+.oc-source-links a:hover { text-decoration: underline; }
+.oc-section p { color: var(--ui-text, #172033); }

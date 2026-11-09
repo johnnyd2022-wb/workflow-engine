@@ -62,7 +62,9 @@ SEED_KINDS = (
     "sales",
     "planner",
     "board",
+    "commitments",
     "contracts",
+    "cover",
     "dispatch",
     "stocktake",
     "customers",
@@ -72,10 +74,12 @@ SEED_KINDS = (
     "np3",
     "licensing",
     "premises",
+    "wine",
     "moves",
     "tasks",
     "customer",
     "people",
+    "cases",
 )
 
 
@@ -108,10 +112,59 @@ def settle(page, extra_ms: int = 400) -> None:
 
 
 def shot(page, out: Path, name: str, *, full: bool = False) -> Path:
-    """Save OUT/<name>.png. `full` captures the whole scroll height (the fixed shell repeats in it)."""
+    """Save OUT/<name>.png. `full` captures the whole scroll height (the fixed shell repeats in it).
+
+    At a mobile width this also fails the scenario if the page scrolls sideways. The shot is
+    saved first so you can see the overflow.
+    """
     path = Path(out) / f"{name}.png"
     page.screenshot(path=str(path), full_page=full)
+    viewport = page.viewport_size or {}
+    if viewport.get("width", DESKTOP["width"]) <= MOBILE_MAX_WIDTH:
+        assert_no_sideways_scroll(page, name)
     return path
+
+
+# An inner region that scrolls on purpose (a wide table in an overflow-x: auto wrapper) is
+# fine; only the page itself scrolling sideways is a fault. The list names the widest
+# offenders so the fix starts in the right place.
+_SIDEWAYS_OVERFLOW_JS = """() => {
+    const width = window.innerWidth;
+    const scrollWidth = document.documentElement.scrollWidth;
+    if (scrollWidth <= width) return null;
+    const offenders = [];
+    for (const el of document.body.querySelectorAll("*")) {
+        const rect = el.getBoundingClientRect();
+        if (rect.right <= width + 1 || rect.width === 0) continue;
+        let clipped = false;
+        for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+            const overflowX = getComputedStyle(up).overflowX;
+            if (overflowX !== "visible" && up.getBoundingClientRect().right <= width + 1) {
+                clipped = true;
+                break;
+            }
+        }
+        if (clipped) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = typeof el.className === "string" && el.className.trim()
+            ? "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".")
+            : "";
+        offenders.push({el: el.tagName.toLowerCase() + id + cls, right: Math.round(rect.right)});
+    }
+    offenders.sort((a, b) => b.right - a.right);
+    return {width, scrollWidth, offenders: offenders.slice(0, 5)};
+}"""
+
+
+def assert_no_sideways_scroll(page, name: str = "page") -> None:
+    """Raise if the page is wider than a mobile viewport, naming the elements that stick out."""
+    overflow = page.evaluate(_SIDEWAYS_OVERFLOW_JS)
+    if overflow:
+        offenders = ", ".join(f"{o['el']} (right edge {o['right']}px)" for o in overflow["offenders"])
+        raise AssertionError(
+            f"{name}: page scrolls sideways at {overflow['width']}px "
+            f"(content is {overflow['scrollWidth']}px wide); widest: {offenders or 'unknown'}"
+        )
 
 
 def theme(page, mode: str) -> None:
@@ -121,9 +174,12 @@ def theme(page, mode: str) -> None:
 
 
 DESKTOP = {"width": 1440, "height": 900}
+LAPTOP = {"width": 1280, "height": 800}
 TABLET = {"width": 1024, "height": 800}
 PHONE = {"width": 390, "height": 844}
 WALL = {"width": 1920, "height": 1080}  # a TV on the wall
+# At or below this width a shot is a mobile shot, and the page must not scroll sideways.
+MOBILE_MAX_WIDTH = 480
 
 
 # ── Seeding ─────────────────────────────────────────────────────────────────────────────
@@ -1427,6 +1483,118 @@ def _seed_planner(db, org_id, inv) -> None:
     demand_service.cancel_demand(db, org_id, made[-1].id)
 
 
+def _seed_cover(db, org_id, inv) -> None:
+    """Stock cover on the Planner (GL-P07 B3): 60 weeks of Xero sales for three gins and a
+    limoncello, mapped to their workflow outputs (one product sold with no output, so the
+    "not linked" note shows), finished stock made by real executions, and weeks-of-cover
+    targets so one product suggests a batch. Needs `lineage production planner board` first."""
+    import math
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.step import Step
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.planning import demand_service, forecast_service
+
+    outputs = demand_service.output_catalog(db, org_id)
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not outputs or not contacts:
+        raise SystemExit("ui-shots: `cover` needs `lineage production planner board` before it")
+
+    def pick(word):
+        return next((row for row in outputs if word.lower() in row["name"].lower()), None)
+
+    # (Xero line, output, weekly pace, seasonal swing, finished stock on hand, weeks of cover)
+    products = [
+        ("Navy Strength Gin 700 mL", pick("navy strength gin: bottle"), 38, 0.35, 160, 6),
+        ("Pink Gin 700 mL", pick("pink gin: bottle"), 22, 0.2, 520, 4),
+        ("Limoncello 500 mL", pick("limoncello: bottle"), 9, 0.5, 60, None),
+        ("Gift voucher", None, 2, 0, 0, None),
+    ]
+    for name, output, *_ in products:
+        db.add(
+            ProductMapping(
+                org_id=org_id,
+                biz_e_product_name=name,
+                xero_description_pattern=name,
+                biz_e_source_output_id=uuid.UUID(output["id"]) if output else None,
+            )
+        )
+    today = date.today()
+    for week in range(1, 61):
+        sold_on = today - timedelta(days=7 * week - 2)
+        invoice = XeroInvoice(
+            org_id=org_id,
+            xero_invoice_id=str(uuid.uuid4()),
+            xero_tenant_id="ui-shots",
+            contact_id=contacts[week % len(contacts)].id,
+            invoice_number=f"INV-C{week:03d}",
+            invoice_type="ACCREC",
+            status="PAID",
+            date=sold_on,
+        )
+        db.add(invoice)
+        db.flush()
+        season = math.cos(2 * math.pi * (sold_on.timetuple().tm_yday - 350) / 365)  # peaks before Christmas
+        for position, (name, _, pace, swing, *_rest) in enumerate(products, start=1):
+            quantity = max(0, round(pace * (1 + swing * season)))
+            if quantity:
+                db.add(
+                    XeroInvoiceLineItem(
+                        org_id=org_id,
+                        invoice_id=invoice.id,
+                        xero_line_item_id=f"C{position}",
+                        description=name,
+                        quantity=quantity,
+                    )
+                )
+    for name, output, _, _, on_hand, weeks in products:
+        if output is None:
+            continue
+        if on_hand:
+            step = next(
+                row
+                for row in db.query(Step).filter(Step.org_id == org_id).all()
+                if any(isinstance(o, dict) and o.get("id") == output["id"] for o in row.outputs or [])
+            )
+            execution = ExecutionRepository(db).create_execution(org_id, step.process_id, commit=False)
+            made = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step.id)
+                .one()
+            )
+            inv.create_inventory_item(
+                org_id=org_id,
+                name=name,
+                quantity=str(on_hand),
+                unit=output["unit"],
+                inventory_type="final_product",
+                source_execution_id=execution.id,
+                source_execution_step_id=made.id,
+                source_output_id=uuid.UUID(output["id"]),
+                commit=False,
+            )
+        if weeks:
+            forecast_service.save_target(db, org_id, None, {"source_output_id": output["id"], "weeks_of_cover": weeks})
+    # One contract line made by a workflow output, so the planner shows a contract demand.
+    from app.features.contract_manufacturing.models.orders import ContractOrder, ContractOrderLine
+
+    line = (
+        db.query(ContractOrderLine)
+        .join(ContractOrder, ContractOrder.id == ContractOrderLine.order_id)
+        .filter(ContractOrderLine.org_id == org_id, ContractOrder.status == "confirmed")
+        .order_by(ContractOrder.due_date)
+        .first()
+    )
+    if line is not None and products[0][1] is not None:
+        line.source_output_id = uuid.UUID(products[0][1]["id"])
+        line.unit = products[0][1]["unit"]
+    db.commit()
+
+
 def _seed_contracts(db, org_id, inv) -> None:
     """Contract manufacturing: four brand customers (one inactive) with orders overdue, due this
     week, later, completed and cancelled, across producer-, customer- and mixed-supplied lines."""
@@ -1626,6 +1794,77 @@ def _seed_stocktake(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_commitments(db, org_id, inv) -> None:
+    """Material commitments on the Production board (GL-P07 B2): a lemon syrup workflow whose
+    sugar and lemons are met from stock, first-expiring first, three batches of it planned for
+    today, and enough stock for two of them. Run Check materials on the board to commit it."""
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.features.planning import batch_service, demand_service
+
+    repo = ProcessRepository(db)
+    process = repo.create_process(org_id, "Lemon syrup")
+    output_id = str(uuid.uuid4())
+    step = repo.add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        position=1000,
+        name="Cook syrup",
+        inputs=[
+            {"name": "Caster sugar", "quantity": "2", "unit": "kg", "requires_inventory_selection": True},
+            {"name": "Lemons", "quantity": "1500", "unit": "g", "requires_inventory_selection": True},
+        ],
+        outputs=[{"id": output_id, "name": "Lemon syrup", "quantity": "10", "unit": "L"}],
+        timing={"duration_minutes": 120, "wait_minutes": 0},
+    )
+    today = date.today()
+    for name, quantity, unit, days in [
+        ("Caster sugar", "1000", "g", 6),
+        ("Caster sugar", "4", "kg", 40),
+        ("Lemons", "5", "kg", 9),
+    ]:
+        inv.create_inventory_item(
+            org_id=org_id,
+            name=name,
+            quantity=quantity,
+            unit=unit,
+            inventory_type="raw_material",
+            supplier="Moore Wilson's",
+            expiry_date=today + timedelta(days=days),
+            commit=False,
+        )
+    db.commit()
+    batch_service.save_setting(
+        db,
+        org_id,
+        process.id,
+        {"source_output_id": output_id, "batch_quantity": "10", "expected_revision": 0},
+    )
+    demand = demand_service.create_demand(
+        db,
+        org_id,
+        {
+            "reference": "Cocktail bar order",
+            "source_output_id": output_id,
+            "quantity": "30",
+            "due_date": (today + timedelta(days=1)).isoformat(),
+            "priority": 50,
+        },
+    )
+    batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+    db.commit()
+    # GL-P07 B2b: the sugar supplier's lead time, and the materials check already run, so the
+    # board, the lot, the dispose page and Notifications all have something to show.
+    from app.core.db.models.supplier import Supplier
+    from app.features.planning import material_adapter
+
+    db.add(Supplier(org_id=org_id, name="Moore Wilson's", lead_time_days=3, phone="04 384 9906"))
+    db.commit()
+    material_adapter.assess(db, org_id, {}, today=today)
+    db.commit()
+    _ = step
+
+
 def _seed_board(db, org_id, inv) -> None:
     """Planned batches for the Production board: batch sizes and timings for each output the
     Planner's demand asks for, every open demand planned, the batches spread over this week and
@@ -1706,6 +1945,154 @@ def _seed_board(db, org_id, inv) -> None:
             },
         )
         db.commit()
+
+
+def _seed_wine(db, org_id, inv) -> None:
+    """A small winery's vintage (docs/wine-compliance-plan.md): three grape deliveries, a
+    Sauvignon blanc blended with a little Pinot gris and bottled, and a Pinot noir in barrel
+    that mixes two vintages, so the Wine page shows a pass, a can't-claim and a pre-flight."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.modules.nz_alcohol.wine import rules as wine
+    from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
+
+    FeatureSubscriptionRepository(db).grant(org_id, "compliant")
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        profile = ComplianceProfile(org_id=org_id)
+        db.add(profile)
+    profile.enabled = True
+    year = wine.current_vintage()
+    profile.settings = {
+        **(profile.settings or {}),
+        "alcohol_product_types": sorted({*((profile.settings or {}).get("alcohol_product_types") or []), "wine"}),
+        "wine_exporter": True,
+        "wine_plan": {
+            "mode": "registered",
+            "plan_reference": "NZW CoP WSMP 4471",
+            "verifier": "AsureQuality",
+            "next_verification": (date.today() + timedelta(days=74)).isoformat(),
+        },
+    }
+    db.commit()
+
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    now = datetime.now(UTC)
+
+    def process(name, steps):
+        made = procs.create_process(org_id, name, category=ProcessCategory.MANUFACTURING, is_draft=False)
+        for number, (step_name, output, unit) in enumerate(steps, start=1):
+            procs.add_step(
+                process_id=made.id, org_id=org_id, step_number=number, position=number * 1000, name=step_name,
+                inputs=[], outputs=[{"name": output, "quantity": 1, "unit": unit}],
+            )  # fmt: skip
+        db.commit()
+        return made
+
+    intake = process("Grape intake", [("Grape intake", "Grape lot", "kg")])
+
+    def run(proc, steps, first_inputs=(), days_ago=30):
+        """steps: [(lot name, quantity, unit, execution_data)], each consuming the previous lot."""
+        execution = execs.create_execution(org_id, proc.id)
+        rows = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+        inputs, lot = list(first_inputs), None
+        for index, (row, (lot_name, qty, unit, data)) in enumerate(zip(rows, steps, strict=True)):
+            when = now - timedelta(days=days_ago - index * 6)
+            outputs = [{"name": lot_name, "quantity": str(qty), "unit": unit}]
+            execs.complete_step(
+                row.id, org_id, actual_inputs=inputs, actual_outputs=outputs, execution_data=data,
+                completed_at_override=when,
+            )  # fmt: skip
+            for used in inputs:  # the step used its inputs, as a recorded step would
+                item = inv.get_inventory_item_by_id(uuid.UUID(used["inventory_item_id"]), org_id)
+                if item is not None:
+                    with allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY):
+                        item.quantity = max(Decimal(0), Decimal(str(item.quantity)) - Decimal(used["quantity"]))
+            lot = inv.create_inventory_item(
+                org_id=org_id, name=lot_name, quantity=str(qty), unit=unit,
+                inventory_type="final_product" if unit == "units" else "work_in_progress",
+                source_execution_id=execution.id, source_execution_step_id=row.id, source_step_name=row.step.name,
+            )  # fmt: skip
+            inputs = [{"inventory_item_id": str(lot.id), "name": lot.name, "quantity": str(qty), "unit": unit}]
+        db.commit()
+        return lot
+
+    def grapes(name, kg, grower, variety, region, vintage, days_ago):
+        data = {wine.GROWER: grower, wine.VARIETY: variety, wine.VINTAGE: str(vintage), wine.REGION: region,
+                wine.SPRAY_DIARY: "Yes"}  # fmt: skip
+        return run(intake, [(name, kg, "kg", data)], days_ago=days_ago)
+
+    sb1 = grapes(f"SB {year} Block 4", 8200, "Block 4 (home)", "Sauvignon blanc", "Marlborough", year, 240)
+    sb2 = grapes(f"SB {year} Awatere", 1600, "Seddon Vineyards", "Sauvignon blanc", "Marlborough", year, 236)
+    pg = grapes(f"PG {year} Moutere", 700, "Moutere Hills", "Pinot gris", "Nelson", year, 234)
+    pn = grapes(f"PN {year} Bannockburn", 3100, "Bannockburn Estate", "Pinot noir", "Central Otago", year, 230)
+    pn_old = grapes(f"PN {year - 1} reserve", 1500, "Bannockburn Estate", "Pinot noir", "Central Otago", year - 1, 220)
+
+    sauv = process(
+        f"Sauvignon blanc {year}",
+        [("Crush and press", "Juice", "L"), ("Ferment", "Young wine", "L"), ("Cellar", "Finished wine", "L"),
+         ("Bottle", "Bottled wine", "units")],
+    )  # fmt: skip
+    crush_in = [
+        {"inventory_item_id": str(lot.id), "name": lot.name, "quantity": q, "unit": "kg"}
+        for lot, q in ((sb1, "8200"), (sb2, "1600"), (pg, "700"))
+    ]
+    run(
+        sauv,
+        [(f"SB {year} juice", 7350, "L", {}), (f"SB {year} young wine", 7050, "L", {}),
+         (f"SB {year} finished", 6980, "L", {wine.SO2_ADDED: "40", wine.FINING: "Egg (albumin)"}),
+         (f"Marlborough Sauvignon blanc {year}", 9240, "units", {ABV_PROMPT_LABEL: "13", wine.BOTTLE_SIZE: "750",
+                                                                 wine.RELEASE: wine.RELEASE_YES})],
+        crush_in, days_ago=200,
+    )  # fmt: skip
+    from app.features.compliant.models import ComplianceRecord as _Record
+
+    bottled = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == f"Marlborough Sauvignon blanc {year}")
+        .one()
+    )
+    elig = _Record(
+        org_id=org_id, framework_slug="wine-export", control_id="batch-eligibility", record_type="attestation",
+        status="complete", title=f"Export eligibility EES-26-0412 for {bottled.name}", period_start=date.today() - timedelta(days=40),
+        due_date=date.today() + timedelta(days=690), evidence_reference="EES-26-0412", source_refs=[str(bottled.id)],
+        details={"lot_id": str(bottled.id), "lot_name": bottled.name, "form": "packaged", "eligible_litres": "4500",
+                 "expires_on": (date.today() + timedelta(days=690)).isoformat(), "markets": ["GB", "AU"]},
+    )  # fmt: skip
+    db.add(elig)
+    db.flush()
+    db.add(_Record(
+        org_id=org_id, framework_slug="wine-export", control_id="customs-export-clearance", record_type="lodgement",
+        status="complete", title="1,800 L to Thames Cellars, GB", period_start=date.today() - timedelta(days=20),
+        evidence_reference="TSW-EX-77812", source_refs=[str(bottled.id)],
+        details={"kind": "commercial", "litres": "1800", "market": "GB", "consignee": "Thames Cellars", "eligibility_id": str(elig.id)},
+    ))  # fmt: skip
+    db.commit()
+    pinot = process(
+        f"Pinot noir {year}",
+        [("Crush and destem", "Must", "L"), ("Ferment", "Young wine", "L"), ("Barrel maturation", "Pinot in barrel", "L")],
+    )  # fmt: skip
+    run(
+        pinot,
+        [(f"PN {year} must", 3200, "L", {}), (f"PN {year} young wine", 3050, "L", {}),
+         (f"PN {year} in barrel", 3000, "L", {wine.SO2_ADDED: "25", wine.FINING: "None"})],
+        [{"inventory_item_id": str(pn.id), "name": pn.name, "quantity": "3100", "unit": "kg"},
+         {"inventory_item_id": str(pn_old.id), "name": pn_old.name, "quantity": "1500", "unit": "kg"}],
+        days_ago=190,
+    )  # fmt: skip
 
 
 def _seed_premises(db, org_id, inv) -> None:
@@ -2125,6 +2512,46 @@ def _seed_people(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_cases(db, org_id, inv) -> None:
+    """Operational cases for the Cases queue and a case page: one owned by a named teammate and
+    due soon, one overdue, and one whose owner has left (needs a new owner)."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.db.models.user import User, UserRole
+    from app.features.operational_cases.models.operational_case import OperationalCase
+    from tests.factories import UserFactory
+
+    admin = db.query(User).filter(User.org_id == org_id, User.role == UserRole.ADMIN).first()
+    run = uuid.uuid4().hex[:6]
+    owner = UserFactory(org_id=org_id, email=f"hemi.{run}@example.test", role=UserRole.PRODUCTION)
+    owner.first_name, owner.last_name = "Hemi", "Walker"
+    gone = UserFactory(org_id=org_id, email=f"sione.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    gone.first_name, gone.last_name = "Sione", "Fale"
+    db.flush()
+    now = datetime.now(UTC)
+    for title, who, due, action in (
+        ("Juniper berries expired with stock left", owner, now + timedelta(days=2), "Count what is left and dispose of it"),
+        ("Batch 14 output short by 12 L", admin, now - timedelta(days=1), "Check the still log and reconcile the remaining quantity"),
+        ("Gift boxes below reorder point", gone, now + timedelta(days=5), "Raise a purchase order with Kerer\u016b Packaging"),
+    ):
+        db.add(
+            OperationalCase(
+                org_id=org_id,
+                title=title,
+                source_type="manual",
+                check_id="ui-shots",
+                source_entity_type="inventory_item",
+                source_entity_id=uuid.uuid4(),
+                source_snapshot={"schema_version": 1},
+                owner_id=who.id,
+                created_by=admin.id,
+                due_at=due,
+                next_action=action,
+            )
+        )
+    db.commit()
+
+
 def _seed_tastings(db, org_id, inv) -> None:
     """A realistic sampling week, with distinct stock and partial-bottle leftovers."""
     from datetime import datetime
@@ -2376,15 +2803,19 @@ def cmd_seed(args) -> int:
             "transfers": _seed_transfers,
             "np3": _seed_np3,
             "people": _seed_people,
+            "cases": _seed_cases,
             "customer": _seed_customer,
             "tasks": _seed_tasks,
             "premises": _seed_premises,
+            "wine": _seed_wine,
             "moves": _seed_moves,
             "licensing": _seed_licensing,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
+            "commitments": _seed_commitments,
             "contracts": _seed_contracts,
+            "cover": _seed_cover,
             "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,
             "suppliers": _seed_suppliers,

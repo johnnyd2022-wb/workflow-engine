@@ -82,13 +82,18 @@
       </div>
     </section>
 
-    {# Matching sales to batches #}
+    {# Matching sales to batches. The mode decides whether waiting sales take stock, so the PUT route needs inventory.adjust to change it (SALES-PERM). #}
+    {% set can_change_mode = can('inventory.adjust') %}
     <section class="ss-section" id="matching" aria-labelledby="ss-matching-title" :data-editing="editing.matching ? 'true' : 'false'">
       <div class="ss-intro">
         <div class="ss-intro__row">
           <div>
             <h2 id="ss-matching-title">Matching sales to batches</h2>
-            <p>How each sale is linked back to the batch it came from. Applies on the next sync, including sales already imported.</p>
+            <p class="ss-intro__desktop">How each sale is linked back to the batch it came from. Applies on the next sync, including sales already imported.</p>
+            <div class="ss-intro__mobile">
+              <p>Choose how sales link to batches.</p>
+              <details><summary>When does this take effect?</summary><p>On the next sync, including sales already imported.</p></details>
+            </div>
           </div>
         </div>
       </div>
@@ -96,9 +101,10 @@
         <form class="ss-form" @submit.prevent="saveSection('matching')" hx-boost="false" data-ss-form="matching">
           <fieldset class="ss-choices">
             <legend>How sales are matched</legend>
-            <label class="ss-choice"><input type="radio" name="matching_mode" value="fifo" x-model="draft.matching.mode"><span><strong>Automatically, oldest batch first</strong><small>Each sale takes the oldest batch that still has stock.</small></span></label>
-            <label class="ss-choice"><input type="radio" name="matching_mode" value="manual" x-model="draft.matching.mode"><span><strong>You choose the batch</strong><small>Each sale waits on Batch matching until you pick its batch.</small></span></label>
-            <label class="ss-choice"><input type="radio" name="matching_mode" value="hybrid" x-model="draft.matching.mode"><span><strong>Automatically, then held for review</strong><small>Pre-sold and loosely matched sales wait on Batch matching, then confirm themselves.</small></span></label>
+            {% if not can_change_mode %}<p class="ss-note ss-choices__note" data-testid="matching-mode-locked">Changing this changes stock, so it needs permission to adjust stock. Ask an admin.</p>{% endif %}
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="fifo" x-model="draft.matching.mode"{% if not can_change_mode %} disabled{% endif %}><span><strong>Automatically, oldest batch first</strong><small>Each sale takes the oldest batch that still has stock.</small></span></label>
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="manual" x-model="draft.matching.mode"{% if not can_change_mode %} disabled{% endif %}><span><strong>You choose the batch</strong><small>Each sale waits on Batch matching until you pick its batch.</small></span></label>
+            <label class="ss-choice"><input type="radio" name="matching_mode" value="hybrid" x-model="draft.matching.mode"{% if not can_change_mode %} disabled{% endif %}><span><strong>Automatically, then held for review</strong><small>Pre-sold and loosely matched sales wait on Batch matching, then confirm themselves.</small></span></label>
           </fieldset>
           <label class="ss-field ss-field--short" x-show="draft.matching.mode === 'hybrid'">
             <span>Review window (days)</span>
@@ -124,7 +130,11 @@
         <div class="ss-intro__row">
           <div>
             <h2 id="ss-customers-title">Customers created in Biz-E</h2>
-            <p>Every Xero contact comes into Sales. This decides whether customers you add here go the other way. Each customer can override it on its own page.</p>
+            <p class="ss-intro__desktop">Every Xero contact comes into Sales. This decides whether customers you add here go the other way. Each customer can override it on its own page.</p>
+            <div class="ss-intro__mobile">
+              <p>Choose whether Biz-E customers are sent to Xero.</p>
+              <details><summary>How does this work?</summary><p>Every Xero contact comes into Sales. Each customer can override this setting on its own page.</p></details>
+            </div>
           </div>
         </div>
       </div>

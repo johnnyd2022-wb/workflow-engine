@@ -51,6 +51,8 @@ def demand_dict(row: PlanningDemand) -> dict:
         "due_date": row.due_date.isoformat(),
         "priority": row.priority,
         "status": row.status,
+        "source": row.source or "manual",
+        "source_note": row.source_note,
     }
 
 
@@ -137,9 +139,12 @@ def cancel_demand(db, org_id: UUID, demand_id: UUID) -> PlanningDemand | None:
     )
     if any(batch.status == "started" for batch in batches):
         raise ValueError("Review started batches before cancelling this demand")
+    from app.features.planning.material_adapter import close_commitments
+
     for batch in batches:
         batch.status = "cancelled"
         batch.revision += 1
+        close_commitments(db, org_id, batch.id, "released")
     row.status = "cancelled"
     db.flush()
     return row

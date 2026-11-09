@@ -21,6 +21,7 @@
   #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
   #page-content .sales-overview .crm-widget-grid { display: contents; }
   #page-content .sales-overview .sales-glance,
+  #page-content .sales-overview .sales-returns-pending,
   #page-content .sales-overview .crm-widget-card--full { grid-column: span 12; }
   #page-content .sales-overview .crm-widget-card--half { grid-column: span 6; }
   #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"][data-widget-locked="true"]) { grid-column: span 5; align-self: stretch; }
@@ -42,12 +43,13 @@
   #page-content .sales-overview .crm-table td { padding-inline: 6px; overflow-wrap: anywhere; }
   #page-content #sales-operator-filter { min-width: 0; max-width: 100%; width: 100% !important; }
 }
-#page-content .sales-header-actions { display: flex; align-items: center; gap: 10px; }
+#page-content .sales-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 #page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--text-inverse); }
 #page-content .sales-header-actions .sales-primary:hover { background: var(--ui-accent-strong); }
 html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--ui-surface-subtle); }
 @container sechead (max-width: 1099px) {
   #page-content .sales-header-actions .sales-primary { order: -1; }
+  #page-content .sales-header-actions > button { order: 2; }
 }
 
 #page-content .sales-overview .crm-widget-card__header { padding: 0; }
@@ -56,6 +58,47 @@ html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sa
 
 #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 #page-content .sales-overview .flow-mode-segment--active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); border-color: var(--ui-accent); }
+
+/* GL-P01a: mapped credit-note lines need a human return decision. */
+#page-content .sales-returns-pending h2 { margin: 0 0 6px; }
+#page-content .sales-returns-pending__intro,
+#page-content .sales-returns-pending__message { margin: 0 0 14px; color: var(--ui-text-muted); font-size: .86rem; }
+#page-content .sales-returns-pending__intro p { margin: 0; }
+#page-content .sales-returns-pending__intro-mobile { display: none; }
+#page-content .sales-returns-pending__list { display: grid; gap: 10px; }
+#page-content .sales-returns-pending__item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr); gap: 16px; padding: 14px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); }
+#page-content .sales-returns-pending__details { display: grid; gap: 4px; align-content: start; min-width: 0; font-size: .84rem; overflow-wrap: anywhere; }
+#page-content .sales-returns-pending__details strong { font-size: .96rem; }
+#page-content .sales-returns-pending__amount { color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+#page-content .sales-returns-pending__decision { display: grid; gap: 8px; align-content: start; }
+#page-content .sales-returns-pending__note-label { display: grid; gap: 5px; font-size: .78rem; font-weight: 700; }
+#page-content .sales-returns-pending__note-label textarea { width: 100%; min-height: 58px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; resize: vertical; }
+#page-content .sales-returns-pending__note-label textarea:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+#page-content .sales-returns-pending__decision .crm-btn { justify-self: start; }
+#page-content .sales-returns-pending__error { margin: 0; color: var(--crm-red); font-size: .8rem; }
+/* GL-P01b: what physically came back. */
+#page-content .sales-returns-pending__came-back { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+#page-content .sales-returns-pending__came-back legend { padding: 0; margin-bottom: 2px; font-size: .84rem; font-weight: 700; }
+#page-content .sales-returns-pending__hint { margin: 0; color: var(--ui-text-muted); font-size: .78rem; }
+#page-content .sales-returns-pending__fields { display: grid; grid-template-columns: minmax(70px, .6fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; }
+#page-content .sales-returns-pending__fields label { display: grid; gap: 5px; min-width: 0; font-size: .78rem; font-weight: 700; }
+#page-content .sales-returns-pending__fields :is(input, select),
+#page-content .sales-returns-pending__note-label :is(input, select) { width: 100%; min-width: 0; min-height: 36px; padding: 6px 9px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-weight: 400; }
+#page-content .sales-returns-pending__fields :is(input, select):focus-visible,
+#page-content .sales-returns-pending__note-label :is(input, select):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+#page-content .sales-returns-pending__or { display: flex; align-items: center; gap: 10px; margin: 2px 0; color: var(--ui-text-muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; }
+#page-content .sales-returns-pending__or::before,
+#page-content .sales-returns-pending__or::after { content: ""; flex: 1; border-top: 1px solid var(--ui-border); }
+@media (max-width: 640px) {
+  #page-content .sales-returns-pending__intro-desktop { display: none; }
+  #page-content .sales-returns-pending__intro-mobile { display: block; }
+  #page-content .sales-returns-pending__intro-mobile summary { min-height: 44px; padding: 12px 0; color: var(--ui-accent-strong); font-weight: 600; cursor: pointer; }
+  #page-content .sales-returns-pending__intro-mobile details p { margin: 0 0 8px; }
+  #page-content .sales-returns-pending__fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #page-content .sales-returns-pending__fields label:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  #page-content .sales-returns-pending__item { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px; }
+  #page-content .sales-returns-pending__decision .crm-btn { width: 100%; }
+}
 
 .sales-task-due { font-size: .7rem; color: var(--ui-text-muted); }
 .sales-task-due--overdue { color: var(--crm-red); font-weight: 700; }

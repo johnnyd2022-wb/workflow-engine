@@ -87,6 +87,23 @@ def cancel_demand(demand_id):
     return jsonify(service.demand_dict(row))
 
 
+def _replan(trigger):
+    """Re-plan after a change, in the same transaction; audited per change it makes."""
+    from app.features.planning.replan import replan
+
+    for event in replan(db_session, _org_id(), today=date.today(), trigger=trigger):
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action=f"planning_batch_auto_{event.kind}",
+                entity="planning_batch",
+                entity_id=event.batch_id,
+                meta_data={"reason": event.reason, "trigger": trigger},
+            )
+        )
+
+
 def _planning_error(exc):
     db_session.rollback()
     status = 409 if isinstance(exc, batches.PlanningConflictError) else 400
@@ -177,7 +194,123 @@ def plan_production_demand(demand_id):
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
-    return jsonify({"batches": [batches.batch_dict(row) for row in rows]}), 201 if changed else 200
+    return _plan_response(rows, changed)
+
+
+def _plan_response(rows, changed, **extra):
+    body = {"batches": [batches.batch_dict(row) for row in rows], **extra}
+    if not rows:
+        # Stock on hand and batches already planned meet it: nothing new to make.
+        body.update(covered=True, message="Covered by stock on hand")
+    return jsonify(body), 201 if changed else 200
+
+
+@planning_bp.post("/api/core/planner/demand/sync")
+@requires_auth
+@requires_org_scope
+def sync_planning_demand():
+    """Bring contract-order demand up to date. The planner page calls it on load."""
+    from app.features.planning import contract_sync
+
+    try:
+        result = contract_sync.sync_contract_demand(db_session, _org_id())
+        for action, row in result["changes"]:
+            _audit(action, row)
+        _replan("demand_synced")
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify(contract_sync.summary(result))
+
+
+def _site_arg(value):
+    return batches.resolve_planning_site(db_session, g.current_org, value or None)
+
+
+@planning_bp.get("/api/core/planner/cover")
+@requires_auth
+@requires_org_scope
+def get_stock_cover():
+    from app.features.planning import forecast_service
+
+    try:
+        weeks = forecast_service.window_weeks(request.args.get("weeks"))
+        site = _site_arg(request.args.get("site_id"))
+        result = forecast_service.cover(db_session, _org_id(), site, today=date.today(), weeks=weeks)
+    except ValueError as exc:
+        return _planning_error(exc)
+    # Which site this is, and the others to choose from when the business runs several.
+    result["site_id"] = str(site.id) if site else None
+    result["sites"] = _planning_sites()
+    return jsonify(result)
+
+
+def _planning_sites():
+    from app.core.db.models.site import Site
+
+    if not g.current_org.multiple_sites_enabled:
+        return []
+    rows = (
+        db_session.query(Site)
+        .filter(Site.org_id == _org_id(), Site.is_active.is_(True))
+        .order_by(Site.is_default.desc(), Site.name)
+        .all()
+    )
+    return [{"id": str(row.id), "name": row.name, "is_default": bool(row.is_default)} for row in rows]
+
+
+@planning_bp.post("/api/core/planner/targets")
+@requires_auth
+@requires_org_scope
+def save_stock_target():
+    from app.features.planning import forecast_service
+
+    data = request.get_json(silent=True)
+    try:
+        site = _site_arg(data.get("site_id") if isinstance(data, dict) else None)
+        row = forecast_service.save_target(db_session, _org_id(), site, data)
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action="planning_stock_target_saved" if row else "planning_stock_target_cleared",
+                entity="planning_stock_target",
+                entity_id=row.id if row else None,
+                meta_data={
+                    "source_output_id": str(data["source_output_id"]),
+                    "weeks_of_cover": str(row.weeks_of_cover) if row else None,
+                },
+            )
+        )
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"target": {"weeks_of_cover": format(row.weeks_of_cover.normalize(), "f")} if row else None})
+
+
+@planning_bp.post("/api/core/planner/cover/plan")
+@requires_auth
+@requires_org_scope
+def plan_stock_cover():
+    """'Plan it' on a stock-cover suggestion: one forecast demand, planned in the same request."""
+    from app.features.planning import forecast_service
+
+    try:
+        demand, rows, changed = forecast_service.plan_forecast(
+            db_session,
+            _org_id(),
+            request.get_json(silent=True),
+            request.headers.get("Idempotency-Key"),
+            today=date.today(),
+        )
+        if changed:
+            _audit("planning_demand_created", demand)
+            for row in rows:
+                _batch_audit("planning_batch_created", row)
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return _plan_response(rows, changed, demand=service.demand_dict(demand))
 
 
 @planning_bp.get("/api/core/planner/batches")
@@ -205,6 +338,7 @@ def change_planning_batch(batch_id):
             return jsonify({"error": "Batch not found"}), 404
         if changed:
             _batch_audit("planning_batch_" + request.get_json()["action"], row)
+            _replan("batch_" + request.get_json()["action"])
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
@@ -305,7 +439,94 @@ def save_capacity(site_id):
                 meta_data={"site_id": str(row.site_id), "revision": row.revision},
             )
         )
+        _replan("capacity_saved")
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
     return jsonify({"setting": setting_dict(row)})
+
+
+@planning_bp.post("/api/core/planner/replan")
+@requires_auth
+@requires_org_scope
+def replan_now():
+    """The board and Planner call this as they load: stock and sales change elsewhere."""
+    from app.features.planning.replan import replan
+
+    try:
+        events = replan(db_session, _org_id(), today=date.today(), trigger="page_load")
+        for event in events:
+            db_session.add(
+                AuditLog(
+                    org_id=_org_id(),
+                    user_id=g.current_user.id,
+                    action=f"planning_batch_auto_{event.kind}",
+                    entity="planning_batch",
+                    entity_id=event.batch_id,
+                    meta_data={"reason": event.reason, "trigger": "page_load"},
+                )
+            )
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"changed": len(events)})
+
+
+@planning_bp.get("/api/core/planner/replan-events")
+@requires_auth
+@requires_org_scope
+def get_replan_events():
+    """What the planner changed by itself in the last two weeks, newest first."""
+    from datetime import UTC, datetime
+
+    from app.features.planning.batch_models import PlanningBatch, PlanningReplanEvent
+    from app.features.planning.models import PlanningDemand
+
+    since = datetime.now(UTC) - timedelta(days=14)
+    rows = (
+        db_session.query(PlanningReplanEvent, PlanningBatch, PlanningDemand)
+        .join(
+            PlanningBatch,
+            (PlanningBatch.org_id == PlanningReplanEvent.org_id) & (PlanningBatch.id == PlanningReplanEvent.batch_id),
+        )
+        .join(
+            PlanningDemand,
+            (PlanningDemand.org_id == PlanningBatch.org_id) & (PlanningDemand.id == PlanningBatch.demand_id),
+        )
+        .filter(PlanningReplanEvent.org_id == _org_id(), PlanningReplanEvent.created_at >= since)
+        .order_by(PlanningReplanEvent.created_at.desc(), PlanningReplanEvent.id)
+        .limit(50)
+        .all()
+    )
+    return jsonify(
+        {
+            "events": [
+                {
+                    "id": str(event.id),
+                    "batch_id": str(event.batch_id),
+                    "kind": event.kind,
+                    "from_date": event.from_date.isoformat() if event.from_date else None,
+                    "to_date": event.to_date.isoformat() if event.to_date else None,
+                    "reason": event.reason,
+                    "reference": demand.reference,
+                    "batch_number": batch.batch_number,
+                    "at": event.created_at.isoformat(),
+                }
+                for event, batch, demand in rows
+            ]
+        }
+    )
+
+
+@planning_bp.get("/api/core/planner/promise")
+@requires_auth
+@requires_org_scope
+def get_promise():
+    """When could a new order for n be ready? (GL-P07 B5)"""
+    from app.features.planning.promise import promise
+
+    try:
+        result = promise(db_session, _org_id(), request.args.to_dict(), today=date.today())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)

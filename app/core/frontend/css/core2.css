@@ -2754,6 +2754,7 @@ body.core2-sheet-open {
 .core2-suppliers-form__error { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.12); }
 .core2-suppliers-form__field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
 .core2-suppliers-form__field input, .core2-suppliers-form__field textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--border-default, #d1d5db); border-radius: 8px; background: var(--bg-input, transparent); color: inherit; }
+.core2-suppliers-form__hint { font-size: 12px; font-weight: 400; color: var(--ui-text-muted, var(--text-secondary)); }
 
 /* Plan 4.1: the hub header is the title and its main action, left-aligned, without the
    decorative circle above the action. */
@@ -2778,3 +2779,17 @@ body.core2-sheet-open {
     margin-left: 0;
   }
 }
+
+/* Live inventory's view and type switches in Style 1 (UX-SWEEP): the same pill switch as People
+   and roles and the Customs pages, not a solid blue bar. */
+#page-content .core2-live-inv__mode,
+#page-content .core2-live-inv__type-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; background: var(--ui-surface, #fff); box-shadow: none; }
+#page-content .core2-live-inv__type-tabs { display: flex; }
+#page-content .core2-live-inv__mode .flow-mode-segment,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment { flex: 1 1 auto; border: 0; border-radius: 999px; background: none; box-shadow: none; color: var(--ui-text-muted, #64748b); font-weight: 600; }
+#page-content .core2-live-inv__mode .flow-mode-segment + .flow-mode-segment,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment + .flow-mode-segment { border-left: 0; }
+#page-content .core2-live-inv__mode .flow-mode-segment--active,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment--active,
+#page-content .core2-live-inv__mode .flow-mode-segment--active:hover,
+#page-content .core2-live-inv__type-tabs .flow-mode-segment--active:hover { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }

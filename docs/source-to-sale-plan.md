@@ -897,10 +897,14 @@ Founder decisions for this phase:
       everything exactly as today. On, the org defines its sites (name, address, kind:
       manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
       is the default. Existing stock and executions go to the default site.
+      - [x] Three gates, all off by default (deployment flag, `multi_site` subscription,
+        the business's own switch), a movable default site, and the Sites page that walks
+        the setup (!597, !598).
     - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
       locations (2.1) become places within a site. Screens and APIs filter by site; every
       total can be shown per site or for the whole business. No separate database or org
       per site.
+      - [x] Every add flow asks where; Inventory shows what is where by site (!599).
     - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
       be linked to zero or more registrations: a Customs CCA licence (one licence may
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
@@ -921,6 +925,8 @@ Founder decisions for this phase:
         immutable batch-lineage fragments, confirmed-loss policy checks and printable
         carrier/consignment docket (!438). Operational release stays internally off;
         overage resolution, drag/scan and the complete movement workflow remain open.
+      - [x] One Move dialog and a Stock transfers page built for receiving (!600).
+        Drag/scan stays open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
@@ -949,6 +955,8 @@ Founder decisions for this phase:
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] An excise entry per CCA licence with several sites; the licence register
+        decides which areas are licensed (!601).
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
@@ -1086,6 +1094,14 @@ Founder decisions for this phase:
       - [x] Explicit demand workspace: quantities, output units, due dates, priority,
         cancellation, tenant isolation and staff audit (!425); sales/contract adapters,
         forecasts and stock targets remain.
+      - [x] Confirmed contract order lines become demand and stay in step (changed,
+        unconfirmed, completed; left alone once a batch starts); lines without a workflow
+        output are listed, never matched by name (!641).
+      - [x] Stock cover per product from connected sales: weekly rate over 4–52 weeks,
+        seasonality from last year with 12+ months of history, runs-out date from stock on
+        hand and planned batches; weeks-of-cover targets per output (and site) suggest whole
+        batches with a plan-by date, and "Plan" turns one into planned demand (!641). Sales
+        orders as demand and pre-sales (1.1) remain.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.
@@ -1094,6 +1110,9 @@ Founder decisions for this phase:
       - [x] Persisted physical batches from explicit manual production demand,
         frozen quantity/unit/site snapshots and repeat-request protection (!440);
         inventory netting and order/target adapters remain.
+      - [x] Netting: a demand plans batches only for what stock on hand and batches already
+        planned don't cover, earlier-due demand first; a covered demand plans none.
+        Contract demand nets only against its own customer's stock and batches (!641).
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
@@ -1104,6 +1123,8 @@ Founder decisions for this phase:
       - [x] Workflow batch-size settings and explicit step duration/wait snapshots,
         fixed output-ready timing and exact workflow-version pinning (!440);
         unknown readiness stays unknown and delivery forecasts remain unpublished.
+      - [x] Step working and waiting time set on the workflow, planner defaults from it,
+        and expiry-aware planned surplus (!606).
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
@@ -1116,6 +1137,13 @@ Founder decisions for this phase:
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
         dependent-production planning and forecast integration remain.
+      - [x] Checking materials commits them to planned batches: bound lots first, the
+        rest from the material's lots soonest-expiring first; cancel releases, start
+        consumes (!611).
+      - [x] Each lot shows what planned batches hold; disposing into a hold warns;
+        suppliers carry a lead time and every shortage says who to order from and by
+        when, on the board and as a notification (!615). Intermediates made by another
+        workflow are still not planned.
     - [x] e. **Can we do it?** (!449, !464, !467) Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
@@ -1129,6 +1157,9 @@ Founder decisions for this phase:
       - [x] Open the suggested lower-priority unpinned batch's move form (!467),
         switching to its start day when outside the view. Staff choose the new date;
         automatic moves remain in 7.3f.
+      - [x] Resource groups have units (two stills run two batches at once), and planning
+        places each batch against them: the latest start that fits on time, else the
+        earliest that fits, saying it is late because of capacity (!649).
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
@@ -1144,12 +1175,26 @@ Founder decisions for this phase:
       - [x] Today's planned production priorities on the dashboard (!463): due and overdue
         open batches, current priority and pin/check state, bounded display and a review
         link to the board. Production permission is required for query and rendering.
-    - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
+      - [x] A real start check (!649): materials checked, held and still on hand, no held
+        lot on quality hold (GL-P02), room on the site's resources, and the site's
+        compliance through the module hook (NZ alcohol: a food registration covering
+        manufacturing there). Once clear, Start makes the execution at the batch's site and
+        consumes what it held.
+      - [x] Automatic replan (!649) after planner changes and whenever the board or
+        Planner loads: re-sizes planned demand to stock, moves batches whose day passed
+        and batches off full days (never pinned ones, or ones a person placed), and the
+        board lists what moved and why. Replanning on a finished-late batch or a flagged
+        ready date as it happens, rather than on the next load, remains.
+    - [x] g. **Promise dates** (B5, !681). For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
     - [ ] h. **Compliance in the plan.** Planned work respects what the modules require:
       a batch needing a site's CCA or food registration is planned only at a site that has
       it (7.1c); a verification visit (2.2) or stocktake (2.6) can block a day.
+      - [x] A module hook the start check asks (`compliant/platform/production_checks`);
+        NZ alcohol blocks a start at a site with no food registration covering
+        manufacturing that day (!649). Choosing the site at planning time, and visits or
+        stocktakes blocking a day, remain.
   - Done when: a new order for 600 bottles shows a promise date in seconds; the planner
     lays out the batches, flags a botanical short for the second one and moves its date;
     the owner pins the first, drags the second, and the next morning the dashboard shows

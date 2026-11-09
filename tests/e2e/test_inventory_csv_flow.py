@@ -327,3 +327,55 @@ def test_csv_upload_through_the_browser_skipping_the_review_card_writes_nothing(
     listing = page.request.get("/api/core/inventory")
     assert listing.status == 200, f"listing failed: {listing.status} {listing.text()}"
     assert name not in listing.text(), "a skipped CSV row was written to inventory"
+
+
+# --- GL-C03: template from the server, a preview summary, and the problem rows as a file ---
+
+
+def test_template_link_downloads_the_servers_template(logged_in_page):
+    page = logged_in_page
+    page.goto("/core/inventory/add/csv")
+    with page.expect_download() as download:
+        page.locator("#csv-download-template").click()
+    assert download.value.suggested_filename == "inventory_template.csv"
+    header = open(download.value.path(), encoding="utf-8-sig").read().splitlines()[0]
+    assert header.startswith("Item Name,Quantity,Unit,Supplier Name")
+
+
+def test_preview_summary_counts_rows_and_offers_the_problem_rows(logged_in_page):
+    page = logged_in_page
+    good = f"E2E CSV Sum {uuid.uuid4().hex[:8]}"
+    _offer_csv(page, f"Item Name,Quantity,Unit\n{good},2,kg\nBroken,0,kg\nAlso broken,1,furlongs\n")
+
+    summary = page.locator("#csv-import-summary")
+    expect(summary).to_be_visible()
+    expect(page.locator("#csv-import-summary-counts")).to_have_text("3 rows · 1 ready · 2 need fixing")
+    expect(page.locator("#csv-download-problems")).to_be_visible()
+
+    with page.expect_download() as download:
+        page.locator("#csv-download-problems").click()
+    assert download.value.suggested_filename == "inventory_import_problems.csv"
+    lines = open(download.value.path(), encoding="utf-8-sig").read().splitlines()
+    assert lines[0] == "Row,Problem,Item Name,Quantity,Unit"
+    assert lines[1:] == [
+        "3,Invalid quantity (must be a positive number),Broken,0,kg",
+        "4,Unit not allowed,Also broken,1,furlongs",
+    ]
+    assert_clean_page(page)
+
+
+def test_clean_file_summary_has_no_problem_download(logged_in_page):
+    page = logged_in_page
+    _offer_csv(page, f"Item Name,Quantity,Unit\nE2E CSV Clean {uuid.uuid4().hex[:8]},2,kg\n")
+    expect(page.locator("#csv-import-summary-counts")).to_have_text("1 row · 1 ready")
+    expect(page.locator("#csv-download-problems")).to_be_hidden()
+    expect(page.locator("#csv-import-summary-hint")).to_be_hidden()
+
+
+def test_nothing_about_a_file_or_sites_shows_before_an_upload_with_sites_off(logged_in_page):
+    """The summary box and the per-row Site hint are hidden attributes their CSS used to beat."""
+    page = logged_in_page
+    page.goto("/core/inventory/add/csv")
+    expect(page.locator("#csv-drop-zone")).to_be_visible()
+    expect(page.locator("#csv-import-summary")).to_be_hidden()
+    expect(page.locator("[data-csv-site]")).to_be_hidden()

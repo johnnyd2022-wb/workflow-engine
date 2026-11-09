@@ -39,6 +39,12 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
   #settings-account .settings-section-list { display: block; }
   #page-content .settings-overview .settings-card { padding: 18px; }
 }
+@media (max-width: 640px) {
+  /* Four sections (admins also get "Your records", GL-P10) don't fit one row on a phone:
+     a 2 x 2 grid instead of a row that scrolls sideways. */
+  .settings-nav:has(> a:nth-child(4)) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
+  #page-content .settings-nav:has(> a:nth-child(4)) a { min-height: 40px; display: grid; place-items: center; white-space: normal; }
+}
 @media (max-width: 359px) {
   .settings-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; border-radius: 16px; }
   #page-content .settings-nav a { min-height: 44px; display: grid; place-items: center; white-space: normal; }
@@ -49,3 +55,8 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
 #page-content .settings-legal-links { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 32px 0 8px; font-size: 13px; color: var(--ui-text-muted); }
 #page-content .settings-legal-links a { color: var(--ui-text-muted); text-decoration: underline; text-underline-offset: 2px; }
 #page-content .settings-legal-links a:hover { color: var(--ui-text); }
+
+/* GL-P10: Your records */
+#page-content .settings-records-copy { margin: 0 0 16px; max-width: 62ch; line-height: 1.5; color: var(--ui-text); }
+#page-content .settings-records-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+#page-content .settings-records-note { font-size: 13px; color: var(--ui-text-muted); }

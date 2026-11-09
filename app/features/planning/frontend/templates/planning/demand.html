@@ -52,14 +52,33 @@
       <ul class="planner-make__list" data-make-list></ul>
     </section>
     <section class="workspace-card planner-demand" aria-labelledby="planner-demand-title">
-      <div class="workspace-card__header"><h2 id="planner-demand-title">Production demand</h2><span class="planner-count" data-demand-count></span></div>
-      <p class="workspace-caption" data-demand-caption>Open demand, soonest due first.</p>
+      <div class="workspace-card__header"><h2 id="planner-demand-title">What to make</h2><span class="planner-count" data-demand-count></span></div>
+      <p class="workspace-caption" data-demand-caption>Orders and contract orders, soonest due first.</p>
+      <p class="workspace-notice planner-status" role="status" data-planning-status hidden></p>
       <div class="planner-empty" data-planning-empty hidden>
         <strong>No production demand yet</strong>
-        <p class="workspace-caption">Add an order or a forecast, then plan its batches on the production board.</p>
+        <p class="workspace-caption">Add an order, confirm a contract order, or set a stock target below, then plan its batches.</p>
         {% if can('production.record') %}<button type="button" class="workspace-button" data-add-toggle>Add demand</button>{% endif %}
       </div>
-      <section class="planner-rows" aria-label="Production demand" data-demand-list></section>
+      <section class="planner-rows" aria-label="Orders to make" data-demand-list></section>
+      <div class="planner-attention" data-contract-unmapped hidden>
+        <strong data-contract-unmapped-title></strong>
+        <ul data-contract-unmapped-list></ul>
+      </div>
+      <section class="planner-cover" aria-labelledby="planner-cover-title" data-cover>
+        <div class="planner-cover__header">
+          <h3 id="planner-cover-title">Keep in stock</h3>
+          <label class="planner-site" data-cover-site hidden><span>Site</span><select data-cover-site-select></select></label>
+        </div>
+        <p class="workspace-caption" data-cover-caption>How fast each product sells, and when to make more.</p>
+        <p class="workspace-empty" data-cover-empty hidden>No product has sales or a stock target yet. Link products to the workflow output they're made by in Sales, or set a target here.</p>
+        <p class="workspace-empty" data-cover-error hidden></p>
+        <div class="planner-rows" data-cover-list></div>
+        <div class="planner-attention" data-sales-unmapped hidden>
+          <strong>Sold, but not linked to a workflow output</strong>
+          <ul data-sales-unmapped-list></ul>
+        </div>
+      </section>
       <details class="planner-closed" data-closed hidden>
         <summary><span data-closed-summary>Closed demand</span></summary>
         <section class="planner-rows planner-rows--closed" aria-label="Closed demand" data-closed-list></section>

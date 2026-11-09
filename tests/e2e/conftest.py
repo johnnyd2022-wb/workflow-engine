@@ -222,11 +222,12 @@ def app_url(e2e_preconditions) -> str:
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, app_url):
-    """Trust the self-signed cert and default navigation to the app."""
+    """Trust the test cert and let Playwright's script helpers run under strict app CSP."""
     return {
         **browser_context_args,
         "base_url": app_url,
         "ignore_https_errors": True,
+        "bypass_csp": True,
     }
 
 
@@ -488,7 +489,20 @@ def logged_in_page(browser, storage_state_path, app_url):
         base_url=app_url,
         ignore_https_errors=True,
         storage_state=storage_state_path,
+        bypass_csp=True,
     )
+    page = context.new_page()
+    attach_probe(page)
+    try:
+        yield page
+    finally:
+        context.close()
+
+
+@pytest.fixture()
+def strict_csp_page(browser, storage_state_path, app_url):
+    """Real CSP for the policy walk and security tests; no helper bypass."""
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True, storage_state=storage_state_path)
     page = context.new_page()
     attach_probe(page)
     try:
@@ -525,6 +539,11 @@ class PageProbe:
 
     def _on_console(self, msg) -> None:
         if msg.type == "error" and not self._RESOURCE_STATUS_NOISE.search(msg.text):
+            self.console_errors.append(msg.text)
+        # Alpine reports a template expression that throws (a CSP build calling a global such as
+        # Number(), a typo'd property) as a *warning*, and the part of the page it drives silently
+        # stops working. Every page test should fail on it.
+        elif msg.type == "warning" and "Alpine Expression Error" in msg.text:
             self.console_errors.append(msg.text)
 
     def _on_page_error(self, exc) -> None:
@@ -583,3 +602,15 @@ def assert_clean_page(page) -> None:
 
     if problems:
         raise AssertionError(f"page not clean: {page.url}\n\n" + "\n\n".join(problems))
+
+
+@pytest.fixture(scope="session")
+def perf_instrumentation(app_url):
+    """One set of performance listeners shared by every browser test module.
+
+    Registering a session fixture separately in each module attaches the same
+    Flask/SQLAlchemy listeners twice when both modules run in a suite.
+    """
+    from tests.e2e.test_perf_budgets import instrument_performance
+
+    yield from instrument_performance()

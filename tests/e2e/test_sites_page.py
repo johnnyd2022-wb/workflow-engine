@@ -6,7 +6,9 @@ Requests are routed into the Flask test client (see test_crm_contact_sync_ui).
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
@@ -71,19 +73,48 @@ def test_adding_a_stock_area_shows_it_on_the_site(sales_page, client):  # noqa: 
     expect(sales_page.locator("[data-sites-message]")).to_contain_text("Tank bay added at Bond store.")
 
 
-def test_an_area_name_used_at_another_site_says_where(sales_page, client):  # noqa: F811
+@pytest.mark.parametrize("width,mode", [(390, "light"), (390, "dark"), (1440, "light"), (1440, "dark")])
+def test_area_names_are_reused_across_sites_but_unique_within_each(sales_page, client, width, mode):  # noqa: F811
     _on(client, "Bond store", "Cellar door")
     sites = {s["name"]: s["id"] for s in client.get("/api/core/sites").get_json()["sites"]}
     made = client.post("/api/core/stock-locations", json={"name": "Dry store", "site_id": sites["Bond store"]})
     assert made.status_code == 201
-    _open(sales_page)
+    _open(sales_page, width=width)
+    from scripts.ui_shots import shot, theme
+
+    theme(sales_page, mode)
     sales_page.get_by_role("button", name="Add an area: Cellar door").click()
     dialog = sales_page.get_by_role("dialog", name="Add a stock area at Cellar door")
     dialog.get_by_label("Name").fill("Dry store")
     dialog.get_by_role("button", name="Add area").click()
-    expect(dialog.locator("[data-area-error]")).to_have_text(
-        "Bond store already has an area called Dry store. Give this one a name of its own, such as Dry store (Cellar door)."
+    expect(dialog).to_be_hidden()
+    for site in ("Bond store", "Cellar door"):
+        expect(sales_page.locator(SITES, has_text=site).locator(".st-area")).to_have_text(["Dry store"])
+    locations = client.get("/api/core/stock-locations").get_json()["locations"]
+    stores = [row for row in locations if row["name"] == "Dry store"]
+    assert {row["site_id"] for row in stores} == {sites["Bond store"], sites["Cellar door"]}
+    assert len({row["id"] for row in stores}) == 2
+
+    # A duplicate at Cellar door must still be refused, without blaming Bond store.
+    sales_page.get_by_role("button", name="Add an area: Cellar door").click()
+    dialog.get_by_label("Name").fill("Dry store")
+    dialog.get_by_role("button", name="Add area").click()
+    expect(dialog.locator("[data-area-error]")).to_have_text("This site already has an area with that name")
+    expect(dialog).to_be_visible()
+    assert (
+        len(
+            [
+                row
+                for row in client.get("/api/core/stock-locations").get_json()["locations"]
+                if row["name"] == "Dry store"
+            ]
+        )
+        == 2
     )
+    if directory := os.getenv("UI_SCREENSHOT_DIR"):
+        out = Path(directory)
+        out.mkdir(parents=True, exist_ok=True)
+        shot(sales_page, out, f"site-area-error-{width}-{mode}")
 
 
 def test_a_refused_site_keeps_its_reason_in_the_dialog(sales_page, client):  # noqa: F811

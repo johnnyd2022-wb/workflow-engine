@@ -67,6 +67,7 @@
         <td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}">{{ order.reference }}</a></td>
         <td class="contracts-col-customer">{{ order.customer_name }}</td>
         <td><span class="contracts-due" data-due="{{ order.due_date }}" title="{{ order.due_date }}">{{ order.due_date }}</span></td>
+        <td class="contracts-col-ready" title="{{ order.ready_reason }}">{% if order.forecast_ready_date %}{{ order.forecast_ready_date }}{% elif order.planned_ready_date %}{{ order.planned_ready_date }} <span class="contracts-ready-note">planned</span>{% else %}<span class="contracts-ready-note">not planned</span>{% endif %}</td>
         <td><span class="contracts-status" data-status="{{ order.status }}">{{ order.status|capitalize }}</span></td>
         <td class="contracts-products">{% for line in order.lines %}<span data-quantity="{{ line.quantity }}" data-unit="{{ line.unit }}">{{ line.quantity }} {{ line.unit }}</span> {{ line.product_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
       </tr>
@@ -74,13 +75,13 @@
     {% endmacro %}
     {% if orders %}
       {% if open_orders %}
-      <div class="contract-table workspace-scroll contracts-table-open"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+      <div class="contract-table workspace-scroll contracts-table-open"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th class="contracts-col-ready">Ready</th><th>Status</th><th>Products</th></tr></thead><tbody>
       {{ order_rows(open_orders) }}
       </tbody></table></div>
       {% else %}<p class="workspace-empty">No open orders. Everything here is completed or cancelled.</p>{% endif %}
       {% if closed_orders %}
       <details class="contracts-closed"><summary>Completed and cancelled ({{ closed_orders | length }})</summary>
-        <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+        <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th class="contracts-col-ready">Ready</th><th>Status</th><th>Products</th></tr></thead><tbody>
         {{ order_rows(closed_orders) }}
         </tbody></table></div>
       </details>

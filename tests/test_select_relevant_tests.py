@@ -22,6 +22,37 @@ def _load_module():
 selector = _load_module()
 
 
+def test_tia_mixed_targets_start_browser_and_server(tmp_path):
+    import subprocess
+
+    targets = tmp_path / "targets"
+    targets.write_text(
+        "tests/test_ci_health.py\n"
+        "tests/e2e/test_session_expiry.py::test_expiry[chromium-a value with spaces]\n"
+    )
+    for requirement in ("browser", "server", "e2e", "database"):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--targets-file", str(targets), f"--needs-{requirement}"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+
+def test_final_target_requirements_keep_lightweight_tests_lightweight():
+    plan = selector.runtime_requirements(["tests/test_inventory_csv_validation.py::test_example"])
+    assert not any(plan.values())
+    node_plan = selector.runtime_requirements(["tests/test_execution_shared_utils_js.py::test_example"])
+    assert node_plan["needs_node"]
+    assert not node_plan["needs_database"]
+
+
+def test_full_fallback_keeps_its_existing_separate_browser_gate():
+    plan = selector.runtime_requirements(["tests/"])
+    assert plan["needs_database"] and plan["needs_node"]
+    assert not plan["needs_e2e"] and not plan["needs_server"] and not plan["needs_browser"]
+
+
 def test_inventory_ui_selects_database_free_frontend_regressions():
     plan = selector.select(["app/core/frontend/inventory/inventory.js"])
 

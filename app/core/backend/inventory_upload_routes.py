@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from flask import g, jsonify, request
+from flask import Response, g, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -114,6 +114,156 @@ def _sanitize(s: str, max_len: int = 500) -> str:
     return s[:max_len] if len(s) > max_len else s
 
 
+def _parse_upload(org_id):
+    """Read and validate an uploaded CSV (multipart 'file' or raw body).
+
+    Returns a (response, status) tuple on a file-level error, else a dict with rows,
+    validation, truncated, fieldnames and raw_rows (the file's own cells, for the error report).
+    """
+    file = request.files.get("file")
+    # Read the raw body as BYTES, not text. `get_data(as_text=True)` decodes with
+    # errors="replace", so invalid UTF-8 arrived as U+FFFD instead of being
+    # rejected — the multipart branch below returns 400 for exactly that input.
+    # On a traceability product, silently mangling an item name is worse than
+    # refusing the upload.
+    raw = request.get_data() if not file else None
+    if file:
+        content = file.read()
+        if len(content) > CSV_MAX_BYTES:
+            return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return jsonify({"error": "File must be UTF-8 encoded."}), 400
+    elif raw is not None:
+        # The raw-body branch used to inherit only Flask's global MAX_CONTENT_LENGTH,
+        # which is sized for evidence uploads (~10MB) — five times this endpoint's own
+        # documented 2MB limit, and a number that moves whenever evidence config does.
+        # Enforce the CSV limit here so both branches honour the same contract.
+        if len(raw) > CSV_MAX_BYTES:
+            return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return jsonify({"error": "File must be UTF-8 encoded."}), 400
+    else:
+        return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
+
+    reader = csv.DictReader(io.StringIO(text))
+    # Normalize headers: strip and case-insensitive match
+    required = {"item name": "name", "quantity": "qty", "unit": "unit"}
+    optional = {
+        "supplier name": "supplier",
+        "purchase date": "purchase_date",
+        "batch number": "batch_number",
+        "expiry date": "expiry_date",
+        "site": "site",
+    }
+    col_map = {}
+    for h in reader.fieldnames or []:
+        key = (h or "").strip().lower()
+        if key in required:
+            col_map[required[key]] = h
+        elif key in optional:
+            col_map[optional[key]] = h
+
+    missing = [k for k in required if required[k] not in col_map]
+    if missing:
+        return jsonify({"error": f"Missing required columns: {', '.join(missing)}"}), 400
+
+    rows = []
+    validation = []
+    raw_rows = []
+    truncated = False
+    # A Site column is judged by its header, not its cells: with multiple sites off, every row
+    # of a file that has one is flagged, blank cells included.
+    sites_enabled = _sites_on(org_id) if "site" in col_map else None
+    sites_by_name = {}
+    for i, row in enumerate(reader):
+        if i >= CSV_MAX_ROWS:
+            truncated = True
+            break
+        row_index = i + 2  # 1-based + header
+        name = _sanitize(row.get(col_map["name"], ""), 255)
+        qty_str = (row.get(col_map["qty"], "") or "").strip()
+        unit_raw = (row.get(col_map["unit"], "") or "").strip()
+        supplier = _sanitize(row.get(col_map.get("supplier") or "", ""), 255) or None
+        purchase_date = _parse_date(row.get(col_map.get("purchase_date") or ""))
+        batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
+        expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
+        site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
+
+        status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
+        unit = canonical_unit if canonical_unit else unit_raw
+        if status == "ok" and sites_enabled is False:
+            status, message = "error", "Remove the Site column: multiple sites are off"
+        elif status == "ok" and site:
+            # The same check csv-commit makes, so a bad site name shows in the preview, not after.
+            key = site.lower()
+            if key not in sites_by_name:
+                from app.features.sites.service import site_named
+
+                sites_by_name[key] = site_named(db_session, org_id, site)
+            if sites_by_name[key] is None:
+                status, message = "error", f"No active site called {site}"
+        raw_rows.append(row)
+
+        validation.append({"row_index": row_index, "status": status, "message": message})
+        rows.append(
+            {
+                "row_index": row_index,
+                "name": name,
+                "quantity": quantity_str_for_storage or qty_str,
+                "unit": unit,
+                "supplier": supplier,
+                "purchase_date": purchase_date.isoformat() if purchase_date else None,
+                "batch_number": batch_number,
+                "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                "site": site,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "validation": validation,
+        "truncated": truncated,
+        "fieldnames": [h for h in (reader.fieldnames or []) if h is not None],
+        "raw_rows": raw_rows,
+    }
+
+
+# Template columns, in order. The validator's own column names, so the template can't drift.
+TEMPLATE_COLUMNS = ["Item Name", "Quantity", "Unit", "Supplier Name", "Purchase Date", "Batch Number", "Expiry Date"]
+SITE_COLUMN = "Site"
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value) -> str:
+    """A cell that a spreadsheet will show as text, never run as a formula (CSV injection)."""
+    s = "" if value is None else str(value)
+    return "'" + s if s.startswith(_FORMULA_PREFIXES) else s
+
+
+def _csv_response(rows: list[list], filename: str) -> Response:
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\r\n")
+    for row in rows:
+        writer.writerow([_csv_cell(c) for c in row])
+    # BOM so Excel opens UTF-8 (macrons in item names) correctly; csv-validate strips it.
+    resp = Response("\ufeff" + buf.getvalue(), mimetype="text/csv")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _sites_on(org_id) -> bool:
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.site_entitlement import sites_on
+
+    org = db_session.get(Organisation, org_id)
+    return bool(org) and sites_on(db_session, org_id, org.multiple_sites_enabled)
+
+
 def register_routes(bp):
     @bp.route("/api/core/inventory/barcode/<path:code>", methods=["GET"])
     @requires_auth
@@ -166,91 +316,11 @@ def register_routes(bp):
             "inventory.csv_validate",
             attributes={"org_id": str(UUID(g.org_id)), "max_rows": CSV_MAX_ROWS},
         ):
-            file = request.files.get("file")
-            # Read the raw body as BYTES, not text. `get_data(as_text=True)` decodes with
-            # errors="replace", so invalid UTF-8 arrived as U+FFFD instead of being
-            # rejected — the multipart branch below returns 400 for exactly that input.
-            # On a traceability product, silently mangling an item name is worse than
-            # refusing the upload.
-            raw = request.get_data() if not file else None
-            if file:
-                content = file.read()
-                if len(content) > CSV_MAX_BYTES:
-                    return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
-                try:
-                    text = content.decode("utf-8-sig")
-                except UnicodeDecodeError:
-                    return jsonify({"error": "File must be UTF-8 encoded."}), 400
-            elif raw is not None:
-                # The raw-body branch used to inherit only Flask's global MAX_CONTENT_LENGTH,
-                # which is sized for evidence uploads (~10MB) — five times this endpoint's own
-                # documented 2MB limit, and a number that moves whenever evidence config does.
-                # Enforce the CSV limit here so both branches honour the same contract.
-                if len(raw) > CSV_MAX_BYTES:
-                    return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
-                try:
-                    text = raw.decode("utf-8-sig")
-                except UnicodeDecodeError:
-                    return jsonify({"error": "File must be UTF-8 encoded."}), 400
-            else:
-                return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
-
-            reader = csv.DictReader(io.StringIO(text))
-            # Normalize headers: strip and case-insensitive match
-            required = {"item name": "name", "quantity": "qty", "unit": "unit"}
-            optional = {
-                "supplier name": "supplier",
-                "purchase date": "purchase_date",
-                "batch number": "batch_number",
-                "expiry date": "expiry_date",
-                "site": "site",
-            }
-            col_map = {}
-            for h in reader.fieldnames or []:
-                key = (h or "").strip().lower()
-                if key in required:
-                    col_map[required[key]] = h
-                elif key in optional:
-                    col_map[optional[key]] = h
-
-            missing = [k for k in required if required[k] not in col_map]
-            if missing:
-                return jsonify({"error": f"Missing required columns: {', '.join(missing)}"}), 400
-
-            rows = []
-            validation = []
-            truncated = False
-            for i, row in enumerate(reader):
-                if i >= CSV_MAX_ROWS:
-                    truncated = True
-                    break
-                row_index = i + 2  # 1-based + header
-                name = _sanitize(row.get(col_map["name"], ""), 255)
-                qty_str = (row.get(col_map["qty"], "") or "").strip()
-                unit_raw = (row.get(col_map["unit"], "") or "").strip()
-                supplier = _sanitize(row.get(col_map.get("supplier") or "", ""), 255) or None
-                purchase_date = _parse_date(row.get(col_map.get("purchase_date") or ""))
-                batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
-                expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
-                site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
-
-                status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
-                unit = canonical_unit if canonical_unit else unit_raw
-
-                validation.append({"row_index": row_index, "status": status, "message": message})
-                rows.append(
-                    {
-                        "row_index": row_index,
-                        "name": name,
-                        "quantity": quantity_str_for_storage or qty_str,
-                        "unit": unit,
-                        "supplier": supplier,
-                        "purchase_date": purchase_date.isoformat() if purchase_date else None,
-                        "batch_number": batch_number,
-                        "expiry_date": expiry_date.isoformat() if expiry_date else None,
-                        "site": site,
-                    }
-                )
+            parsed = _parse_upload(UUID(g.org_id))
+            if isinstance(parsed, tuple):
+                return parsed
+            rows, validation, truncated = parsed["rows"], parsed["validation"], parsed["truncated"]
+            problems = sum(1 for v in validation if v["status"] != "ok")
 
             return jsonify(
                 {
@@ -260,8 +330,50 @@ def register_routes(bp):
                     "validated_count": len(rows),
                     "truncated": truncated,
                     "max_rows_allowed": CSV_MAX_ROWS,
+                    "summary": {"rows": len(rows), "ready": len(rows) - problems, "problems": problems},
                 }
             )
+
+    @bp.route("/api/core/inventory/csv-template", methods=["GET"])
+    @requires_auth
+    def csv_template():
+        """The CSV template: the columns csv-validate reads, plus Site when multiple sites are on."""
+        org_id = UUID(g.org_id)
+        header, example = (
+            list(TEMPLATE_COLUMNS),
+            ["Example Item", "10", "kg", "ACME Ltd", "2024-01-15", "BATCH-001", "2025-12-31"],
+        )
+        if _sites_on(org_id):
+            from app.core.db.models.site import Site
+
+            header.append(SITE_COLUMN)
+            default = (
+                db_session.query(Site)
+                .filter(Site.org_id == org_id, Site.is_active.is_(True))
+                .order_by(Site.is_default.desc(), Site.name)
+                .first()
+            )
+            example.append(default.name if default else "")
+        return _csv_response([header, example], "inventory_template.csv")
+
+    @bp.route("/api/core/inventory/csv-error-report", methods=["POST"])
+    @requires_auth
+    def csv_error_report():
+        """The rows csv-validate would flag, as a CSV: Row, Problem, then the file's own columns.
+
+        Same input and limits as csv-validate. Fix the rows in the report and upload it again
+        (its Row and Problem columns are ignored on upload).
+        """
+        with start_span("inventory.csv_error_report", attributes={"org_id": str(UUID(g.org_id))}):
+            parsed = _parse_upload(UUID(g.org_id))
+            if isinstance(parsed, tuple):
+                return parsed
+            header = parsed["fieldnames"]
+            out = [["Row", "Problem", *header]]
+            for raw, v in zip(parsed["raw_rows"], parsed["validation"], strict=True):
+                if v["status"] != "ok":
+                    out.append([v["row_index"], v["message"], *(raw.get(h, "") for h in header)])
+            return _csv_response(out, "inventory_import_problems.csv")
 
     def _row_site(org_id, site_name):
         """A row's "site" column, when multiple sites are on; None if no active site has that name."""

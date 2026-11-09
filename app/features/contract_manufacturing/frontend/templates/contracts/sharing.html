@@ -8,7 +8,8 @@
 </p>
 {% if can('production.record') %}<section class="contract-card">
 <h2>Publish an order update</h2>
-<p>Only selected facts and documents are copied to the portal. Shared milestones are copied from linked batch steps when you publish. Ready dates, QC status and stock quantities are unavailable until their source integrations are ready.</p>{% if publication %}<p>Last revision: {{ publication.revision }} · {% if publication.revoked_at %}Withdrawn{% else %}Shared{% endif %}</p>{% endif %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-publications" data-publication>
+<p>Only selected facts and documents are copied to the portal. Shared milestones are copied from linked batch steps when you publish. QC status and stock quantities are unavailable until their source integrations are ready.</p>{% if publication %}<p>Last revision: {{ publication.revision }} · {% if publication.revoked_at %}Withdrawn{% else %}Shared{% endif %}</p>{% endif %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-publications" data-publication>
+<label><input type="checkbox" name="share_ready_dates" value="1" checked> Share the ready date from the planner{% if order.forecast_ready_date %} (can be ready {{ order.forecast_ready_date }}){% elif order.planned_ready_date %} (planned for {{ order.planned_ready_date }}, not yet promised){% else %} (none yet){% endif %}. It's copied when you publish; publish again after the plan changes.</label>
 {% if step_candidates %}<fieldset>
 <legend>Batch steps to share</legend>
 <p>Choose the steps customers may see and give each a customer-facing label. Status is copied when you publish a new revision.</p>

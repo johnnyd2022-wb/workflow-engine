@@ -4,6 +4,7 @@
   window.bize.onPage('[data-compliant-surface="overview"]', function (root) {
     var canManage = root.dataset.canManage === '1';
     var primary = root.closest('#page-content').querySelector('[data-compliance-primary]');
+    var primaryLabel = primary.querySelector('[data-compliance-primary-label]') || primary;
     var error = root.querySelector('[data-compliant-error]');
     var retry = root.querySelector('[data-retry]');
     var controller = new AbortController();
@@ -36,6 +37,7 @@
     function destination(framework) {
       if (programme(framework)) return '/compliant/nz-alcohol/food-safety';
       if (framework.slug === 'customs-alcohol') return '/compliant/nz-alcohol/customs';
+      if (framework.slug === 'wine-standards') return '/compliant/nz-alcohol/wine';
       return canManage ? '/compliant/nz-alcohol/configuration' : null;
     }
     function link(label, href, className) {
@@ -90,7 +92,7 @@
         body.appendChild(metrics);
         disclosure.appendChild(body);
         card.appendChild(disclosure);
-        if (href) card.appendChild(link(name ? 'Open ' + name : framework.slug === 'customs-alcohol' ? 'Open Customs' : 'Review configuration', href, 'workspace-link compliance-framework-link'));
+        if (href) card.appendChild(link(name ? 'Open ' + name : framework.slug === 'customs-alcohol' ? 'Open Customs' : framework.slug === 'wine-standards' ? 'Open Wine' : 'Review configuration', href, 'workspace-link compliance-framework-link'));
         else card.appendChild(el('p', 'Ask your admin about this framework.', 'workspace-caption'));
         target.appendChild(card);
       });
@@ -147,7 +149,7 @@
       primary.removeAttribute('href');
       if (!frameworks.length) {
         if (!canManage) return;
-        primary.textContent = 'Set up Compliance';
+        primaryLabel.textContent = 'Set up Compliance';
         primary.href = '/compliant/nz-alcohol/configuration';
         primary.hidden = false;
         return;
@@ -157,7 +159,7 @@
       if (!target) return;
       var href = destination(target.framework);
       if (programme(target.framework) && target.values.attention) href += target.values.overdue ? '/checks?filter=overdue' : '/checks?filter=attention';
-      primary.textContent = 'Review evidence';
+      primaryLabel.textContent = 'Review evidence';
       primary.href = href;
       primary.hidden = false;
     }
@@ -212,8 +214,7 @@
       root.setAttribute('aria-busy', 'true');
       error.hidden = true;
       root.removeAttribute('data-load-failed');
-      primary.hidden = true;
-      primary.removeAttribute('href');
+      // Keep the server-rendered primary while loading: it is a real link from first paint.
       try {
         var response = await fetch('/api/compliant/overview', { signal: controller.signal });
         status = response.status;
@@ -231,6 +232,8 @@
         set('[data-action-count]', 'Unavailable');
         root.querySelector('[data-next-action]').replaceChildren(el('p', 'Next steps are unavailable until evidence loads.', 'workspace-caption'));
         error.hidden = false;
+        primary.hidden = true;  // no evidence loaded, so no destination worth promising
+        primary.removeAttribute('href');
         // The message above says it once; the cards it would have filled are put away, not drawn with dashes.
         root.setAttribute('data-load-failed', '');
       } finally {

@@ -14,7 +14,7 @@ flask_app = fixtures.flask_app
 pytestmark = pytest.mark.e2e
 
 
-def test_phone_binds_raw_lot_and_records_unresolved_material_evidence(db, board_clients, browser):
+def test_phone_binds_raw_lot_and_shows_what_it_holds_for_each_batch(db, board_clients, browser):
     client, org_id, output = board_clients[0]
     step = db.query(Step).filter(Step.org_id == org_id).one()
     step.inputs = [{"name": "Sugar <script>alert(1)</script>", "quantity": "2", "unit": "kg"}]
@@ -56,10 +56,17 @@ def test_phone_binds_raw_lot_and_records_unresolved_material_evidence(db, board_
             "Materials observed. Refresh after stock changes; delivery and start checks remain pending.", exact=True
         ).wait_for()
         assert page.locator(".board-batch").count() == 3
-        assert page.get_by_text("Material availability unresolved", exact=True).count() == 3
-        # A batch that cannot start keeps its disabled Start button in its Details.
-        page.locator(".board-batch").first.locator(".board-batch__details > summary").click()
-        assert page.get_by_role("button", name="Start batch").first.is_disabled()
+        # GL-P07 B2: the 5 kg lot covers two 2 kg batches and is held for them; the third is 1 kg short.
+        assert page.get_by_text("There isn't enough in stock for this batch yet", exact=True).count() == 1
+        held = page.get_by_text("Sugar <img src=x onerror=alert(1)> · 2 kg held", exact=True)
+        assert held.count() == 2
+        assert page.get_by_text("Short of the chosen lot: 1 kg", exact=True).count() == 1
+        # A batch that cannot start (the short third one) keeps its disabled Start button in its
+        # Details. Since B4 the first two, their materials held, really can start.
+        short = page.locator(".board-batch").nth(2)
+        short.locator(".board-batch__details > summary").click()
+        assert short.get_by_role("button", name="Start batch").is_disabled()
+        assert page.locator(".board-batch").first.get_by_role("button", name="Start batch").is_enabled()
         assert page.locator("[data-board-root] script, [data-board-root] img").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert page.locator("[data-board-root] input, [data-board-root] select").evaluate_all(

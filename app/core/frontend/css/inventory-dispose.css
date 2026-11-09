@@ -53,10 +53,8 @@
     }
     .dispose-list__label {
       font-size: 0.75rem;
-      font-weight: 400;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--text-secondary, #6b7280);
+      font-weight: 600;
+      color: var(--ui-text-muted, #64748b);
     }
     .dispose-list__unit {
       font-size: 0.875rem;
@@ -90,8 +88,9 @@
       color: var(--text-primary, #111827);
     }
     .dispose-tab[aria-selected="true"] {
-      color: var(--primary, #2563eb);
-      border-bottom-color: var(--primary, #2563eb);
+      color: var(--ui-accent-strong, #115e59);
+      font-weight: 700;
+      border-bottom-color: var(--ui-accent, #0f766e);
     }
     .dispose-item-action {
       border: none;
@@ -99,8 +98,8 @@
       padding: 0;
       font-size: 0.9375rem;
       line-height: 1.45;
-      font-weight: 500;
-      color: var(--primary, #2563eb);
+      font-weight: 600;
+      color: var(--ui-accent-strong, #115e59);
       cursor: pointer;
       text-decoration: none;
       transition: color 0.16s ease;
@@ -108,7 +107,8 @@
     }
     .dispose-item-action:hover,
     .dispose-item-action:focus-visible {
-      color: var(--primary-dark, #1d4ed8);
+      color: var(--ui-accent, #0f766e);
+      text-decoration: underline;
       outline: none;
     }
     .dispose-tab__count {

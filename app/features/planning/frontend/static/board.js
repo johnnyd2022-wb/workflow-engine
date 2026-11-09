@@ -114,16 +114,18 @@
       parent.append(form);
       return form;
     }
+    // What still stops a batch: the live start check for batches due soon, else what's recorded.
+    function checks(batch) { return batch.start_blockers || batch.blockers; }
     function state(batch) {
       if (batch.status === 'started') return {key: 'started', text: 'Started'};
       if (batch.status === 'cancelled') return {key: 'cancelled', text: 'Cancelled'};
       if (batch.can_start) return {key: 'ready', text: 'Ready to start'};
-      const count = batch.blockers.length;
+      const count = checks(batch).length;
       return {key: 'blocked', text: count ? plural(count, 'check', 'checks') + ' to clear' : 'Not ready'};
     }
     function startButton(batch) {
       const start = node('button', 'Start batch', 'board-batch__start'); start.type = 'button'; start.disabled = !batch.can_start;
-      if (!batch.can_start) start.title = batch.blockers.join('; ');
+      if (!batch.can_start) start.title = checks(batch).join('; ');
       start.addEventListener('click', async function () {
         start.disabled = true;
         try { await api('/api/core/planner/batches/' + batch.id + '/start', {expected_revision: batch.revision}, {'Idempotency-Key': 'planner-' + batch.id + '-' + batch.revision}); await loadBoard(); }
@@ -163,18 +165,31 @@
       body.append(node('p', 'Proposed start ' + batch.proposed_start_date));
       body.append(node('p', batch.theoretical_ready_date ? 'Timing estimate ' + batch.theoretical_ready_date : 'Ready date unknown'));
       body.append(node('p', batch.forecast_ready_date ? 'Forecast ready ' + batch.forecast_ready_date : 'Delivery estimate pending checks'));
-      if (batch.blockers.length) { const list = node('ul', undefined, 'board-batch__blockers'); batch.blockers.forEach(reason => list.append(node('li', reason))); body.append(list); }
+      if (checks(batch).length) { const list = node('ul', undefined, 'board-batch__blockers'); checks(batch).forEach(reason => list.append(node('li', reason))); body.append(list); }
       if (batch.snapshot.timing_reason) body.append(node('p', batch.snapshot.timing_reason));
       const material = materialAssessment?.batches.find(row => row.batch_id === batch.id);
       if (material) {
-        body.append(node('p', 'Materials observed ' + materialAssessment.observed_at));
+        body.append(node('p', 'Materials checked ' + new Date(materialAssessment.observed_at).toLocaleString('en-NZ', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'})));
         if (material.stale) body.append(node('p', 'Plan changed. Check materials again.'));
         else {
-          body.append(node('p', material.material_start_date ? 'Materials available from ' + material.material_start_date : 'Material availability unresolved'));
+          if (material.material_start_date) body.append(node('p', 'Materials available from ' + material.material_start_date));
           if (material.material_timing_estimate) body.append(node('p', 'Timing estimate with these materials ' + material.material_timing_estimate));
-          (material.bindings || []).forEach(binding => {
-            const fact = materialAssessment.observations.find(lot => lot.id === binding.inventory_item_id);
-            if (fact) body.append(node('p', fact.name + ' · On hand observed: ' + fact.on_hand_quantity + ' ' + fact.unit));
+          // What this check committed to the batch, lot by lot, and what it's short of.
+          if (material.material_start_date && (material.allocations || []).length) {
+            const held = node('ul', undefined, 'board-batch__held'); held.setAttribute('aria-label', 'Held for this batch');
+            material.allocations.forEach(row => {
+              const fact = materialAssessment.observations.find(lot => lot.id === row.lot_id);
+              held.append(node('li', (fact ? fact.name : 'Lot') + ' · ' + amount(row.lot_quantity ?? row.quantity) + ' ' + (row.lot_unit || row.unit) + ' held'));
+            });
+            body.append(held);
+          }
+          (material.shortages || []).forEach(row => {
+            // GL-P07 B2b: who to order from, and by when, from the supplier's lead time.
+            let order = '';
+            if (row.order_now) order = ' · order from ' + row.supplier + ' now';
+            else if (row.order_by) order = ' · order from ' + row.supplier + ' by ' + new Date(row.order_by + 'T00:00:00').toLocaleDateString('en-NZ', {day: 'numeric', month: 'short'});
+            else if (row.supplier) order = ' · usually from ' + row.supplier + ' (no lead time set)';
+            body.append(node('p', 'Short of ' + (row.material || 'the chosen lot') + ': ' + amount(row.quantity) + ' ' + row.unit + order, row.order_now ? 'board-batch__order-now' : undefined));
           });
           const reasons = node('ul'); material.reasons.forEach(reason => reasons.append(node('li', reason))); body.append(reasons);
         }
@@ -260,7 +275,8 @@
       const config = currentCapacity();
       const list = root.querySelector('[data-capacity-groups]'); list.replaceChildren();
       config.groups.forEach(group => {
-        list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per working day'));
+        const units = Number(group.units || 1);
+        list.append(node('p', group.name + ' · ' + (units > 1 ? units + ' × ' : '') + group.minutes_per_day + ' minutes per working day'));
         const form = node('form'); form.setAttribute('hx-boost', 'false'); form.dataset.capacityCalendar = group.id;
         const days = node('fieldset', undefined, 'board-calendar-days'); days.append(node('legend', group.name + ' working days'));
         DAY_NAMES.forEach((name, index) => {
@@ -343,8 +359,29 @@
         days.append(section);
       });
     }
+    let replanned = false;
+    function shortDay(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('en-NZ', {day: 'numeric', month: 'short'}); }
+    function renderChanges(events) {
+      const card = root.querySelector('[data-replan]'); const list = root.querySelector('[data-replan-list]');
+      list.replaceChildren();
+      card.hidden = !events.length;
+      events.slice(0, 12).forEach(event => {
+        const item = node('li', undefined, 'board-changes__item'); item.dataset.kind = event.kind;
+        const what = event.reference + ' · batch ' + event.batch_number;
+        const verb = event.kind === 'moved' ? 'Moved ' + shortDay(event.from_date) + ' → ' + shortDay(event.to_date)
+          : event.kind === 'added' ? 'Added, starting ' + shortDay(event.to_date) : 'Cancelled';
+        item.append(node('strong', what), node('span', verb, 'board-changes__verb'), node('span', event.reason, 'board-changes__why'));
+        list.append(item);
+      });
+    }
     async function loadBoard() {
       const requestNumber = ++boardRequest;
+      if (canRecord && !replanned) {
+        // Stock and orders change elsewhere: bring the plan up to date before showing it.
+        replanned = true;
+        try { await api('/api/core/planner/replan', {}); } catch (exc) { /* the board still shows the plan as it is */ }
+      }
+      api('/api/core/planner/replan-events').then(result => { if (alive) renderChanges(result.events); }, () => {});
       try {
         const dates = range(); const [result, observed, capacity] = await Promise.all([api('/api/core/planner/batches?start=' + iso(dates.start) + '&end=' + iso(dates.end)), api('/api/core/planner/material-assessments'), api('/api/core/planner/capacity?start=' + iso(dates.start) + '&end=' + iso(dates.end))]);
         if (requestNumber !== boardRequest || !alive) return;
@@ -384,9 +421,9 @@
         [duration, waiting].forEach(input => { input.min = '0'; input.max = '525600'; input.step = '1'; input.required = true; }); fieldset.append(row);
         (step.inputs || []).forEach((input, index) => {
           if (!input || input.source_output_id != null) return;
-          const label = node('label', 'Exact raw lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');
+          const label = node('label', 'Lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');
           const select = node('select'); select.dataset.materialStep = step.step_id; select.dataset.materialIndex = index;
-          option(select, '', 'Select a lot');
+          option(select, '', 'Soonest to expire');
           materialLots.filter(lot => lot.unit === input.unit).forEach(lot => option(select, lot.id, lot.name + ' · Lot ' + lot.id.slice(0, 8) + ' · ' + lot.unit));
           const binding = workflow.setting?.snapshot.material_bindings?.find(entry => entry.step_id === step.step_id && entry.input_index === index);
           if (binding) {
@@ -434,8 +471,8 @@
       const form = event.currentTarget; const button = form.querySelector('button'); button.disabled = true;
       const config = currentCapacity();
       try {
-        await saveCapacity({...config, groups: config.groups.concat([{id: crypto.randomUUID(), name: form.elements.name.value, minutes_per_day: Number(form.elements.minutes_per_day.value)}])});
-        form.elements.name.value = ''; form.elements.minutes_per_day.value = '';
+        await saveCapacity({...config, groups: config.groups.concat([{id: crypto.randomUUID(), name: form.elements.name.value, minutes_per_day: Number(form.elements.minutes_per_day.value), units: Number(form.elements.units.value || 1)}])});
+        form.elements.name.value = ''; form.elements.minutes_per_day.value = ''; form.elements.units.value = '1';
         notice.textContent = 'Resource group saved; assign steps to include their load.';
       } catch (exc) { fail(exc); } finally { button.disabled = false; }
     });

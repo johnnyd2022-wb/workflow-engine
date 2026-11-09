@@ -49,7 +49,14 @@ PERMISSIONS: dict[str, str] = {
         "Add customers, notes and tasks; edit customer details; create and authorise invoices "
         "(with FIFO matching, an authorised invoice takes its stock off the oldest batches)"
     ),
-    "sales.manage": "Connect Xero, map products, configure sales traceability",
+    # SALES-PERM (2026-11-06, follows GL-S01): connecting Xero and syncing only bring in sales
+    # Xero already holds, and a sync applies them to stock exactly as authorising does under
+    # sales.record. Changing the matching mode decides whether waiting sales take stock, so it
+    # also needs inventory.adjust (checked in the traceability-config route).
+    "sales.manage": (
+        "Connect Xero and sync, map products, configure sales traceability "
+        "(a sync applies authorised sales to stock; changing the matching mode also needs inventory.adjust)"
+    ),
     "compliance.view": "See compliance checks, evidence and reports",
     "compliance.record": "Log checks, attach evidence and sign off compliance records",
     "compliance.manage": "Configure compliance modules and their rules",
@@ -253,9 +260,14 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
+    ("data_export.*", None, "settings.manage"),  # GL-P10: every record, admins only
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
     # --- go-live stocktake (plan 1.3)
+    # --- quality holds (GL-P02): holding is the safe direction; release is signed off
+    ("lot_holds.release_lot_hold", None, "compliance.manage"),
+    ("lot_holds.*", _READ, "inventory.view"),
+    ("lot_holds.*", None, "inventory.adjust"),
     ("go_live.set_go_live_date", None, "settings.manage"),  # changes which sales are matched
     ("go_live.create_opening_stock", None, "inventory.adjust"),
     ("go_live.go_live_page", None, "inventory.adjust"),
@@ -292,6 +304,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.inventory_dispose*", None, "production.record"),
     ("core.*task*", _READ, "production.view"),
     ("core.*task*", None, "production.record"),
+    # GL-P03 recalls: opening one holds stock (compliance.manage); working the customer list is
+    # sales or compliance work; anyone who sees production, sales or compliance can read it.
+    ("recalls.open_recall", None, "compliance.manage"),
+    ("recalls.*", _READ, ("production.view", "sales.view", "compliance.view")),
+    ("recalls.*", None, ("compliance.manage", "sales.record")),
     ("operational_cases.*", _READ, "production.view"),
     ("operational_cases.*", None, "production.record"),
     # --- stock
@@ -301,6 +318,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.adjust_inventory_item_quantity", None, "inventory.adjust"),
     ("core.csv_validate", None, "inventory.adjust"),
     ("core.csv_commit", None, "inventory.adjust"),
+    ("core.csv_template", None, "inventory.adjust"),
+    ("core.csv_error_report", None, "inventory.adjust"),  # POST, but read-only
     ("core.consume_final_product_fifo", None, "inventory.adjust"),
     ("core.inventory_add*", None, "inventory.adjust"),
     ("core.get_matching_untracked_for_add", None, "inventory.adjust"),
@@ -365,6 +384,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("crm.crm_api.*contact_sync_settings", None, "sales.manage"),
     ("crm.crm_api.*traceability_config", _READ, "sales.view"),
     ("crm.crm_api.*traceability_config", None, "sales.manage"),
+    ("crm.crm_api.list_pending_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_credit_note_line_no_return", None, "sales.record"),
+    ("crm.crm_api.list_customer_returns", _READ, "sales.view"),
+    ("crm.crm_api.record_customer_return", None, "sales.record"),  # GL-P01b: moves stock back
     ("tastings.*", _READ, "sales.view"),
     ("tastings.*", None, "sales.record"),
     ("crm.*", _READ, "sales.view"),
@@ -398,6 +421,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_cca_transfers.*", None, "compliance.record"),
     ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
     ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
+    ("compliant.compliant_wine.add_record", None, "compliance.record"),
+    ("compliant.compliant_wine.report_problem", None, "compliance.record"),
+    ("compliant.compliant_wine.add_consignment", None, "compliance.record"),
+    ("compliant.compliant_wine.*", _READ, "compliance.view"),
+    ("compliant.compliant_wine.*", None, "compliance.manage"),
     ("compliant.compliant_premises.*", _READ, "compliance.view"),
     ("compliant.compliant_premises.*", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),

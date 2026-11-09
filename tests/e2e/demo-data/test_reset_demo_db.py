@@ -1,13 +1,8 @@
 """POST /api/core/reset-demo-db — the demo-data slice's one route.
 
-Covers .agents/specs/demo-data.md AC1 (auth required — observable as 400, see below),
-AC3 (successful reset shape),
-and the mandatory cross-tenant probe. The cross-tenant probe asserts the SECURE outcome
-(403 for a caller outside the demo org) — per security-audit F1
-(.agents/reports/demo-data/security-audit.md), the route currently checks only
-@requires_auth with no caller-identity/org check, so this test is expected to be RED
-against unpatched code and green once F1 is fixed. That is deliberate: e2e tests are
-ground truth, not a report card massaged to pass.
+Covers AC1 (authentication and CSRF required), AC3 (successful reset shape), and
+regression coverage for security-audit F1: an authenticated caller outside the demo
+organisation must never reset its data.
 
 AC2 (environment gate) and AC4 (demo user missing) are not covered here — both require
 booting the app with a different `config.environment` / DB state than this session's
@@ -23,19 +18,30 @@ pytestmark = pytest.mark.e2e
 
 
 def test_ac1_unauthenticated_reset_is_rejected(browser, app_url):
-    """An anonymous caller cannot succeed — but the observable status is 400
-    (CSRF token missing), not 401. Flask-WTF's CSRFProtect runs as a global
-    before_request hook that fires before any route's @requires_auth check, and only
-    the authenticated SPA shell (base_spa.html) embeds a csrf-token meta tag — there is
-    no public page an anonymous visitor can use to obtain one. This is true of every
-    state-changing POST/PUT/PATCH/DELETE route in the app, not specific to demo-data;
-    a clean 401-before-CSRF case is not reachable over real HTTP for this route."""
+    """An anonymous reset receives the signed-out protected-write response."""
     context = browser.new_context(base_url=app_url, ignore_https_errors=True)
     page = context.new_page()
     try:
         resp = page.request.post("/api/core/reset-demo-db")
-        assert resp.status == 400
-        assert "csrf" in resp.text().lower()
+        assert resp.status == 401
+        assert resp.json().get("code") == "signed_out"
+        assert resp.json().get("error") == "Session expired or not authenticated"
+    finally:
+        context.close()
+
+
+def test_demo_org_member_still_needs_csrf_to_reset(browser, app_url, demo_org_member):
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True)
+    page = context.new_page()
+    try:
+        login_through_ui(page, demo_org_member["email"], demo_org_member["password"])
+        before = page.request.get("/api/core/processes").json()["processes"]
+        response = page.request.post("/api/core/reset-demo-db")
+        assert response.status == 400
+        assert response.json().get("code") == "csrf"
+        assert "csrf" in response.text().lower()
+        after = page.request.get("/api/core/processes").json()["processes"]
+        assert {row["id"] for row in after} == {row["id"] for row in before}
     finally:
         context.close()
 
@@ -68,9 +74,8 @@ def test_cross_tenant_reset_is_rejected(browser, app_url, fresh_user):
     """The mandatory cross-tenant probe (e2e-playwright skill, §1): a user outside the
     demo org must not be able to trigger a reset of the demo org's data.
 
-    Expected to FAIL today — see module docstring and security-audit F1. A caller from
-    any org currently gets 200/success because the route never checks the caller's
-    identity against the demo org it always targets.
+    Pins the repaired F1 boundary: even with a valid CSRF token, the caller must
+    belong to the demo organisation.
     """
     outsider = fresh_user()
     context = browser.new_context(base_url=app_url, ignore_https_errors=True)
