@@ -85,3 +85,28 @@ def test_the_page_fits_without_sideways_scroll(xero, sales_page, client, custome
     expect(sales_page.locator("[data-contact-details]")).to_be_visible()
     expect(sales_page.locator(".cd-tabs")).to_be_visible()
     expect(sales_page.locator(".cd-style-pick")).to_have_count(0)
+
+
+def test_sales_to_date_counts_every_invoice_not_just_the_chart_range(xero, sales_page, db, org, customer):  # noqa: F811
+    """The header card has no range control, so it shows all time; the charts keep their range."""
+    from decimal import Decimal
+
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    old = date.today().replace(day=1) - timedelta(days=800)  # well before the charts' 6 months
+    db.add_all(
+        [
+            XeroInvoice(org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-old", invoice_number="INV-0001",
+                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", total=Decimal("1000"), date=old),
+            XeroInvoice(org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-new", invoice_number="INV-0002",
+                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", total=Decimal("250"),
+                        date=date.today()),
+        ]
+    )  # fmt: skip
+    db.commit()
+    _open(sales_page, customer)
+    card = sales_page.locator(".cd-fact", has_text="Sales to date")
+    expect(card.locator(".cd-fact__value")).to_contain_text("1,250")
+    names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    expect(card.locator(".cd-fact__note")).to_have_text(f"2 invoices since {names[old.month - 1]} {str(old.year)[2:]}")
+    expect(sales_page.locator(".cd-fact", has_text="Sales in the period")).to_have_count(0)

@@ -109,6 +109,8 @@ function crmCustomerDetail(contactId) {
       total_revenue: 0,
       total_invoices: 0,
     },
+    // The "Sales to date" card: all time, whatever range the charts below use.
+    allTimeSales: { total_revenue: 0, total_invoices: 0, since: '' },
     analyticsDateFrom: '',
     analyticsDateTo: '',
     analyticsDraftFrom: '',
@@ -137,7 +139,7 @@ function crmCustomerDetail(contactId) {
         await this.loadOperators();
         this.resetInvoiceForm();
         this.setDefaultAnalyticsRange();
-        await this.loadCustomerAnalytics();
+        await Promise.all([this.loadCustomerAnalytics(), this.loadAllTimeSales()]);
       } catch (e) {
         this.error = e.message || 'Failed to load customer.';
       } finally {
@@ -170,6 +172,12 @@ function crmCustomerDetail(contactId) {
       if (this.overdueTasks) return `${this.overdueTasks} overdue`;
       const next = this.openTasks.filter((t) => t.due_date).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
       return next ? `Next: ${next.title} · ${this.dueWords(next).toLowerCase()}` : 'None has a due date';
+    },
+
+    get allTimeNote() {
+      const n = this.allTimeSales.total_invoices || 0;
+      if (!n) return 'No invoices yet';
+      return `${n} invoice${n === 1 ? '' : 's'}` + (this.allTimeSales.since ? ` since ${this.monthLabel(this.allTimeSales.since)}` : '');
     },
 
     get rangeWords() {
@@ -984,6 +992,19 @@ function crmCustomerDetail(contactId) {
       } finally {
         this.syncSaving = false;
       }
+    },
+
+    async loadAllTimeSales() {
+      try {
+        // No dates: the analytics API totals every invoice for the customer.
+        const all = await CRMAPI.getCustomerAnalytics(this.contactId, {});
+        const months = (all?.monthly_sales || []).map((row) => String(row.month || '')).filter(Boolean).sort();
+        this.allTimeSales = {
+          total_revenue: all?.total_revenue || 0,
+          total_invoices: all?.total_invoices || 0,
+          since: months.length ? months[0].slice(0, 7) : '',
+        };
+      } catch (_) {}
     },
 
     async loadCustomerAnalytics() {

@@ -54,7 +54,7 @@
       </header>
 
       <div class="cd-facts" aria-label="Where this customer stands">
-        <div class="cd-fact"><span class="cd-fact__label">Sales in the period</span><strong class="cd-fact__value" x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="('' + (customerAnalytics.total_invoices || 0) + ' invoices · ' + (rangeWords))"></span></div>
+        <div class="cd-fact"><span class="cd-fact__label">Sales to date</span><strong class="cd-fact__value" x-text="formatCurrency(allTimeSales.total_revenue, 'NZD')"></strong><span class="cd-fact__note" x-text="allTimeNote"></span></div>
         <div class="cd-fact"><span class="cd-fact__label">Last order</span><strong class="cd-fact__value" x-text="lastOrder ? agoWords(lastOrder.date) : 'None yet'"></strong><span class="cd-fact__note" x-text="lastOrder ? ('' + (lastOrder.invoice_number || 'Invoice') + ' · ' + (formatCurrency(lastOrder.total, lastOrder.currency_code))) : 'No invoices in Biz-E'"></span></div>
         <div class="cd-fact" :class="overdueTasks ? 'cd-fact--bad' : ''"><span class="cd-fact__label">Open tasks</span><strong class="cd-fact__value" x-text="openTasks.length"></strong><span class="cd-fact__note" x-text="nextTaskWords"></span></div>
         <div class="cd-fact"><span class="cd-fact__label">Last contact</span><strong class="cd-fact__value" x-text="customer.last_contact_date ? agoWords(customer.last_contact_date) : 'None recorded'"></strong><span class="cd-fact__note" x-text="customer.last_contact_date ? ('' + (formatDate(customer.last_contact_date)) + ' · ' + (customer.last_contact_source === 'sale' ? 'a sale' : 'a task')) : 'No sale or task yet'"></span></div>
