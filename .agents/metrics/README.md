@@ -22,6 +22,7 @@ worktree (the old files were per-checkout).
 | `skill_runs` | skill run | the skill, when it finishes |
 | `skill_outcomes` | resolved run/MR | whoever later sees the MR merged/closed/escaped |
 | `perf_runs` / `perf_results` | perf test run / route+metric | `tests/e2e/test_perf_budgets.py` |
+| `market_indicators` | dated, sourced market observation or estimate | `market-research` via `scripts/market_research_metrics.py` |
 
 A run and its outcome join on **`ref`** — the MR ref (`!123`) or the branch name. They are
 written at different times by different agents, which is why the store is append-only: no
@@ -44,8 +45,24 @@ or git) so a result can be tied to the change that produced it.
 (`digest`, `sweep`) say so and exit 0; the CI `data_stores` check reports SKIPPED. Check
 state with `python3 scripts/metrics_db.py status`.
 
-Setting `$METRICS_DIR` switches to JSONL files in that directory (the unit-test hook and a
+For the skill-run ledger, setting `$METRICS_DIR` switches to JSONL files in that directory (the unit-test hook and a
 fully offline mode) — the schema below is that file shape, and the column names match.
+
+## Market research indicators
+
+`market_indicators` is an append-only time series for sourced market measurements, separate
+from the skill-run ledger. `scope_key` is the stable product/category and geography slug;
+`metric_key` identifies one comparable series within it. Each row records the measurement
+date, optional measured period, point value or estimate range, unit, geography, segment,
+source reference, source publication date, confidence, method, report path, cadence, and optional
+above/below threshold. The pair `(report_path, metric_key)` prevents duplicate imports of
+the same report. A revised estimate belongs in a new dated report, preserving history.
+
+The skill records through `python3 scripts/market_research_metrics.py record --file <path>`
+and reads a scope through `python3 scripts/market_research_metrics.py history --scope <slug>`.
+The recording command validates the whole batch before writing; if the DB is unavailable,
+rows use the same local spool as skill runs. Apply `python3 scripts/metrics_db.py migrate`
+once to create the table and grant the existing read/append role access.
 
 ## `skill_runs` columns
 

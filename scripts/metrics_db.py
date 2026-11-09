@@ -255,6 +255,27 @@ def provenance() -> dict[str, Any]:
 _RUN_COLS = ("ts", "skill", "run_type", "scope", "findings", "verdict", "ref", "duration_s", "notes")
 _RUN_PROV = ("commit_sha", "mr_iid", "pipeline_id")
 _OUTCOME_COLS = ("ts", "ref", "outcome", "skill", "notes")
+_INDICATOR_COLS = (
+    "scope_key",
+    "report_path",
+    "metric_key",
+    "measured_on",
+    "period_start",
+    "period_end",
+    "value",
+    "lower_bound",
+    "upper_bound",
+    "unit",
+    "geography",
+    "segment",
+    "source_ref",
+    "source_published_on",
+    "confidence",
+    "method",
+    "refresh_cadence",
+    "threshold_operator",
+    "threshold_value",
+)
 
 
 _INSERT_SQL = {
@@ -267,21 +288,26 @@ _INSERT_SQL = {
         "INSERT INTO skill_outcomes (ts, ref, outcome, skill, notes) "
         "VALUES (COALESCE(%s, now()), %s, %s, %s, %s) ON CONFLICT DO NOTHING"
     ),
+    "indicator": (
+        "INSERT INTO market_indicators (" + ", ".join(_INDICATOR_COLS) + ") "
+        "VALUES (" + ", ".join(["%s"] * len(_INDICATOR_COLS)) + ") ON CONFLICT DO NOTHING"
+    ),
 }
 _SELECT_SQL = {
     "run": "SELECT ts, skill, run_type, scope, findings, verdict, ref, duration_s, notes FROM skill_runs ORDER BY ts, id",
     "outcome": "SELECT ts, ref, outcome, skill, notes FROM skill_outcomes ORDER BY ts, id",
+    "indicator": "SELECT " + ", ".join(_INDICATOR_COLS) + " FROM market_indicators ORDER BY measured_on, id",
 }
 
 
 def _insert(conn, kind: str, record: dict[str, Any]) -> None:
-    cols = _RUN_COLS + _RUN_PROV if kind == "run" else _OUTCOME_COLS
+    cols = {"run": _RUN_COLS + _RUN_PROV, "outcome": _OUTCOME_COLS, "indicator": _INDICATOR_COLS}[kind]
     with conn.cursor() as cur:
         cur.execute(_INSERT_SQL[kind], [record.get(c) for c in cols])
 
 
 def store(kind: str, record: dict[str, Any]) -> str:
-    """Insert one skill run/outcome. Returns 'db' or 'spooled'. Never raises on outage."""
+    """Insert one run, outcome or indicator. Returns 'db' or 'spooled' on outage."""
     if kind == "run":
         prov = provenance()
         record = {**{k: prov[k] for k in _RUN_PROV}, **record}
@@ -302,12 +328,27 @@ def _iso(value: Any) -> Any:
 def fetch(kind: str) -> list[dict[str, Any]]:
     """All runs or outcomes in append order, plus anything still spooled locally. Raises
     MetricsDBUnavailableError when the DB is down -- the caller decides how to degrade."""
-    cols = _RUN_COLS if kind == "run" else _OUTCOME_COLS
+    cols = {"run": _RUN_COLS, "outcome": _OUTCOME_COLS, "indicator": _INDICATOR_COLS}[kind]
     with session() as conn:
         spool_flush(conn)
         with conn.cursor() as cur:
             cur.execute(_SELECT_SQL[kind])
             return [{c: _iso(v) for c, v in zip(cols, row, strict=True)} for row in cur.fetchall()]
+
+
+def market_indicator_history(scope_key: str) -> list[dict[str, Any]]:
+    """All dated observations for one market scope, flushing any pending spool first."""
+    with session() as conn:
+        spool_flush(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT scope_key, report_path, metric_key, measured_on, period_start, period_end, "
+                "value, lower_bound, upper_bound, unit, geography, segment, source_ref, "
+                "source_published_on, confidence, method, refresh_cadence, threshold_operator, "
+                "threshold_value FROM market_indicators WHERE scope_key = %s ORDER BY measured_on, id",
+                (scope_key,),
+            )
+            return [{c: _iso(v) for c, v in zip(_INDICATOR_COLS, row, strict=True)} for row in cur.fetchall()]
 
 
 # --------------------------------------------------------------------------------------
@@ -489,7 +530,8 @@ def cmd_status() -> int:
                 "SELECT 'skill_runs', count(*) FROM skill_runs UNION ALL "
                 "SELECT 'skill_outcomes', count(*) FROM skill_outcomes UNION ALL "
                 "SELECT 'perf_runs', count(*) FROM perf_runs UNION ALL "
-                "SELECT 'perf_results', count(*) FROM perf_results"
+                "SELECT 'perf_results', count(*) FROM perf_results UNION ALL "
+                "SELECT 'market_indicators', count(*) FROM market_indicators"
             )
             for table, n in cur.fetchall():
                 print(f"  {table}: {n}")
@@ -508,16 +550,16 @@ def cmd_check() -> int:
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = ANY(%s)",
                 (
                     os.environ.get("BIZE_METRICS_SCHEMA", SCHEMA),
-                    ["skill_runs", "skill_outcomes", "perf_runs", "perf_results"],
+                    ["skill_runs", "skill_outcomes", "perf_runs", "perf_results", "market_indicators"],
                 ),
             )
             found = cur.fetchone()[0]
     except MetricsDBUnavailableError as e:
         print(f"SKIPPED: metrics DB not checked ({e}); this never blocks a merge")
         return 0
-    if found != 4:
+    if found != 5:
         print(
-            f"metrics DB reachable but schema incomplete ({found}/4 tables) -- run metrics_db.py migrate",
+            f"metrics DB reachable but schema incomplete ({found}/5 tables) -- run metrics_db.py migrate",
             file=sys.stderr,
         )
         return 1

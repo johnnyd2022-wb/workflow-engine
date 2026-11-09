@@ -88,3 +88,40 @@ SELECT r.route,
 FROM perf_results r
 JOIN recent ON recent.id = r.run_id
 GROUP BY r.route, r.metric;
+
+-- Dated market observations from the market-research skill. A report may contain both
+-- point measurements and estimate ranges; source/method fields keep comparisons auditable.
+CREATE TABLE IF NOT EXISTS market_indicators (
+    id                 bigserial PRIMARY KEY,
+    scope_key          text NOT NULL CHECK (scope_key <> ''),
+    report_path        text NOT NULL CHECK (report_path <> ''),
+    metric_key         text NOT NULL CHECK (metric_key <> ''),
+    measured_on        date NOT NULL,
+    period_start       date,
+    period_end         date,
+    value              numeric,
+    lower_bound        numeric,
+    upper_bound        numeric,
+    unit               text NOT NULL CHECK (unit <> ''),
+    geography          text NOT NULL CHECK (geography <> ''),
+    segment            text,
+    source_ref         text NOT NULL CHECK (source_ref <> ''),
+    source_published_on date,
+    confidence         text NOT NULL CHECK (confidence IN ('low', 'medium', 'high')),
+    method             text,
+    refresh_cadence    text,
+    threshold_operator text CHECK (threshold_operator IN ('above', 'below')),
+    threshold_value    numeric,
+    captured_at        timestamptz NOT NULL DEFAULT now(),
+    CHECK (value IS NOT NULL OR lower_bound IS NOT NULL OR upper_bound IS NOT NULL),
+    CHECK (lower_bound IS NULL OR upper_bound IS NULL OR lower_bound <= upper_bound),
+    CHECK (value IS NULL OR lower_bound IS NULL OR value >= lower_bound),
+    CHECK (value IS NULL OR upper_bound IS NULL OR value <= upper_bound),
+    CHECK ((threshold_operator IS NULL) = (threshold_value IS NULL)),
+    CHECK (period_start IS NULL OR period_end IS NULL OR period_start <= period_end)
+);
+ALTER TABLE market_indicators ADD COLUMN IF NOT EXISTS refresh_cadence text;
+CREATE UNIQUE INDEX IF NOT EXISTS market_indicators_identity
+    ON market_indicators (report_path, metric_key);
+CREATE INDEX IF NOT EXISTS market_indicators_history
+    ON market_indicators (scope_key, metric_key, measured_on DESC);
