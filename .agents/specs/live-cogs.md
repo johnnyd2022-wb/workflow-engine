@@ -1,5 +1,5 @@
 # SPEC: live-cogs
-status: v4 (round 2 engine gaps resolved; 8.1a is the first build)
+status: v5 (8.1a built; 8.1b gaps resolved and built: B1-B9 below, AC64-AC74)
 name: Live batch & bottle cost
 slug: live-cogs
 blueprint: new slice `app/features/costing/`, attached through `register_routes(core_bp)`;
@@ -200,7 +200,8 @@ changing any figure.
 
 ### `xero_accounts` (crm slice — chart of accounts cache)
 `id`, `xero_account_id`, `code`, `name`, `type` (Xero type, e.g. `DIRECTCOSTS`, `EXPENSE`),
-`account_class`, `status`, `last_synced_at`. Unique `(org_id, xero_account_id)`.
+`account_class`, `status`, `default_treatment` (Layer 1's answer, null for a non-expense
+account; B5), `last_synced_at`. Unique `(org_id, xero_account_id)`.
 
 ### `purchase_documents` (costing slice — source-agnostic header)
 | Column | Notes |
@@ -223,13 +224,13 @@ Bills are stored here, **not** in `xero_invoices`, because every existing reader
 | Column | Notes |
 | --- | --- |
 | `document_id` | composite FK, cascade |
-| `line_key` | Xero LineItemID when present, else `pos:<n>` (1-based position). Unique `(org_id, document_id, line_key)` — the upsert key |
+| `line_key` | Xero LineItemID when present, else `pos:<n>:<fp>` (1-based position among all the transaction's lines, plus an 8-hex content fingerprint; B1). Unique `(org_id, document_id, line_key)` — the upsert key |
 | `description`, `item_code`, `quantity`, `unit_amount` | quantity is usually null on card spend |
 | `account_code`, `account_name` | as coded in Xero |
 | `amount_ex_tax`, `tax_amount` | base currency; **negative** for `refund` / `credit` |
 | `treatment` | `stock` \| `not_stock` \| `duty` \| `overhead` — from rules; one vocabulary everywhere |
-| `treatment_rule_id` | rule that decided; null = account default |
-| `treatment_override` | set when a user decides this line by hand (`not_stock` action) |
+| `treatment_rule_id` | rule that decided; null = account default (no foreign key until 8.1c creates `purchase_rules`) |
+| `treatment_override` | boolean, false by default; true when a user decides this line by hand (`not_stock` action): `treatment` then holds that decision and neither sync nor rules change it |
 | `state` | `open` \| `partly_recorded` \| `recorded` \| `skipped` \| `not_stock` |
 | `not_stock_amount` | part of the line the user said is not stock (same sign as amount) |
 | `review_reason` | null, or `amount_changed` \| `recoded` \| `deleted_in_xero` |
@@ -658,7 +659,8 @@ The page and every dialog must work at phone width (375px) — it is used at the
 
 - **Scopes** added to `XERO_SCOPES`: `accounting.banktransactions.read` and
   `accounting.settings.read` (Phase 1); `accounting.reports.profitandloss.read` (Phase 3).
-  Names confirmed by spec-critic against Xero's scope table; re-check at build. Existing
+  Names confirmed by spec-critic against Xero's scope table and re-checked at the 8.1b build
+  (2026-11-11, developer.xero.com/documentation/guides/oauth2/scopes/). Existing
   connections reconnect (not in production). The existing `accounting.invoices` covers bills.
 - **`XeroApiClient`** gains, all paginated and using the existing retry and rate limiter:
   `get_accounts()`; `get_bank_transactions(modified_after)` for types `SPEND` and `RECEIVE`,
@@ -770,7 +772,7 @@ tenant_scoped: yes. Every query filters `org_id`; every cross-table link is a co
 
 | Route | Purpose |
 | --- | --- |
-| `GET /purchases?tab=&from=&to=&historical=` | Purchases page list (cards with pre-fill) and per-tab counts |
+| `GET /purchases?tab=&from=&to=&limit=&offset=&historical=` | Purchases page list and per-tab counts. 8.1b delivers the Xero side of each card, the four tabs, `from`/`to` (inclusive), `limit` (1–500, default 100) and `offset`, newest document first (B8); 8.1c adds pre-fill and `historical` |
 | `GET /purchases/<line_id>/candidates` | lots that might already be this purchase |
 | `POST /purchases/<line_id>/record` | create lots + allocations (`Idempotency-Key` header, existing `ApiIdempotencyKey`) |
 | `POST /purchases/<line_id>/link` | allocate to existing lots (also refunds: negative, quantity 0) |
@@ -1051,6 +1053,71 @@ Phase 3
 - AC63 (delete entry): `DELETE /lots/<id>/cost/<entry_id>` deactivates the entry (kept for
   audit, `deactivated_at` set); the lot then falls back to its estimate or `unknown`.
 
+8.1b — Xero purchases in (decisions B1–B9; tests in `tests/test_costing_purchases_*.py`,
+`tests/test_xero_purchases_client.py`)
+- AC64 (positional keys, B1): a line with no LineItemID is keyed `pos:<n>:<fp>`; an edit to its
+  amount, tax or account keeps the key; a reorder, an insert before it or a new description
+  supersedes the old key (`superseded_at` set, the line leaves To record) and creates the new
+  one as a new card; two identical lines at different positions are two cards; a key that
+  returns is reinstated; fetching identical data again changes nothing.
+- AC65 (foreign currency, B2): a USD line of 100.00 ex GST with `CurrencyRate 0.6` is stored as
+  166.6667 (tax 15.00 → 25.0000); a foreign `RECEIVE` stays negative; an NZD document is stored
+  as is; a foreign document with no rate, or rate 0, is reported as a sync error and not stored.
+- AC66 (line amount types): `Exclusive` and `NoTax` store the line amount; `Inclusive` stores
+  line amount − tax amount ($103.50 with $13.50 tax → 90.0000; no tax figure → the amount).
+- AC67 (which entries, B3–B4): only `SPEND` and `RECEIVE` are stored; `DELETED` / `VOIDED`
+  documents are stored `voided`; lines on non-expense or unknown accounts are not stored, and a
+  document with none stored is not stored.
+- AC68 (account defaults, B5): `default_treatment` for every row of the Layer 1 table, including
+  that "Parent" / "Highlight" are not "rent" / "light" and that only `DIRECTCOSTS` accounts can
+  be anything but `not_stock`; the chart is cached per org and refreshed on every purchases sync;
+  a changed default reclassifies lines in state `open` / `skipped` with no hand decision or rule,
+  and nothing else.
+- AC69 (scopes): `XERO_SCOPES` contains `accounting.banktransactions.read` and
+  `accounting.settings.read` once each, with the existing scopes.
+- AC70 (client, B3): `get_accounts()` returns the whole chart; `get_bank_transactions()` runs
+  one `Type=="SPEND"` and one `Type=="RECEIVE"` query, follows pages until a short page, sends
+  `modified_after` as an aware datetime, filters by `Date>=DateTime(y, m, d)` /
+  `Date<=DateTime(y, m, d)` for a date range (and then not by modified date), returns `DELETED`
+  rows, drops any other type, raises `XeroInsufficientScopeError` on a missing scope and retries
+  a 429 like the other calls.
+- AC71 (sync jobs, B6): `full` and `incremental` syncs run the purchases section for an org with
+  `costing` and count it in `purchases_synced` (job and sync event); a full sync fetches
+  everything, an incremental one modified since the resume point; an org without `costing`
+  makes no purchases call; a purchases failure makes the job `partial` (even with nothing to
+  sync on the sales side), keeps the sales counts and leaves the resume point where it was;
+  a `purchases` job runs accounts + purchases only, never moves the resume point, fetches
+  incrementally from it (everything with `full=True` or no previous sync); a `purchases_history`
+  job fetches the inclusive date range by transaction date, can be repeated, asks Xero each
+  time and creates no duplicate; both are refused (ValueError) for an org without `costing`, and
+  a history range with start after end is refused; missing scopes say to reconnect Xero.
+- AC72 (changes later, line side, B7): on a line with nothing recorded, an amount change just
+  updates it, a recode to a non-stock account removes it from To record, a recode into a stock
+  account adds it, and deleting the transaction hides it, none flagged. On a recorded line
+  (state `partly_recorded` / `recorded` / `not_stock`, or a not-stock part): an amount change
+  sets `amount_changed`, rescales `not_stock_amount` by new ÷ old (4 dp half-up; a line wholly
+  not stock stays wholly not stock) and calls `hooks.amount_changed(…, old_amount)`; a recode
+  from stock to non-stock sets `recoded`, calls `hooks.recoded(…, old_account)` and the line
+  stays under Recorded; recoding back clears `recoded`; stock-to-stock recoding and a hand-set
+  treatment are not reviews; a deleted document or a vanished key sets `deleted_in_xero`, calls
+  `hooks.deleted` and the line shows in To record with its reason; a returning line clears
+  `superseded_at` and `deleted_in_xero` and calls `hooks.reinstated`. A weaker reason never
+  replaces a stronger one (`deleted_in_xero` > `amount_changed` > `recoded`); hooks fire for
+  every event regardless; fetching the same change again flags and calls nothing twice.
+- AC73 (list route, B8): `GET /purchases` returns the four tabs with the placement in B8,
+  per-tab counts under the same dates, inclusive `from` / `to`, newest first, `limit` / `offset`;
+  an unknown tab, a malformed date, `limit` outside 1–500 or a non-number, or a negative
+  `offset` is 400; the default tab is `to_record`; `PRODUCTION` is 403, `MEMBER` and a custom
+  role with `costs.view` are 200, a role with only `costs.manage` is 403; no `costing`
+  feature is 404; unauthenticated is not served; another org's lines never appear, even with
+  the same Xero ids; it is read-only.
+- AC74 (isolation and schema, B9): syncing one org never changes another's lines; a line cannot
+  reference another org's document (composite key); `(org_id, source, external_id)` and
+  `(org_id, document_id, line_key)` are unique; the database refuses a bad treatment, state,
+  review reason, source or kind, and a not-stock part larger than the line; deleting a document
+  deletes its lines; purging an org removes its purchases and chart; `xero_account_id` is unique
+  per org.
+
 ## Phasing
 
 | Phase | Delivers | Outcome |
@@ -1068,7 +1135,7 @@ bottle.
 | MR | Contents | ACs |
 | --- | --- | --- |
 | 8.1a Cost engine | slice skeleton, permissions, `costing` feature, `costing_settings`, `cost_flows` + hooks + output identity + backfill, `lot_cost_entries` (manual / free), roll-up computed on read, lot and execution cost API | AC22–AC29, AC31–AC32, AC36–AC37, AC40–AC42 (8.1a routes), AC52–AC63. Migration owns `cost_flows`, `lot_cost_entries`, `costing_settings` |
-| 8.1b Xero purchases in | scopes, `xero_accounts`, `purchase_documents/lines`, account defaults, sync | AC1–AC4. Migration owns those three tables |
+| 8.1b Xero purchases in | scopes, `xero_accounts`, `purchase_documents/lines`, account defaults, sync (`purchases_synced`; sync types `purchases`, `purchases_history`), the line side of "When Xero changes later" with hooks for 8.1c, the `GET /purchases` list | AC1–AC4, AC64–AC74, and the line-side parts of AC34–AC35 (review reason, rescaled not-stock part, hook calls; the allocation side is 8.1c). Migration `costing_purchases_001` owns those three tables and `xero_sync_jobs.purchases_synced` |
 | 8.1c Rules and actions | `purchase_rules`, `purchase_allocations`, record/link/not-stock/skip/refund/review/bulk/historical APIs, changes-later rules | AC5–AC20, AC30, AC34–AC35. Migration owns `purchase_rules`, `purchase_allocations`, the `costing_settings` 8.1c columns |
 | 8.1d Purchases page | page, dialog, tabs, bulk, historical UI, derived notice, Home card | AC21, AC43 |
 | 8.1e Cost where people look | lot cost panel, batch cost card, readiness API + page, Add Inventory total paid | AC38–AC39 |
@@ -1102,6 +1169,99 @@ regular supplier. From then on new purchases arrive pre-filled.
 - ASSUMPTION A10: Phase 1 stores no cost caches; every figure is computed on read. Rejected:
   stale-flag caches (the invalidation rules were the main source of review gaps, and current
   tenants are small).
+
+### 8.1b decisions (made while building 8.1b; the founder can overturn any in review)
+
+- ASSUMPTION B1 (Gap 9, line keys): a Xero line's key is its `LineItemID`. When Xero sends none it
+  is `pos:<n>:<fp>`: `n` the 1-based position among **all** the transaction's lines (stored or
+  not, so reclassifying a neighbour never shifts a key), `fp` the first 8 hex digits of SHA-256
+  over the lower-cased, whitespace-collapsed description and item code. Amount, tax and account
+  are **not** in the fingerprint, so an edit to them keeps the key and takes the amount / recode
+  rules; a reorder, an insert before the line or a new description gives a new key and the old
+  one is superseded (treated as deleted) while the new one arrives as a new card. A superseded
+  key that returns is reinstated. Allocations are never re-pointed to a different line. Known
+  limit: two lines with the same description and item code that swap places keep their keys, so
+  their amounts swap — that arrives as an `amount_changed` review, never silently. Rejected:
+  amount in the fingerprint (every amount edit would become delete + new card, losing the
+  rescale rule); a row hash of the whole line (same problem).
+- ASSUMPTION B2 (foreign currency, rounding): Xero's `CurrencyRate` is units of the document's
+  currency per **one unit of base currency** (Xero's multicurrency guide), so base amount =
+  foreign amount ÷ rate. Each line's ex-tax amount and its tax are converted separately and
+  rounded half-up to 4 dp, unit amounts to 6 dp; the sign (negative for a refund) is applied
+  after rounding. The header's `total_ex_tax` / `total_tax` are Xero's `SubTotal` / `TotalTax`
+  converted the same way and signed like the lines, so they tie to Xero and may differ from the
+  sum of the stored lines by a rounding unit, or by lines that aren't stored. The base currency
+  is NZD (no organisation base-currency field is read, and every target customer is a New Zealand
+  business): a document with no currency, or in NZD, is stored at rate 1. A foreign document
+  with no rate or a rate ≤ 0 is a sync error for that document and is not stored; nothing is
+  guessed. For an `Inclusive` document the stored unit amount is ex-tax (line ex-tax ÷ quantity,
+  null without a quantity), because Xero's unit amount includes the tax there.
+- ASSUMPTION B3 (what is fetched): bank transactions of type `SPEND` and `RECEIVE` only, as two
+  queries (a single comparison each; no `OR` in the Xero filter), paginated until a short page.
+  `DELETED` and `VOIDED` are stored as `voided` documents. A document missing from a full fetch
+  is **not** marked deleted: Xero returns deleted transactions with their status, so absence is
+  not deletion, and a partial fetch must never delete.
+- ASSUMPTION B4 (what is stored): a line is stored when its account is in the cached chart and is
+  an expense account (class `EXPENSE`, or type `DIRECTCOSTS`, `EXPENSE`, `OVERHEADS`,
+  `DEPRECIATN`, `WAGESEXPENSE`). A line whose account code is missing from the chart is not
+  stored, counted and logged (the chart is fetched first on every purchases sync). A line
+  already stored whose account stops being an expense account is kept (lots may hang off it)
+  with treatment `not_stock`, under the recode rules. A document with no stored line is not
+  stored. Known limit: stock a producer codes to an asset account (e.g. a "Stock on hand"
+  balance-sheet account) is not a purchase as the spec defines it and never appears.
+- ASSUMPTION B5 (account defaults): `default_treatment` is stored on `xero_accounts` and re-derived
+  on every accounts sync. Keywords are matched at the start of a word, so "Current" / "Parent"
+  are not "rent" and "Highlight" is not "light"; duty = excise / duty / duties, checked before
+  the overhead words (rent, wage(s), salary/salaries, power, light, heating, fuel, vehicle,
+  freight, courier, postage); only `DIRECTCOSTS` accounts can be `stock`, `duty` or `overhead`.
+  Where a per-account **override** persists is Gap 13 (8.1c); until then the effective treatment
+  is the default, and `treatment_rule_id` has no foreign key (8.1c adds it with `purchase_rules`).
+  When a sync changes an account's default, lines coded to it in state `open` / `skipped`, with
+  no hand decision and no rule, take the new treatment; everything else keeps theirs
+  (`reclassify_unrecorded_lines`, which 8.1c reuses for rule changes).
+- ASSUMPTION B6 (sync jobs): the purchases section runs only for an org holding `costing` (an
+  org without it makes no Xero purchases calls and sees no scope errors). `full` fetches every
+  bank transaction; `incremental` fetches those modified since `last_successful_sync_at`. A
+  standalone `purchases` job fetches since that resume point (everything with `full=True`, or
+  when there has been no sync) and a `purchases_history` job fetches an inclusive date range by
+  transaction date; **neither moves the resume point**, which belongs to the sales sync. Both
+  refuse an org without `costing`. `purchases_synced` counts documents stored or updated in the
+  run. A purchases failure marks a `full` / `incremental` job `partial` even when the sales half
+  had nothing to sync, and (the resume point moving only on success) the next incremental sync
+  re-fetches sales from the same point — accepted: re-fetching is idempotent and the alternative
+  loses purchase changes. A standalone job whose only step failed is `failed`. A missing scope
+  says to reconnect Xero.
+- ASSUMPTION B7 (changes later, line side): changes are found by comparing the stored line with
+  the incoming one, so fetching a record twice never re-flags it. "Recorded" means state
+  `partly_recorded`, `recorded` or `not_stock`, or a non-zero `not_stock_amount`; only recorded
+  lines get review reasons and hook calls (8.1b has no allocations, so 8.1c's hooks are the whole
+  allocation side). The table's rules apply as follows. *Amount*: amount and tax update;
+  `not_stock_amount` is rescaled by new ÷ old (a line wholly not stock stays wholly not stock);
+  `amount_changed`; `hooks.amount_changed(db, org_id, line, old_amount)`, called after the line is
+  updated, so the hook rescales allocations and re-derives the state. *Recode*: the treatment is
+  re-derived from the new account (unless a hand decision stands); only stock → non-stock on a
+  recorded line is a `recoded` review (`hooks.recoded(…, old_account_code)`), and recoding back to
+  stock clears it. *Delete / void / vanished key*: `deleted_in_xero`, `hooks.deleted`. *Return*:
+  clears `superseded_at` and `deleted_in_xero`, `hooks.reinstated`. A line of a voided document
+  is not otherwise updated. When several reasons arrive together the strongest is kept:
+  `deleted_in_xero` > `amount_changed` > `recoded` (a deleted purchase has no cost left to
+  trust; an edited amount changed costs; a recode only changed a classification). Hooks fire
+  whatever the stored reason.
+- ASSUMPTION B8 (list route, Gap 14 stopgap): 8.1b ships `GET /purchases` so AC1–AC4 are
+  observable. A line is *live* when its document is `active` and `superseded_at` is null.
+  `to_record` = live stock lines in state `open` / `partly_recorded`, plus any line with reason
+  `amount_changed` or `deleted_in_xero` (live or not, stock or not); `recorded` = live stock
+  lines in state `recorded` with no reason, plus any line with reason `recoded` (whatever its
+  treatment); `skipped` = live stock lines in state `skipped` with no reason; `not_stock` = live
+  lines in state `not_stock` (the owner's own decision; account-default non-stock lines appear
+  nowhere) with no reason. 8.1c/d may refine this when they settle Gap 14. No start-date filter
+  or `historical` mode yet (they need the 8.1c settings columns); `from` / `to` filter
+  `document_date`.
+- ASSUMPTION B9 (module layout): `xero_accounts` and the Accounts / BankTransactions client calls
+  and sync stay in the crm slice; `purchase_sources.py` (normalising, upserting, change rules,
+  `hooks`), `purchase_models.py`, `purchase_queries.py`, `purchase_routes.py` and `treatments.py`
+  are in the costing slice. The crm sync imports the costing slice lazily; the costing slice
+  imports only crm's `XeroAccount` model.
 
 ## Resolved during spec review (code facts)
 
@@ -1141,7 +1301,7 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Gap 4: "Already in stock" candidates must include lots with a manual whole-lot price (AC8);
   the flow price then takes precedence (AC55) and the manual entry is deactivated. (8.1c)
 - Gap 9: positional `pos:<n>` line keys need a content fingerprint so a reordered or inserted
-  Xero line supersedes instead of silently moving allocations. (8.1b)
+  Xero line supersedes instead of silently moving allocations. (8.1b) **Resolved: B1, AC64.**
 - Gap 10: historical runs always refetch their range idempotently; align AC20. (8.1c)
 - Gap 12: system-finding alerts need a generic `required_permission` filter and a provider
   seam so Core holds no costing check id. (8.1d)
@@ -1150,7 +1310,8 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Gap 15: readiness keyed by `source_output_id`, with a legacy name-only bucket. (8.1e)
 - Gap 18: ACs for every Phase 1 UI promise (rules UI, cost panel, batch card, readiness page,
   history UI, phone width). (8.1d/e)
-- Minor: foreign-currency formula and rounding (8.1b); list-route isolation in AC42 (8.1c–e);
+- Minor: foreign-currency formula and rounding (8.1b) **resolved: B2, AC65**; list-route
+  isolation in AC42 (8.1c–e; the 8.1b list route is covered by AC73–AC74);
   Phase 3 immutable valued movements before the first snapshot (Phase 3).
 
 ## Out of scope

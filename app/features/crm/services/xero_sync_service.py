@@ -1,7 +1,7 @@
 """XeroSyncService — orchestrates contact and invoice sync from Xero."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
@@ -10,14 +10,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
+from app.core.security.entitlements import org_has_feature
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.crm.repositories.xero_account_repo import XeroAccountRepository
 from app.features.crm.repositories.xero_contact_repo import XeroContactRepository
 from app.features.crm.repositories.xero_credit_note_repo import XeroCreditNoteRepository
 from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.services.contact_service import SYNCED_FIELDS
-from app.features.crm.services.xero_api_client import XeroAPIClient
+from app.features.crm.services.xero_api_client import XeroAPIClient, XeroInsufficientScopeError
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger, start_span
 
@@ -34,10 +36,15 @@ class SyncResult:
     contacts_synced: int = 0
     invoices_synced: int = 0
     credit_notes_synced: int = 0
+    purchases_synced: int = 0
     sales_allocated: int = 0
     sales_unmapped: int = 0
     sales_insufficient_stock: int = 0
     errors: list[str] = field(default_factory=list)
+    # The part of ``errors`` that came from the purchases sync (live-cogs), and whether the job had
+    # a sales half at all: a purchases-only job has nothing else to have succeeded.
+    purchase_errors: list[str] = field(default_factory=list)
+    sales_ran: bool = True
 
     @property
     def success(self) -> bool:
@@ -45,9 +52,17 @@ class SyncResult:
 
     @property
     def partial(self) -> bool:
-        return bool(self.errors) and (
-            self.contacts_synced > 0 or self.invoices_synced > 0 or self.credit_notes_synced > 0
-        )
+        if not self.errors:
+            return False
+        if (
+            self.contacts_synced > 0
+            or self.invoices_synced > 0
+            or self.credit_notes_synced > 0
+            or self.purchases_synced > 0
+        ):
+            return True
+        # Purchases failing leaves the sales half intact, even when it had nothing to sync.
+        return self.sales_ran and len(self.purchase_errors) == len(self.errors)
 
 
 class XeroSyncService:
@@ -128,6 +143,8 @@ class XeroSyncService:
                 logger.exception("xero_credit_note_sync_failed", org_id=str(org_id))
                 result.errors.append(f"Credit note sync error: {e}")
 
+            self._purchases_section(result, api_client, org_id, "full", reraise_expired=True)
+
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
@@ -202,8 +219,96 @@ class XeroSyncService:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
 
+            self._purchases_section(result, api_client, org_id, "incremental", modified_after=modified_after)
+
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
+
+    def purchases_sync(self, org_id: UUID, triggered_by: str = "manual", *, full: bool = False) -> SyncResult:
+        """A purchases-only job (``sync_type="purchases"``): the chart of accounts, then bank
+        transactions modified since the last sync (everything when ``full`` or when there has been
+        no sync). Sales are not touched and the shared resume point is not moved, so the next
+        incremental sync still sees everything it should."""
+        self._require_costing(org_id)
+        tenant = self._require_tenant(org_id)
+        modified_after = None if full else tenant.last_successful_sync_at
+        return self._purchases_only_job(org_id, tenant, "purchases", triggered_by, modified_after=modified_after)
+
+    def purchases_history_sync(
+        self, org_id: UUID, date_from: date, date_to: date, triggered_by: str = "manual"
+    ) -> SyncResult:
+        """A historical run (``sync_type="purchases_history"``): bank transactions dated from
+        ``date_from`` to ``date_to`` inclusive, by transaction date rather than modified date, so
+        it can be repeated and always asks Xero again. Stores them idempotently."""
+        self._require_costing(org_id)
+        if date_from > date_to:
+            raise ValueError("The start date must not be after the end date.")
+        tenant = self._require_tenant(org_id)
+        return self._purchases_only_job(
+            org_id, tenant, "purchases_history", triggered_by, date_from=date_from, date_to=date_to
+        )
+
+    def _require_tenant(self, org_id: UUID):
+        tenant = self.tenant_repo.get_connected(org_id)
+        if not tenant:
+            raise ValueError("No connected Xero tenant for this org.")
+        return tenant
+
+    def _costing_enabled(self, org_id: UUID) -> bool:
+        from app.features.costing import FEATURE_KEY
+
+        return org_has_feature(self.db, org_id, FEATURE_KEY)
+
+    def _require_costing(self, org_id: UUID) -> None:
+        if not self._costing_enabled(org_id):
+            raise ValueError("The costing feature is not enabled for this organisation.")
+
+    def _purchases_only_job(self, org_id: UUID, tenant, sync_type: str, triggered_by: str, **fetch: Any) -> SyncResult:
+        with start_span(
+            "xero.sync", attributes={"org_id": str(org_id), "sync_type": sync_type, "triggered_by": triggered_by}
+        ):
+            started_at = datetime.now(UTC)
+            job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, sync_type, triggered_by)
+            self.db.commit()
+            result = SyncResult(sales_ran=False)
+            self._purchases_section(result, XeroAPIClient(self.db, org_id), org_id, sync_type, **fetch)
+            self._finalise_job(job.id, org_id, result, started_at=started_at, advance_resume=False)
+            return result
+
+    def _purchases_section(
+        self,
+        result: SyncResult,
+        api_client: XeroAPIClient,
+        org_id: UUID,
+        sync_type: str,
+        *,
+        reraise_expired: bool = False,
+        **fetch: Any,
+    ) -> None:
+        """Run the purchases sync into ``result`` if the org has costing; failures land in its errors."""
+        if not self._costing_enabled(org_id):
+            return
+        try:
+            with start_span("xero.sync.purchases", attributes={"org_id": str(org_id), "sync_type": sync_type}):
+                purchases = self._sync_purchases(api_client, org_id, **fetch)
+            result.purchases_synced = purchases.purchases_synced
+            result.errors.extend(purchases.errors)
+            result.purchase_errors.extend(purchases.errors)
+        except XeroTokenExpiredError:
+            if reraise_expired:
+                raise
+            self._purchases_failed(result, org_id, "Xero access has expired; reconnect Xero.")
+        except XeroInsufficientScopeError as e:
+            self._purchases_failed(result, org_id, f"Purchases need new Xero permissions: reconnect Xero. ({e})")
+        except Exception as e:
+            logger.exception("xero_purchase_sync_failed", org_id=str(org_id))
+            self._purchases_failed(result, org_id, f"Purchases sync error: {e}")
+
+    @staticmethod
+    def _purchases_failed(result: SyncResult, org_id: UUID, message: str) -> None:
+        logger.warning("xero_purchase_sync_error", org_id=str(org_id), error=message)
+        result.errors.append(message)
+        result.purchase_errors.append(message)
 
     # ------------------------------------------------------------------
     # Internal: contacts
@@ -516,10 +621,82 @@ class XeroSyncService:
         return result
 
     # ------------------------------------------------------------------
+    # Internal: chart of accounts and purchases (live-cogs)
+    # ------------------------------------------------------------------
+
+    def _sync_accounts(self, api_client: XeroAPIClient, org_id: UUID) -> set[str]:
+        """Cache Xero's chart of accounts with each account's default purchase treatment.
+
+        Returns the codes whose default treatment changed under existing accounts."""
+        from app.features.costing.treatments import default_treatment
+
+        values = []
+        for remote in api_client.get_accounts():
+            xero_account_id = _plain(getattr(remote, "account_id", None))
+            if not xero_account_id:
+                continue
+            type_ = _plain(getattr(remote, "type", None)).upper()
+            account_class = _plain(getattr(remote, "_class", None)).upper()
+            name = _plain(getattr(remote, "name", None)) or "(No name)"
+            values.append(
+                {
+                    "xero_account_id": xero_account_id[:100],
+                    "code": _plain(getattr(remote, "code", None))[:50] or None,
+                    "name": name[:255],
+                    "type": type_[:50] or None,
+                    "account_class": account_class[:20] or None,
+                    "status": _plain(getattr(remote, "status", None)).upper()[:20] or None,
+                    "default_treatment": default_treatment(type_, account_class, name),
+                }
+            )
+        changed = XeroAccountRepository(self.db).upsert_chart(org_id, values)
+        logger.info("xero_accounts_sync_done", org_id=str(org_id), accounts_count=len(values))
+        return changed
+
+    def _sync_purchases(
+        self,
+        api_client: XeroAPIClient,
+        org_id: UUID,
+        *,
+        modified_after: datetime | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> SyncResult:
+        """Chart of accounts, then bank transactions into purchase documents and lines.
+
+        ``modified_after`` is an incremental fetch; ``date_from`` / ``date_to`` a historical one by
+        transaction date. The chart comes first because it decides what each line is."""
+        from app.features.costing import purchase_sources
+
+        result = SyncResult()
+        chart_changed = self._sync_accounts(api_client, org_id)
+        chart = purchase_sources.load_chart(self.db, org_id)
+        purchase_sources.reclassify_unrecorded_lines(self.db, org_id, chart, chart_changed)
+        transactions = api_client.get_bank_transactions(
+            modified_after=modified_after, date_from=date_from, date_to=date_to
+        )
+        logger.info("xero_purchases_sync_started", org_id=str(org_id), transactions_count=len(transactions))
+        summary = purchase_sources.PURCHASE_SOURCES[purchase_sources.SOURCE_XERO_BANK].ingest(
+            self.db, org_id, transactions, chart
+        )
+        result.purchases_synced = summary.documents
+        result.errors.extend(summary.errors)
+        self.db.flush()
+        return result
+
+    # ------------------------------------------------------------------
     # Finalise job record
     # ------------------------------------------------------------------
 
-    def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult, *, started_at: datetime) -> None:
+    def _finalise_job(
+        self,
+        job_id: UUID,
+        org_id: UUID,
+        result: SyncResult,
+        *,
+        started_at: datetime,
+        advance_resume: bool = True,
+    ) -> None:
         status = "failed"
         if result.success:
             self.sync_job_repo.mark_completed(
@@ -528,10 +705,12 @@ class XeroSyncService:
                 result.contacts_synced,
                 result.invoices_synced,
                 result.credit_notes_synced,
+                result.purchases_synced,
             )
-            # Resume from before this sync fetched anything: a Xero edit made while it ran must be
-            # in the next incremental sync, not skipped until somebody runs a full one.
-            self.tenant_repo.update_last_sync(org_id, started_at - RESUME_OVERLAP)
+            if advance_resume:
+                # Resume from before this sync fetched anything: a Xero edit made while it ran must be
+                # in the next incremental sync, not skipped until somebody runs a full one.
+                self.tenant_repo.update_last_sync(org_id, started_at - RESUME_OVERLAP)
             status = "completed"
         elif result.partial:
             self.sync_job_repo.mark_partial(
@@ -542,6 +721,7 @@ class XeroSyncService:
                 error_message=f"{len(result.errors)} error(s) during sync",
                 error_details={"errors": result.errors},
                 credit_notes_synced=result.credit_notes_synced,
+                purchases_synced=result.purchases_synced,
             )
             # The resume point stays put, so the records that failed are retried next time
             # instead of being skipped until somebody edits them in Xero again.
@@ -564,6 +744,7 @@ class XeroSyncService:
             "contacts_synced": int(result.contacts_synced or 0),
             "invoices_synced": int(result.invoices_synced or 0),
             "credit_notes_synced": int(result.credit_notes_synced or 0),
+            "purchases_synced": int(result.purchases_synced or 0),
             "sales_allocated": int(result.sales_allocated or 0),
             "sales_unmapped": int(result.sales_unmapped or 0),
             "sales_insufficient_stock": int(result.sales_insufficient_stock or 0),
@@ -578,6 +759,11 @@ class XeroSyncService:
             payload=payload,
             correlation_id=job_id,
         )
+
+
+def _plain(value) -> str:
+    """An SDK enum or plain value as stripped text ('' for None)."""
+    return str(getattr(value, "value", value) or "").strip()
 
 
 def _serialise_xero_payment_terms(raw) -> dict | None:

@@ -16,13 +16,16 @@ class XeroSyncJob(TenantScoped, Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     xero_tenant_id = Column(String(100), nullable=False)
-    sync_type = Column(String(50), nullable=False)  # contacts | invoices | full
+    sync_type = Column(
+        String(50), nullable=False
+    )  # contacts | invoices | full | incremental | purchases | purchases_history
     status = Column(String(50), nullable=False)  # pending | running | completed | failed | partial
     started_at = Column(TIMESTAMP(timezone=True), nullable=True)
     completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
     contacts_synced = Column(Integer, nullable=False, default=0)
     invoices_synced = Column(Integer, nullable=False, default=0)
     credit_notes_synced = Column(Integer, nullable=False, default=0, server_default="0")
+    purchases_synced = Column(Integer, nullable=False, default=0, server_default="0")
     error_message = Column(Text, nullable=True)
     error_details = Column(JSONB, nullable=True)
     triggered_by = Column(String(50), nullable=True)  # manual | oauth_connect | scheduled

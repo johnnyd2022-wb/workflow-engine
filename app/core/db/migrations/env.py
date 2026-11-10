@@ -59,6 +59,8 @@ from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSe
 from app.features.planning.capacity_models import PlanningCapacitySetting
 from app.features.planning.forecast_models import PlanningMaterialAssessment, PlanningMaterialBatchAssessment
 from app.features.costing.models import CostFlow, CostingSettings, LotCostEntry  # noqa: F401
+from app.features.costing.purchase_models import PurchaseDocument, PurchaseLine  # noqa: F401
+from app.features.crm.models.xero_account import XeroAccount  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

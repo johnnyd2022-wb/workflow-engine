@@ -21,7 +21,12 @@ XERO_TOKEN_URL = "https://identity.xero.com/connect/token"
 XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
-XERO_SCOPES = "openid profile email accounting.contacts accounting.invoices accounting.invoices.read offline_access"
+# accounting.banktransactions.read (card / bank spend) and accounting.settings.read (chart of accounts)
+# feed the live-cogs purchases sync; connections made before they were added reconnect once.
+XERO_SCOPES = (
+    "openid profile email accounting.contacts accounting.invoices accounting.invoices.read "
+    "accounting.banktransactions.read accounting.settings.read offline_access"
+)
 
 
 class XeroTokenExpiredError(Exception):

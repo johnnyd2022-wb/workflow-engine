@@ -264,6 +264,59 @@ class XeroAPIClient:
 
         return credit_notes
 
+    # ------------------------------------------------------------------
+    # Chart of accounts and bank transactions (live-cogs purchases)
+    # ------------------------------------------------------------------
+
+    def get_accounts(self) -> list:
+        """Return the whole chart of accounts (Xero does not paginate it)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        result = self._call_with_retry(api.get_accounts, self._xero_tenant_id)
+        return list(getattr(result, "accounts", None) or [])
+
+    def get_bank_transactions(
+        self,
+        modified_after: datetime | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list:
+        """Return SPEND and RECEIVE bank transactions, DELETED ones included, paginating automatically.
+
+        ``modified_after`` is an incremental fetch (records changed since). ``date_from`` /
+        ``date_to`` (inclusive, either may be omitted) filter by transaction date instead, for a
+        historical run. Each type is its own query so the ``where`` stays a single comparison.
+        """
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        extra: dict = {}
+        if modified_after:
+            if modified_after.tzinfo is None:
+                modified_after = modified_after.replace(tzinfo=UTC)
+            extra["if_modified_since"] = modified_after
+
+        transactions: list = []
+        for txn_type in _BANK_TRANSACTION_TYPES:
+            where = f'Type=="{txn_type}"'
+            if date_from:
+                where += f" AND Date>=DateTime({date_from.year}, {date_from.month}, {date_from.day})"
+            if date_to:
+                where += f" AND Date<=DateTime({date_to.year}, {date_to.month}, {date_to.day})"
+            page = 1
+            while True:
+                result = self._call_with_retry(api.get_bank_transactions, tenant_id, page=page, where=where, **extra)
+                batch = getattr(result, "bank_transactions", None) or []
+                # The where clause already filters by type; this keeps a stray type out regardless.
+                transactions.extend(t for t in batch if _enum_text(getattr(t, "type", None)) in _BANK_TRANSACTION_TYPES)
+                logger.debug("Bank transactions %s page %d: %d records", txn_type, page, len(batch))
+                if len(batch) < 100:
+                    break
+                page += 1
+        return transactions
+
     def create_invoice(
         self,
         *,
@@ -478,6 +531,14 @@ class XeroAPIClient:
                             return val.strip()
 
         raise ValueError("Xero did not return an online invoice URL for this invoice.")
+
+
+_BANK_TRANSACTION_TYPES = ("SPEND", "RECEIVE")
+
+
+def _enum_text(value) -> str:
+    """An SDK enum or plain string as upper-case text."""
+    return str(getattr(value, "value", value) or "").strip().upper()
 
 
 def _contact_model(fields: dict, contact_id: str | None = None):

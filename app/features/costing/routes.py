@@ -121,3 +121,7 @@ def put_settings():
     result = service.set_settings(db_session, _org(), **_body())
     db_session.commit()
     return jsonify(result)
+
+
+# Purchases routes (8.1b) attach to costing_bp; imported last so the blueprint and helpers exist.
+from app.features.costing import purchase_routes  # noqa: E402, F401
