@@ -76,7 +76,8 @@ def upgrade():
             name="ck_cost_flows_kind",
         ),
         sa.CheckConstraint(
-            "kind NOT IN ('produced','reconciled_in','consumed') OR execution_id IS NOT NULL",
+            "kind NOT IN ('produced','reconciled_in','consumed')"
+            " OR (execution_id IS NOT NULL AND execution_step_id IS NOT NULL AND step_number IS NOT NULL)",
             name="ck_cost_flows_execution_kinds",
         ),
     )

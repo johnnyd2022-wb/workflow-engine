@@ -1049,3 +1049,112 @@ def test_r1_step_must_belong_to_the_execution(world, db):
     with pytest.raises(IntegrityError, match="fk_cost_flows_execution_step"):
         db.flush()
     db.rollback()
+
+
+# --- build-review round 2 regressions --------------------------------------------------------
+
+
+def test_r2_unresolved_same_name_outputs_stay_separate(world, db):
+    """Codex R2 #1: null-identity outputs are never merged by name. Blend 1 L, Blend 100 kg and
+    Other 1 unit are incompatible, so the primary flow alone (largest quantity: Blend 100 kg)
+    takes the pool."""
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 100, 10)
+    defs = [{"name": "Blend", "unit": "L"}, {"name": "Blend", "unit": "kg"}, {"name": "Other", "unit": "units"}]
+    execution, (step,) = workflow(db, org.id, [defs])
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 10, "L")],
+        [
+            {"name": "Blend", "quantity": 1, "unit": "L"},
+            {"name": "Blend", "quantity": 100, "unit": "kg"},
+            {"name": "Other", "quantity": 1, "unit": "units"},
+        ],
+    )
+    got = {(o["name"], o["unit"]): D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"]}
+    assert got == {("Blend", "L"): D("0"), ("Blend", "kg"): D("100"), ("Other", "units"): D("0")}
+
+
+def test_r2_budget_counts_lots_and_executions_not_steps(world, db, monkeypatch):
+    """Codex R2 #2: a 5-step batch with one input is 1 execution + 2 lots, inside a budget of 3."""
+    org, client = world
+    from app.features.costing import engine
+
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 50, 10)
+    execution, steps = workflow(db, org.id, [[], [], [], [], [{"name": "Gin", "unit": "L"}]])
+    complete(client, execution, steps[0], [(spirit, 10, "L")], [])
+    for st in steps[1:4]:
+        complete(client, execution, st, [], [])
+    complete(client, execution, steps[4], [], [{"name": "Gin", "quantity": 10, "unit": "L"}])
+    monkeypatch.setattr(engine, "MAX_NODES", 3)
+    cost = execution_cost(db, org.id, execution.id)
+    assert "too_large" not in cost["warnings"] and D(cost["outputs"][0]["unit_cost"]) == D("5")
+
+
+def test_r2_execution_flows_must_name_their_step(world, db):
+    """Codex R2 #3: produced / reconciled / consumed rows need execution, step and step number;
+    the ORM declares the step key the migration creates."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.features.costing.models import CostFlow
+
+    org, _ = world
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    item = lot(db, org.id, "Loose", 1, "L")
+    for missing in ("execution_step_id", "step_number"):
+        fields = dict(execution_id=execution.id, execution_step_id=step.id, step_number=1)
+        fields[missing] = None
+        db.add(
+            CostFlow(
+                org_id=org.id,
+                inventory_item_id=item.id,
+                direction="in",
+                kind="produced",
+                quantity=D("1"),
+                source_key=f"forged:{missing}",
+                write_reason="test",
+                reconstructed=False,
+                **fields,
+            )
+        )
+        with pytest.raises(IntegrityError, match="ck_cost_flows_execution_kinds"):
+            db.flush()
+        db.rollback()
+    names = {c.name for c in ExecutionStep.__table__.constraints}
+    assert "uq_execution_steps_org_execution_id" in names
+
+
+def test_r2_concurrent_first_settings_writes_both_succeed(world, db):
+    """Codex R2 (R1 #7): two sessions writing an org's first settings row both succeed."""
+    import threading
+
+    from app.core.db import SessionLocal
+    from app.features.costing import service
+
+    org, _ = world
+    barrier = threading.Barrier(2)
+    errors = []
+
+    def write(value):
+        session = SessionLocal()
+        try:
+            barrier.wait()
+            service.set_settings(session, org.id, use_last_known_price=value)
+            session.commit()
+        except Exception as error:  # noqa: BLE001 -- collected and asserted below
+            errors.append(error)
+        finally:
+            session.close()
+
+    threads = [threading.Thread(target=write, args=(v,)) for v in (False, True)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert service.get_settings(db, org.id)["use_last_known_price"] in (True, False)

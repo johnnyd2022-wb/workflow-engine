@@ -1,0 +1,3 @@
+FAILED tests/test_data_export.py::test_every_secret_looking_column_is_dropped_or_declared_safe
+FAILED tests/test_staff_site_roles.py::test_endpoint_registry_covers_live_methods_and_new_routes_deny
+2 failed, 4211 passed, 31 skipped, 1337 warnings in 1024.21s (0:17:04)

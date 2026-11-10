@@ -69,7 +69,8 @@ class CostFlow(TenantScoped, Base):
             name="ck_cost_flows_kind",
         ),
         CheckConstraint(
-            "kind NOT IN ('produced','reconciled_in','consumed') OR execution_id IS NOT NULL",
+            "kind NOT IN ('produced','reconciled_in','consumed')"
+            " OR (execution_id IS NOT NULL AND execution_step_id IS NOT NULL AND step_number IS NOT NULL)",
             name="ck_cost_flows_execution_kinds",
         ),
         Index("ix_cost_flows_item_direction", "org_id", "inventory_item_id", "direction"),

@@ -74,6 +74,7 @@ EXCLUDED_COLUMNS: dict[tuple[str, str], str] = {
 
 # Columns whose names look secret but hold ordinary business data.
 SAFE_LOOKING_SECRET: dict[tuple[str, str], str] = {
+    ("cost_flows", "source_key"): "which stock write a cost movement came from",
     ("crm_sales_fifo_allocations", "xero_line_key"): "which Xero invoice line a sale came from",
     ("crm_sales_traceability_config", "matching_key"): "which product field sales are matched on",
     ("feature_subscriptions", "feature_key"): "the name of a plan feature",

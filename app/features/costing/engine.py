@@ -155,7 +155,7 @@ class CostEngine:
         self._active: set[tuple] = set()  # entered, not finished: met again = cycle
         self._direct_memo: dict[UUID, LotCost] = {}
         self._materials: dict[str, list[InventoryItem]] | None = None
-        self._nodes = 0
+        self._charged: set[tuple] = set()
 
     # --- public payloads -----------------------------------------------------------------
 
@@ -254,9 +254,7 @@ class CostEngine:
                 stack.pop()
                 continue
             if node not in self._active:
-                self._nodes += 1
-                if self._nodes > MAX_NODES:
-                    raise TooLargeError()
+                self._charge(node)
                 self._active.add(node)
                 pending = [d for d in self._deps(node) if d not in self._memo and d not in self._active]
                 if pending:
@@ -267,6 +265,15 @@ class CostEngine:
             self._active.discard(node)
             stack.pop()
         return self._memo[root]
+
+    def _charge(self, node: tuple) -> None:
+        """The budget is lots + executions (spec "Recompute"); steps are internal detail."""
+        key = ("lot", node[1]) if node[0] == "lot" else ("execution", node[1])
+        if key in self._charged:
+            return
+        self._charged.add(key)
+        if len(self._charged) > MAX_NODES:
+            raise TooLargeError()
 
     def _deps(self, node: tuple) -> list[tuple]:
         if node[0] == "lot":
@@ -658,6 +665,23 @@ class CostEngine:
         cost.carry_known, cost.carry_status, cost.carry_missing, cost.carry_warnings = ZERO, ACTUAL, {}, set()
         return cost
 
+    @staticmethod
+    def _logical_output(flow: CostFlow, lot: InventoryItem | None) -> tuple:
+        """Which output of the step a flow belongs to — never inferred from a name.
+
+        A declared output is its definition id. Without one, the only flows that are one output
+        are an output's reconciled part and its surplus lot, which records the untracked lot it
+        was reconciled into; anything else stands alone.
+        """
+        if flow.source_output_id:
+            return ("id", str(flow.source_output_id))
+        if flow.kind == "reconciled_in":
+            return ("reconciled", str(flow.inventory_item_id))
+        target = (lot.extra_data or {}).get("reconciled_untracked_item_id") if lot is not None else None
+        if target:
+            return ("reconciled", str(target))
+        return ("flow", str(flow.id))
+
     def _quantity_in(self, flow: CostFlow, unit: str | None) -> Decimal | None:
         lot = self._get_lot(flow.inventory_item_id)
         if lot is None or not unit:
@@ -688,11 +712,7 @@ class CostEngine:
 
         groups: dict[tuple, list[CostFlow]] = {}
         for f in candidates:
-            if f.source_output_id:
-                key = ("id", str(f.source_output_id))
-            else:
-                key = ("name", normalise(lots[f.id].name) if lots[f.id] is not None else str(f.id))
-            groups.setdefault(key, []).append(f)
+            groups.setdefault(self._logical_output(f, lots[f.id]), []).append(f)
 
         def group_unit(key):
             lot = lots[groups[key][0].id]
