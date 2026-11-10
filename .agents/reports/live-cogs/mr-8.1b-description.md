@@ -46,6 +46,6 @@ Results (private migrated DB): 114 new tests pass; with the costing, CRM, Xero, 
 - Stock coded to an asset (balance-sheet) account is not a purchase under the spec and never appears (B4).
 
 ### Codex review (advisory)
-CODEX_SECTION
+**Not run.** The Codex launcher refused (`not running inside Herdr`; the first launch left no session behind), so there are no Codex findings to fix or reject. The builder did a self-review of the diff instead; its one change (an existing line keeps its treatment when its account is missing from the cached chart, with a test) is in this MR. The prompt is at `.agents/reports/live-cogs/build-review-8.1b.prompt.md` for a later run.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
