@@ -1,5 +1,5 @@
 # SPEC: live-cogs
-status: draft v3 (round 1 spec-critic gaps resolved; awaiting round 2)
+status: v4 (round 2 engine gaps resolved; 8.1a is the first build)
 name: Live batch & bottle cost
 slug: live-cogs
 blueprint: new slice `app/features/costing/`, attached through `register_routes(core_bp)`;
@@ -92,18 +92,13 @@ The price is that past-period figures can move. Phase 3 adds month-end snapshots
 month's reported figures stay fixed and later changes show as "changes since close".
 
 ### Q4. Joint outputs and yield — cost follows the step, split by quantity unless told otherwise
-Cost is pooled per execution and handed to output lots step by step (algorithm below). When a
-step produces several lots, the pool is split by, in order:
-
-1. a cost share configured on the process step's output (`cost_share`: a percentage, or
-   `byproduct` — takes no cost); opt-in, never required. Configured percentages are scaled to
-   sum to 100 over the outputs actually produced; byproducts get 0;
-2. quantity, when every output's unit converts to one common unit (`are_units_compatible`);
-3. otherwise everything goes to the primary output — `final_product` before
-   `work_in_progress` before `raw_material`, then largest quantity, then earliest created —
-   and `execution_costs.split_assumed = true` ("split assumed — confirm" on the card).
-
-Splitting by litres of finished product (bottles × size) is a Phase 2 option.
+Cost is pooled per execution and handed to output lots step by step (algorithm below). The
+exact split rule (`split_weights`) is in "Cost roll-up"; in short: a cost share configured on
+the step's output definition (`cost_share`: a percentage, or `byproduct`) is honoured first;
+outputs without one share the rest by quantity when their units are compatible, otherwise it
+all goes to the primary output with `split_assumed = true`. Library stock remainders take no
+share in Phase 1 (ASSUMPTION A9). Splitting by litres of finished product (bottles × size) is a
+Phase 2 option.
 
 Normal losses (angel's share, spillage inside a step) are absorbed automatically, because the
 whole pool is spread over what actually came out. Cost consumed after a batch's last output
@@ -197,10 +192,11 @@ org's base currency, **excluding GST** (ASSUMPTION A2); unit costs are `NUMERIC(
 All migrations are additive and reversible (downgrade drops only the new tables/columns).
 Nothing is added to `inventory_items`.
 
-Facts vs caches. **Facts** (`purchase_*`, `lot_cost_entries`, `cost_flows`) are written by
-user actions, sync and Core hooks, and are never derived from each other. **Caches**
-(`inventory_lot_costs`, `execution_costs`) are derived from facts only and can be dropped and
-rebuilt at any time.
+Facts only. **Facts** (`purchase_*`, `lot_cost_entries`, `cost_flows`) are written by user
+actions, sync and Core hooks, and are never derived from each other. Every cost is a pure
+function of facts, computed on read (see "Recompute"). There are **no cost cache tables in
+Phase 1**; a cache can be added later (Phase 3 stock value) as a pure optimisation without
+changing any figure.
 
 ### `xero_accounts` (crm slice — chart of accounts cache)
 `id`, `xero_account_id`, `code`, `name`, `type` (Xero type, e.g. `DIRECTCOSTS`, `EXPENSE`),
@@ -271,65 +267,109 @@ stock), `cost_flow_id` (the inflow this purchase paid for; null for refunds), `s
 Unique `(org_id, purchase_line_id, inventory_item_id)`.
 
 ### `lot_cost_entries` (costs with no purchase behind them)
-`id`, `inventory_item_id`, `cost_flow_id` (the inflow it prices; null = the whole lot), `kind`
-(`manual` \| `free`), `amount`, `quantity`, `note`, `is_active`, `created_by_user_id`,
-`created_at`. `free` requires `amount = 0`. At most one active entry per `(lot, cost_flow_id)`.
+`id`, `inventory_item_id` (composite FK, `ondelete=CASCADE`), `cost_flow_id` (the inflow it
+prices; null = **whole-lot price**), `kind` (`manual` \| `free`), `amount` (≥ 0), `quantity`
+(> 0, in the lot's unit), `note`, `is_active`, `created_by_user_id`, `created_at`,
+`deactivated_at`. `free` requires `amount = 0`. Partial unique index: at most one active entry
+per `(org_id, inventory_item_id, cost_flow_id)` with nulls equal (two indexes: one on
+`(org_id, inventory_item_id, cost_flow_id) WHERE is_active AND cost_flow_id IS NOT NULL`, one on
+`(org_id, inventory_item_id) WHERE is_active AND cost_flow_id IS NULL` — portable, no
+`NULLS NOT DISTINCT`).
+
+**Price facts.** A lot's price facts are its active `lot_cost_entries` plus (8.1c) its active
+or orphaned `purchase_allocations`. Both have the same meaning:
+
+- A **flow price** (`cost_flow_id` set) prices `quantity` units of that one `created`/`added`
+  inflow for `amount`. Invariant, enforced at write under a row lock on the lot:
+  `Σ quantity of positive flow prices on a flow ≤ flow.quantity` (400 otherwise). The flow's
+  unpriced **residual** is `flow.quantity − Σ quantity`.
+- A **whole-lot price** (`cost_flow_id` null, positive amount) sets the unit price
+  `p = amount / quantity` for every unpriced unit of the lot's `created`/`added` inflows,
+  including residuals. Its `quantity` is only the basis of that price (what the receipt said).
+- Each unit of inflow is priced exactly once: flow prices first, the whole-lot price for what's
+  left. So a whole-lot manual price and a later flow-specific purchase never double count.
+- **Refunds** (8.1c: negative-amount allocations, quantity 0, `cost_flow_id` null) are applied
+  once, after pricing, to the lot's priced amount; a refund larger than the priced amount
+  floors the lot's amount at 0 and adds the warning `refund_exceeds_cost`; a refund on a lot
+  with nothing priced is ignored for cost and adds the warning `refund_without_cost`.
+- Price facts can only be written on a lot whose inflows are all `created`/`added` (a lot made
+  by production, transfer or reconciliation gets its cost from its source; 400 otherwise),
+  and never on a customer-owned lot (always 0; 400).
 
 ### `cost_flows` (every quantity into or out of a lot that cost cares about)
 | Column | Notes |
 | --- | --- |
-| `inventory_item_id` | composite FK |
+| `inventory_item_id` | composite FK, `ondelete=CASCADE` |
 | `direction` | `in` \| `out` |
 | `kind` | in: `created` \| `added` \| `produced` \| `transfer_in` \| `reconciled_in` · out: `consumed` |
 | `quantity` | positive, in the lot's unit |
-| `execution_id`, `execution_step_id`, `step_number` | set for `produced`, `reconciled_in` and `consumed` |
-| `source_output_id` | the step output definition matched by name at write time (produced only) |
+| `execution_id`, `execution_step_id`, `step_number` | set for `produced`, `reconciled_in` and `consumed`; composite FKs, `ondelete=CASCADE` |
+| `source_output_id` | the step output **definition id** (`steps.outputs[].id`), resolved as below; null when it can't be resolved |
+| `source_key` | stable identity of the stock write that caused the row; unique `(org_id, source_key)`. Live hooks and the backfill use the **same** keys, so neither can duplicate the other |
 | `write_reason` | the `InventoryQuantityWriteReason` of the write that caused it |
 | `reconstructed` | bool — true for rows made by the backfill rather than at the time |
 | `created_at` | |
+
+`source_key` values: `create:<item_id>`, `add:<event_id>` (the `inventory_item.quantity_adjusted`
+entity event the add emits), `consume:<execution_step_id>:<item_id>`,
+`reconcile:<execution_step_id>:<untracked_item_id>:<source_output_id or name>`.
 
 Indexes: `(org_id, inventory_item_id, direction)`, `(org_id, execution_id, step_number)`.
 
 Written in the **same transaction** as the stock write, from three places only:
 
-1. `InventoryRepository.create_inventory_item` → one `in` row (`created`, or `produced` when
-   `source_execution_step_id` is set, or `transfer_in` when `transfer_receipt_id` is set) for
-   the created quantity. Every lot creation goes through this method (checked: the only
-   `InventoryItem(` constructor outside models).
-2. `InventoryRepository.add_quantity_to_inventory_item` → one `in` row (`added`).
+1. `InventoryRepository.create_inventory_item` → one `in` row for the created quantity, kind by
+   precedence: `transfer_in` when `transfer_receipt_id` is set (a transfer destination copies
+   the source's production provenance, so this check comes first); else `produced` when
+   `source_execution_step_id` is set; else `created`. Every lot creation goes through this
+   method (checked: the only `InventoryItem(` constructor outside models).
+2. `InventoryRepository.add_quantity_to_inventory_item` → one `in` row (`added`) when the
+   quantity actually increases.
 3. `complete_step` in `execution_routes.py` → one `out` row (`consumed`) per aggregated input
-   lot; and for an output reconciled into an untracked lot
+   lot, in that lot's unit; and for an output reconciled into an untracked lot
    (`reconcile_output_to_untracked_reduce_only`), one `in` row (`reconciled_in`) on that
-   untracked lot for the reconciled amount, because that output creates no lot of its own (only
-   the surplus does).
+   untracked lot for the reconciled amount (converted to the untracked lot's unit), because
+   that output creates no lot of its own (only the surplus does).
+
+**Output identity.** `complete_step` resolves each output's definition id and passes it to
+`create_inventory_item(source_output_id=…)` (which already validates it belongs to the step):
+the output's `output_id` when the client sends one that the step declares; else the one
+declared output whose stripped name equals the output's name, **only if exactly one** has that
+name; else null (no `cost_share` applies; the split falls back to quantity/primary). Library
+stock lines carry `source_output_id = null` and `extra_data.library_stock = true`.
+`reconciled_in` rows carry the same resolved id as the output they came from.
 
 These are plain inserts with no cost logic, so they cannot fail independently of the stock
 write; there is no "costing off" path that skips them. Whether costing is enabled affects only
 whether costs are computed and shown.
 
-**Backfill** (migration data step, re-runnable as a command): for every existing lot, an `in`
-row for its original quantity (`created`/`produced`/`transfer_in` by the same rules), where
-original = current quantity + Σ consumed (from `actual_inputs`) + Σ sales FIFO allocations +
-Σ wastage + Σ other recorded decreases − Σ recorded additions, floored at the current quantity;
-`out` rows from every completed step's `actual_inputs`. All marked `reconstructed = true`.
+**Backfill** (`uv run workflow costing backfill-flows --org <id> | --all`; idempotent; not a
+migration step). Sources, all marked `reconstructed = true`, all keyed as above so a rerun or a
+later live write inserts nothing twice:
 
-### `inventory_lot_costs` (cache, one row per lot)
-`inventory_item_id` (unique per org), `quantity_in` (Σ in flows), `costed_quantity`,
-`cost_actual`, `cost_estimated`, `unit_cost` (nullable), `status`, `unknown_inputs` (int),
-`source` (`purchase` \| `manual` \| `production` \| `estimate` \| `customer_owned` \| `transfer`
-\| `mixed`), `breakdown` JSONB, `stale` (bool), `computed_at`.
+- `in` per existing lot, kind by the same precedence, `source_key create:<item_id>`; quantity =
+  the `quantity` in the lot's earliest `inventory_item.created` entity event, else current
+  quantity + Σ its `consumed` quantity from `actual_inputs` (a floor: sales, wastage and
+  stocktake decreases before flows existed aren't recoverable; this only weights pricing).
+- `in` (`added`) per `inventory_item.quantity_adjusted` event emitted by
+  `add_quantity_to_inventory_item` where the quantity rose, `source_key add:<event_id>`.
+- `out` (`consumed`) per completed step × input lot from `actual_inputs`, summed per lot and
+  converted to the lot's unit, `source_key consume:<execution_step_id>:<item_id>`; an input
+  whose lot no longer exists, or whose unit can't convert, is skipped and counted in the
+  command's output.
+- Historical reconciliations are **not** reconstructed: their untracked lots stay unknown and
+  are listed as missing inputs, which is honest and fixable by entering a price.
 
-### `execution_costs` (cache, one row per execution)
-`execution_id` (unique per org), `input_cost_actual`, `input_cost_estimated`, `cost_so_far`
-(unabsorbed pool), `status`, `unknown_inputs`, `split_assumed` (bool), `breakdown` JSONB (per
-consumed lot: quantity, unit cost, amount, status; per produced flow: allocated amount and
-status — the `allocated_cost` of the algorithm lives here, not on `cost_flows`), `stale`,
-`computed_at`.
+Worked examples (each is a test): create-only (one `created` row); create, add 3, consume 2
+(rows `created`, `added 3`, `consumed 2`); a produced lot (one `produced` row with its step);
+a transfer destination (`transfer_in`, even though it also has `source_execution_step_id`);
+backfill run twice (second run inserts 0 rows); a lot created after the backfill (live hook
+row only, backfill rerun inserts nothing).
 
 ### `costing_settings` (one row per org)
-`start_date` (date, default the day costing is switched on), `use_last_known_price` (bool,
-default true), `last_history_from`, `last_history_to` (the last historical run's range, for
-"resume"), `created_at`, `updated_at`.
+8.1a: `use_last_known_price` (bool, default true), `created_at`, `updated_at`; created on first
+write, read as defaults when absent. 8.1c adds `start_date`, `last_history_from`,
+`last_history_to`.
 
 ### Existing tables touched
 - `xero_sync_jobs`: add `purchases_synced INTEGER NOT NULL DEFAULT 0`; `sync_type` gains
@@ -346,93 +386,125 @@ first snapshot. Phase 1's `cost_flows` are what make later periods reconstructab
 
 ## Cost roll-up
 
-Costing uses its own uncapped, memoised walk over `cost_flows` — not `TemporalDagTracer`
-(event-sourced, as-of-a-time, capped at depth 5).
+Costing uses its own memoised walk over `cost_flows` — not `TemporalDagTracer` (event-sourced,
+as-of-a-time, capped at depth 5). It reads facts only and writes nothing.
+
+**Values.** Every computed cost carries: `known` (the dollar amount of the inputs that have a
+cost — a floor when anything is missing), `status`, `missing` (the set of lots with no cost
+that this figure depends on, by id and name) and `warnings`. Status order, worst last:
+`actual` < `estimated` < `partial` < `unknown`. A lot's `unit_known` is `known ÷ quantity`.
+The public `unit_cost` equals `unit_known` when status is `actual` or `estimated`, and is
+**null** when `partial` or `unknown`; `known_unit_cost` always carries the floor (null only when
+`unknown`). Internally, the floor is what propagates, so a partial WIP lot still passes its
+known cost on and its missing inputs ride along to every downstream output.
 
 ```
-lot_cost(lot):                                  # memoised per computation
-    if lot.contract_customer_id:  return Cost(unit=0, status=actual, source=customer_owned)
-
-    priced, unpriced = [], []                   # (quantity, amount, status) / quantity
+lot_cost(lot):                                   # memoised per request
+    if lot.contract_customer_id: return (unit_known=0, actual, source=customer_owned)
+    if lot in visiting: return (None, unknown, missing={lot}, warnings={cycle})
+    parts = []                                    # (quantity, known, status, missing)
+    unpriced_ca = 0                                # unpriced created/added quantity
+    unpriced_other = 0                             # transfer_in whose source is unknown
     for f in in_flows(lot):
         if f.kind == transfer_in:
-            src = transfer_source_lot(lot)      # transfer_receipt_id → transfer → source_item_id
-            c = lot_cost(src); priced_or_unpriced(f.quantity, c)
+            src = transfer_source_lot(lot)         # transfer_receipt_id -> transfer -> source_item_id
+            c = lot_cost(src) if src else UNKNOWN
+            if c.status == unknown: unpriced_other += f.quantity; missing |= c.missing
+            else: parts += (f.quantity, f.quantity * convert(c.unit_known, src.unit -> lot.unit), c.status, c.missing)
         elif f.kind in (produced, reconciled_in):
-            ensure cost_execution(f.execution) has run
-            priced += (f.quantity, allocated_cost[f], status[f])
-        else:                                   # created / added
-            a = allocations (active or orphaned) + active cost entries paying for f (by cost_flow_id)
-            if a: priced += (Σ a.quantity, Σ a.amount, estimated if any orphaned else actual)
-            else: unpriced += f.quantity
-    whole_lot = allocations/entries with cost_flow_id null  # "this purchase paid for this lot"
-    if whole_lot: priced += (Σ quantity, Σ amount, actual); unpriced = []
-    refunds = Σ negative allocations             # reduce amount, never quantity
+            a = cost_execution(f.execution).allocation[f]
+            parts += (f.quantity, a.known, a.status, a.missing)
+        else:                                     # created / added
+            fp = positive flow prices on f        # invariant: sum(fp.quantity) <= f.quantity
+            q = sum(fp.quantity)
+            if q > 0: parts += (q, sum(fp.amount), facts_status(fp), {})
+            unpriced_ca += f.quantity - q
+    wl = whole_lot_price(lot)                     # at most one; p = amount / quantity
+    if wl:
+        if unpriced_ca > 0: parts += (unpriced_ca, unpriced_ca * wl.p, facts_status(wl), {}); unpriced_ca = 0
+        elif no in_flows(lot): return (wl.p, facts_status(wl), source=manual)   # lot predates flows
+    refunds = sum of negative price facts         # 8.1c; applied once, here
+    if parts:
+        Q = sum(quantity); K = sum(known) + refunds
+        if K < 0: K = 0; warn refund_exceeds_cost
+        status = worst(part statuses)
+        if unpriced_ca or unpriced_other: status = worst(status, estimated)   # takes the lot's own price
+        return (K / Q, status, missing = union(part missing) | missing)
+    if refunds: warn refund_without_cost
+    if settings.use_last_known_price and (e := material_estimate(lot)):
+        return (e.unit, estimated, source=estimate, estimate_from=e.lot)
+    return (None, unknown, missing = {lot} | missing)
 
-    if priced:
-        unit = (Σ priced.amount + refunds) / Σ priced.quantity
-        status = worst(priced.status); if unpriced: status = worst(status, estimated)
-        return Cost(unit, status)                # unpriced quantity takes the lot's own price
-    est = material_estimate(lot) if settings.use_last_known_price
-    return Cost(unit=est, status=estimated) if est is not None else Cost(status=unknown)
+facts_status(facts) = estimated if any is an orphaned allocation (8.1c) else actual
 
-cost_execution(execution):                      # runs for in-progress batches too
-    pool = Cost.zero()
-    for step in execution.steps ordered by step_number:
-        for c in out_flows(step, kind=consumed):
+cost_execution(execution):                       # memoised; runs for in-progress batches too
+    pool = (known=0, status=actual, missing={})
+    for step in execution steps ordered by step_number:
+        if step is completed and its actual_inputs name lots but it has no consumed flows:
+            pool.missing |= those lots; pool.status = partial; warn no_flow_history
+        for c in consumed flows of step:
             u = lot_cost(c.lot)
-            if u.status == unknown:  pool.note_unknown(c.lot)       # pool becomes partial
-            else:                    pool.add(c.quantity * u.unit, u.status)
-        outs = in_flows(step, kind in (produced, reconciled_in))
+            if u.status == unknown: pool.status = worst(pool.status, partial)
+            else: pool.known += c.quantity * u.unit_known; pool.status = worst(pool.status, u.status)
+            pool.missing |= u.missing; pool.warnings |= u.warnings
+        outs = produced and reconciled_in flows of step
         if outs:
-            weights = split_weights(step, outs)                     # Q4 precedence
-            for o in outs: allocated_cost[o] = pool * weights[o]    # rounding remainder → largest
-            pool = Cost.zero()
-    execution_costs.cost_so_far = pool          # live cost while running; production loss if it never reaches an output
+            weights, assumed = split_weights(step, outs); split_assumed |= assumed
+            for o in outs:
+                allocation[o] = (known = pool.known * weights[o], status = pool.status, missing = pool.missing)
+            # money quantised to 4 dp; the rounding remainder goes to the largest weight (ties: earliest flow)
+            # an output with weight 0 gets known 0, status actual, missing {} — it carries no cost by design
+            pool = (0, actual, {})
+    cost_so_far = pool       # live cost while running; a production loss if it never reaches an output
 ```
 
-Status order (worst last): `actual` < `estimated` < `partial` < `unknown`. A batch with any
-unknown input is `partial`: its `cost_so_far` and `unit_cost` exclude that input and the API
-returns `unit_cost: null` alongside `cost_so_far` (shown as Incomplete).
+A partial pool's `status` is `partial` even if every *costed* input is actual. Execution status
+= worst of every consumed lot's status (unknown counts as partial) and of `cost_so_far`.
 
-Precision: unit costs to 6 dp, money to 4 dp, rounding half-up; displayed to cents.
+**`split_weights(step, outs)`** — returns a weight per output summing to 1, and `assumed`:
+
+1. Library stock lots (`extra_data.library_stock`) get weight 0 (ASSUMPTION A9), unless they
+   are the only outputs, in which case they are treated as ordinary outputs.
+2. For each remaining output, `cfg` = the `cost_share` on the step output definition whose
+   `id` equals the flow's `source_output_id`. Valid values: `{"mode": "percent", "value": v}`
+   with `0 < v ≤ 100`, or `{"mode": "byproduct"}`; anything else is ignored (treated as no
+   config) and logged.
+3. Groups: `percent` (valid percent), `byp` (byproduct), `free` (no config).
+4. If `percent` and `free` are both empty (every output is a byproduct): move `byp` into
+   `free`, `assumed = true`.
+5. `P = Σ percent values`. If `P > 100`, or `free` is empty, scale the percents to sum to 100
+   (`P > 0`) and `free` gets 0. Otherwise `free` shares `R = 100 − P`:
+   one output takes all of `R`; several share it by quantity when every unit in `free`
+   converts to the first's unit (`are_units_compatible`); otherwise all of `R` goes to the
+   primary output of `free` and `assumed = true`.
+6. `byp` gets 0.
+
+Primary output: `final_product` before `work_in_progress` before `raw_material`, then largest
+quantity, then earliest flow, then flow id.
+
+Precision: unit costs to 6 dp, money to 4 dp, rounding half-up, applied only at the API
+boundary and to allocations; internal arithmetic uses unrounded `Decimal`. Displayed to cents.
 
 **Same material** (for last known price and readiness): two lots are the same material when
-`normalise(name)` matches and their units are compatible (`are_units_compatible`), where
-`normalise` lower-cases, trims, collapses whitespace and strips a trailing
-`" - Library stock"`. The estimate is the unit cost (converted to this lot's unit) of the most
-recent lot of that material with an actual cost dated on or before this lot's
-`purchase_date` (else `created_at`); failing that, the earliest one after. Estimates never chain
-from other estimates.
+`normalise(name)` matches and their units are compatible, where `normalise` lower-cases, trims,
+collapses whitespace and strips a trailing `" - library stock"`.
 
-A cycle (a lot fed by a batch that consumed that same lot) is broken at the back edge using
-the lot's cost excluding that inflow; the lot is marked `partial` and a warning is logged.
+**`material_estimate(lot)`**: candidates are other lots of the same material in the org, not
+customer-owned, that are **directly priced** — their own price facts give them status `actual`
+with no produced/transfer/reconciled inflow (estimates never chain, and production costs are
+never used as a material's price). A candidate's date is its `purchase_date`, else its
+`created_at` date. Pick the latest candidate dated on or before this lot's date (ties: latest
+`created_at`, then id), else the earliest dated after (ties: earliest `created_at`). The unit
+cost is converted to this lot's unit (`price × candidate units per one lot unit`).
 
 ### Recompute
 
-No job queue exists (Xero sync jobs run synchronously), so recompute is **mark stale, compute
-on read**:
-
-```
-mark_stale(lot_ids):                            # same transaction as the fact change
-    walk forward: each lot → executions that consumed it (out_flows) → lots those executions
-    produced from that step onward → …; plus lots whose last-known-price source is in the set
-    set stale = true on those inventory_lot_costs and execution_costs rows (insert if missing)
-
-read(lot | execution):
-    if row missing or stale: recompute that node and its stale ancestors, in dependency order;
-    upsert; stale = false
-```
-
-Triggers for `mark_stale`: allocation created/changed/orphaned; `lot_cost_entries` change; a
-purchase line amount change on sync; any `cost_flows` insert; a `cost_share` change on a
-process (all its executions); `use_last_known_price` toggled (whole org).
-
-A read recomputes at most 500 nodes; beyond that it returns the stale cached figure with
-`"updating": true` and the remainder is finished by the next read or by
-`uv run workflow costing rebuild --org <id>` (also run at the end of every Xero purchases
-sync). The rebuild drops and recomputes both caches for the org; for the same facts it must
-produce the same values as incremental reads (AC18).
+Compute on read, nothing stored. Every lot/execution read builds the figure from facts, memoised
+for that request, so a late price, a changed setting or a newly costed material is reflected on
+the very next read — there is no stale state to invalidate. A single computation visits at most
+20,000 nodes (lots + executions); beyond that the API returns status `unknown` with warning
+`too_large` (not expected at any current tenant's size; the Phase 3 cache is the fix if it ever
+is). AC33 (rebuild equals incremental) is retired with the caches.
 
 ### What each stock write means for cost
 
@@ -446,7 +518,7 @@ produce the same values as incremental reads (AC18).
 | Wastage, tasting, stocktake loss | quantity × unit cost, reported by kind (Phase 3); unit cost unchanged |
 | Site transfer | destination lot carries the source lot's unit cost |
 | Customer-owned material | zero |
-| Library stock remainder | an ordinary output lot; takes its share under Q4 |
+| Library stock remainder | takes no share of the batch cost in Phase 1 (ASSUMPTION A9) |
 
 ## Deciding what is a stock purchase
 
@@ -508,7 +580,7 @@ Not stock. A date filter applies to all tabs. Only `stock` lines appear in any t
    - Saving, in one transaction under an idempotency key: each row creates a lot through
      `InventoryRepository.create_inventory_item` (supplier = payee, purchase date = document
      date, supplier batch number, expiry, location), which writes its `created` flow; then an
-     allocation per row with `cost_flow_id` = that flow. Then `mark_stale`.
+     allocation per row with `cost_flow_id` = that flow.
    - After saving, "Remember this for <payee>" creates a `stock` rule matching payee + account
      whose template reproduces the rows (material, type, unit, quantity as `fixed`, share as a
      percentage of the amount, ask flags set for any field the user filled).
@@ -571,7 +643,7 @@ The page and every dialog must work at phone width (375px) — it is used at the
 
 | Change in Xero | Nothing recorded yet | Already recorded |
 | --- | --- | --- |
-| Amount changed | line amount updates | each active allocation and `not_stock_amount` is rescaled by new ÷ old (rounded to 4 dp, remainder to the largest allocation); quantities unchanged; `review_reason = amount_changed`; `mark_stale` |
+| Amount changed | line amount updates | each active allocation and `not_stock_amount` is rescaled by new ÷ old (rounded to 4 dp, remainder to the largest allocation); quantities unchanged; `review_reason = amount_changed` |
 | Recoded to a non-stock account | line leaves the page | allocations and lots kept; `review_reason = recoded`; still shown under Recorded with a badge |
 | Recoded into a stock account | line appears | — |
 | Deleted / voided | line leaves the page | lots kept; allocations `orphaned` — still priced, status `estimated`; `review_reason = deleted_in_xero` |
@@ -595,8 +667,8 @@ The page and every dialog must work at phone width (375px) — it is used at the
   `line_key`), converts currency at the document's rate, converts amounts to ex-tax
   (`LineAmountTypes`: `Exclusive` → as is; `Inclusive` → line amount − tax amount; `NoTax` → as
   is), sets `kind`/sign (`SPEND` positive, `RECEIVE` on an expense account negative), applies
-  treatments, applies the "When Xero changes later" rules, and calls `mark_stale` for lots whose
-  allocations moved. It ends by running the org's costing rebuild.
+  treatments, applies the "When Xero changes later" rules. Costs are computed on read, so nothing needs
+  rebuilding afterwards.
 - The purchases sync runs inside the existing synchronous sync job; its counts go to
   `purchases_synced`. A failure in it marks the job `partial` and leaves sales sync results
   intact.
@@ -660,20 +732,34 @@ everything except admin-only) gets both, by the existing `_ALL − ADMIN_ONLY` r
 `COMPLIANCE`, `SALES` and `AUDITOR` get neither. Both are grantable to custom roles. Margin
 figures (Phase 2) need `costs.view` **and** `sales.view` (there is no `sales.revenue`).
 
-| Endpoint | Method | Permission |
-| --- | --- | --- |
-| purchases list, candidates, readiness, lot cost, execution cost, settings, rules (read) | GET | `costs.view` |
-| record, link, not-stock, skip, reopen, review actions, bulk, historical run | POST | `costs.manage` + `inventory.adjust` (record creates stock) |
-| lot cost entry | PUT | `costs.manage` |
-| rules, accounts, settings | POST/PUT/DELETE | `costs.manage` |
+Enforcement: `access_policy.POLICY` gets `("costing.*", _READ, "costs.view")` and
+`("costing.*", None, "costs.manage")` (the costing blueprint is named `costing`). A tuple in
+that table means *any of*, so where an action needs **two** permissions the route also carries
+the existing `@requires_permission("inventory.adjust")` decorator
+(`app/core/security/permissions.py`), which is an *and* on top of the table.
 
-Every costing endpoint is registered in the access-policy route table (default deny). API
+| Endpoint | Method | Table | Extra decorator | MR |
+| --- | --- | --- | --- | --- |
+| `/lots/<id>/cost`, `/executions/<id>/cost`, `/settings` | GET | `costs.view` | — | 8.1a |
+| `/lots/<id>/cost` (manual / free entry) | PUT | `costs.manage` | — | 8.1a |
+| `/lots/<id>/cost/<entry_id>` | DELETE | `costs.manage` | — | 8.1a |
+| `/settings` | PUT | `costs.manage` | — | 8.1a |
+| purchases list, candidates, readiness, rules, accounts | GET | `costs.view` | — | 8.1c–e |
+| `/purchases/<id>/record`, `/purchases/<id>/link` (create or link stock) | POST | `costs.manage` | `inventory.adjust` | 8.1c |
+| not-stock, skip, reopen, review, bulk, historical run | POST | `costs.manage` | — | 8.1c |
+| rules, accounts | POST/PUT/DELETE | `costs.manage` | — | 8.1c |
+
+Entering a price on a lot changes no stock, so it needs `costs.manage` only. Tests cover a
+custom role with `costs.manage` but not `inventory.adjust` (record/link 403, everything else
+allowed) and the inverse (every costing write 403).
+
+Every costing endpoint is covered by the access-policy route table (default deny). API
 responses from other slices that gain cost fields (lot detail, execution detail, Add Inventory)
 **omit** those fields unless the user has `costs.view`. Every costing route also returns 404
 when the org's `costing_enabled` subscription is off.
 
 tenant_scoped: yes. Every query filters `org_id`; every cross-table link is a composite
-`(org_id, …)` key; `mark_stale`, reads and rebuild never cross orgs.
+`(org_id, …)` key; cost reads and the backfill never cross orgs.
 
 ## API (all under `/api/core/costing`, `@requires_auth` + org scope + permission per the matrix)
 
@@ -695,13 +781,26 @@ tenant_scoped: yes. Every query filters `org_id`; every cross-table link is a co
 | `GET/PUT /settings` | start date, last known price |
 | Phase 2: `GET /materials/<name>/history`, `GET /margins` · Phase 3: `GET /stock-value`, `POST /stock-value/snapshot`, `GET /bridge` | |
 
-Cost payload, everywhere a cost is returned:
-`{"unit_cost": "4.750000" | null, "cost_so_far": "95.0000", "status": "actual|estimated|partial|unknown",
-"actual": "90.0000", "estimated": "5.0000", "missing": [{"inventory_item_id", "name"}],
-"split_assumed": false, "updating": false}`.
+Lot cost payload (`GET /lots/<id>/cost`):
+`{"inventory_item_id", "unit": "kg", "unit_cost": "45.000000" | null, "known_unit_cost": "45.000000" | null,
+"status": "actual|estimated|partial|unknown", "source": "manual|free|purchase|production|transfer|estimate|customer_owned|mixed|none",
+"estimate_from": {"inventory_item_id", "name"} | null, "priced_quantity": "2.0000", "unpriced_quantity": "0.0000",
+"missing": [{"inventory_item_id", "name"}], "warnings": [...], "entries": [{"id", "kind", "amount", "quantity", "cost_flow_id", "note", "created_at"}],
+"editable": true}` — `editable` is false for lots whose cost comes from production, transfer
+or a customer.
 
-CLI: `uv run workflow costing rebuild --org <id> [--all]` and
-`uv run workflow costing backfill-flows --org <id>` (idempotent).
+Execution cost payload (`GET /executions/<id>/cost`):
+`{"execution_id", "status", "known_input_cost": "95.0000", "cost_so_far": "0.0000",
+"cost_so_far_status", "split_assumed": false, "missing": [...], "warnings": [...],
+"inputs": [{"inventory_item_id", "name", "step_number", "quantity", "unit", "unit_cost", "known_amount", "status"}],
+"outputs": [{"inventory_item_id", "flow_id", "kind": "produced|reconciled_in", "name", "step_number", "quantity", "unit",
+"known_amount", "unit_cost", "known_unit_cost", "status", "missing": [...], "weight": "0.800000"}]}`.
+There is no single batch-level unit cost: each output has its own; the batch card (8.1e)
+chooses what to headline. Money is a string to 4 dp, unit costs to 6 dp.
+
+CLI: `uv run workflow costing backfill-flows --org <id> | --all` (idempotent). Switching costing on
+for an org is the existing `uv run workflow grant-feature --org <id> --feature costing` (and the
+admin site, whose `KNOWN_FEATURES` gains `costing`); run the backfill after granting.
 
 ## External surfaces
 
@@ -788,36 +887,47 @@ Phase 1 — historical runs, start date, notice
   summary contains a purchases card with count 3; with 0 lines neither is present; a user
   without `costs.manage` sees neither.
 
-Phase 1 — cost roll-up
+Phase 1 — cost roll-up (8.1a unless noted). Lots below are priced with manual entries unless
+an AC says otherwise; "costed $X for Q" means a whole-lot manual entry of amount X, quantity Q.
 - AC22: A raw lot with no cost, where an earlier lot of the same material (name differing only
-  in case and spacing, unit g vs kg) has an actual $45/kg, reports 45.000000/kg `estimated`.
-  With no costed lot of that material, or `use_last_known_price` off, it reports
-  `unit_cost: null`, status `unknown`.
-- AC23: A lot marked free reports `unit_cost 0.000000`, status `actual`; a lot with
-  `contract_customer_id` reports `0.000000`, `actual`, source `customer_owned`.
-- AC24: A 2 kg lot costed $90 that later has 3 kg added with a $120 allocation reports
-  42.000000/kg `actual`; if the added 3 kg has no cost, it reports 45.000000/kg `estimated`.
+  in case and spacing, unit g vs kg) is costed $45 for 1 kg, reports `unit_cost 0.045000` per g,
+  status `estimated`, `estimate_from` naming the source lot. With no costed lot of that
+  material, or `use_last_known_price` off, it reports `unit_cost: null`, status `unknown`, and
+  itself in `missing`. A produced lot of the same name is never used as the source.
+- AC23: A lot marked free reports `unit_cost 0.000000`, status `actual`, source `free`; a lot
+  with `contract_customer_id` reports `0.000000`, `actual`, source `customer_owned`, and a PUT of
+  a manual cost on it returns 400.
+- AC24: A 2 kg lot with a flow price of $90 on its `created` flow, which then has 3 kg added
+  with a flow price of $120 on the `added` flow, reports 42.000000/kg `actual`; if the added 3 kg
+  has no price, it reports 45.000000/kg `estimated` with `unpriced_quantity 3.0000`.
 - AC25: A batch whose step 1 consumes 1 kg of a 45/kg lot and 10 L of a 5/L lot and whose final
-  step produces 20 units reports `cost_so_far 0`, each output 4.750000/unit, `actual`.
-- AC26: Before any output is recorded, that batch's cost reports `cost_so_far 95.0000` and
-  `unit_cost null`.
-- AC27: A step producing 8 L and 2 L splits its pool 80/20; with the 2 L output configured
-  `byproduct`, the 8 L output takes 100%; with outputs in kg and units (incompatible), the
-  `final_product` output takes 100% and `split_assumed` is true.
-- AC28: A batch that consumed one `unknown` lot reports status `partial`, `missing` naming it,
-  `cost_so_far`/allocation excluding it, and `unit_cost null` on its output; after a manual
-  cost is entered on that lot, the next read returns a complete `unit_cost`.
+  step produces 20 units reports `cost_so_far 0.0000`, `known_input_cost 95.0000`, the output at
+  4.750000/unit, `actual`.
+- AC26: Before any output is recorded, that batch reports `cost_so_far 95.0000` and no outputs.
+- AC27: Splits, one test each: (a) outputs 8 L and 2 L, no config → 80/20; (b) 2 L configured
+  `byproduct` → 8 L takes 100%, 2 L `known_amount 0.0000`; (c) outputs in kg and units → the
+  `final_product` takes 100%, `split_assumed true`; (d) 8 L configured 30% and 2 L unconfigured
+  → 30/70; (e) two outputs configured 60% and 60% → 50/50; (f) both outputs `byproduct` → split
+  by quantity, `split_assumed true`; (g) an invalid `cost_share` (`value: 0`, `value: 150`,
+  unknown mode) is ignored → quantity split; (h) the allocated amounts always sum exactly to the
+  pool, e.g. $100 over three equal outputs → 33.3334 + 33.3333 + 33.3333.
+- AC28: A batch that consumed one `unknown` lot (plus a 45/kg lot) reports status `partial`,
+  `missing` naming the unknown lot, `known_input_cost` excluding it, and on its output
+  `unit_cost null`, `known_unit_cost` = the known floor; after a manual cost is entered on the
+  unknown lot, the next read returns a complete `unit_cost` and `actual`.
 - AC29: In a two-step batch where step 1 produces a WIP lot that step 2 fully consumes, the
-  final output's cost equals the step-1 inputs plus step-2 inputs, each counted once.
-- AC30: Linking a purchase to a raw lot after a batch consumed it changes that batch's output
-  unit cost on the next `GET /executions/<id>/cost` and the output lot's `GET /lots/<id>/cost`.
+  final output's cost equals the step-1 inputs plus step-2 inputs, each counted once. With one
+  step-1 input unknown, the WIP is `partial`, step 2's output is `partial` with that same lot in
+  `missing`, and its `known_unit_cost` = (step-1 known + step-2 inputs) ÷ quantity.
+- AC30 (8.1c): Linking a purchase to a raw lot after a batch consumed it changes that batch's
+  output unit cost on the next `GET /executions/<id>/cost` and the output lot's
+  `GET /lots/<id>/cost`.
 - AC31: An output reconciled into an untracked lot writes a `reconciled_in` flow for the
-  reconciled amount on that lot, which then carries its share of the batch cost.
-- AC32: A site transfer's destination lot reports the source lot's unit cost.
-- AC33: For an org with 3 batches and mixed facts, deleting all cache rows and running
-  `costing rebuild` yields `inventory_lot_costs` and `execution_costs` rows equal, column by
-  column except `computed_at`, to those produced by reading every lot and execution
-  incrementally after each fact was added.
+  reconciled amount (in the untracked lot's unit) on that lot, which then carries its share of
+  the batch cost; the batch's `outputs` lists it with `kind reconciled_in`.
+- AC32: A site transfer's destination lot reports the source lot's unit cost (converted when
+  the units differ), source `transfer`; its in-flow is `transfer_in` even though it carries the
+  source's `source_execution_step_id`.
 
 Phase 1 — Xero changes later
 - AC34: A recorded line whose Xero amount changes from $90 to $99 has its allocation rescaled
@@ -829,13 +939,16 @@ Phase 1 — Xero changes later
   removes the allocation and the lot reverts to estimate/unknown.
 
 Phase 1 — Core hooks, surfaces, access
-- AC36: Creating a lot through Add Inventory, uploading inventory, completing a step with
-  outputs, and adding quantity each write exactly one `in` flow of the written quantity, in the
-  same transaction (a forced rollback of the stock write leaves no flow). Completing a step
-  writes one `consumed` flow per input lot.
-- AC37: The backfill on a DB with existing lots and completed steps writes `reconstructed`
-  flows such that, for every lot, Σ in − Σ consumed − Σ other recorded decreases equals its
-  current quantity; running it twice adds nothing.
+- AC36: Creating a lot through the Add Inventory API, completing a step with outputs, and adding
+  quantity each write exactly one `in` flow of the written quantity with the kind and
+  `source_key` the spec gives, in the same transaction (a forced rollback of the stock write
+  leaves no flow). Completing a step writes one `consumed` flow per input lot, summed when the
+  same lot is used by two inputs, in the lot's unit (an input of 500 g from a kg lot writes
+  0.5000).
+- AC37: The backfill, on an org with lots and completed steps made with the hooks disabled,
+  writes the worked-example rows exactly (create-only; create + add 3 + consume 2; produced;
+  transfer destination), all `reconstructed = true`; a second run inserts 0 rows; a lot created
+  after the backfill gets only its live row, and a rerun still inserts 0.
 - AC38: Add Inventory with "total paid $50" for 5 kg creates the lot and a manual entry; the lot
   reports 10.000000/kg `actual`. The field is absent from the form for a user without
   `costs.manage` and ignored by the API if sent.
@@ -843,13 +956,14 @@ Phase 1 — Core hooks, surfaces, access
   uncosted raw material (via a WIP lot) lists both raw materials with `costed: true/false` and
   `ready: false`; once the second is costed, `ready: true`. A product with no batch lists its
   process's declared step inputs.
-- AC40: A user with neither costing permission gets 403 on every costing route; a user with
-  `costs.view` only gets 403 on every POST/PUT/DELETE; lot and execution detail APIs omit cost
-  fields for users without `costs.view`.
-- AC41: With `costing_enabled` off, every costing route returns 404, no cost fields appear,
+- AC40: A `PRODUCTION` user (neither costing permission) gets 403 on every 8.1a costing route;
+  a custom role with `costs.view` only gets 200 on every GET and 403 on every PUT/DELETE; an
+  `ADMIN` and a `MEMBER` get 200 on all. (8.1c adds the `inventory.adjust` pair tests.)
+- AC41: With the `costing` feature not granted, every costing route returns 404 for an admin,
   and step completion and stock writes still write `cost_flows`.
-- AC42: For every costing route, a request naming another org's line, lot, execution or rule
-  returns 404 and changes nothing (one cross-tenant test per route).
+- AC42: For every 8.1a costing route, a request naming another org's lot, execution or cost
+  entry returns 404 and changes nothing; a lot's cost never includes another org's lots, even
+  when a `cost_flows` row is forged pointing at one (the walk filters `org_id` on every query).
 - AC43: E2E at a 375×800 viewport: the Purchases page and record dialog render with
   `document.documentElement.scrollWidth <= 375`, and a purchase can be recorded end to end by
   tapping and typing only.
@@ -872,11 +986,50 @@ Phase 3
   + wastage + samples + variance + production losses ± estimate changes, to the cent.
 - AC51: The bridge lists every stock-account purchase line in the period not recorded as stock.
 
+8.1a — engine rules that close round-2 review gaps
+- AC52 (output identity): completing a step whose output carries `output_id` stores that id
+  as `source_output_id` on the lot and its flow; without `output_id`, a name matching exactly one
+  declared output resolves to its id; a name matching two declared outputs resolves to null and
+  that step's `cost_share` config is not applied; a renamed output definition keeps working
+  when the client sends `output_id`; an `output_id` the step doesn't declare is rejected (400).
+- AC53 (Library stock): bottling 78 bottles plus 350 mL Library stock from a $390 pool puts
+  $390 on the bottles (5.000000/bottle) and `known_amount 0.0000` on the Library stock lot,
+  whose lot cost is `0.000000`, status `actual`; a step whose only output is Library stock gives
+  it the whole pool.
+- AC54 (flow price bounds): a flow price whose quantity exceeds the flow's unpriced quantity
+  returns 400; a 5 kg lot with a flow price of $20 for 2 kg reports `priced_quantity 2.0000`,
+  `unpriced_quantity 3.0000`, `unit_cost 10.000000`, status `estimated` (not `actual`); a
+  second flow price of $30 for 3 kg makes it `actual` at 10.000000.
+- AC55 (no double count): a lot with a whole-lot price of $80 for 2 kg that then gets a flow
+  price of $90 for its 2 kg `created` flow reports 45.000000 (the whole-lot price applies to
+  nothing); with a 2 kg created flow priced $90 and 3 kg added unpriced plus a whole-lot price
+  of $60 for 3 kg, it reports (90 + 60) ÷ 5 = 30.000000 `actual`.
+- AC56 (one whole-lot price): a second PUT of a whole-lot price deactivates the first; at most
+  one active whole-lot entry exists per lot (database-enforced: a direct second insert fails).
+- AC57 (editable lots only): a PUT on a lot whose in-flow is `produced`, `transfer_in` or
+  `reconciled_in` returns 400, and its `editable` is false.
+- AC58 (last known price choice): with costed lots of the same material dated 1 Oct ($40/kg)
+  and 1 Nov ($50/kg), an uncosted lot dated 15 Oct uses $40, one dated 5 Nov uses $50, and one
+  dated 1 Sep uses $40 (earliest after); a newly costed lot dated 10 Oct changes the 15 Oct
+  lot's estimate to its price on the next read; turning `use_last_known_price` off makes all
+  three `unknown`.
+- AC59 (estimates don't chain): lot B estimated from lot A; lot C, the same material dated after
+  B, uses A's price (B is not a source).
+- AC60 (cycle): a lot that is both consumed by and produced from the same execution reports a
+  `cycle` warning and status `partial`, and the read returns 200 (no recursion error).
+- AC61 (no flow history): an execution completed before flows existed (actual_inputs set, no
+  `consumed` flows) reports status `partial`, warning `no_flow_history`, and its input lots in
+  `missing`; after the backfill it reports normally.
+- AC62 (settings): `GET /settings` returns `use_last_known_price true` for an org with no row;
+  `PUT` stores it; a `PUT` with a non-boolean returns 400.
+- AC63 (delete entry): `DELETE /lots/<id>/cost/<entry_id>` deactivates the entry (kept for
+  audit, `deactivated_at` set); the lot then falls back to its estimate or `unknown`.
+
 ## Phasing
 
 | Phase | Delivers | Outcome |
 | --- | --- | --- |
-| 1 | Scopes; accounts + bank-transaction sync; account defaults; purchase rules with pre-fill and "remember this"; Purchases page (record / already in stock / not stock / skip / refunds / review / bulk); historical runs; derived notice + Home card; manual and free cost; last known price; `cost_flows` hooks + backfill; roll-up with stale-on-change; cost readiness; lot cost panel; batch cost card; Add Inventory total paid; permissions; feature flag | Any producer gets a real cost per bottle, complete as soon as each material has been costed once. No setup required. |
+| 1 | Scopes; accounts + bank-transaction sync; account defaults; purchase rules with pre-fill and "remember this"; Purchases page (record / already in stock / not stock / skip / refunds / review / bulk); historical runs; derived notice + Home card; manual and free cost; last known price; `cost_flows` hooks + backfill; roll-up computed on read; cost readiness; lot cost panel; batch cost card; Add Inventory total paid; permissions; feature flag | Any producer gets a real cost per bottle, complete as soon as each material has been costed once. No setup required. |
 | 2 | Bills and supplier credits (credits are negative allocations, like refunds); margins with duty; duty if sold today; litres split option; material price history; auto-record rules; "paid for by" on Add Inventory | Profit per product over time. |
 | 3 | Stock value and month-end snapshots; Xero P&L fetch; bridge (periods from the first snapshot on); closing stock export; closed-month figures held fixed | Accountant-ready stock figure and an explained tie-back to Xero. |
 | 4 (opt-in) | Overheads into batch cost (rent, freight, labour as a configured rate per litre or per batch); freight added to a purchase's landed cost | Full absorption costing for those who want it. |
@@ -888,9 +1041,9 @@ bottle.
 
 | MR | Contents | ACs |
 | --- | --- | --- |
-| 8.1a Cost engine | slice skeleton, permissions, `costing_enabled`, `costing_settings`, `cost_flows` + hooks + backfill, `lot_cost_entries`, caches, roll-up, stale/rebuild, lot and execution cost API | AC22–AC33, AC36–AC37, AC40–AC42 (engine routes) |
-| 8.1b Xero purchases in | scopes, `xero_accounts`, `purchase_documents/lines`, account defaults, sync, changes-later rules | AC1–AC4, AC34–AC35 (sync side) |
-| 8.1c Rules and actions | `purchase_rules`, `purchase_allocations`, record/link/not-stock/skip/refund/review/bulk/historical APIs | AC5–AC20, AC35 (review) |
+| 8.1a Cost engine | slice skeleton, permissions, `costing` feature, `costing_settings`, `cost_flows` + hooks + output identity + backfill, `lot_cost_entries` (manual / free), roll-up computed on read, lot and execution cost API | AC22–AC29, AC31–AC32, AC36–AC37, AC40–AC42 (8.1a routes), AC52–AC63. Migration owns `cost_flows`, `lot_cost_entries`, `costing_settings` |
+| 8.1b Xero purchases in | scopes, `xero_accounts`, `purchase_documents/lines`, account defaults, sync | AC1–AC4. Migration owns those three tables |
+| 8.1c Rules and actions | `purchase_rules`, `purchase_allocations`, record/link/not-stock/skip/refund/review/bulk/historical APIs, changes-later rules | AC5–AC20, AC30, AC34–AC35. Migration owns `purchase_rules`, `purchase_allocations`, the `costing_settings` 8.1c columns |
 | 8.1d Purchases page | page, dialog, tabs, bulk, historical UI, derived notice, Home card | AC21, AC43 |
 | 8.1e Cost where people look | lot cost panel, batch cost card, readiness API + page, Add Inventory total paid | AC38–AC39 |
 
@@ -916,6 +1069,13 @@ regular supplier. From then on new purchases arrive pre-filled.
   is a pricing decision for plan item 6.3, not this build.
 - ASSUMPTION A8: "Cost per bottle" in Phases 1–3 is materials + packaging (+ duty at sale from
   Phase 2); overheads only via opt-in Phase 4.
+- ASSUMPTION A9: Library stock remainders take no share of a batch's cost in Phase 1, so the
+  bottles carry it all (slightly overstating bottle cost; reused Library stock enters a later
+  batch at 0). Rejected: a per-mL share, because bottle volume isn't recorded yet. Revisit with
+  the Phase 2 litres split.
+- ASSUMPTION A10: Phase 1 stores no cost caches; every figure is computed on read. Rejected:
+  stale-flag caches (the invalidation rules were the main source of review gaps, and current
+  tenants are small).
 
 ## Resolved during spec review (code facts)
 
@@ -928,8 +1088,8 @@ regular supplier. From then on new purchases arrive pre-filled.
 - R4 (V4): transfer destination → `transfer_receipt_id → transfer → source_item_id`.
 - R5 (V5): permissions and role defaults live in `app/core/security/access_policy.py`
   (`PERMISSIONS`, `ROLE_PERMISSIONS`, route table); there is no `sales.revenue`.
-- R6 (V6): Xero sync jobs are synchronous bookkeeping, not a queue → stale-on-change, compute on
-  read, rebuild at the end of each purchases sync.
+- R6 (V6): Xero sync jobs are synchronous bookkeeping, not a queue → no caches, compute on
+  read.
 - R7 (V7): scopes `accounting.banktransactions.read`, `accounting.settings.read`,
   `accounting.reports.profitandloss.read`. LineItemID stability after an edit in Xero's UI is
   undocumented → `superseded_at` handles a vanished key.
@@ -941,12 +1101,31 @@ regular supplier. From then on new purchases arrive pre-filled.
 
 ## To verify at build
 
-- V10. Postgres version supports `NULLS NOT DISTINCT` (15+); otherwise a unique index on
-  `coalesce(...)` expressions.
+- V10. 8.1a uses two partial unique indexes instead of `NULLS NOT DISTINCT`; 8.1c's
+  `purchase_rules` uniqueness does the same (resolved: portable whatever the production version).
 - V11. How a dashboard summary card and a derived system finding are registered (the
   `core.get_dashboard_summary` sections and `compliance_checks/system_status.py`).
-- V12. Which recorded stock decreases the backfill can read (FIFO allocations, wastage,
-  movements, tasting and contract dispatch) — any it can't read go into the floor rule.
+- V12. Resolved: the backfill reads `inventory_item.created` / `quantity_adjusted` entity events
+  and `actual_inputs`; other decreases don't affect unit cost and aren't reconstructed.
+
+## Open for 8.1b–e (round-2 review gaps not on the engine's path)
+
+Each must be resolved in this spec, with ACs, before its MR is built:
+
+- Gap 4: "Already in stock" candidates must include lots with a manual whole-lot price (AC8);
+  the flow price then takes precedence (AC55) and the manual entry is deactivated. (8.1c)
+- Gap 9: positional `pos:<n>` line keys need a content fingerprint so a reordered or inserted
+  Xero line supersedes instead of silently moving allocations. (8.1b)
+- Gap 10: historical runs always refetch their range idempotently; align AC20. (8.1c)
+- Gap 12: system-finding alerts need a generic `required_permission` filter and a provider
+  seam so Core holds no costing check id. (8.1d)
+- Gap 13: complete, deterministic rule precedence and where account overrides persist. (8.1c)
+- Gap 14: tab placement for every review reason. (8.1c/d)
+- Gap 15: readiness keyed by `source_output_id`, with a legacy name-only bucket. (8.1e)
+- Gap 18: ACs for every Phase 1 UI promise (rules UI, cost panel, batch card, readiness page,
+  history UI, phone width). (8.1d/e)
+- Minor: foreign-currency formula and rounding (8.1b); list-route isolation in AC42 (8.1c–e);
+  Phase 3 immutable valued movements before the first snapshot (Phase 3).
 
 ## Out of scope
 
