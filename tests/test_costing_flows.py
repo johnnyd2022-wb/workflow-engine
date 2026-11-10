@@ -69,7 +69,14 @@ def test_ac36_add_quantity_writes_added_flow_only_when_it_rises(world, db):
     db.commit()
     assert _shape(flows(db, org.id, item.id)) == [("added", D("3")), ("created", D("2"))]
     (added,) = flows(db, org.id, item.id, kind="added")
-    assert added.source_key.startswith("add:")
+    from app.core.db.models.entity_event import EntityEvent
+
+    (event,) = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.entity_id == item.id, EntityEvent.event_type == "inventory_item.quantity_adjusted")
+        .all()
+    )
+    assert added.source_key == f"add:{event.id}"
 
 
 def test_ac36_rolled_back_stock_write_leaves_no_flow(world, db):
@@ -114,7 +121,19 @@ def test_ac41_flows_are_written_with_the_feature_off(db, flask_app):  # noqa: F8
         spirit = lot(db, org.id, "Spirit", 10, "L")
         execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
         complete(client, execution, step, [(spirit, 10, "L")], [{"name": "Gin", "quantity": 10, "unit": "L"}])
-        assert {r.kind for r in _all_flows(db, org.id)} == {"created", "consumed", "produced"}
+        rows = sorted(
+            (r.direction, r.kind, D(str(r.quantity)), r.source_key.split(":")[0]) for r in _all_flows(db, org.id)
+        )
+        assert rows == [
+            ("in", "created", D("10"), "create"),
+            ("in", "produced", D("10"), "create"),
+            ("out", "consumed", D("10"), "consume"),
+        ]
+        from app.core.db.repositories.inventory_repo import InventoryRepository as Repo
+
+        Repo(db).add_quantity_to_inventory_item(spirit.id, org.id, "2")
+        db.commit()
+        assert [r.kind for r in flows(db, org.id, spirit.id, kind="added")] == ["added"]
     finally:
         purge(db, org)
 
@@ -227,8 +246,10 @@ def test_ac37_backfill_reconstructs_worked_examples_and_is_idempotent(world, db)
     assert _shape(flows(db, org.id, out.id)) == [("produced", D("1"))]
     assert first["inserted"] == len(rebuilt)
 
+    snapshot = sorted((str(r.id), r.source_key) for r in _all_flows(db, org.id))
     assert backfill_flows(db, org.id)["inserted"] == 0
     db.commit()
+    assert sorted((str(r.id), r.source_key) for r in _all_flows(db, org.id)) == snapshot
     later = lot(db, org.id, "Later", 1, "kg")
     assert backfill_flows(db, org.id)["inserted"] == 0
     db.commit()
@@ -242,11 +263,28 @@ def test_ac37_backfill_without_created_event_uses_current_plus_consumed(world, d
     from tests.factories import InventoryItemFactory
 
     org, client = world
+    from sqlalchemy import text
+
+    from app.core.db.models.entity_event import EntityEvent
+
     old = InventoryItemFactory(org_id=org.id, name="Old Spirit", quantity="10", unit="L", inventory_type="raw_material")
     db.commit()
     execution, (step,) = workflow(db, org.id, [[{"name": "Out", "unit": "L"}]])
     complete(client, execution, step, [(old, 4, "L")], [{"name": "Out", "quantity": 4, "unit": "L"}])
     _wipe_flows(db, org.id)
+    # Make it a genuine legacy lot: no created event to read the original quantity from.
+    db.execute(text("SELECT set_config('app.migration_mode','1',true)"))
+    db.execute(
+        text("DELETE FROM entity_events WHERE entity_id = :id AND event_type = 'inventory_item.created'"),
+        {"id": old.id},
+    )
+    db.commit()
+    assert (
+        db.query(EntityEvent)
+        .filter(EntityEvent.entity_id == old.id, EntityEvent.event_type == "inventory_item.created")
+        .count()
+        == 0
+    )
     backfill_flows(db, org.id)
     db.commit()
     (created,) = flows(db, org.id, old.id, kind="created")
@@ -259,10 +297,13 @@ def test_ac37_backfill_is_org_scoped(world, db):
     org, _ = world
     other = new_org(db)
     try:
+        mine = lot(db, org.id, "Mine", 1, "kg")
         lot(db, other.id, "Theirs", 1, "kg")
+        _wipe_flows(db, org.id)
         _wipe_flows(db, other.id)
-        backfill_flows(db, org.id)
+        assert backfill_flows(db, org.id)["inserted"] == 1
         db.commit()
+        assert [r.inventory_item_id for r in _all_flows(db, org.id)] == [mine.id]
         assert _all_flows(db, other.id) == []
     finally:
         purge(db, other)
@@ -275,6 +316,31 @@ def test_ac36_flows_cascade_when_a_lot_is_deleted(world, db):
     db.delete(db.get(InventoryItem, item_id))
     db.commit()
     assert flows(db, org.id, item_id) == []
+
+
+def test_source_key_is_unique_per_org(world, db):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.features.costing.models import CostFlow
+
+    org, _ = world
+    item = lot(db, org.id, "Keyed", 1, "kg")
+    (row,) = flows(db, org.id, item.id)
+    db.add(
+        CostFlow(
+            org_id=org.id,
+            inventory_item_id=item.id,
+            direction="in",
+            kind="added",
+            quantity=Decimal("1"),
+            source_key=row.source_key,
+            write_reason="test",
+            reconstructed=False,
+        )
+    )
+    with pytest.raises(IntegrityError, match="uq_cost_flows_source_key"):
+        db.flush()
+    db.rollback()
 
 
 def test_flow_kinds_are_constrained(world, db):
@@ -314,3 +380,22 @@ def test_flow_kinds_are_constrained(world, db):
     with pytest.raises(IntegrityError):
         db.flush()
     db.rollback()
+
+
+def test_ac36_failed_step_completion_leaves_no_consumed_flow(world, db):
+    """A completion that fails after the stock checks (here: an undeclared output_id) writes
+    neither the stock decrement nor any flow."""
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 4, "L")],
+        [{"name": "Gin", "quantity": 4, "unit": "L", "output_id": str(uuid4())}],
+        expect=400,
+    )
+    db.expire_all()
+    assert D(str(db.get(InventoryItem, spirit.id).quantity)) == D("10")
+    assert flows(db, org.id, spirit.id, kind="consumed") == []

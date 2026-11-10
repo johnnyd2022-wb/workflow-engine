@@ -273,6 +273,10 @@ class InventoryRepository:
                         "add_method": add_method,
                     },
                 )
+                # Live cost engine (8.1a): the lot's first inflow, same transaction.
+                from app.features.costing.flows import on_lot_created
+
+                on_lot_created(self.db, item, write_reason)
 
                 if commit:
                     self.db.commit()
@@ -321,7 +325,7 @@ class InventoryRepository:
                     item.extra_data = merged
 
                 ew = EventWriter(self.db, org_id)
-                ew.emit(
+                event = ew.emit(
                     event_type="inventory_item.quantity_adjusted",
                     entity_type="inventory_item",
                     entity_id=item.id,
@@ -333,6 +337,11 @@ class InventoryRepository:
                         "reason": InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY.value,
                     },
                     diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+                )
+                from app.features.costing.flows import on_quantity_added
+
+                on_quantity_added(
+                    self.db, item, add_val, event.id, InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY
                 )
 
                 if commit:

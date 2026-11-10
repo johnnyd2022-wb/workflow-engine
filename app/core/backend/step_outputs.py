@@ -104,6 +104,8 @@ def apply_whole_unit_rules(
                 "extra_data": extra,
                 # Library stock is new stock, never reconciled against an untracked item.
                 "untracked_item_id": None,
+                # Not a declared output: it takes no share of the batch cost (live-cogs A9).
+                "source_output_id": None,
             }
         )
     output_creations.extend(library_lines)

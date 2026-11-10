@@ -80,11 +80,14 @@ def test_ac40_view_only_custom_role(world, db, flask_app):  # noqa: F811
 
 def test_ac40_manage_without_inventory_adjust_can_price_lots(world, db, flask_app):  # noqa: F811
     """Entering a price changes no stock, so costs.manage alone is enough (spec matrix)."""
-    client = user_client(db, flask_app, world["org"], permissions=["costs.view", "costs.manage"])
+    client = user_client(db, flask_app, world["org"], permissions=["costs.manage"])
     response = client.put(
         f"{API}/lots/{world['item'].id}/cost", json={"kind": "manual", "amount": "80", "quantity": "2"}
     )
     assert response.status_code == 200, response.get_json()
+    assert client.get(f"{API}/lots/{world['item'].id}/cost").status_code == 403, "manage is not view"
+    reread = world["admin"].get(f"{API}/lots/{world['item'].id}/cost").get_json()
+    assert reread["unit_cost"] == "40.000000"
 
 
 @pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.MEMBER])
@@ -168,6 +171,11 @@ def test_lot_cost_payload_shape(world):
     ):
         assert key in body, key
     assert body["unit_cost"] == "45.000000" and body["source"] == "manual" and body["editable"] is True
+    assert body["known_unit_cost"] == "45.000000" and body["status"] == "actual"
+    assert body["estimate_from"] is None and body["missing"] == [] and body["warnings"] == []
+    (entry,) = body["entries"]
+    assert entry["id"] == str(world["entry"].id) and entry["kind"] == "manual"
+    assert entry["amount"] == "90.0000" and entry["quantity"] == "2.0000" and entry["cost_flow_id"] is None
 
 
 def test_execution_cost_payload_shape(world):
@@ -183,8 +191,14 @@ def test_execution_cost_payload_shape(world):
         "outputs",
     ):
         assert key in body, key
+    assert body["cost_so_far"] == "0.0000" and body["cost_so_far_status"] == "actual"
+    assert body["warnings"] == [] and body["missing"] == [] and body["split_assumed"] is False
+    assert body["known_input_cost"] == "45.0000" and body["status"] == "actual"
     (out,) = body["outputs"]
     assert out["unit_cost"] == "5.000000" and out["known_amount"] == "45.0000"
+    assert out["known_unit_cost"] == "5.000000" and out["weight"] == "1.000000"
+    assert out["quantity"] == "9.0000" and out["unit"] == "bottles" and out["step_number"] == 1
+    assert out["kind"] == "produced" and out["missing"] == [] and out["flow_id"]
     (inp,) = body["inputs"]
     assert inp["internal"] is False and inp["known_amount"] == "45.0000"
 

@@ -45,6 +45,8 @@ def new_org(db, *, grant=True):
 def user_client(db, flask_app, org, role=UserRole.ADMIN, permissions=None):
     """A signed-in client for a new user in ``org``. ``permissions`` makes a custom role."""
     email = f"costing-{uuid4()}@test.com"
+    if permissions is not None:
+        role = UserRole.MEMBER  # a custom role sits on a non-admin user (all-sites access)
     user = UserRepository(db).create_user(
         org_id=org.id,
         email=email,

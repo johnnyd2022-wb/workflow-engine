@@ -283,7 +283,7 @@ or orphaned `purchase_allocations`. Both have the same meaning:
   inflow for `amount`. Invariant, enforced at write under a row lock on the lot:
   `Σ quantity of positive flow prices on a flow ≤ flow.quantity` (400 otherwise). The flow's
   unpriced **residual** is `flow.quantity − Σ quantity`.
-- A **whole-lot price** (`cost_flow_id` null, positive amount) sets the unit price
+- A **whole-lot price** (`cost_flow_id` null; amount ≥ 0, zero only for `kind = free`) sets the unit price
   `p = amount / quantity` for every unpriced unit of the lot's `created`/`added` inflows,
   including residuals. Its `quantity` is only the basis of that price (what the receipt said).
 - Each unit of inflow is priced exactly once: flow prices first, the whole-lot price for what's
@@ -333,9 +333,10 @@ Written in the **same transaction** as the stock write, from three places only:
 
 **Output identity.** `complete_step` resolves each output's definition id and passes it to
 `create_inventory_item(source_output_id=…)` (which already validates it belongs to the step):
-the output's `output_id` when the client sends one that the step declares; else the one
-declared output whose stripped name equals the output's name, **only if exactly one** has that
-name; else null (no `cost_share` applies; the split falls back to quantity/primary). Library
+the output's `output_id` when the client sends one that the step declares (an `output_id` the
+step doesn't declare rejects the completion, 400); else the one declared output for which
+`declared.name.strip() == output.name.strip()` (case-sensitive), **only if exactly one**
+matches; else null (no `cost_share` applies; the split falls back to quantity/primary). Library
 stock lines carry `source_output_id = null` and `extra_data.library_stock = true`.
 `reconciled_in` rows carry the same resolved id as the output they came from.
 
@@ -343,7 +344,7 @@ These are plain inserts with no cost logic, so they cannot fail independently of
 write; there is no "costing off" path that skips them. Whether costing is enabled affects only
 whether costs are computed and shown.
 
-**Backfill** (`uv run workflow costing backfill-flows --org <id> | --all`; idempotent; not a
+**Backfill** (`uv run workflow costing backfill-flows --org-id <id> | --all`; idempotent; not a
 migration step). Sources, all marked `reconstructed = true`, all keyed as above so a rerun or a
 later live write inserts nothing twice:
 
@@ -357,6 +358,8 @@ later live write inserts nothing twice:
   converted to the lot's unit, `source_key consume:<execution_step_id>:<item_id>`; an input
   whose lot no longer exists, or whose unit can't convert, is skipped and counted in the
   command's output.
+- Reconstructed rows have `write_reason = "backfill"` and `created_at` = the time the backfill
+  ran (they sort after live rows; ordering ties break on `id`).
 - Historical reconciliations are **not** reconstructed: their untracked lots stay unknown and
   are listed as missing inputs, which is honest and fixable by entering a price.
 
@@ -479,8 +482,10 @@ A partial pool's `status` is `partial` even if every *costed* input is actual. E
    primary output of `free` and `assumed = true`.
 6. `byp` gets 0.
 
-Primary output: `final_product` before `work_in_progress` before `raw_material`, then largest
-quantity, then earliest flow, then flow id.
+Primary output, by the destination lots' actual `inventory_type`: `final_product` before
+`work_in_progress` before `raw_material`, then largest quantity, then earliest flow. "Earliest
+flow" everywhere means ordered by `(created_at, id)` ascending. (Ordinary outputs of one
+step share a type; differing types arise when an output is reconciled into an existing lot.)
 
 Precision: unit costs to 6 dp, money to 4 dp, rounding half-up, applied only at the API
 boundary and to allocations; internal arithmetic uses unrounded `Decimal`. Displayed to cents.
@@ -789,6 +794,21 @@ Lot cost payload (`GET /lots/<id>/cost`):
 "editable": true}` — `editable` is false for lots whose cost comes from production, transfer
 or a customer.
 
+`source`: the single source of every priced part — `manual`, `free`, `production`, `transfer` —
+or `mixed` when parts come from more than one; `estimate` (last known price), `customer_owned`,
+or `none` (unknown). `priced_quantity` = Σ quantity of priced parts (flow-priced and
+whole-lot-priced direct inflows, produced / reconciled inflows, costed transfer inflows; the
+whole-lot entry's own quantity for a lot with no flows; 0 for customer-owned and estimates);
+`unpriced_quantity` = the rest of the lot's inflow quantity.
+
+`PUT /lots/<id>/cost` body: `{"kind": "manual"|"free" (default manual), "amount", "quantity",
+"cost_flow_id"?, "note"?}`; `manual` needs `amount ≥ 0` and `quantity > 0` (numbers or numeric
+strings, ≤ 4 dp, < 10^14); `free` takes no amount (or 0) and `quantity` defaults to 1. Unknown
+fields → 400. A PUT replaces the active entry in the same slot (same lot and `cost_flow_id`).
+Returns 200 with the recalculated lot payload. `DELETE /lots/<id>/cost/<entry_id>` deactivates
+an active entry and returns 200 with the lot payload; an unknown or already inactive entry is
+404. `PUT /settings` body `{"use_last_known_price": true|false}` only; anything else 400.
+
 Execution cost payload (`GET /executions/<id>/cost`):
 `{"execution_id", "status", "known_input_cost": "95.0000", "cost_so_far": "0.0000",
 "cost_so_far_status", "split_assumed": false, "missing": [...], "warnings": [...],
@@ -800,8 +820,8 @@ execution (a WIP passed between its steps). `known_input_cost` = Σ `known_amoun
 that are not internal, so a WIP is never counted twice. There is no single batch-level unit cost: each output has its own; the batch card (8.1e)
 chooses what to headline. Money is a string to 4 dp, unit costs to 6 dp.
 
-CLI: `uv run workflow costing backfill-flows --org <id> | --all` (idempotent). Switching costing on
-for an org is the existing `uv run workflow grant-feature --org <id> --feature costing` (and the
+CLI: `uv run workflow costing backfill-flows --org-id <id> | --all` (idempotent). Switching costing on
+for an org is the existing `uv run workflow grant-feature --org-id <id> --feature costing` (and the
 admin site, whose `KNOWN_FEATURES` gains `costing`); run the backfill after granting.
 
 ## External surfaces
@@ -927,9 +947,10 @@ an AC says otherwise; "costed $X for Q" means a whole-lot manual entry of amount
 - AC31: An output reconciled into an untracked lot writes a `reconciled_in` flow for the
   reconciled amount (in the untracked lot's unit) on that lot, which then carries its share of
   the batch cost; the batch's `outputs` lists it with `kind reconciled_in`.
-- AC32: A site transfer's destination lot reports the source lot's unit cost (converted when
-  the units differ), source `transfer`; its in-flow is `transfer_in` even though it carries the
-  source's `source_execution_step_id`.
+- AC32: A site transfer's destination lot reports the source lot's unit cost, source
+  `transfer`, `editable false`; its in-flow is `transfer_in` even though it carries the source's
+  `source_execution_step_id`. (Transfers copy the source unit today; the engine converts if they
+  ever differ.) The backfill reconstructs that lot's flow as `transfer_in` too.
 
 Phase 1 — Xero changes later
 - AC34: A recorded line whose Xero amount changes from $90 to $99 has its allocation rescaled
@@ -996,12 +1017,15 @@ Phase 3
   when the client sends `output_id`; an `output_id` the step doesn't declare is rejected (400).
 - AC53 (Library stock): bottling 78 bottles plus 350 mL Library stock from a $390 pool puts
   $390 on the bottles (5.000000/bottle) and `known_amount 0.0000` on the Library stock lot,
-  whose lot cost is `0.000000`, status `actual`; a step whose only output is Library stock gives
-  it the whole pool.
-- AC54 (flow price bounds): a flow price whose quantity exceeds the flow's unpriced quantity
-  returns 400; a 5 kg lot with a flow price of $20 for 2 kg reports `priced_quantity 2.0000`,
+  whose lot cost is `0.000000`, status `actual`. Core can't currently produce a step whose only
+  output is Library stock (it is always a remainder line beside counted output); the engine
+  still gives such a step's Library stock the whole pool, proved on constructed flows.
+- AC54 (flow price bounds): a flow price whose quantity exceeds the flow's quantity returns
+  400; a 5 kg lot with a flow price of $20 for 2 kg reports `priced_quantity 2.0000`,
   `unpriced_quantity 3.0000`, `unit_cost 10.000000`, status `estimated` (not `actual`); a
-  second flow price of $30 for 3 kg makes it `actual` at 10.000000.
+  second PUT on the same flow of $50 for 5 kg **replaces** the first (which becomes inactive
+  with `deactivated_at` set) and makes it `actual` at 10.000000. Entries in one slot never
+  accumulate; several prices on one flow only arise from purchase allocations (8.1c).
 - AC55 (no double count): a lot with a whole-lot price of $80 for 2 kg that then gets a flow
   price of $90 for its 2 kg `created` flow reports 45.000000 (the whole-lot price applies to
   nothing); with a 2 kg created flow priced $90 and 3 kg added unpriced plus a whole-lot price

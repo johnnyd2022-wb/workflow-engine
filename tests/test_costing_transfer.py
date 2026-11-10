@@ -15,7 +15,7 @@ def test_ac32_transfer_destination_reports_source_unit_cost(transfers, db):  # n
     org, *_rest = transfers
     stock_id, actor_id = transfers[6], transfers[7]
     with unscoped():
-        price(db, org.id, stock_id, 200, 20)  # $10 a bottle, whole-lot (factory lot: no flows)
+        price(db, org.id, stock_id, 200, 20)  # $10 a bottle, whole-lot price over its created flow
     transfer = start(transfers)
     with unscoped():
         service.receive(db, org.id, actor_id, transfer["id"], str(uuid4()), {"quantity": "4"}, permit)
@@ -30,4 +30,26 @@ def test_ac32_transfer_destination_reports_source_unit_cost(transfers, db):  # n
         cost = lot_cost(db, org.id, fragment.id)
         assert (D(cost["unit_cost"]), cost["status"], cost["source"]) == (D("10"), "actual", "transfer")
         assert cost["editable"] is False
+        from app.features.costing.service import CostingError
+
+        try:
+            price(db, org.id, fragment.id, 1, 1)
+            raise AssertionError("a transfer destination must not take a typed price")
+        except CostingError:
+            db.rollback()
+
+        # The backfill reconstructs it as transfer_in too, with the live key.
+        from app.features.costing.backfill import backfill_flows
+        from app.features.costing.models import CostFlow
+
+        db.query(CostFlow).filter(CostFlow.org_id == org.id, CostFlow.inventory_item_id == fragment.id).delete()
+        db.commit()
+        backfill_flows(db, org.id)
+        db.commit()
+        (rebuilt,) = flows(db, org.id, fragment.id)
+        assert (rebuilt.kind, rebuilt.source_key, rebuilt.reconstructed) == (
+            "transfer_in",
+            f"create:{fragment.id}",
+            True,
+        )
         db.rollback()

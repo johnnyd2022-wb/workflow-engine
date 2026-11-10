@@ -1,0 +1,218 @@
+"""Writing cost facts: manual / free lot prices and costing settings (live-cogs 8.1a).
+
+Spec .agents/specs/live-cogs.md, "lot_cost_entries" (price facts). Callers own the commit.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal, InvalidOperation
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.core.db.models.inventory_item import InventoryItem
+from app.core.utils.time import utc_now
+from app.features.costing.models import DIRECT_KINDS, CostFlow, CostingSettings, LotCostEntry
+
+MAX_MONEY = Decimal("100000000000000")  # NUMERIC(18,4) holds < 10^14
+ENTRY_KINDS = ("manual", "free")
+
+
+class CostingError(ValueError):
+    """The request can't be carried out; the message is safe to show (400)."""
+
+
+class CostingNotFoundError(LookupError):
+    """No such lot / entry / execution in this organisation (404)."""
+
+
+def parse_amount(raw: Any, what: str, *, allow_zero: bool) -> Decimal:
+    if isinstance(raw, bool) or raw is None or raw == "":
+        raise CostingError(f"{what} is required")
+    try:
+        value = Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        raise CostingError(f"{what} must be a number") from None
+    if not value.is_finite():
+        raise CostingError(f"{what} must be a number")
+    if value < 0 or (value == 0 and not allow_zero):
+        raise CostingError(f"{what} must be {'0 or more' if allow_zero else 'more than 0'}")
+    if value >= MAX_MONEY:
+        raise CostingError(f"{what} is too large")
+    if value != value.quantize(Decimal("0.0001")):
+        raise CostingError(f"{what} can have at most 4 decimal places")
+    return value
+
+
+def _parse_uuid(raw: Any) -> UUID | None:
+    try:
+        return UUID(str(raw))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def get_lot(db: Session, org_id: UUID, item_id: Any, *, for_update: bool = False) -> InventoryItem:
+    item_uuid = _parse_uuid(item_id)
+    if item_uuid is None:
+        raise CostingNotFoundError("Lot not found")
+    query = db.query(InventoryItem).filter(InventoryItem.org_id == org_id, InventoryItem.id == item_uuid)
+    if for_update:
+        query = query.with_for_update()
+    item = query.one_or_none()
+    if item is None:
+        raise CostingNotFoundError("Lot not found")
+    return item
+
+
+def editable_reason(db: Session, org_id: UUID, item: InventoryItem) -> str | None:
+    """None when a price can be typed on this lot; otherwise why not."""
+    if item.contract_customer_id:
+        return "This stock belongs to a customer, so it costs you nothing"
+    if item.transfer_receipt_id or item.source_execution_step_id:
+        return "This lot's cost comes from where it was made or moved from"
+    other = (
+        db.query(CostFlow.id)
+        .filter(
+            CostFlow.org_id == org_id,
+            CostFlow.inventory_item_id == item.id,
+            CostFlow.direction == "in",
+            CostFlow.kind.notin_(DIRECT_KINDS),
+        )
+        .first()
+    )
+    if other:
+        return "This lot's cost comes from where it was made or moved from"
+    return None
+
+
+def active_entries(db: Session, org_id: UUID, item_id: UUID) -> list[LotCostEntry]:
+    return (
+        db.query(LotCostEntry)
+        .filter(
+            LotCostEntry.org_id == org_id,
+            LotCostEntry.inventory_item_id == item_id,
+            LotCostEntry.is_active.is_(True),
+        )
+        .order_by(LotCostEntry.created_at, LotCostEntry.id)
+        .all()
+    )
+
+
+def set_lot_price(
+    db: Session,
+    org_id: UUID,
+    item_id: Any,
+    *,
+    amount: Any = None,
+    quantity: Any = None,
+    kind: str = "manual",
+    cost_flow_id: Any = None,
+    note: str | None = None,
+    user_id: UUID | None = None,
+) -> LotCostEntry:
+    """Record a typed or free price, replacing the active one in the same slot (lot + flow)."""
+    if kind not in ENTRY_KINDS:
+        raise CostingError("kind must be 'manual' or 'free'")
+    item = get_lot(db, org_id, item_id, for_update=True)
+    reason = editable_reason(db, org_id, item)
+    if reason:
+        raise CostingError(reason)
+
+    if kind == "free":
+        if amount not in (None, "", 0, "0") and parse_amount(amount, "Amount", allow_zero=True) != 0:
+            raise CostingError("A free lot has no amount")
+        amount_value = Decimal("0")
+        quantity_value = (
+            Decimal("1") if quantity in (None, "") else parse_amount(quantity, "Quantity", allow_zero=False)
+        )
+    else:
+        amount_value = parse_amount(amount, "Amount", allow_zero=True)
+        quantity_value = parse_amount(quantity, "Quantity", allow_zero=False)
+
+    flow_uuid = None
+    if cost_flow_id not in (None, ""):
+        flow_uuid = _parse_uuid(cost_flow_id)
+        flow = (
+            db.query(CostFlow)
+            .filter(
+                CostFlow.org_id == org_id,
+                CostFlow.id == flow_uuid,
+                CostFlow.inventory_item_id == item.id,
+                CostFlow.direction == "in",
+                CostFlow.kind.in_(DIRECT_KINDS),
+            )
+            .one_or_none()
+            if flow_uuid
+            else None
+        )
+        if flow is None:
+            raise CostingError("That stock receipt isn't part of this lot")
+        if quantity_value > Decimal(str(flow.quantity)):
+            raise CostingError(f"This receipt was {flow.quantity} {item.unit}; a price can't cover more than that")
+
+    for existing in active_entries(db, org_id, item.id):
+        if existing.cost_flow_id == flow_uuid:
+            existing.is_active = False
+            existing.deactivated_at = utc_now()
+    db.flush()
+
+    entry = LotCostEntry(
+        org_id=org_id,
+        inventory_item_id=item.id,
+        cost_flow_id=flow_uuid,
+        kind=kind,
+        amount=amount_value,
+        quantity=quantity_value,
+        note=(note or None) and str(note)[:500],
+        is_active=True,
+        created_by_user_id=user_id,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def deactivate_entry(db: Session, org_id: UUID, item_id: Any, entry_id: Any) -> LotCostEntry:
+    item = get_lot(db, org_id, item_id, for_update=True)
+    entry_uuid = _parse_uuid(entry_id)
+    entry = (
+        db.query(LotCostEntry)
+        .filter(
+            LotCostEntry.org_id == org_id,
+            LotCostEntry.inventory_item_id == item.id,
+            LotCostEntry.id == entry_uuid,
+            LotCostEntry.is_active.is_(True),
+        )
+        .one_or_none()
+        if entry_uuid
+        else None
+    )
+    if entry is None:
+        raise CostingNotFoundError("Price not found")
+    entry.is_active = False
+    entry.deactivated_at = utc_now()
+    db.flush()
+    return entry
+
+
+def get_settings(db: Session, org_id: UUID) -> dict:
+    row = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
+    return {"use_last_known_price": True if row is None else bool(row.use_last_known_price)}
+
+
+def set_settings(db: Session, org_id: UUID, **changes) -> dict:
+    allowed = {"use_last_known_price"}
+    if not changes or set(changes) - allowed:
+        raise CostingError("Only use_last_known_price can be changed")
+    value = changes["use_last_known_price"]
+    if not isinstance(value, bool):
+        raise CostingError("use_last_known_price must be true or false")
+    row = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).with_for_update().one_or_none()
+    if row is None:
+        row = CostingSettings(org_id=org_id, use_last_known_price=value)
+        db.add(row)
+    else:
+        row.use_last_known_price = value
+    db.flush()
+    return get_settings(db, org_id)

@@ -18,6 +18,7 @@ from tests.costing_helpers import (
     lot,
     lot_cost,
     new_org,
+    output_defs,
     price,
     produced_lots,
     purge,
@@ -92,23 +93,6 @@ def test_ac23_free_and_customer_owned(world, db):
     assert (D(cost["unit_cost"]), cost["status"], cost["source"]) == (D("0"), "actual", "free")
 
 
-def test_ac23_customer_owned_is_zero_and_not_priceable(world, db):
-    org, _ = world
-    from app.features.contract_manufacturing.models.orders import ContractCustomer
-    from app.features.costing.service import CostingError
-
-    customer = ContractCustomer(org_id=org.id, name="Client Distilling")
-    db.add(customer)
-    db.commit()
-    theirs = lot(db, org.id, "Client Botanicals", 2, "kg", contract_customer_id=customer.id)
-    cost = lot_cost(db, org.id, theirs.id)
-    assert (D(cost["unit_cost"]), cost["status"], cost["source"]) == (D("0"), "actual", "customer_owned")
-    assert cost["editable"] is False
-    with pytest.raises(CostingError):
-        price(db, org.id, theirs.id, 10, 2)
-    db.rollback()
-
-
 def test_ac24_weighted_pool_over_two_inflows(world, db):
     org, _ = world
     from app.core.db.repositories.inventory_repo import InventoryRepository
@@ -162,11 +146,16 @@ def test_ac54_second_flow_price_replaces_first(world, db):
     org, _ = world
     item = lot(db, org.id, "Liquorice", 5, "kg")
     flow = _created_flow(db, org.id, item)
-    price(db, org.id, item.id, 20, 2, cost_flow_id=flow.id)
-    price(db, org.id, item.id, 50, 5, cost_flow_id=flow.id)
+    from app.features.costing.models import LotCostEntry
+
+    first = price(db, org.id, item.id, 20, 2, cost_flow_id=flow.id)
+    second = price(db, org.id, item.id, 50, 5, cost_flow_id=flow.id)
     cost = lot_cost(db, org.id, item.id)
     assert (D(cost["unit_cost"]), cost["status"]) == (D("10"), "actual")
-    assert len([e for e in cost["entries"]]) == 1
+    assert [e["id"] for e in cost["entries"]] == [str(second.id)]
+    assert D(cost["priced_quantity"]) == 5 and D(cost["unpriced_quantity"]) == 0
+    old = db.get(LotCostEntry, first.id)
+    assert old.is_active is False and old.deactivated_at is not None
 
 
 def test_ac55_whole_lot_price_never_double_counts(world, db):
@@ -273,6 +262,85 @@ def test_ac63_deleting_an_entry_falls_back(world, db):
     row = db.get(LotCostEntry, entry.id)
     assert row is not None and row.is_active is False and row.deactivated_at is not None
     assert lot_cost(db, org.id, item.id)["status"] == "unknown"
+
+
+def test_ac63_deleting_an_entry_falls_back_to_last_known_price(world, db):
+    org, _ = world
+    from app.features.costing import service
+
+    earlier = lot(db, org.id, "Pink Peppercorn", 1, "kg", purchase_date=date(2026, 9, 1))
+    price(db, org.id, earlier.id, 24, 1)
+    item = lot(db, org.id, "Pink Peppercorn", 1, "kg", purchase_date=date(2026, 10, 1))
+    entry = price(db, org.id, item.id, 30, 1)
+    assert D(lot_cost(db, org.id, item.id)["unit_cost"]) == 30
+    service.deactivate_entry(db, org.id, item.id, entry.id)
+    db.commit()
+    cost = lot_cost(db, org.id, item.id)
+    assert (D(cost["unit_cost"]), cost["status"], cost["source"]) == (D("24"), "estimated", "estimate")
+    assert cost["estimate_from"]["inventory_item_id"] == str(earlier.id)
+
+
+def test_estimate_rules_suffix_units_and_created_at_fallback(world, db):
+    org, _ = world
+    # Library stock of a material is the same material; an incompatible unit is not.
+    costed = lot(db, org.id, "Navy Gin - Library stock", 1000, "ml", purchase_date=date(2026, 10, 1))
+    price(db, org.id, costed.id, 30, 1000)  # $0.03/mL
+    in_litres = lot(db, org.id, "navy gin", 2, "L", purchase_date=date(2026, 10, 2))
+    cost = lot_cost(db, org.id, in_litres.id)
+    assert (D(cost["unit_cost"]), cost["status"]) == (D("30"), "estimated")
+    counted = lot(db, org.id, "Navy Gin", 3, "bottles")
+    assert lot_cost(db, org.id, counted.id)["status"] == "unknown", "mL can't price bottles"
+
+    # No purchase_date: created_at decides. Both sources are dated today by created_at, the
+    # later-created one is the most recent on or before the target.
+    a = lot(db, org.id, "Elderflower", 1, "kg")
+    price(db, org.id, a.id, 10, 1)
+    b = lot(db, org.id, "Elderflower", 1, "kg")
+    price(db, org.id, b.id, 12, 1)
+    target = lot(db, org.id, "Elderflower", 1, "kg")
+    assert lot_cost(db, org.id, target.id)["estimate_from"]["inventory_item_id"] == str(b.id)
+
+
+def test_ac42_estimates_never_use_another_orgs_lots(world, db):
+    org, _ = world
+    other = new_org(db)
+    try:
+        theirs = lot(db, other.id, "Juniper", 1, "kg")
+        price(db, other.id, theirs.id, 45, 1)
+        mine = lot(db, org.id, "Juniper", 1, "kg")
+        cost = lot_cost(db, org.id, mine.id)
+        assert cost["status"] == "unknown" and cost["estimate_from"] is None
+        with pytest.raises(Exception):  # noqa: B017 -- the not-found error type is the engine's own
+            lot_cost(db, org.id, theirs.id)
+        db.rollback()
+    finally:
+        purge(db, other)
+
+
+def test_reads_write_nothing(world, db):
+    """A10: costs are computed on read; a read never inserts or updates a row."""
+    org, client = world
+    from sqlalchemy import text
+
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 50, 10)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    complete(client, execution, step, [(spirit, 10, "L")], [{"name": "Gin", "quantity": 10, "unit": "L"}])
+
+    def snapshot():
+        db.expire_all()
+        return {
+            t: db.execute(text(f"SELECT count(*), max(xmin::text) FROM {t} WHERE org_id = :o"), {"o": org.id}).one()
+            for t in ("cost_flows", "lot_cost_entries", "costing_settings", "inventory_items")
+        }
+
+    before = snapshot()
+    lot_cost(db, org.id, spirit.id)
+    execution_cost(db, org.id, execution.id)
+    db.commit()
+    assert snapshot() == before
+    tables = {r[0] for r in db.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))}
+    assert not {"inventory_lot_costs", "execution_costs"} & tables, "Phase 1 keeps no cost caches"
 
 
 # --- batch roll-up ---------------------------------------------------------------------
@@ -417,8 +485,152 @@ def test_ac27h_rounding_remainder_keeps_the_total(world, db):
     defs = [{"name": n, "unit": "L"} for n in ("A", "B", "C")]
     execution, (step,) = workflow(db, org.id, [defs])
     complete(client, execution, step, [(item, 10, "L")], [{"name": n, "quantity": 1, "unit": "L"} for n in "ABC"])
-    amounts = sorted(D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"])
-    assert amounts == [D("33.3333"), D("33.3333"), D("33.3334")]
+    outs = by_name(execution_cost(db, org.id, execution.id)["outputs"])
+    # equal weights: the remainder goes to the earliest flow, which is A's
+    assert {n: D(o["known_amount"]) for n, o in outs.items()} == {
+        "A": D("33.3334"),
+        "B": D("33.3333"),
+        "C": D("33.3333"),
+    }
+
+
+def _forge_output(db, org_id, execution, step, item, quantity):
+    """A produced flow Core can't make today (another type in the same step, Library-stock-only)."""
+    from uuid import uuid4
+
+    from app.features.costing.models import CostFlow
+
+    db.add(
+        CostFlow(
+            org_id=org_id,
+            inventory_item_id=item.id,
+            direction="in",
+            kind="produced",
+            quantity=D(str(quantity)),
+            execution_id=execution.id,
+            execution_step_id=step.id,
+            step_number=step.step_number,
+            source_key=f"forged:{uuid4()}",
+            write_reason="test",
+            reconstructed=False,
+        )
+    )
+    db.commit()
+
+
+def test_ac27c_primary_output_is_chosen_by_type_before_quantity(world, db):
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 95, 10)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "bottles"}]])
+    complete(client, execution, step, [(spirit, 10, "L")], [{"name": "Gin", "quantity": 3, "unit": "bottles"}])
+    mash = lot(db, org.id, "Botanical mash", 50, "kg")  # raw material, far larger, incompatible unit
+    _forge_output(db, org.id, execution, step, mash, 50)
+    cost = execution_cost(db, org.id, execution.id)
+    outs = by_name(cost["outputs"])
+    assert D(outs["Gin"]["known_amount"]) == D("95") and D(outs["Botanical mash"]["known_amount"]) == 0
+    assert cost["split_assumed"] is True
+
+
+def test_ac27_percent_plus_several_free_outputs_share_the_rest_by_quantity(world, db):
+    org, client = world
+    defs = [
+        {"name": "Hearts", "unit": "L", "cost_share": {"mode": "percent", "value": 50}},
+        {"name": "Heads", "unit": "L"},
+        {"name": "Tails", "unit": "ml"},
+    ]
+    produce = [
+        {"name": "Hearts", "quantity": 8, "unit": "L"},
+        {"name": "Heads", "quantity": 1, "unit": "L"},
+        {"name": "Tails", "quantity": 3000, "unit": "ml"},
+    ]
+    execution, _ = _two_input_batch(db, org, client, defs, produce)
+    got = {o["name"]: D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"]}
+    # 50% to Hearts; the other 47.50 split 1 L : 3 L
+    assert got == {"Hearts": D("47.5"), "Heads": D("11.875"), "Tails": D("35.625")}
+
+
+def test_ac27_percents_below_100_with_no_free_output_are_scaled(world, db):
+    org, client = world
+    defs = [
+        {"name": "Hearts", "unit": "L", "cost_share": {"mode": "percent", "value": 30}},
+        {"name": "Tails", "unit": "L", "cost_share": {"mode": "percent", "value": 10}},
+        {"name": "Feints", "unit": "L", "cost_share": {"mode": "byproduct"}},
+    ]
+    produce = [
+        {"name": "Hearts", "quantity": 1, "unit": "L"},
+        {"name": "Tails", "quantity": 1, "unit": "L"},
+        {"name": "Feints", "quantity": 8, "unit": "L"},
+    ]
+    execution, _ = _two_input_batch(db, org, client, defs, produce)
+    got = {o["name"]: D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"]}
+    assert got == {"Hearts": D("71.25"), "Tails": D("23.75"), "Feints": D("0")}
+
+
+def test_ac52_duplicate_names_get_no_cost_share(world, db):
+    org, client = world
+    defs = [
+        {"name": "Gin", "unit": "L", "cost_share": {"mode": "byproduct"}},
+        {"name": "Gin", "unit": "L", "cost_share": {"mode": "byproduct"}},
+        {"name": "Tails", "unit": "L"},
+    ]
+    produce = [{"name": "Gin", "quantity": 5, "unit": "L"}, {"name": "Tails", "quantity": 5, "unit": "L"}]
+    execution, _ = _two_input_batch(db, org, client, defs, produce)
+    got = {o["name"]: D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"]}
+    assert got == {"Gin": D("47.5"), "Tails": D("47.5")}, "a name-only match must not pick up a config"
+
+
+def test_ac52_renamed_output_keeps_its_cost_share_by_id(world, db):
+    org, client = world
+    defs = [{"name": "Hearts", "unit": "L"}, {"name": "Tails", "unit": "L", "cost_share": {"mode": "byproduct"}}]
+    juniper = lot(db, org.id, "Juniper", 1, "kg")
+    price(db, org.id, juniper.id, 95, 1)
+    execution, (step,) = workflow(db, org.id, [defs])
+    tails_id = next(d["id"] for d in output_defs(step) if d["name"] == "Tails")
+    complete(
+        client,
+        execution,
+        step,
+        [(juniper, 1, "kg")],
+        [
+            {"name": "Hearts", "quantity": 8, "unit": "L"},
+            {"name": "Tails (renamed)", "quantity": 2, "unit": "L", "output_id": tails_id},
+        ],
+    )
+    got = {o["name"]: D(o["known_amount"]) for o in execution_cost(db, org.id, execution.id)["outputs"]}
+    assert got == {"Hearts": D("95"), "Tails (renamed)": D("0")}
+
+
+def test_ac53_library_stock_only_output_takes_the_pool(world, db):
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 40, 10)
+    execution, (step,) = workflow(db, org.id, [[]])
+    complete(client, execution, step, [(spirit, 10, "L")], [])
+    library = lot(
+        db, org.id, "Gin - Library stock", 500, "ml", inventory_type=FINAL, extra_data={"library_stock": True}
+    )
+    _forge_output(db, org.id, execution, step, library, 500)
+    (out,) = execution_cost(db, org.id, execution.id)["outputs"]
+    assert D(out["known_amount"]) == D("40")
+
+
+def test_node_limit_returns_unknown_too_large(world, db, monkeypatch):
+    org, client = world
+    from app.features.costing import engine
+
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 50, 10)
+    previous = spirit
+    for n in range(4):  # a chain of batches, each consuming the last one's output
+        execution, (step,) = workflow(db, org.id, [[{"name": f"Stage {n}", "unit": "L"}]])
+        complete(client, execution, step, [(previous, 10, "L")], [{"name": f"Stage {n}", "quantity": 10, "unit": "L"}])
+        (previous,) = produced_lots(db, org.id, step.id)
+    assert D(lot_cost(db, org.id, previous.id)["unit_cost"]) == D("5")
+    monkeypatch.setattr(engine, "MAX_NODES", 3)
+    small = lot_cost(db, org.id, previous.id)
+    assert small["status"] == "unknown" and small["warnings"] == ["too_large"] and small["unit_cost"] is None
+    assert execution_cost(db, org.id, execution.id)["warnings"] == ["too_large"]
 
 
 def test_ac28_unknown_input_makes_batch_partial_until_priced(world, db):
@@ -509,22 +721,41 @@ def test_ac31_reconciled_output_carries_cost_to_untracked_lot(world, db):
     org, client = world
     spirit = lot(db, org.id, "Spirit", 6, "L")
     price(db, org.id, spirit.id, 30, 6)
-    untracked = lot(db, org.id, "Gin Base", 10, "L", inventory_type=WIP, extra_data={"untracked": True})
+    untracked = lot(
+        db,
+        org.id,
+        "Gin Base",
+        10,
+        "L",
+        inventory_type=WIP,
+        extra_data={"untracked": True, "remaining_balance_to_reconcile": "10"},
+    )
     execution, (step,) = workflow(db, org.id, [[{"name": "Gin Base", "unit": "L"}]])
+    (definition,) = output_defs(step)
     complete(
         client,
         execution,
         step,
         [(spirit, 6, "L")],
-        [{"name": "Gin Base", "quantity": 6, "unit": "L", "untracked_item_id": str(untracked.id)}],
+        # 6000 mL into an L lot: the flow is in the lot's unit
+        [{"name": "Gin Base", "quantity": 6000, "unit": "ml", "untracked_item_id": str(untracked.id)}],
     )
     rec = flows(db, org.id, untracked.id, kind="reconciled_in")
     assert len(rec) == 1 and D(str(rec[0].quantity)) == D("6")
+    assert str(rec[0].source_output_id) == definition["id"]
+    assert rec[0].source_key == f"reconcile:{step.id}:{untracked.id}:{definition['id']}"
     cost = execution_cost(db, org.id, execution.id)
     (out,) = cost["outputs"]
     assert out["kind"] == "reconciled_in" and out["inventory_item_id"] == str(untracked.id)
     assert D(out["known_amount"]) == D("30")
-    assert D(lot_cost(db, org.id, untracked.id)["known_unit_cost"]) == D("5")
+    untracked_cost = lot_cost(db, org.id, untracked.id)
+    assert D(untracked_cost["known_unit_cost"]) == D("5")
+    assert untracked_cost["editable"] is False, "AC57: its cost comes from the batch"
+    from app.features.costing.service import CostingError
+
+    with pytest.raises(CostingError):
+        price(db, org.id, untracked.id, 1, 1)
+    db.rollback()
 
 
 def test_ac53_library_stock_takes_no_share(world, db):
@@ -598,40 +829,32 @@ def test_ac61_no_flow_history_then_backfill(world, db):
     assert after["status"] == "actual" and D(after["outputs"][0]["unit_cost"]) == D("5")
 
 
-def test_ac42_forged_cross_org_flow_is_ignored(world, db):
-    org, client = world
+def test_ac42_a_flow_cannot_point_at_another_orgs_lot(world, db):
+    """The composite (org_id, inventory_item_id) key makes a cross-org flow unrepresentable,
+    so the walk can never reach another org's lot through cost_flows."""
+    from sqlalchemy.exc import IntegrityError
+
     from app.features.costing.models import CostFlow
 
+    org, _ = world
     other = new_org(db)
     try:
         theirs = lot(db, other.id, "Spirit", 10, "L")
-        price(db, other.id, theirs.id, 1000, 10)
-        mine = lot(db, org.id, "Spirit", 10, "L")
-        execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
-        complete(client, execution, step, [(mine, 10, "L")], [{"name": "Gin", "quantity": 10, "unit": "L"}])
-        # A consumed row in MY org pointing at THEIR lot must not pull their cost in.
         db.add(
             CostFlow(
                 org_id=org.id,
                 inventory_item_id=theirs.id,
-                direction="out",
-                kind="consumed",
+                direction="in",
+                kind="created",
                 quantity=D("10"),
-                execution_id=execution.id,
-                execution_step_id=step.id,
-                step_number=1,
                 source_key=f"forged:{theirs.id}",
                 write_reason="test",
                 reconstructed=False,
             )
         )
-        try:
-            db.commit()
-        except Exception:  # a composite (org_id, item) FK rejecting the forgery is also a pass
-            db.rollback()
-        cost = execution_cost(db, org.id, execution.id)
-        assert D(cost["known_input_cost"]) < D("1000")
-        assert str(theirs.id) not in [i["inventory_item_id"] for i in cost["inputs"]]
+        with pytest.raises(IntegrityError, match="fk_cost_flows_item"):
+            db.flush()
+        db.rollback()
     finally:
         purge(db, other)
 
