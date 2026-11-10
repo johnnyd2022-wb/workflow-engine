@@ -792,10 +792,12 @@ or a customer.
 Execution cost payload (`GET /executions/<id>/cost`):
 `{"execution_id", "status", "known_input_cost": "95.0000", "cost_so_far": "0.0000",
 "cost_so_far_status", "split_assumed": false, "missing": [...], "warnings": [...],
-"inputs": [{"inventory_item_id", "name", "step_number", "quantity", "unit", "unit_cost", "known_amount", "status"}],
+"inputs": [{"inventory_item_id", "name", "step_number", "quantity", "unit", "unit_cost", "known_amount", "status", "internal"}],
 "outputs": [{"inventory_item_id", "flow_id", "kind": "produced|reconciled_in", "name", "step_number", "quantity", "unit",
 "known_amount", "unit_cost", "known_unit_cost", "status", "missing": [...], "weight": "0.800000"}]}`.
-There is no single batch-level unit cost: each output has its own; the batch card (8.1e)
+`inputs` lists every consumed flow; `internal` is true when the lot was produced by this same
+execution (a WIP passed between its steps). `known_input_cost` = Σ `known_amount` of inputs
+that are not internal, so a WIP is never counted twice. There is no single batch-level unit cost: each output has its own; the batch card (8.1e)
 chooses what to headline. Money is a string to 4 dp, unit costs to 6 dp.
 
 CLI: `uv run workflow costing backfill-flows --org <id> | --all` (idempotent). Switching costing on
