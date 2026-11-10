@@ -50,8 +50,13 @@ def consume_key(execution_step_id: UUID, item_id: UUID) -> str:
     return f"consume:{execution_step_id}:{item_id}"
 
 
-def reconcile_key(execution_step_id: UUID, untracked_item_id: UUID, output_ref: str) -> str:
-    return f"reconcile:{execution_step_id}:{untracked_item_id}:{output_ref}"
+def reconcile_key(execution_step_id: UUID, untracked_item_id: UUID, output_position: int) -> str:
+    """One key per actual-output row: two rows reconciling into one lot are two movements."""
+    return f"reconcile:{execution_step_id}:{untracked_item_id}:{output_position}"
+
+
+class FlowConflictError(RuntimeError):
+    """A live stock write tried to record a movement that is already recorded."""
 
 
 def insert_flow(
@@ -70,7 +75,11 @@ def insert_flow(
     source_output_id: UUID | None = None,
     reconstructed: bool = False,
 ) -> bool:
-    """Insert one flow; returns False when the quantity isn't positive or the key exists."""
+    """Insert one flow; returns False when the quantity isn't positive or the key exists.
+
+    Live writes (``reconstructed=False``) never expect their key to exist: a conflict there is
+    a bug that would silently drop a stock movement, so it fails the stock write instead.
+    """
     from app.features.costing.models import CostFlow
 
     amount = _qty(quantity)
@@ -89,14 +98,17 @@ def insert_flow(
             execution_step_id=execution_step_id,
             step_number=step_number,
             source_output_id=source_output_id,
-            source_key=source_key[:200],
+            source_key=source_key,
             write_reason=str(write_reason)[:50],
             reconstructed=reconstructed,
             created_at=utc_now(),
         )
         .on_conflict_do_nothing(index_elements=["org_id", "source_key"])
     )
-    return db.execute(stmt).rowcount > 0
+    inserted = db.execute(stmt).rowcount > 0
+    if not inserted and not reconstructed:
+        raise FlowConflictError(f"stock movement {source_key} is already recorded")
+    return inserted
 
 
 def _step_number(db: Session, execution_step_id: UUID | None) -> int | None:
@@ -166,7 +178,7 @@ def on_reconciled(
     execution_step_id,
     step_number,
     source_output_id,
-    output_name: str,
+    output_position: int,
 ) -> None:
     insert_flow(
         db,
@@ -175,7 +187,7 @@ def on_reconciled(
         direction="in",
         kind="reconciled_in",
         quantity=quantity,
-        source_key=reconcile_key(execution_step_id, untracked_item_id, str(source_output_id or output_name)),
+        source_key=reconcile_key(execution_step_id, untracked_item_id, output_position),
         write_reason="execution_step_inventory",
         execution_id=execution_id,
         execution_step_id=execution_step_id,

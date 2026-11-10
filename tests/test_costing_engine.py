@@ -743,7 +743,7 @@ def test_ac31_reconciled_output_carries_cost_to_untracked_lot(world, db):
     rec = flows(db, org.id, untracked.id, kind="reconciled_in")
     assert len(rec) == 1 and D(str(rec[0].quantity)) == D("6")
     assert str(rec[0].source_output_id) == definition["id"]
-    assert rec[0].source_key == f"reconcile:{step.id}:{untracked.id}:{definition['id']}"
+    assert rec[0].source_key == f"reconcile:{step.id}:{untracked.id}:0"  # one key per output row
     cost = execution_cost(db, org.id, execution.id)
     (out,) = cost["outputs"]
     assert out["kind"] == "reconciled_in" and out["inventory_item_id"] == str(untracked.id)
@@ -866,3 +866,186 @@ def test_unit_payload_precision(world, db):
     cost = lot_cost(db, org.id, item.id)
     assert cost["unit_cost"] == "3.333333"
     assert Decimal(cost["priced_quantity"]).as_tuple().exponent == -4
+
+
+# --- build-review round 1 regressions --------------------------------------------------------
+
+
+def test_r1_partly_reconciled_output_shares_one_configured_percentage(world, db):
+    """Codex R1 #1: an output split into a reconciled part and a surplus lot is ONE output for
+    its cost share. A at 30% (4 L reconciled + 4 L surplus), B unconfigured 2 L, $100 pool:
+    A $30 split $15/$15, B $70."""
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 100, 10)
+    untracked = lot(
+        db,
+        org.id,
+        "A",
+        4,
+        "L",
+        inventory_type=WIP,
+        extra_data={"untracked": True, "remaining_balance_to_reconcile": "4"},
+    )
+    execution, (step,) = workflow(
+        db,
+        org.id,
+        [[{"name": "A", "unit": "L", "cost_share": {"mode": "percent", "value": 30}}, {"name": "B", "unit": "L"}]],
+    )
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 10, "L")],
+        [
+            {"name": "A", "quantity": 8, "unit": "L", "untracked_item_id": str(untracked.id)},
+            {"name": "B", "quantity": 2, "unit": "L"},
+        ],
+    )
+    outs = execution_cost(db, org.id, execution.id)["outputs"]
+    by_kind = {(o["name"], o["kind"]): D(o["known_amount"]) for o in outs}
+    assert by_kind == {("A", "reconciled_in"): D("15"), ("A", "produced"): D("15"), ("B", "produced"): D("70")}
+
+
+def test_r1_deep_chain_does_not_hit_the_recursion_limit(world, db):
+    """Codex R1 #2: the walk is iterative, so a chain far deeper than Python's recursion limit
+    still returns normally (well under MAX_NODES)."""
+    import sys
+
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+
+    org, client = world
+    first = lot(db, org.id, "Base", 1, "L")
+    price(db, org.id, first.id, 7, 1)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Link", "unit": "L"}]])
+    process_id = execution.process_id
+    depth = sys.getrecursionlimit()  # one hop is several Python frames in a recursive walk
+    previous = first
+    repo = ExecutionRepository(db)
+    for n in range(depth):
+        ex = execution if n == 0 else repo.create_execution(org_id=org.id, process_id=process_id)
+        db.flush()
+        st = sorted(ex.execution_steps, key=lambda s: s.step_number)[0]
+        nxt = lot(db, org.id, "Link", 1, "L")  # a plain lot; the forged flows make it a link
+        _forge_consumed(db, org.id, ex, st, previous, 1)
+        _forge_output(db, org.id, ex, st, nxt, 1)
+        previous = nxt
+    cost = lot_cost(db, org.id, previous.id)
+    assert cost["warnings"] == [] or "too_large" not in cost["warnings"]
+    assert D(cost["known_unit_cost"]) == D("7")
+
+
+def _forge_consumed(db, org_id, execution, step, item, quantity):
+    from uuid import uuid4
+
+    from app.features.costing.models import CostFlow
+
+    db.add(
+        CostFlow(
+            org_id=org_id,
+            inventory_item_id=item.id,
+            direction="out",
+            kind="consumed",
+            quantity=D(str(quantity)),
+            execution_id=execution.id,
+            execution_step_id=step.id,
+            step_number=step.step_number,
+            source_key=f"forged:{uuid4()}",
+            write_reason="test",
+            reconstructed=False,
+        )
+    )
+
+
+def test_r1_two_rows_reconciling_into_one_lot_are_both_recorded(world, db):
+    """Codex R1 #3: two 3 L output rows into one untracked lot are 6 L of reconciled flow."""
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 6, "L")
+    price(db, org.id, spirit.id, 60, 6)
+    untracked = lot(
+        db,
+        org.id,
+        "Gin",
+        10,
+        "L",
+        inventory_type=WIP,
+        extra_data={"untracked": True, "remaining_balance_to_reconcile": "10"},
+    )
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 6, "L")],
+        [
+            {"name": "Gin", "quantity": 3, "unit": "L", "untracked_item_id": str(untracked.id)},
+            {"name": "Gin", "quantity": 3, "unit": "L", "untracked_item_id": str(untracked.id)},
+        ],
+    )
+    rec = flows(db, org.id, untracked.id, kind="reconciled_in")
+    assert sorted(D(str(r.quantity)) for r in rec) == [D("3"), D("3")]
+    assert D(lot_cost(db, org.id, untracked.id)["known_unit_cost"]) == D("10")
+
+
+def test_r1_mixed_source_direct_lot_supplies_an_estimate(world, db):
+    """Codex R1 #5: 2 kg manual $20 + 3 kg added and marked free = $4/kg actual, source mixed;
+    a later lot of the same material is estimated at $4/kg."""
+    org, _ = world
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    item = lot(db, org.id, "Hibiscus", 2, "kg", purchase_date=date(2026, 10, 1))
+    price(db, org.id, item.id, 20, 2, cost_flow_id=_created_flow(db, org.id, item).id)
+    InventoryRepository(db).add_quantity_to_inventory_item(item.id, org.id, "3")
+    db.commit()
+    (added,) = flows(db, org.id, item.id, kind="added")
+    price(db, org.id, item.id, 0, 3, kind="free", cost_flow_id=added.id)
+    own = lot_cost(db, org.id, item.id)
+    assert (D(own["unit_cost"]), own["status"], own["source"]) == (D("4"), "actual", "mixed")
+    later = lot(db, org.id, "Hibiscus", 1, "kg", purchase_date=date(2026, 10, 9))
+    est = lot_cost(db, org.id, later.id)
+    assert (D(est["unit_cost"]), est["status"]) == (D("4"), "estimated")
+
+
+def test_r1_step_must_belong_to_the_execution(world, db):
+    """Codex R1 #4/#6: provenance is validated as a pair, and the database refuses a flow whose
+    step isn't a step of its execution."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+    from app.features.costing.models import CostFlow
+
+    org, _ = world
+    ex_a, (step_a,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    ex_b, (step_b,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    repo = InventoryRepository(db)
+    for execution_id in (None, ex_a.id):
+        with pytest.raises(ValueError, match="must belong"):
+            repo.create_inventory_item(
+                org_id=org.id,
+                name="Gin",
+                quantity="1",
+                unit="L",
+                inventory_type=FINAL,
+                source_execution_id=execution_id,
+                source_execution_step_id=step_b.id,
+            )
+        db.rollback()
+    item = lot(db, org.id, "Loose", 1, "L")
+    db.add(
+        CostFlow(
+            org_id=org.id,
+            inventory_item_id=item.id,
+            direction="out",
+            kind="consumed",
+            quantity=D("1"),
+            execution_id=ex_a.id,
+            execution_step_id=step_b.id,
+            step_number=1,
+            source_key="forged:mismatch",
+            write_reason="test",
+            reconstructed=False,
+        )
+    )
+    with pytest.raises(IntegrityError, match="fk_cost_flows_execution_step"):
+        db.flush()
+    db.rollback()

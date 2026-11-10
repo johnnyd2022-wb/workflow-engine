@@ -183,6 +183,10 @@ class InventoryRepository:
             if not owned_step_row:
                 _deny("cross_org_source_execution_step", "source_execution_step_id", source_execution_step_id)
                 raise ValueError("source_execution_step_id not found in this organisation")
+            # A step only means something inside its own batch (cost_flows keys on the pair).
+            if source_execution_id is None or owned_step_row.execution_id != source_execution_id:
+                _deny("source_step_not_in_execution", "source_execution_step_id", source_execution_step_id)
+                raise ValueError("source_execution_step_id must belong to source_execution_id")
 
         if source_output_id is not None:
             if owned_step_row is None:

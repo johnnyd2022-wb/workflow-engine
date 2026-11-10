@@ -5,10 +5,17 @@ Spec .agents/specs/live-cogs.md, "Cost roll-up" and "Recompute". Reads facts onl
 ``CostEngine`` is one computation: results are memoised for its lifetime, so build a new one
 per request.
 
-Every value carries ``known`` (the dollars of inputs that have a cost — a floor when anything
-is missing), a ``status`` (actual < estimated < partial < unknown), the ``missing`` lots it
-depends on, and ``warnings``. Arithmetic is unrounded ``Decimal``; rounding happens only on
-allocations (4 dp) and at the payload boundary.
+The graph has two kinds of node: a **lot**, and a **batch step** (the batch's cost pool after
+that step). A lot made by step *n* depends on node (batch, *n*); step *n* depends on step
+*n − 1* and on the lots it consumed. Working at step granularity keeps a WIP handed from step 1
+to step 2 of one batch acyclic. The walk is an explicit stack, not recursion, so depth is
+bounded only by ``MAX_NODES``; a node met again while it is still being worked on is a cycle,
+and that edge contributes an unknown (``partial`` + warning ``cycle``).
+
+Every value carries ``known`` (dollars of inputs that have a cost — a floor when anything is
+missing), a ``status`` (actual < estimated < partial < unknown), the ``missing`` lots and
+``warnings``. Arithmetic is unrounded ``Decimal``; rounding happens only on allocations (4 dp)
+and at the payload boundary.
 """
 
 from __future__ import annotations
@@ -40,6 +47,7 @@ UNIT = Decimal("0.000001")
 QTY = Decimal("0.0001")
 MAX_NODES = 20_000
 ZERO = Decimal("0")
+HUNDRED = Decimal("100")
 _TYPE_RANK = {
     InventoryType.FINAL_PRODUCT.value: 0,
     InventoryType.WORK_IN_PROGRESS.value: 1,
@@ -104,17 +112,33 @@ class Alloc:
 
 
 @dataclass
-class ExecCost:
-    execution_id: UUID
-    alloc: dict = field(default_factory=dict)  # flow id -> Alloc
+class StepCost:
+    """The batch's pool after one step, and what that step consumed and handed out."""
+
+    carry_known: Decimal = ZERO
+    carry_status: str = ACTUAL
+    carry_missing: dict = field(default_factory=dict)
+    carry_warnings: set = field(default_factory=set)
+    alloc: dict = field(default_factory=dict)  # flow id -> Alloc, for this step's outputs
     inputs: list = field(default_factory=list)
     outputs: list = field(default_factory=list)
-    pool_known: Decimal = ZERO
-    pool_status: str = ACTUAL
-    status: str = ACTUAL
-    missing: dict = field(default_factory=dict)
-    warnings: set = field(default_factory=set)
+    statuses: list = field(default_factory=list)
+    absorbed_missing: dict = field(default_factory=dict)
+    absorbed_warnings: set = field(default_factory=set)
     split_assumed: bool = False
+
+
+@dataclass
+class ExecInfo:
+    steps: list
+    index: dict  # execution_step id -> position
+    consumed: dict  # position -> [CostFlow]
+    outs: dict  # position -> [CostFlow]
+    internal: set  # lots produced by this execution
+
+
+def _cycle_lot(item: InventoryItem) -> LotCost:
+    return LotCost(None, UNKNOWN, "none", missing={str(item.id): item.name}, warnings={"cycle"})
 
 
 class CostEngine:
@@ -123,10 +147,13 @@ class CostEngine:
         self.org_id = org_id
         self.use_last_known_price = get_settings(db, org_id)["use_last_known_price"]
         self._lots: dict[UUID, InventoryItem | None] = {}
-        self._lot_memo: dict[tuple[UUID, bool], LotCost] = {}
-        self._lot_visiting: set[UUID] = set()
-        self._exec_memo: dict[UUID, ExecCost] = {}
-        self._exec_building: dict[UUID, ExecCost] = {}
+        self._in_flow_cache: dict[UUID, list[CostFlow]] = {}
+        self._entry_cache: dict[UUID, list[LotCostEntry]] = {}
+        self._transfer_cache: dict[UUID, InventoryItem | None] = {}
+        self._exec_info: dict[UUID, ExecInfo | None] = {}
+        self._memo: dict[tuple, object] = {}
+        self._active: set[tuple] = set()  # entered, not finished: met again = cycle
+        self._direct_memo: dict[UUID, LotCost] = {}
         self._materials: dict[str, list[InventoryItem]] | None = None
         self._nodes = 0
 
@@ -135,7 +162,7 @@ class CostEngine:
     def lot(self, item_id) -> dict:
         item = self._load_lot_or_404(item_id)
         try:
-            cost = self._lot(item)
+            cost = self._solve(("lot", item.id))
         except TooLargeError:
             return self._too_large_lot(item)
         from app.features.costing.service import active_entries, editable_reason
@@ -177,7 +204,8 @@ class CostEngine:
     def execution(self, execution_id) -> dict:
         execution = self._load_execution_or_404(execution_id)
         try:
-            cost = self._exec(execution.id)
+            info = self._info(execution.id)
+            steps = [self._solve(("step", execution.id, i)) for i in range(len(info.steps))]
         except TooLargeError:
             return {
                 "execution_id": str(execution.id),
@@ -191,26 +219,95 @@ class CostEngine:
                 "inputs": [],
                 "outputs": [],
             }
-        external = sum((i["_known"] for i in cost.inputs if not i["internal"]), ZERO)
+        inputs = [i for s in steps for i in s.inputs]
+        missing: dict = {}
+        warnings: set = set()
+        for s in steps:
+            missing.update(s.absorbed_missing)
+            warnings |= s.absorbed_warnings
+        last = steps[-1] if steps else StepCost()
+        missing.update(last.carry_missing)
+        warnings |= last.carry_warnings
+        statuses = [st for s in steps for st in s.statuses]
+        external = sum((i["_known"] for i in inputs if not i["internal"]), ZERO)
         return {
             "execution_id": str(execution.id),
-            "status": cost.status,
+            "status": worst(ACTUAL, *statuses, last.carry_status),
             "known_input_cost": money(external),
-            "cost_so_far": money(cost.pool_known),
-            "cost_so_far_status": cost.pool_status,
-            "split_assumed": cost.split_assumed,
-            "missing": _missing_list(cost.missing),
-            "warnings": sorted(cost.warnings),
-            "inputs": [{k: v for k, v in i.items() if not k.startswith("_")} for i in cost.inputs],
-            "outputs": cost.outputs,
+            "cost_so_far": money(last.carry_known),
+            "cost_so_far_status": last.carry_status,
+            "split_assumed": any(s.split_assumed for s in steps),
+            "missing": _missing_list(missing),
+            "warnings": sorted(warnings),
+            "inputs": [{k: v for k, v in i.items() if not k.startswith("_")} for i in inputs],
+            "outputs": [o for s in steps for o in s.outputs],
         }
 
-    # --- loading ---------------------------------------------------------------------------
+    # --- the walk ------------------------------------------------------------------------------
 
-    def _tick(self) -> None:
-        self._nodes += 1
-        if self._nodes > MAX_NODES:
-            raise TooLargeError()
+    def _solve(self, root: tuple):
+        """Evaluate ``root`` after everything it depends on, without recursion."""
+        stack = [root]
+        while stack:
+            node = stack[-1]
+            if node in self._memo:
+                stack.pop()
+                continue
+            if node not in self._active:
+                self._nodes += 1
+                if self._nodes > MAX_NODES:
+                    raise TooLargeError()
+                self._active.add(node)
+                pending = [d for d in self._deps(node) if d not in self._memo and d not in self._active]
+                if pending:
+                    stack.extend(reversed(pending))
+                    continue
+            # every dependency is now settled, or is an ancestor still being worked on (a cycle)
+            self._memo[node] = self._evaluate(node)
+            self._active.discard(node)
+            stack.pop()
+        return self._memo[root]
+
+    def _deps(self, node: tuple) -> list[tuple]:
+        if node[0] == "lot":
+            item = self._get_lot(node[1])
+            if item is None or item.contract_customer_id:
+                return []
+            deps = []
+            for f in self._in_flows(item.id):
+                if f.kind == "transfer_in":
+                    src = self._transfer_source(item)
+                    if src is not None:
+                        deps.append(("lot", src.id))
+                elif f.kind in ("produced", "reconciled_in"):
+                    info = self._info(f.execution_id)
+                    position = info.index.get(f.execution_step_id) if info else None
+                    if position is not None:
+                        deps.append(("step", f.execution_id, position))
+            return deps
+        _, execution_id, position = node
+        info = self._info(execution_id)
+        deps = [("step", execution_id, position - 1)] if position > 0 else []
+        for c in info.consumed.get(position, []):
+            if self._get_lot(c.inventory_item_id) is not None:
+                deps.append(("lot", c.inventory_item_id))
+        return deps
+
+    def _evaluate(self, node: tuple):
+        if node[0] == "lot":
+            return self._evaluate_lot(self._get_lot(node[1]), allow_estimate=True)
+        return self._evaluate_step(node[1], node[2])
+
+    def _lot_value(self, item: InventoryItem) -> LotCost:
+        node = ("lot", item.id)
+        if node in self._memo:
+            return self._memo[node]
+        return _cycle_lot(item)  # only reachable for an ancestor still on the stack
+
+    def _step_value(self, execution_id: UUID, position: int) -> StepCost | None:
+        return self._memo.get(("step", execution_id, position))
+
+    # --- loading ---------------------------------------------------------------------------
 
     def _get_lot(self, item_id: UUID) -> InventoryItem | None:
         if item_id not in self._lots:
@@ -242,63 +339,88 @@ class CostEngine:
         return execution
 
     def _in_flows(self, item_id: UUID) -> list[CostFlow]:
-        return (
-            self.db.query(CostFlow)
-            .filter(CostFlow.org_id == self.org_id, CostFlow.inventory_item_id == item_id, CostFlow.direction == "in")
-            .order_by(CostFlow.created_at, CostFlow.id)
-            .all()
-        )
+        if item_id not in self._in_flow_cache:
+            self._in_flow_cache[item_id] = (
+                self.db.query(CostFlow)
+                .filter(
+                    CostFlow.org_id == self.org_id,
+                    CostFlow.inventory_item_id == item_id,
+                    CostFlow.direction == "in",
+                )
+                .order_by(CostFlow.created_at, CostFlow.id)
+                .all()
+            )
+        return self._in_flow_cache[item_id]
 
     def _entries(self, item_id: UUID) -> list[LotCostEntry]:
-        return (
-            self.db.query(LotCostEntry)
-            .filter(
-                LotCostEntry.org_id == self.org_id,
-                LotCostEntry.inventory_item_id == item_id,
-                LotCostEntry.is_active.is_(True),
+        if item_id not in self._entry_cache:
+            self._entry_cache[item_id] = (
+                self.db.query(LotCostEntry)
+                .filter(
+                    LotCostEntry.org_id == self.org_id,
+                    LotCostEntry.inventory_item_id == item_id,
+                    LotCostEntry.is_active.is_(True),
+                )
+                .all()
             )
-            .all()
-        )
+        return self._entry_cache[item_id]
 
     def _transfer_source(self, item: InventoryItem) -> InventoryItem | None:
+        if item.id in self._transfer_cache:
+            return self._transfer_cache[item.id]
+        src = None
         receipt = (
             self.db.query(SiteStockReceipt)
             .filter(SiteStockReceipt.org_id == self.org_id, SiteStockReceipt.id == item.transfer_receipt_id)
             .one_or_none()
+            if item.transfer_receipt_id
+            else None
         )
-        if receipt is None:
-            return None
-        transfer = (
-            self.db.query(SiteStockTransfer)
-            .filter(SiteStockTransfer.org_id == self.org_id, SiteStockTransfer.id == receipt.transfer_id)
-            .one_or_none()
+        if receipt is not None:
+            transfer = (
+                self.db.query(SiteStockTransfer)
+                .filter(SiteStockTransfer.org_id == self.org_id, SiteStockTransfer.id == receipt.transfer_id)
+                .one_or_none()
+            )
+            if transfer is not None and transfer.source_item_id != item.id:
+                src = self._get_lot(transfer.source_item_id)
+        self._transfer_cache[item.id] = src
+        return src
+
+    def _info(self, execution_id: UUID) -> ExecInfo | None:
+        if execution_id in self._exec_info:
+            return self._exec_info[execution_id]
+        steps = (
+            self.db.query(ExecutionStep)
+            .filter(ExecutionStep.org_id == self.org_id, ExecutionStep.execution_id == execution_id)
+            .order_by(ExecutionStep.step_number, ExecutionStep.id)
+            .all()
         )
-        if transfer is None or transfer.source_item_id == item.id:
-            return None
-        return self._get_lot(transfer.source_item_id)
+        index = {s.id: i for i, s in enumerate(steps)}
+        consumed, outs = defaultdict(list), defaultdict(list)
+        internal = set()
+        flows = (
+            self.db.query(CostFlow)
+            .filter(CostFlow.org_id == self.org_id, CostFlow.execution_id == execution_id)
+            .order_by(CostFlow.created_at, CostFlow.id)
+            .all()
+        )
+        for f in flows:
+            position = index.get(f.execution_step_id)
+            if f.direction == "in":
+                internal.add(f.inventory_item_id)
+            if position is None:
+                continue
+            (consumed if f.direction == "out" else outs)[position].append(f)
+        info = ExecInfo(steps, index, consumed, outs, internal)
+        self._exec_info[execution_id] = info
+        return info
 
     # --- lots --------------------------------------------------------------------------------
 
-    def _lot(self, item: InventoryItem, allow_estimate: bool = True) -> LotCost:
-        key = (item.id, allow_estimate)
-        if key in self._lot_memo:
-            return self._lot_memo[key]
+    def _evaluate_lot(self, item: InventoryItem, allow_estimate: bool) -> LotCost:
         if item.contract_customer_id:
-            result = LotCost(ZERO, ACTUAL, "customer_owned")
-            self._lot_memo[key] = result
-            return result
-        if item.id in self._lot_visiting:
-            return LotCost(None, UNKNOWN, "none", missing={str(item.id): item.name}, warnings={"cycle"})
-        self._tick()
-        self._lot_visiting.add(item.id)
-        try:
-            result = self._compute_lot(item, allow_estimate)
-        finally:
-            self._lot_visiting.discard(item.id)
-        self._lot_memo[key] = result
-        return result
-
-    def _compute_lot(self, item: InventoryItem, allow_estimate: bool) -> LotCost:
+            return LotCost(ZERO, ACTUAL, "customer_owned")
         ins = self._in_flows(item.id)
         entries = self._entries(item.id)
         flow_prices = {e.cost_flow_id: e for e in entries if e.cost_flow_id is not None}
@@ -315,11 +437,11 @@ class CostEngine:
             q = _d(f.quantity)
             if f.kind == "transfer_in":
                 src = self._transfer_source(item)
-                c = self._lot(src) if src is not None else None
-                if c is None:
+                if src is None:
                     warnings.add("transfer_source_missing")
                     unpriced_other += q
                     continue
+                c = self._lot_value(src)
                 missing.update(c.missing)
                 warnings |= c.warnings
                 factor = self._unit_factor(item.unit, src.unit)
@@ -375,11 +497,11 @@ class CostEngine:
         missing = {**missing, str(item.id): item.name}
         return LotCost(None, UNKNOWN, "none", missing, warnings, ZERO, unpriced)
 
-    def _unit_factor(self, lot_unit: str, source_unit: str) -> Decimal | None:
+    def _unit_factor(self, lot_unit: str | None, source_unit: str | None) -> Decimal | None:
         """How many ``source_unit`` there are in one ``lot_unit`` (price conversion)."""
         if (lot_unit or "").strip().lower() == (source_unit or "").strip().lower():
             return Decimal("1")
-        if not are_units_compatible(lot_unit, source_unit):
+        if not lot_unit or not source_unit or not are_units_compatible(lot_unit, source_unit):
             return None
         try:
             return convert_to_inventory_unit_decimal(Decimal("1"), lot_unit, source_unit)
@@ -397,9 +519,15 @@ class CostEngine:
         return self._materials
 
     def _is_direct(self, lot: InventoryItem) -> bool:
-        if lot.transfer_receipt_id or lot.source_execution_step_id:
+        if lot.transfer_receipt_id or lot.source_execution_step_id or lot.contract_customer_id:
             return False
         return all(f.kind in DIRECT_KINDS for f in self._in_flows(lot.id))
+
+    def _direct_cost(self, lot: InventoryItem) -> LotCost:
+        """A directly priced lot's own cost — no estimate, and no dependencies to walk."""
+        if lot.id not in self._direct_memo:
+            self._direct_memo[lot.id] = self._evaluate_lot(lot, allow_estimate=False)
+        return self._direct_memo[lot.id]
 
     def _estimate(self, item: InventoryItem) -> tuple[InventoryItem, Decimal] | None:
         target = _lot_date(item)
@@ -410,8 +538,8 @@ class CostEngine:
             factor = self._unit_factor(item.unit, other.unit)
             if factor is None:
                 continue
-            cost = self._lot(other, allow_estimate=False)
-            if cost.status != ACTUAL or cost.unit_known is None or cost.source not in ("manual", "free", "purchase"):
+            cost = self._direct_cost(other)
+            if cost.status != ACTUAL or cost.unit_known is None:
                 continue
             candidates.append((other, cost.unit_known * factor))
         if not candidates:
@@ -421,142 +549,129 @@ class CostEngine:
             return max(before, key=lambda c: (_lot_date(c[0]), c[0].created_at, str(c[0].id)))
         return min(candidates, key=lambda c: (_lot_date(c[0]), c[0].created_at, str(c[0].id)))
 
-    # --- executions ----------------------------------------------------------------------------
+    # --- batch steps --------------------------------------------------------------------------
 
     def _allocation(self, flow: CostFlow, item: InventoryItem) -> Alloc:
-        building = self._exec_building.get(flow.execution_id)
-        if building is not None:  # inside that execution: only earlier steps are settled
-            found = building.alloc.get(flow.id)
-            if found is not None:
-                return found
+        info = self._info(flow.execution_id)
+        position = info.index.get(flow.execution_step_id) if info else None
+        if position is None:
+            return Alloc(ZERO, PARTIAL, {str(item.id): item.name}, {"unallocated_output"}, ZERO)
+        step = self._step_value(flow.execution_id, position)
+        if step is None:  # that step is an ancestor still being worked on
             return Alloc(ZERO, PARTIAL, {str(item.id): item.name}, {"cycle"}, ZERO)
-        found = self._exec(flow.execution_id).alloc.get(flow.id)
+        found = step.alloc.get(flow.id)
         if found is None:
             return Alloc(ZERO, PARTIAL, {str(item.id): item.name}, {"unallocated_output"}, ZERO)
         return found
 
-    def _exec(self, execution_id: UUID) -> ExecCost:
-        if execution_id in self._exec_memo:
-            return self._exec_memo[execution_id]
-        if execution_id in self._exec_building:
-            return self._exec_building[execution_id]
-        self._tick()
-        cost = ExecCost(execution_id=execution_id)
-        self._exec_building[execution_id] = cost
-        try:
-            self._compute_exec(cost)
-        finally:
-            self._exec_building.pop(execution_id, None)
-        self._exec_memo[execution_id] = cost
+    def _evaluate_step(self, execution_id: UUID, position: int) -> StepCost:
+        info = self._info(execution_id)
+        step = info.steps[position]
+        cost = StepCost()
+        if position > 0:
+            prev = self._step_value(execution_id, position - 1)
+            if prev is None:  # cycle through an earlier step of this batch
+                cost.carry_status = PARTIAL
+                cost.carry_warnings = {"cycle"}
+            else:
+                cost.carry_known = prev.carry_known
+                cost.carry_status = prev.carry_status
+                cost.carry_missing = dict(prev.carry_missing)
+                cost.carry_warnings = set(prev.carry_warnings)
+
+        step_consumed = info.consumed.get(position, [])
+        if not step_consumed and _completed(step):
+            named = _named_input_lots(step)
+            if named:
+                cost.carry_status = worst(cost.carry_status, PARTIAL)
+                for item_id, name in named:
+                    lot = self._get_lot(item_id)
+                    cost.carry_missing[str(item_id)] = lot.name if lot is not None else name
+                cost.carry_warnings.add("no_flow_history")
+                cost.statuses.append(PARTIAL)
+
+        for c in step_consumed:
+            lot = self._get_lot(c.inventory_item_id)
+            if lot is None:
+                cost.carry_warnings.add("input_lot_missing")
+                continue
+            u = self._lot_value(lot)
+            q = _d(c.quantity)
+            known = q * u.unit_known if u.unit_known is not None else ZERO
+            status = u.status if u.status != UNKNOWN else PARTIAL
+            cost.carry_known += known
+            cost.carry_status = worst(cost.carry_status, status)
+            cost.carry_missing.update(u.missing)
+            cost.carry_warnings |= u.warnings
+            cost.statuses.append(status)
+            cost.inputs.append(
+                {
+                    "inventory_item_id": str(lot.id),
+                    "name": lot.name,
+                    "step_number": step.step_number,
+                    "quantity": qty(q),
+                    "unit": lot.unit,
+                    "unit_cost": unit_str(u.unit_known if u.status in (ACTUAL, ESTIMATED) else None),
+                    "known_amount": money(known),
+                    "status": u.status,
+                    "internal": lot.id in info.internal,
+                    "_known": known,
+                }
+            )
+
+        step_outs = info.outs.get(position, [])
+        if not step_outs:
+            return cost
+        weights, assumed = self._split_weights(step, step_outs)
+        cost.split_assumed = assumed
+        amounts = _allocate(cost.carry_known, step_outs, weights)
+        for f in step_outs:
+            w = weights[f.id]
+            if w == 0:
+                a = Alloc(ZERO, ACTUAL, {}, set(), ZERO)
+            else:
+                a = Alloc(amounts[f.id], cost.carry_status, dict(cost.carry_missing), set(cost.carry_warnings), w)
+            cost.alloc[f.id] = a
+            lot = self._get_lot(f.inventory_item_id)
+            q = _d(f.quantity)
+            known_unit = a.known / q if q > 0 else None
+            cost.outputs.append(
+                {
+                    "inventory_item_id": str(f.inventory_item_id),
+                    "flow_id": str(f.id),
+                    "kind": f.kind,
+                    "name": lot.name if lot is not None else None,
+                    "step_number": step.step_number,
+                    "quantity": qty(q),
+                    "unit": lot.unit if lot is not None else None,
+                    "known_amount": money(a.known),
+                    "unit_cost": unit_str(known_unit if a.status in (ACTUAL, ESTIMATED) else None),
+                    "known_unit_cost": unit_str(known_unit),
+                    "status": a.status,
+                    "missing": _missing_list(a.missing),
+                    "weight": unit_str(w),
+                }
+            )
+        # the outputs absorb the whole pool
+        cost.absorbed_missing = cost.carry_missing
+        cost.absorbed_warnings = cost.carry_warnings
+        cost.carry_known, cost.carry_status, cost.carry_missing, cost.carry_warnings = ZERO, ACTUAL, {}, set()
         return cost
 
-    def _compute_exec(self, cost: ExecCost) -> None:
-        steps = (
-            self.db.query(ExecutionStep)
-            .filter(ExecutionStep.org_id == self.org_id, ExecutionStep.execution_id == cost.execution_id)
-            .order_by(ExecutionStep.step_number, ExecutionStep.id)
-            .all()
-        )
-        flows = (
-            self.db.query(CostFlow)
-            .filter(CostFlow.org_id == self.org_id, CostFlow.execution_id == cost.execution_id)
-            .order_by(CostFlow.created_at, CostFlow.id)
-            .all()
-        )
-        consumed, outs = defaultdict(list), defaultdict(list)
-        for f in flows:
-            (consumed if f.direction == "out" else outs)[f.execution_step_id].append(f)
-        internal = {f.inventory_item_id for f in flows if f.direction == "in"}
-
-        pool_known, pool_status, pool_missing, pool_warnings = ZERO, ACTUAL, {}, set()
-        input_statuses: list[str] = []
-
-        for step in steps:
-            step_consumed = consumed.get(step.id, [])
-            if not step_consumed and _completed(step):
-                named = _named_input_lots(step)
-                if named:
-                    pool_status = worst(pool_status, PARTIAL)
-                    for item_id, name in named:
-                        lot = self._get_lot(item_id)
-                        pool_missing[str(item_id)] = lot.name if lot is not None else name
-                    pool_warnings.add("no_flow_history")
-                    input_statuses.append(PARTIAL)
-
-            for c in step_consumed:
-                lot = self._get_lot(c.inventory_item_id)
-                if lot is None:
-                    cost.warnings.add("input_lot_missing")
-                    continue
-                u = self._lot(lot)
-                q = _d(c.quantity)
-                known = q * u.unit_known if u.unit_known is not None else ZERO
-                status = u.status if u.status != UNKNOWN else PARTIAL
-                pool_known += known
-                pool_status = worst(pool_status, status)
-                pool_missing.update(u.missing)
-                pool_warnings |= u.warnings
-                input_statuses.append(status)
-                cost.inputs.append(
-                    {
-                        "inventory_item_id": str(lot.id),
-                        "name": lot.name,
-                        "step_number": step.step_number,
-                        "quantity": qty(q),
-                        "unit": lot.unit,
-                        "unit_cost": unit_str(u.unit_known if u.status in (ACTUAL, ESTIMATED) else None),
-                        "known_amount": money(known),
-                        "status": u.status,
-                        "internal": lot.id in internal,
-                        "_known": known,
-                    }
-                )
-
-            step_outs = outs.get(step.id, [])
-            if not step_outs:
-                continue
-            weights, assumed = self._split_weights(step, step_outs)
-            cost.split_assumed = cost.split_assumed or assumed
-            amounts = _allocate(pool_known, step_outs, weights)
-            cost.missing.update(pool_missing)
-            cost.warnings |= pool_warnings
-            for f in step_outs:
-                w = weights[f.id]
-                if w == 0:
-                    a = Alloc(ZERO, ACTUAL, {}, set(), ZERO)
-                else:
-                    a = Alloc(amounts[f.id], pool_status, dict(pool_missing), set(pool_warnings), w)
-                cost.alloc[f.id] = a
-                lot = self._get_lot(f.inventory_item_id)
-                q = _d(f.quantity)
-                known_unit = a.known / q if q > 0 else None
-                cost.outputs.append(
-                    {
-                        "inventory_item_id": str(f.inventory_item_id),
-                        "flow_id": str(f.id),
-                        "kind": f.kind,
-                        "name": lot.name if lot is not None else None,
-                        "step_number": step.step_number,
-                        "quantity": qty(q),
-                        "unit": lot.unit if lot is not None else None,
-                        "known_amount": money(a.known),
-                        "unit_cost": unit_str(known_unit if a.status in (ACTUAL, ESTIMATED) else None),
-                        "known_unit_cost": unit_str(known_unit),
-                        "status": a.status,
-                        "missing": _missing_list(a.missing),
-                        "weight": unit_str(w),
-                    }
-                )
-            pool_known, pool_status, pool_missing, pool_warnings = ZERO, ACTUAL, {}, set()
-
-        cost.missing.update(pool_missing)
-        cost.warnings |= pool_warnings
-        cost.pool_known = pool_known
-        cost.pool_status = pool_status
-        cost.status = worst(ACTUAL, *input_statuses, pool_status)
+    def _quantity_in(self, flow: CostFlow, unit: str | None) -> Decimal | None:
+        lot = self._get_lot(flow.inventory_item_id)
+        if lot is None or not unit:
+            return None
+        factor = self._unit_factor(unit, lot.unit)  # lot units in one `unit`
+        return _d(flow.quantity) / factor if factor else None
 
     def _split_weights(self, step: ExecutionStep, outs: list[CostFlow]) -> tuple[dict, bool]:
-        """Spec "split_weights": a weight per output flow summing to 1, and whether it was assumed."""
+        """Spec "split_weights": a weight per output flow summing to 1, and whether it was assumed.
+
+        Shares belong to logical outputs (one step output definition), not to flows: an output
+        partly reconciled into an untracked lot and partly new stock is two flows of one
+        output, which share that output's weight by quantity.
+        """
         defs = {
             str(d.get("id")): d
             for d in ((step.step.outputs if step.step is not None else None) or [])
@@ -569,54 +684,76 @@ class CostEngine:
             return bool(lot is not None and (lot.extra_data or {}).get("library_stock"))
 
         weights = {f.id: ZERO for f in outs}
-        library = [f for f in outs if is_library(f)]
-        candidates = [f for f in outs if not is_library(f)] or library
-        assumed = False
+        candidates = [f for f in outs if not is_library(f)] or [f for f in outs if is_library(f)]
+
+        groups: dict[tuple, list[CostFlow]] = {}
+        for f in candidates:
+            if f.source_output_id:
+                key = ("id", str(f.source_output_id))
+            else:
+                key = ("name", normalise(lots[f.id].name) if lots[f.id] is not None else str(f.id))
+            groups.setdefault(key, []).append(f)
+
+        def group_unit(key):
+            lot = lots[groups[key][0].id]
+            return lot.unit if lot is not None else None
+
+        def group_quantity(key, unit):
+            values = [self._quantity_in(f, unit) for f in groups[key]]
+            return None if any(v is None for v in values) else sum(values, ZERO)
 
         percent, byproduct, free = {}, [], []
-        for f in candidates:
-            cfg = _cost_share(defs.get(str(f.source_output_id)) if f.source_output_id else None)
+        for key in groups:
+            cfg = _cost_share(defs.get(key[1])) if key[0] == "id" else None
             if cfg is None:
-                free.append(f)
+                free.append(key)
             elif cfg == "byproduct":
-                byproduct.append(f)
+                byproduct.append(key)
             else:
-                percent[f.id] = cfg
+                percent[key] = cfg
+        assumed = False
         if not percent and not free:
             free, byproduct, assumed = byproduct, [], True
 
+        group_weight = {key: ZERO for key in groups}
         total_percent = sum(percent.values(), ZERO)
-        hundred = Decimal("100")
-        if percent and (total_percent > hundred or not free):
-            for fid, v in percent.items():
-                weights[fid] = v / total_percent
-            return weights, assumed
-        for fid, v in percent.items():
-            weights[fid] = v / hundred
-        rest = (hundred - total_percent) / hundred
-        if not free or rest <= 0:
-            return weights, assumed
-        if len(free) == 1:
-            weights[free[0].id] = rest
-            return weights, assumed
-        base_unit = lots[free[0].id].unit if lots[free[0].id] is not None else None
-        converted = {}
-        for f in free:
-            lot = lots[f.id]
-            factor = self._unit_factor(base_unit, lot.unit) if lot is not None and base_unit else None
-            if factor is None:
-                converted = None
-                break
-            # quantity of f in base units = q * (base units per one lot unit) = q / factor
-            converted[f.id] = _d(f.quantity) / factor
-        if converted and sum(converted.values(), ZERO) > 0:
-            total = sum(converted.values(), ZERO)
-            for fid, q in converted.items():
-                weights[fid] = rest * q / total
-            return weights, assumed
-        primary = min(free, key=lambda f: _primary_key(f, lots[f.id]))
-        weights[primary.id] = rest
-        return weights, True
+        if percent and (total_percent > HUNDRED or not free):
+            for key, v in percent.items():
+                group_weight[key] = v / total_percent
+        else:
+            for key, v in percent.items():
+                group_weight[key] = v / HUNDRED
+            rest = (HUNDRED - total_percent) / HUNDRED
+            if free and rest > 0:
+                if len(free) == 1:
+                    group_weight[free[0]] = rest
+                else:
+                    base = group_unit(free[0])
+                    sizes = {key: group_quantity(key, base) for key in free}
+                    if all(v is not None for v in sizes.values()) and sum(sizes.values(), ZERO) > 0:
+                        total = sum(sizes.values(), ZERO)
+                        for key, v in sizes.items():
+                            group_weight[key] = rest * v / total
+                    else:
+                        primary = min(free, key=lambda key: min(_primary_key(f, lots[f.id]) for f in groups[key]))
+                        group_weight[primary] = rest
+                        assumed = True
+
+        for key, flows in groups.items():
+            gw = group_weight[key]
+            if gw == 0:
+                continue
+            if len(flows) == 1:
+                weights[flows[0].id] = gw
+                continue
+            unit = group_unit(key)
+            sizes = {f.id: self._quantity_in(f, unit) for f in flows}
+            if any(v is None for v in sizes.values()):
+                sizes = {f.id: _d(f.quantity) for f in flows}
+            total = sum(sizes.values(), ZERO)
+            for f in flows:
+                weights[f.id] = gw * sizes[f.id] / total if total > 0 else gw / len(flows)
+        return weights, assumed
 
     def _too_large_lot(self, item: InventoryItem) -> dict:
         return {
@@ -687,7 +824,7 @@ def _cost_share(definition: dict | None):
             value = Decimal(str(raw))
         except (InvalidOperation, ValueError, TypeError):
             return None
-        if value.is_finite() and Decimal("0") < value <= Decimal("100"):
+        if value.is_finite() and ZERO < value <= HUNDRED:
             return value
     return None
 
@@ -698,7 +835,8 @@ def _primary_key(flow: CostFlow, lot: InventoryItem | None):
 
 
 def _allocate(pool: Decimal, outs: list[CostFlow], weights: dict) -> dict:
-    """Quantise each share to 4 dp; the rounding remainder goes to the largest weight."""
+    """Quantise each share to 4 dp; the rounding remainder goes to the largest weight
+    (ties: the earliest flow by (created_at, id))."""
     total = pool.quantize(MONEY, rounding=ROUND_HALF_UP)
     shares = {f.id: (pool * weights[f.id]).quantize(MONEY, rounding=ROUND_HALF_UP) for f in outs}
     weighted = [f for f in outs if weights[f.id] > 0]

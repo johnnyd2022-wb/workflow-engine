@@ -3,7 +3,9 @@
 `cost_flows` (every quantity into or out of a lot), `lot_cost_entries` (typed or free prices)
 and `costing_settings` (one row per org). Additive: nothing existing changes. Rows go with their
 lot or execution (ON DELETE CASCADE). The flow history for existing lots is filled by
-`uv run workflow costing backfill-flows`, not here. Downgrade refuses while prices are recorded.
+`uv run workflow costing backfill-flows`, not here. Downgrade drops only what this adds, and
+refuses while typed prices are recorded (they are user data with no other copy; the flows and
+settings are rebuildable). Repo convention, as in planning_replan_001.
 
 Revision ID: costing_engine_001
 Revises: planning_replan_001
@@ -23,6 +25,11 @@ UUID = postgresql.UUID(as_uuid=True)
 
 
 def upgrade():
+    # Lets a flow name a step of its own org *and* its own execution (composite FK below).
+    # id is the primary key, so every existing row already satisfies it.
+    op.create_unique_constraint(
+        "uq_execution_steps_org_execution_id", "execution_steps", ["org_id", "execution_id", "id"]
+    )
     op.create_table(
         "cost_flows",
         sa.Column("id", UUID, primary_key=True),
@@ -32,7 +39,7 @@ def upgrade():
         sa.Column("kind", sa.String(20), nullable=False),
         sa.Column("quantity", sa.Numeric(18, 4), nullable=False),
         sa.Column("execution_id", UUID, nullable=True),
-        sa.Column("execution_step_id", UUID, sa.ForeignKey("execution_steps.id", ondelete="CASCADE"), nullable=True),
+        sa.Column("execution_step_id", UUID, nullable=True),
         sa.Column("step_number", sa.Integer(), nullable=True),
         sa.Column("source_output_id", UUID, nullable=True),
         sa.Column("source_key", sa.String(200), nullable=False),
@@ -53,7 +60,16 @@ def upgrade():
             name="fk_cost_flows_execution",
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(
+            ["org_id", "execution_id", "execution_step_id"],
+            ["execution_steps.org_id", "execution_steps.execution_id", "execution_steps.id"],
+            name="fk_cost_flows_execution_step",
+            ondelete="CASCADE",
+        ),
         sa.CheckConstraint("quantity > 0", name="ck_cost_flows_quantity_positive"),
+        sa.CheckConstraint(
+            "execution_step_id IS NULL OR execution_id IS NOT NULL", name="ck_cost_flows_step_needs_execution"
+        ),
         sa.CheckConstraint(
             "(direction = 'in' AND kind IN ('created','added','produced','transfer_in','reconciled_in'))"
             " OR (direction = 'out' AND kind = 'consumed')",
@@ -122,6 +138,7 @@ def upgrade():
         sa.Column("use_last_known_price", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.UniqueConstraint("org_id", "id", name="uq_costing_settings_org_id"),
         sa.UniqueConstraint("org_id", name="uq_costing_settings_org"),
     )
 
@@ -137,3 +154,4 @@ def downgrade():
     op.drop_index("ix_cost_flows_execution_step", table_name="cost_flows")
     op.drop_index("ix_cost_flows_item_direction", table_name="cost_flows")
     op.drop_table("cost_flows")
+    op.drop_constraint("uq_execution_steps_org_execution_id", "execution_steps", type_="unique")

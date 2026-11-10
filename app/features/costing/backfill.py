@@ -103,16 +103,20 @@ def backfill_flows(db: Session, org_id: UUID) -> dict:
             if delta is not None and delta > 0:
                 added_rows.append((event, delta))
 
+    step_numbers = {
+        row.id: row.step_number
+        for row in db.query(ExecutionStep.id, ExecutionStep.step_number).filter(ExecutionStep.org_id == org_id)
+    }
     for lot in lots.values():
         quantity = created_qty.get(lot.id)
         if quantity is None:
             quantity = (_dec(lot.quantity) or Decimal("0")) + consumed_by_lot.get(lot.id, Decimal("0"))
         kind = created_kind(lot)
         from_execution = kind == "produced"
-        step_number = None
-        if from_execution and lot.source_execution_step_id:
-            row = db.query(ExecutionStep.step_number).filter(ExecutionStep.id == lot.source_execution_step_id).first()
-            step_number = row[0] if row else None
+        if from_execution and lot.source_execution_step_id not in step_numbers:
+            skipped_inputs += 1  # provenance outside this org: never follow it
+            continue
+        step_number = step_numbers.get(lot.source_execution_step_id) if from_execution else None
         inserted += insert_flow(
             db,
             org_id=org_id,

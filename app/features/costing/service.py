@@ -208,11 +208,15 @@ def set_settings(db: Session, org_id: UUID, **changes) -> dict:
     value = changes["use_last_known_price"]
     if not isinstance(value, bool):
         raise CostingError("use_last_known_price must be true or false")
-    row = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).with_for_update().one_or_none()
-    if row is None:
-        row = CostingSettings(org_id=org_id, use_last_known_price=value)
-        db.add(row)
-    else:
-        row.use_last_known_price = value
-    db.flush()
+    from uuid import uuid4
+
+    from sqlalchemy.dialects.postgresql import insert
+
+    now = utc_now()
+    db.execute(
+        insert(CostingSettings.__table__)
+        .values(id=uuid4(), org_id=org_id, use_last_known_price=value, created_at=now, updated_at=now)
+        .on_conflict_do_update(index_elements=["org_id"], set_={"use_last_known_price": value, "updated_at": now})
+    )
+    db.expire_all()
     return get_settings(db, org_id)

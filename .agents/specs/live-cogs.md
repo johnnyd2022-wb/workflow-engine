@@ -189,7 +189,8 @@ historical runs, manual cost, last-known price, the roll-up, readiness and the b
 All tables: `TenantScoped`, `org_id` not null, `UniqueConstraint(org_id, id)`, composite
 `(org_id, …)` foreign keys in the style of `inventory_items`. Money is `NUMERIC(18,4)` in the
 org's base currency, **excluding GST** (ASSUMPTION A2); unit costs are `NUMERIC(18,6)`.
-All migrations are additive and reversible (downgrade drops only the new tables/columns).
+All migrations are additive and reversible (downgrade drops only the new tables/columns, and
+refuses while typed prices exist, since those are user data with no other copy — repo convention).
 Nothing is added to `inventory_items`.
 
 Facts only. **Facts** (`purchase_*`, `lot_cost_entries`, `cost_flows`) are written by user
@@ -312,7 +313,9 @@ or orphaned `purchase_allocations`. Both have the same meaning:
 
 `source_key` values: `create:<item_id>`, `add:<event_id>` (the `inventory_item.quantity_adjusted`
 entity event the add emits), `consume:<execution_step_id>:<item_id>`,
-`reconcile:<execution_step_id>:<untracked_item_id>:<source_output_id or name>`.
+`reconcile:<execution_step_id>:<untracked_item_id>:<output row position>` (two rows reconciling into
+one lot are two movements). A live write whose key already exists is a bug and fails the stock
+write (`FlowConflictError`); only the backfill skips existing keys.
 
 Indexes: `(org_id, inventory_item_id, direction)`, `(org_id, execution_id, step_number)`.
 

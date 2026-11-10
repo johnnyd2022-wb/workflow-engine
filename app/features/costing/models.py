@@ -52,7 +52,17 @@ class CostFlow(TenantScoped, Base):
             name="fk_cost_flows_execution",
             ondelete="CASCADE",
         ),
+        # the step is this org's, and a step of that very execution
+        ForeignKeyConstraint(
+            ["org_id", "execution_id", "execution_step_id"],
+            ["execution_steps.org_id", "execution_steps.execution_id", "execution_steps.id"],
+            name="fk_cost_flows_execution_step",
+            ondelete="CASCADE",
+        ),
         CheckConstraint("quantity > 0", name="ck_cost_flows_quantity_positive"),
+        CheckConstraint(
+            "execution_step_id IS NULL OR execution_id IS NOT NULL", name="ck_cost_flows_step_needs_execution"
+        ),
         CheckConstraint(
             "(direction = 'in' AND kind IN ('created','added','produced','transfer_in','reconciled_in'))"
             " OR (direction = 'out' AND kind = 'consumed')",
@@ -73,7 +83,7 @@ class CostFlow(TenantScoped, Base):
     kind = Column(String(20), nullable=False)
     quantity = Column(Numeric(18, 4), nullable=False)
     execution_id = Column(UUID(as_uuid=True), nullable=True)
-    execution_step_id = Column(UUID(as_uuid=True), ForeignKey("execution_steps.id", ondelete="CASCADE"), nullable=True)
+    execution_step_id = Column(UUID(as_uuid=True), nullable=True)
     step_number = Column(Integer, nullable=True)
     source_output_id = Column(UUID(as_uuid=True), nullable=True)
     source_key = Column(String(200), nullable=False)
@@ -138,7 +148,10 @@ class CostingSettings(TenantScoped, Base):
     """One row per org; absent means the defaults."""
 
     __tablename__ = "costing_settings"
-    __table_args__ = (UniqueConstraint("org_id", name="uq_costing_settings_org"),)
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_costing_settings_org_id"),
+        UniqueConstraint("org_id", name="uq_costing_settings_org"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     use_last_known_price = Column(Boolean, nullable=False, default=True, server_default=sa.true())

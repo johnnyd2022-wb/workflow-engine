@@ -1225,7 +1225,7 @@ def register_routes(
                 # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
                 from app.features.reconciliation.service import reconcile_output_to_untracked_reduce_only
 
-                for output_params in output_creations:
+                for output_position, output_params in enumerate(output_creations):
                     untracked_item_id = output_params.pop("untracked_item_id", None)
                     quantity_decimal = output_params.pop("quantity_decimal", None)
                     output_name = output_params.get("name", "Unknown")
@@ -1259,7 +1259,7 @@ def register_routes(
                             execution_step_id=execution_step_uuid,
                             step_number=execution_step.step_number,
                             source_output_id=output_params.get("source_output_id"),
-                            output_name=output_name,
+                            output_position=output_position,
                         )
                         surplus = quantity_decimal
                         try:
