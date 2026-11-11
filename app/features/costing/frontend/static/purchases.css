@@ -1,0 +1,101 @@
+/* Purchases (live-cogs 8.1d). Style 1 is the base; Styles 2 and 3 are CONCEPT ONLY blocks below. */
+#page-content .pu-shell { max-width: 1100px; }
+#page-content .pu-style-pick { display: flex; gap: 6px; }
+#page-content .pu-style-pick [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent-strong); }
+
+#page-content .pu-tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--ui-border); overflow-x: auto; }
+#page-content .pu-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font: inherit;
+  color: var(--ui-text-muted); cursor: pointer; white-space: nowrap; }
+#page-content .pu-tab[aria-current="page"] { color: var(--ui-text); border-bottom-color: var(--ui-accent); font-weight: 600; }
+#page-content .pu-count:not(:empty) { margin-left: 4px; padding: 1px 7px; border-radius: 999px; background: var(--ui-accent-soft);
+  color: var(--ui-accent-strong); font-size: 12px; font-weight: 600; }
+
+#page-content .pu-list { display: grid; gap: 12px; }
+#page-content .pu-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 18px 20px; margin: 0; }
+#page-content .pu-card--solo { grid-template-columns: 1fr; }
+#page-content .pu-card--solo .pu-card__right { display: none; }
+#page-content .pu-card__right { border-left: 1px solid var(--ui-border); padding-left: 20px; display: grid; gap: 12px; align-content: start; }
+#page-content .pu-what__top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+#page-content .pu-payee { font-size: 16px; }
+#page-content .pu-amount { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .pu-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--ui-text-muted); font-size: 13px; }
+#page-content .pu-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#page-content .pu-badges:empty { display: none; }
+#page-content .pu-badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--ui-border); font-size: 12px; color: var(--ui-text-muted); }
+#page-content .pu-badge--warn { border-color: #e7b04a; color: #8a5a00; background: #fff7e6; }
+#page-content .pu-badge--ok { border-color: var(--ui-accent); color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 176 74 / 14%); color: #f4c97a; }
+#page-content .pu-propose__title { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-text-muted); }
+#page-content .pu-propose__rows { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
+#page-content .pu-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#page-content .pu-toast { position: sticky; top: 8px; z-index: 5; display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  margin: 0 0 12px; padding: 10px 14px; border-radius: var(--ui-radius-sm); background: var(--ui-surface); border: 1px solid var(--ui-accent);
+  box-shadow: var(--ui-shadow-card); }
+#page-content .pu-toast[hidden] { display: none; }
+
+#page-content .pu-dialog { position: fixed; inset: 0; margin: auto; height: fit-content; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-text); padding: 20px; }
+#page-content .pu-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+#page-content .pu-dialog h2 { margin: 0 0 4px; font-size: 18px; }
+#page-content .pu-rows__list { display: grid; gap: 12px; margin: 12px 0; }
+#page-content .pu-row-edit { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; padding: 12px; border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm); }
+#page-content .pu-field { display: grid; gap: 4px; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .pu-field input { width: 100% !important; min-width: 0 !important; }
+#page-content .pu-sum { margin: 8px 0; font-weight: 600; }
+#page-content .pu-rest { border: 0; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+#page-content .pu-rest[hidden] { display: none; }
+#page-content .pu-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) 120px; gap: 10px; align-items: center; padding: 8px 0;
+  border-bottom: 1px solid var(--ui-border); }
+#page-content .pu-dialog__error { color: #b42318; }
+#page-content .pu-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+@media (max-width: 720px) {
+  #page-content .pu-tabs { flex-wrap: wrap; overflow: visible; }
+  #page-content .pu-tab { padding: 8px 6px; font-size: 14px; }
+  #page-content .pu-card { grid-template-columns: 1fr; gap: 12px; }
+  #page-content .pu-card__right { border-left: 0; padding-left: 0; border-top: 1px solid var(--ui-border); padding-top: 12px; }
+  #page-content .pu-row-edit { grid-template-columns: 1fr 1fr; }
+  #page-content .pu-row-edit .pu-field:first-child { grid-column: 1 / -1; }
+  #page-content .pu-pick { grid-template-columns: auto minmax(0, 1fr); }
+  #page-content .pu-pick input[type="text"] { grid-column: 2; }
+  #page-content .pu-style-pick { display: none; }
+}
+
+/* CONCEPT ONLY — Style 2: one purchase at a time, large, keyboard-led. */
+#page-content [data-purchases-style="2"] .pu-list { max-width: 640px; margin: 0 auto; }
+#page-content [data-purchases-style="2"] .pu-card { grid-template-columns: 1fr; padding: 28px; }
+#page-content [data-purchases-style="2"] .pu-card__right { border-left: 0; padding-left: 0; border-top: 1px solid var(--ui-border); padding-top: 16px; }
+#page-content [data-purchases-style="2"] .pu-payee { font-size: 20px; }
+#page-content [data-purchases-style="2"] .pu-amount { font-size: 28px; }
+#page-content .pu-focusbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; max-width: 640px; margin: 0 auto 12px;
+  color: var(--ui-text-muted); font-size: 13px; }
+#page-content .pu-focusbar[hidden] { display: none; }
+#page-content .pu-focusbar kbd { padding: 0 5px; border: 1px solid var(--ui-border); border-radius: 4px; font-size: 12px; }
+@media (max-width: 720px) { #page-content .pu-keys { display: none; } }
+
+/* CONCEPT ONLY — Style 3: a review table with batch actions. */
+#page-content [data-purchases-style="3"] .pu-list { gap: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md);
+  background: var(--ui-surface); overflow: hidden; }
+#page-content .pu-row { display: grid; grid-template-columns: 28px 70px minmax(120px, 1fr) minmax(0, 2fr) 100px auto; gap: 12px;
+  align-items: center; padding: 10px 14px; border-top: 1px solid var(--ui-border); font-size: 14px; }
+#page-content .pu-row--head { border-top: 0; background: var(--ui-surface-subtle); font-size: 12px; color: var(--ui-text-muted);
+  text-transform: uppercase; letter-spacing: .04em; }
+#page-content .pu-row__amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+#page-content .pu-row__details { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--ui-text-muted); min-width: 0; }
+#page-content .pu-row__details .pu-badges { margin: 0; }
+#page-content .pu-row .pu-actions { flex-wrap: nowrap; justify-content: flex-end; min-width: 290px; }
+#page-content .pu-batchbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; margin: 0 0 8px; border-radius: var(--ui-radius-sm);
+  background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+#page-content .pu-batchbar[hidden] { display: none; }
+#page-content .pu-batchbar span { margin-right: auto; font-weight: 600; }
+@media (max-width: 720px) {
+  #page-content .pu-row { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "check payee amount" ". details details" "actions actions actions"; }
+  #page-content .pu-row > input { grid-area: check; }
+  #page-content .pu-row__payee { grid-area: payee; font-weight: 600; }
+  #page-content .pu-row__amount { grid-area: amount; white-space: nowrap; }
+  #page-content .pu-row__details { grid-area: details; }
+  #page-content .pu-row .pu-actions { grid-area: actions; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
+  #page-content .pu-row__date, #page-content .pu-row--head span { display: none; }
+  #page-content .pu-row--head { grid-template-areas: "check . ."; }
+}

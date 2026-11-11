@@ -67,6 +67,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core/stocktake", "production", "inventory", "Stocktake", "/core/inventory/view", None),
     Page("/core/sourcemap", "production", "inventory", "Trace and recall", "/core/inventory/view", None),
     Page("/core/site-transfers", "production", "inventory", "Stock transfers", "/core/inventory/view", None),
+    Page("/core/costing/purchases", "production", "purchases", "Purchases", None, None),
     Page("/core/contracts", "production", "contracts", "Contract orders", None, None),
     Page("/core/contracts/materials", "production", "contracts", "Customer materials", "/core/contracts", None),
     Page("/core/suppliers", "production", "suppliers", "Suppliers", None, None),
@@ -210,6 +211,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("inventory", "Inventory", "/core/inventory/view", ("inventory.view",)),
         Tab("contracts", "Contract orders", "/core/contracts", ("sales.view", "production.view")),
         Tab("suppliers", "Suppliers", "/core/suppliers", ("inventory.view",)),
+        # Live cost (8.1d): purchases from Xero to record into stock; costing orgs only.
+        Tab("purchases", "Purchases", "/core/costing/purchases", ("costs.view",), when="costing"),
     ),
     "compliance": (
         Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
@@ -261,7 +264,7 @@ WORKSPACE_TAB_GROUPS = {
         ("overview",),
         ("planner", "contracts"),
         ("workflows", "batches"),
-        ("inventory", "suppliers"),
+        ("inventory", "suppliers", "purchases"),
     ),
     "compliance": (
         ("overview", "tools", "configuration"),

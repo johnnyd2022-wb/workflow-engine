@@ -143,7 +143,7 @@ def _primary_tab(section: str, tab: Tab | None) -> Tab | None:
 
 
 def _conditions() -> dict[str, bool]:
-    """Setup-dependent tabs, read once per request (compliance, sales and settings pages only)."""
+    """Setup-dependent tabs, read once per request (compliance, sales, settings and production pages)."""
     # Cached on the request's own environ: `g` can outlive a request when an app context is reused.
     cached = request.environ.get("bize.nav_conditions")
     if cached is not None:
@@ -169,9 +169,20 @@ def _conditions() -> dict[str, bool]:
         "wine": "wine" in (settings.get("alcohol_product_types") or []),
         # Settings, Sites: only where the deployment and the organisation's plan allow it.
         "multi_site": entitled(db_session(), UUID(str(org_id))) if org_id else False,
+        "costing": _costing_on(org_id),
     }
     request.environ["bize.nav_conditions"] = conditions
     return conditions
+
+
+def _costing_on(org_id) -> bool:
+    if not org_id:
+        return False
+    from app.core.db import db_session
+    from app.core.security.entitlements import org_has_feature
+    from app.features.costing import FEATURE_KEY
+
+    return org_has_feature(db_session(), org_id, FEATURE_KEY)
 
 
 def _permitted(tab: Tab, user) -> bool:
@@ -236,7 +247,7 @@ def _workspace_links(section: str | None, key: str | None, user, conditions: dic
         and tab.path != request.path
         and _permitted(tab, user)
         # Module-gated links aren't in the page at all for orgs without the module.
-        and not (tab.when == "nz_alcohol" and _hidden(tab, conditions))
+        and not (tab.when in ("nz_alcohol", "costing") and _hidden(tab, conditions))
     ]
     if section == "production" and primary == "overview" and has_permission(user, "production.view"):
         links.append({"key": "tasks", "label": "Production tasks", "href": "/core/tasks", "hidden": False})
@@ -270,7 +281,9 @@ def nav_context() -> dict:
     if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows"}:
         tab_key = request.args["tab"]
     tabs = section_tabs(section, user) if user is not None else []
-    conditions = _conditions() if section in ("compliance", "sales", "settings") and user is not None else {}
+    conditions = (
+        _conditions() if section in ("compliance", "sales", "settings", "production") and user is not None else {}
+    )
     primary_key = _primary_key(section, tab_key, tabs)
     items = []
     for tab in tabs:
