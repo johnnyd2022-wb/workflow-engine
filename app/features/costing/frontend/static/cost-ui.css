@@ -119,3 +119,4 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
   #page-content .ru-row__name { grid-column: 1 / -1; }
   #page-content .ru-rule__head { flex-direction: column; }
 }
+#page-content .ru-dialog [aria-invalid="true"] { border-color: #b42318 !important; }

@@ -94,7 +94,8 @@ def costing_me():
     enabled = org_has_feature(db_session(), org, FEATURE_KEY)
     can_view = bool(enabled and has_permission(user, "costs.view", "costs.manage"))
     can_manage = bool(enabled and has_permission(user, "costs.manage"))
-    body = {"enabled": bool(enabled), "can_view": can_view, "can_manage": can_manage}
+    # "enabled" is effective: someone who can't see cost isn't told costing is on (AC93).
+    body = {"enabled": can_view, "can_view": can_view, "can_manage": can_manage}
     if can_view:
         from app.features.costing import actions
         from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
@@ -115,9 +116,10 @@ def get_lot_cost(item_id):
 
 @costing_bp.route(f"{API}/lots/<item_id>/cost", methods=["PUT"])
 @requires_auth
+@idempotent_write("costing_lot_cost_put")  # a retried save after a lost reply replays, never repeats
 def put_lot_cost(item_id):
     data = _body()
-    unknown = set(data) - {"kind", "amount", "quantity", "cost_flow_id", "note"}
+    unknown = set(data) - {"kind", "amount", "quantity", "cost_flow_id", "note", "replace"}
     if unknown:
         raise service.CostingError(f"Unknown field(s): {', '.join(sorted(unknown))}")
     service.set_lot_price(
@@ -130,6 +132,7 @@ def put_lot_cost(item_id):
         cost_flow_id=data.get("cost_flow_id"),
         note=data.get("note"),
         user_id=_user_id(),
+        replace_all=data.get("replace") == "all",
     )
     db_session.commit()
     return jsonify(CostEngine(db_session, _org()).lot(item_id))
@@ -137,6 +140,7 @@ def put_lot_cost(item_id):
 
 @costing_bp.route(f"{API}/lots/<item_id>/cost/<entry_id>", methods=["DELETE"])
 @requires_auth
+@idempotent_write("costing_lot_cost_delete")  # a retried save after a lost reply replays, never repeats
 def delete_lot_cost(item_id, entry_id):
     service.deactivate_entry(db_session, _org(), item_id, entry_id)
     db_session.commit()
@@ -350,6 +354,7 @@ def list_rules():
 
 @costing_bp.route(f"{API}/rules", methods=["POST"])
 @requires_auth
+@idempotent_write("costing_rule_create")  # a retried save after a lost reply replays, never repeats
 def create_rule():
     from app.features.costing import rules
 
@@ -360,6 +365,7 @@ def create_rule():
 
 @costing_bp.route(f"{API}/rules/<rule_id>", methods=["PUT"])
 @requires_auth
+@idempotent_write("costing_rule_update")  # a retried save after a lost reply replays, never repeats
 def update_rule(rule_id):
     from app.features.costing import rules
 
@@ -370,6 +376,7 @@ def update_rule(rule_id):
 
 @costing_bp.route(f"{API}/rules/<rule_id>", methods=["DELETE"])
 @requires_auth
+@idempotent_write("costing_rule_delete")  # a retried save after a lost reply replays, never repeats
 def delete_rule(rule_id):
     from app.features.costing import rules
 

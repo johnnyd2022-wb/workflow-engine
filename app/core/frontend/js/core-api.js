@@ -473,10 +473,11 @@ window.CoreAPI = window.CoreAPI || {
         return response.blob();
     },
 
-    async inventoryCsvCommit(payload) {
+    async inventoryCsvCommit(payload, opts = {}) {
         return this.request('/inventory/csv-commit', {
             method: 'POST',
             body: payload,
+            headers: opts.idempotencyKey ? {'Idempotency-Key': opts.idempotencyKey} : undefined,
         });
     },
 

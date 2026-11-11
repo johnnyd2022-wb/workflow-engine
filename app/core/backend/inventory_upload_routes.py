@@ -16,6 +16,7 @@ from uuid import UUID
 from flask import Response, g, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
@@ -426,6 +427,7 @@ def register_routes(bp):
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
+    @idempotent_write("inventory_csv_commit")  # a lost reply replays; re-sending can't add the file twice
     def csv_commit():
         """Commit validated CSV rows as inventory items. Re-validates on backend.
 

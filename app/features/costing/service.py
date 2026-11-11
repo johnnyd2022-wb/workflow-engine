@@ -80,6 +80,78 @@ def price_new_lot(db: Session, org_id: UUID, item: InventoryItem, amount: Decima
     )
 
 
+def lot_provenance(db: Session, org_id: UUID, item: InventoryItem) -> dict | None:
+    """Where a lot's cost comes from, for the cost panel: the newest purchase recorded into it,
+    the batch that made it, or the lot it was moved from. Hrefs are same-origin paths."""
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.process import Process
+    from app.features.costing.models import PurchaseAllocation, PurchaseDocument, PurchaseLine
+
+    doc = (
+        db.query(PurchaseDocument)
+        .join(
+            PurchaseLine,
+            (PurchaseLine.org_id == PurchaseDocument.org_id) & (PurchaseLine.document_id == PurchaseDocument.id),
+        )
+        .join(
+            PurchaseAllocation,
+            (PurchaseAllocation.org_id == PurchaseLine.org_id)
+            & (PurchaseAllocation.purchase_line_id == PurchaseLine.id),
+        )
+        .filter(
+            PurchaseAllocation.org_id == org_id,
+            PurchaseAllocation.inventory_item_id == item.id,
+            PurchaseAllocation.status == "active",
+        )
+        .order_by(PurchaseDocument.document_date.desc().nullslast())
+        .first()
+    )
+    if doc is not None:
+        return {
+            "kind": "purchase",
+            "name": doc.payee_name,
+            "date": doc.document_date.isoformat() if doc.document_date else None,
+            "href": "/core/costing/purchases",
+        }
+    if item.source_execution_id:
+        row = (
+            db.query(Execution.started_at, Process.name)
+            .join(Process, Process.id == Execution.process_id)
+            .filter(Execution.org_id == org_id, Execution.id == item.source_execution_id)
+            .first()
+        )
+        if row is not None:
+            return {
+                "kind": "batch",
+                "name": row[1],
+                "date": row[0].date().isoformat() if row[0] else None,
+                "href": "/core/executions/live",
+            }
+    if item.transfer_receipt_id:
+        from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
+
+        receipt = (
+            db.query(SiteStockReceipt)
+            .filter(SiteStockReceipt.org_id == org_id, SiteStockReceipt.id == item.transfer_receipt_id)
+            .one_or_none()
+        )
+        transfer = (
+            db.query(SiteStockTransfer)
+            .filter(SiteStockTransfer.org_id == org_id, SiteStockTransfer.id == receipt.transfer_id)
+            .one_or_none()
+            if receipt is not None
+            else None
+        )
+        if transfer is not None and transfer.source_item_id and transfer.source_item_id != item.id:
+            return {
+                "kind": "transfer",
+                "name": item.name,
+                "date": None,
+                "href": f"/core/inventory/view?item={transfer.source_item_id}",
+            }
+    return None
+
+
 def _parse_uuid(raw: Any) -> UUID | None:
     try:
         return UUID(str(raw))
@@ -159,8 +231,11 @@ def set_lot_price(
     cost_flow_id: Any = None,
     note: str | None = None,
     user_id: UUID | None = None,
+    replace_all: bool = False,
 ) -> LotCostEntry:
-    """Record a typed or free price, replacing the active one in the same slot (lot + flow)."""
+    """Record a typed or free price, replacing the active one in the same slot (lot + flow).
+    ``replace_all`` (the lot cost panel's "what was paid" / "free"): the new whole-lot price
+    replaces every hand-entered price on the lot, flow-specific ones included, so it takes effect."""
     if kind not in ENTRY_KINDS:
         raise CostingError("kind must be 'manual' or 'free'")
     item = get_lot(db, org_id, item_id, for_update=True)
@@ -200,8 +275,10 @@ def set_lot_price(
         if quantity_value > Decimal(str(flow.quantity)):
             raise CostingError(f"This receipt was {flow.quantity} {item.unit}; a price can't cover more than that")
 
+    if replace_all and flow_uuid is not None:
+        raise CostingError("A whole-lot price has no receipt")
     for existing in active_entries(db, org_id, item.id):
-        if existing.cost_flow_id == flow_uuid:
+        if existing.cost_flow_id == flow_uuid or replace_all:
             existing.is_active = False
             existing.deactivated_at = utc_now()
     db.flush()

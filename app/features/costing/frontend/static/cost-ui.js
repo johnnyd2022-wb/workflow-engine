@@ -128,7 +128,9 @@
 
         var facts = el('dl', 'cost-facts');
         var source = SOURCE_WORDS[cost.source];
-        if (source && cost.status !== 'unknown') addFact(facts, 'Source', source);
+        var from = provenanceNode(cost.provenance);
+        if (from && cost.status !== 'unknown') addFact(facts, 'Source', from);
+        else if (source && cost.status !== 'unknown') addFact(facts, 'Source', source);
         if (Number(cost.unpriced_quantity) > 0 && Number(cost.priced_quantity) > 0) {
           addFact(facts, 'Priced', cost.priced_quantity + ' of ' + (Number(cost.priced_quantity) + Number(cost.unpriced_quantity)) + ' ' + (cost.unit || ''));
         }
@@ -216,13 +218,13 @@
           var amount = parseMoney(input.value);
           if (amount == null) { error.textContent = 'Enter an amount, like 45.00'; input.focus(); return; }
           save.disabled = true;
-          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'manual', amount: amount, quantity: wholeQuantity(cost) }, key)
+          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'manual', amount: amount, quantity: wholeQuantity(cost), replace: 'all' }, key)
             .then(function (next) { render(next); if (options.onChange) options.onChange(next); })
             .catch(function (err) { save.disabled = false; error.textContent = err.message; input.focus(); });
         });
         free.addEventListener('click', function () {
           free.disabled = true;
-          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'free' }, newKey())
+          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'free', replace: 'all' }, newKey())
             .then(function (next) { render(next); if (options.onChange) options.onChange(next); })
             .catch(function (err) { free.disabled = false; showError(err.message); });
         });
@@ -267,8 +269,25 @@
   function addFact(list, term, value) {
     var row = el('div', 'cost-facts__row');
     row.appendChild(el('dt', '', term));
-    row.appendChild(el('dd', '', value));
+    var dd = el('dd');
+    if (value && value.nodeType) dd.appendChild(value); else dd.textContent = value;
+    row.appendChild(dd);
     list.appendChild(row);
+  }
+
+  /* "Recorded from Botanical Supply Co, 3 Oct 2026" with a link to where it came from. */
+  function provenanceNode(p) {
+    if (!p || typeof p.href !== 'string' || p.href.charAt(0) !== '/' || p.href.charAt(1) === '/') return null;
+    var when = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    var lead = { purchase: 'Recorded from ', batch: 'Made in a ', transfer: 'Moved from another site — ' }[p.kind];
+    if (!lead) return null;
+    var span = el('span');
+    span.appendChild(document.createTextNode(lead));
+    var a = el('a', '', p.kind === 'batch' ? (p.name || 'batch') + ' batch' : p.kind === 'transfer' ? 'the lot it came from' : (p.name || 'a purchase'));
+    a.href = p.href;
+    span.appendChild(a);
+    if (when) span.appendChild(document.createTextNode(', ' + when));
+    return span;
   }
 
   /* "45", "45.5", "$1,200.00" -> "1200.00"; null when it isn't money (4 dp max, not negative). */

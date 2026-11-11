@@ -159,6 +159,10 @@
       (rule && rule.template ? rule.template : []).forEach(addRow);
       els.dialogError.textContent = '';
       els.save.disabled = false;
+      ['payee_pattern', 'description_pattern', 'account_code'].forEach(function (n) {
+        field(n).removeAttribute('aria-invalid');
+        field(n).removeAttribute('aria-describedby');
+      });
       syncTemplate();
       els.dialog.showModal();
       field('payee_pattern').focus();
@@ -262,7 +266,17 @@
           els.save.disabled = false;
           if (err.status && err.status < 500) saveKey = key(); // a refusal: the next try is a new request
           els.dialogError.textContent = err.status === 409 ? 'A rule for exactly these purchases already exists. Edit that one instead.' : err.message;
-          els.dialogError.focus && els.dialogError.focus();
+          if (err.status === 409) {
+            // The conflict is about the matchers: mark them and send focus there.
+            var matchers = ['payee_pattern', 'description_pattern', 'account_code'].map(field);
+            matchers.forEach(function (m) {
+              m.setAttribute('aria-invalid', 'true');
+              m.setAttribute('aria-describedby', 'ru-dialog-error');
+            });
+            (matchers.filter(function (m) { return m.value.trim(); })[0] || matchers[0]).focus();
+          } else {
+            els.dialogError.focus();
+          }
         });
     }
 

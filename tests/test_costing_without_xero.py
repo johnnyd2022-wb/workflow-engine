@@ -66,7 +66,7 @@ def test_ac93_me_without_costs_view_is_200_and_reveals_nothing(world, db, flask_
     response = production.get(f"{API}/me")
     assert response.status_code == 200
     body = response.get_json()
-    assert body["enabled"] is True and body["can_view"] is False and body["can_manage"] is False
+    assert body["enabled"] is False and body["can_view"] is False and body["can_manage"] is False
     assert body.get("purchases_to_record") is None and body.get("xero_connected") is None
 
 
@@ -242,3 +242,78 @@ def test_ac94_no_xero_org_gets_an_actual_bottle_cost(world, db):
     key = f"output:{output_defs(step)[0]['id']}"
     assert client.get(f"{API}/readiness/{key}").get_json()["ready"] is True
     assert client.get(f"{API}/me").get_json()["xero_connected"] is False
+
+
+# --- 8.1e-2 review round 1 regressions -------------------------------------------------------------------
+
+
+def test_r1_changing_what_was_paid_replaces_the_flow_price(world, db):
+    org, client = world
+    item_id = _add(client, total_paid="50").get_json()["id"]  # $10/kg on the created flow
+    changed = client.put(
+        f"{API}/lots/{item_id}/cost",
+        json={"kind": "manual", "amount": "100", "quantity": "5", "replace": "all"},
+        headers={"Idempotency-Key": str(uuid4())},
+    )
+    assert changed.status_code == 200, changed.get_json()
+    assert D(changed.get_json()["unit_cost"]) == D("20")
+    assert len(_entries(db, item_id)) == 1
+    free = client.put(
+        f"{API}/lots/{item_id}/cost", json={"kind": "free", "replace": "all"}, headers={"Idempotency-Key": str(uuid4())}
+    )
+    assert (D(free.get_json()["unit_cost"]), free.get_json()["status"]) == (D("0"), "actual")
+
+
+def test_r1_lot_panel_says_which_batch_made_it(world, db):
+    from tests.costing_helpers import produced_lots
+
+    org, client = world
+    spirit = db.get(
+        InventoryItem, _add(client, name="Neutral spirit", quantity="10", unit="L", total_paid="80").get_json()["id"]
+    )
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "bottles"}]])
+    complete(client, execution, step, [(spirit, 10, "L")], [{"name": "Gin", "quantity": 20, "unit": "bottles"}])
+    (gin,) = produced_lots(db, org.id, step.id)
+    provenance = client.get(f"{API}/lots/{gin.id}/cost").get_json()["provenance"]
+    assert provenance["kind"] == "batch" and provenance["href"].startswith("/core/")
+    assert client.get(f"{API}/lots/{spirit.id}/cost").get_json()["provenance"] is None, "typed by hand"
+
+
+def test_r1_csv_commit_lost_reply_replays_and_adds_once(world, db):
+    org, client = world
+    rows = _validate(client, CSV).get_json()["rows"]
+    key = {"Idempotency-Key": str(uuid4())}
+    first = client.post("/api/core/inventory/csv-commit", json={"rows": rows}, headers=key)
+    again = client.post("/api/core/inventory/csv-commit", json={"rows": rows}, headers=key)
+    assert first.status_code == again.status_code == 200
+    assert again.headers.get("Idempotent-Replay") == "true"
+    db.expire_all()
+    assert (
+        db.query(InventoryItem).filter(InventoryItem.org_id == org.id, InventoryItem.name == "Orris root").count() == 1
+    )
+
+
+def test_r1_rule_and_cost_writes_replay_on_retry(world, db):
+    org, client = world
+    key = {"Idempotency-Key": str(uuid4())}
+    body = {"payee_pattern": "Retry Co", "match_type": "exact", "treatment": "not_stock"}
+    first = client.post(f"{API}/rules", json=body, headers=key)
+    again = client.post(f"{API}/rules", json=body, headers=key)
+    assert first.status_code == again.status_code == 201 and first.get_json()["id"] == again.get_json()["id"]
+    item_id = _add(client).get_json()["id"]
+    put_key = {"Idempotency-Key": str(uuid4())}
+    price = {"kind": "manual", "amount": "25", "quantity": "5", "replace": "all"}
+    client.put(f"{API}/lots/{item_id}/cost", json=price, headers=put_key)
+    client.put(f"{API}/lots/{item_id}/cost", json=price, headers=put_key)
+    from app.features.costing.models import LotCostEntry as Entry
+
+    db.expire_all()
+    assert db.query(Entry).filter(Entry.inventory_item_id == item_id).count() == 1, "no second (inactive) entry"
+
+
+def test_r1_csv_escape_encodes_quotes_for_attributes():
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / "app/core/frontend/inventory/add_csv.html").read_text()
+    body = html[html.index("function escapeHtml") : html.index("function escapeHtml") + 400]
+    assert "&quot;" in body and "&#39;" in body

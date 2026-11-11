@@ -802,6 +802,9 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     if added_paid is not None:
                         from app.features.costing.models import CostFlow
 
+                        # Lock the lot first, so a concurrent delivery can't add its flow between
+                        # this snapshot and ours (the add itself locks the same row again).
+                        repo.get_inventory_item_by_id_for_update(existing.id, org_id)
                         before_flows = {
                             fid
                             for (fid,) in db_session.query(CostFlow.id).filter(

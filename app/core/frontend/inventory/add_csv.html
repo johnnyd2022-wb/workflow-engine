@@ -89,10 +89,11 @@
 
       var DUP_FORM_SUMMARY = 'This Item name, Supplier and Batch number already exists in inventory. Please review the highlighted fields below.';
 
+      /* Safe in text and in quoted attribute values: CSV cells are untrusted. */
       function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.textContent = text == null ? '' : String(text);
-        return div.innerHTML;
+        return String(text == null ? '' : text)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
       function showPreview() {
@@ -408,7 +409,14 @@
         if (wrap) {
           wrap.innerHTML = '<p class="csv-review-saving" role="status">Saving inventory…</p>';
         }
-        CoreAPI.inventoryCsvCommit(window.BizeSite ? window.BizeSite.into({ rows: S.acceptedRows }, S.sitePick) : { rows: S.acceptedRows }).then(function(res) {
+        // One key per file being added, kept until the server answers for certain, so "Try again"
+        // after a lost reply replays the same save instead of adding the stock twice.
+        if (!S.commitKey) S.commitKey = window.CoreAPI._newIdempotencyKey ? window.CoreAPI._newIdempotencyKey() : null;
+        CoreAPI.inventoryCsvCommit(
+          window.BizeSite ? window.BizeSite.into({ rows: S.acceptedRows }, S.sitePick) : { rows: S.acceptedRows },
+          S.commitKey ? { idempotencyKey: S.commitKey } : {}
+        ).then(function(res) {
+          S.commitKey = null;
           var hasErr = res.errors && res.errors.length;
           if (hasErr) {
             if (res.created && res.created.length) {
@@ -463,13 +471,41 @@
             showDropZoneOnly();
           }
         }).catch(function(err) {
-          window.showNotification && window.showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
-          showDropZoneOnly();
+          if (err && err.status && err.status < 500) {
+            S.commitKey = null; // refused for certain: nothing was added
+            window.showNotification && window.showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
+            showDropZoneOnly();
+            return;
+          }
+          // No answer, or the server failed: the rows are kept and "Try again" replays the same save.
+          if (wrap) {
+            wrap.textContent = '';
+            var p = document.createElement('p');
+            p.className = 'csv-review-saving';
+            p.setAttribute('role', 'alert');
+            p.textContent = 'Saving didn’t finish. Your rows are kept — try again.';
+            var retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'btn btn-primary';
+            retry.style.minHeight = '44px';
+            retry.textContent = 'Try again';
+            retry.addEventListener('click', function () { retry.disabled = true; finishReviewQueue(); });
+            wrap.appendChild(p);
+            wrap.appendChild(retry);
+            retry.focus();
+          }
         });
       }
 
       function runAfterCardExit(fn) {
         var card = document.getElementById('csv-review-card');
+        // Lock the card's buttons now: a second click during the exit animation would consume
+        // the next row as well.
+        if (card) {
+          if (card.getAttribute('data-leaving') === '1') return;
+          card.setAttribute('data-leaving', '1');
+          card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        }
         if (!card) {
           fn();
           return;
