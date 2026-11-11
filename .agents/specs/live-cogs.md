@@ -1398,6 +1398,82 @@ candidates *include* a lot with a manual price; plus:
 - AC80: replaying a `record` with the same Idempotency-Key creates nothing new; a line on a
   `needs_rate` document → 400.
 
+## 8.1c-2 build contract — purchase rules, pre-fill, bulk, historical runs
+
+**Tables (migration `costing_rules_001`).** `purchase_rules` as in "Data model", with:
+`payee_pattern` / `description_pattern` stored normalised (casefold, whitespace collapsed,
+stripped); `account_code` exact; `match_type` applies to the two patterns; at least one matcher
+(check); uniqueness via one unique index on `(org_id, coalesce(account_code,''),
+coalesce(payee_pattern,''), coalesce(description_pattern,''), match_type)` (portable, V10).
+`purchase_lines` gains `treatment_rule_id` (composite FK to the rule, `ON DELETE SET NULL
+(treatment_rule_id)`). `costing_settings` gains `last_history_from`, `last_history_to`.
+
+**Matching (round-2 gap 13).** A rule matches a line when every matcher it sets matches: the
+line's `account_code` equals `account_code`; the document payee, normalised, equals
+(`exact`) or contains (`contains`) `payee_pattern`; the line description, normalised, likewise
+for `description_pattern`. Among active matching rules the winner is, in order: more matchers
+set (3 > 2 > 1); then `exact` over `contains`; then a payee matcher over a description-only
+one; then the most recently updated; then the smaller id. So payee + account beats payee only,
+which beats account only, which beats the account default (AC15).
+
+**Treatment.** `classify_line(line, account, rule)` returns the winning rule's treatment, else
+the account's effective treatment, and sets `treatment_rule_id`. Creating, changing,
+deactivating or deleting a rule re-classifies live lines whose state is `open` or `skipped`
+and that have no allocations (AC17); other lines keep their treatment. The sync classifies
+every line it writes with the current rules.
+
+**Pre-fill.** Every To record card gains `prefill: {source: "rule"|"last_time"|"none", rule_id,
+rows: [{name, inventory_type, unit, quantity, amount, ask: [...]}]}` for a spend line:
+- from the winning `stock` rule's template: `amount` = open × share ÷ 100 (4 dp, half-up) for
+  percentage rows; the one `"rest"` row takes open − the others (never below 0). Quantity:
+  `fixed` → `quantity`; `from_price` → amount ÷ `unit_price` (4 dp); `ask` → null and `quantity`
+  in `ask`. `ask` also lists `batch_number` / `expiry` where the row's flags are set.
+- else from the most recent recorded line of the same normalised payee: its allocations' lots
+  (name, type, unit, quantity) with amounts in the same proportion of this line's open amount
+  (`source = last_time`, suggestion only);
+- else one empty row with the whole open amount (`source = none`).
+
+**Rules API** (`/api/core/costing/rules`, GET `costs.view`; POST/PUT/DELETE `costs.manage`):
+body `{account_code?, payee_pattern?, description_pattern?, match_type, treatment, template?,
+is_active?}`; a template only on `stock`; template validation: 1–20 rows, each with name, unit,
+`inventory_type` raw_material|final_product, `quantity_mode` fixed (quantity > 0) | from_price
+(unit_price > 0) | ask, `share` a number in (0, 100] or `"rest"`; at most one `"rest"`; Σ
+percentages ≤ 100. A duplicate matcher set → 409. 404 across orgs.
+
+**Remember this** — `POST /purchases/<line_id>/remember` on a `recorded` or `partly_recorded`
+spend line (`costs.manage`): creates (or updates, if one with the same matchers exists) a
+`stock` rule matching payee (exact, normalised) + account, whose template has one row per
+active allocation (lot name, type, unit, quantity `fixed`, share = allocation ÷ line amount ×
+100 to 4 dp, `ask_batch_number` / `ask_expiry` set when the lot has one). No `"rest"` row.
+
+**Not-stock rule** — `POST /purchases/<line_id>/not-stock` accepts `{"always": true}`, which
+also creates (or updates) a `not_stock` rule for payee (exact) + account (AC10).
+
+**Bulk** — `POST /purchases/bulk {line_ids: [...] (≤ 200, unique), action: skip|not_stock|
+apply_rule}` (`costs.manage`): each line in its own savepoint; result `{results: [{line_id,
+ok, error?}]}`; a line of another org is `{ok: false, error: "not found"}` and nothing else
+happens (AC13). `apply_rule` re-classifies the line with current rules and returns its card.
+
+**Historical runs (round-2 gap 10)** — `POST /purchases/historical-run {from, to}`
+(`costs.manage`; `from` ≤ `to`, both required, `to` ≤ today, range ≤ 3 years): stores
+`last_history_from/to`, and **always** fetches Xero for that range
+(`Date >= DateTime(from) AND Date <= DateTime(to)`, no modified-since) and upserts with the
+start-date filter lifted for that call, inside the same savepoint rules as the sync; returns
+`{documents, lines}`. A second identical run fetches again and creates no duplicates (the upsert
+keys). `GET /purchases?historical=1&from=&to=` lists, in that range, ignoring `start_date`:
+To record also includes `skipped` lines (actionable), and Not stock lines carry `undo: true`
+(Undo = `reopen`). Needs the purchases scopes; without them → 409 `needs_reconnect`.
+
+**ACs (8.1c-2).** AC10, AC13–AC20 above, plus:
+- AC81: precedence — every tiebreak row of "Matching", one test each.
+- AC82: template validation 400s (two rest rows; shares > 100; bad mode; template on a
+  non-stock rule); duplicate matchers → 409.
+- AC83: pre-fill from `last_time` and `none`; `from_price` quantity; rest never negative.
+- AC84: deleting a rule re-classifies open lines back to the account default and leaves
+  recorded ones; `treatment_rule_id` is nulled.
+- AC85: historical run validation (from > to, future to, > 3 years) → 400; no scopes → 409.
+- AC86: bulk with > 200 or duplicate ids → 400.
+
 ## Open for 8.1b–e (round-2 review gaps not on the engine's path)
 
 Each must be resolved in this spec, with ACs, before its MR is built:
