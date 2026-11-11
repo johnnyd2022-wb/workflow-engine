@@ -633,6 +633,22 @@ def test_node_limit_returns_unknown_too_large(world, db, monkeypatch):
     assert execution_cost(db, org.id, execution.id)["warnings"] == ["too_large"]
 
 
+def test_estimate_candidates_share_the_node_budget(world, db, monkeypatch):
+    org, _ = world
+    from app.features.costing import engine
+
+    for day in range(1, 6):
+        candidate = lot(db, org.id, "Budgeted material", 1, "kg", purchase_date=date(2026, 10, day))
+        price(db, org.id, candidate.id, day, 1)
+    target = lot(db, org.id, "Budgeted material", 1, "kg", purchase_date=date(2026, 11, 1))
+
+    monkeypatch.setattr(engine, "MAX_NODES", 3)
+    cost = lot_cost(db, org.id, target.id)
+    assert cost["status"] == "unknown"
+    assert cost["unit_cost"] is None
+    assert cost["warnings"] == ["too_large"]
+
+
 def test_ac28_unknown_input_makes_batch_partial_until_priced(world, db):
     org, client = world
     juniper = lot(db, org.id, "Juniper", 1, "kg")

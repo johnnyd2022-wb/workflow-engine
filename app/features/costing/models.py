@@ -14,7 +14,6 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
-    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -111,6 +110,12 @@ class LotCostEntry(TenantScoped, Base):
             name="fk_lot_cost_entries_flow",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["org_id", "created_by_user_id"],
+            ["users.org_id", "users.id"],
+            name="fk_lot_cost_entries_creator",
+            ondelete="SET NULL (created_by_user_id)",
+        ),
         CheckConstraint("kind IN ('manual','free')", name="ck_lot_cost_entries_kind"),
         CheckConstraint("amount >= 0", name="ck_lot_cost_entries_amount"),
         CheckConstraint("quantity > 0", name="ck_lot_cost_entries_quantity"),
@@ -140,7 +145,7 @@ class LotCostEntry(TenantScoped, Base):
     quantity = Column(Numeric(18, 4), nullable=False)
     note = Column(String(500), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default=sa.true())
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     deactivated_at = Column(DateTime(timezone=True), nullable=True)
 

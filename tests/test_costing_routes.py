@@ -232,6 +232,73 @@ def test_put_rejects_bad_input(world, body):
     assert D(world["admin"].get(f"{API}/lots/{world['item'].id}/cost").get_json()["unit_cost"]) == D("45")
 
 
+def test_put_rejects_body_over_16_kib_without_writing(world, db):
+    from app.features.costing.models import LotCostEntry
+
+    before = {
+        entry.id
+        for entry in db.query(LotCostEntry)
+        .filter(LotCostEntry.org_id == world["org"].id, LotCostEntry.inventory_item_id == world["item"].id)
+        .all()
+    }
+    body = '{"kind":"manual","amount":"1","quantity":"1","note":"' + ("x" * (20 * 1024)) + '"}'
+    response = world["admin"].put(f"{API}/lots/{world['item'].id}/cost", data=body, content_type="application/json")
+    assert response.status_code == 413
+    db.expire_all()
+    after = {
+        entry.id
+        for entry in db.query(LotCostEntry)
+        .filter(LotCostEntry.org_id == world["org"].id, LotCostEntry.inventory_item_id == world["item"].id)
+        .all()
+    }
+    assert after == before
+
+
+def test_cost_entry_creator_is_tenant_scoped_and_set_null_on_delete(world, db):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.db.models.user import User, UserRole
+    from app.core.db.repositories.user_repo import UserRepository
+    from app.features.costing import service
+    from app.features.costing.models import LotCostEntry
+
+    org = world["org"]
+    other = new_org(db)
+    try:
+        foreign_user = UserRepository(db).create_user(
+            org_id=other.id,
+            email=f"foreign-cost-creator-{uuid4()}@test.com",
+            password_hash="unused",
+            role=UserRole.MEMBER,
+            is_active=True,
+        )
+        actor = UserRepository(db).create_user(
+            org_id=org.id,
+            email=f"cost-creator-{uuid4()}@test.com",
+            password_hash="unused",
+            role=UserRole.MEMBER,
+            is_active=True,
+        )
+        item = lot(db, org.id, "Creator-scoped", 1, "kg")
+        db.commit()
+
+        with pytest.raises(IntegrityError, match="fk_lot_cost_entries_creator"):
+            service.set_lot_price(db, org.id, item.id, amount="1", quantity="1", user_id=foreign_user.id)
+        db.rollback()
+
+        entry = service.set_lot_price(db, org.id, item.id, amount="1", quantity="1", user_id=actor.id)
+        db.commit()
+        entry_id = entry.id
+        db.delete(db.get(User, actor.id))
+        db.commit()
+        db.expire_all()
+        persisted = db.get(LotCostEntry, entry_id)
+        assert persisted.org_id == org.id
+        assert persisted.created_by_user_id is None
+    finally:
+        purge(db, other)
+
+
 def test_put_flow_price_on_the_lots_own_flow(world, db):
     (created,) = flows(db, world["org"].id, world["item"].id, kind="created")
     response = world["admin"].put(

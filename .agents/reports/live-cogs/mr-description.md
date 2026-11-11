@@ -48,15 +48,16 @@ Roadmap **8.1a — Cost engine** (spec `.agents/specs/live-cogs.md` v4). The fir
 | build-review round 2 | fail, 3 medium → fixed | `.agents/reports/live-cogs/build-review-r2.md` |
 | build-review round 3 | **pass** | `.agents/reports/live-cogs/build-review-r3.md` |
 | migration | `costing_engine_001` additive; upgrade/downgrade round-tripped on a private DB | — |
+| security-tenant-audit + migration-safety (Codex) | findings-open → all fixed (downgrade refuses any costing row; 16 KiB body limit; estimate candidates on the node budget; tenant indexes; org-bound creator FK) | `.agents/reports/live-cogs/audit-8.1a.md` |
 
 ## Not yet run (why this is a draft)
 
-- `security-audit`, `migration-safety`, `ci-gate` stages were not run as separate stages; the Codex build review covered tenancy, permissions and the migration. CI runs lint and the relevant tests on this MR.
+- `ci-gate` was not run as a separate stage; CI runs lint and the relevant tests on this MR. Codex ran the security/tenant and migration audits (above).
 - No e2e: this MR has no UI.
 
 ## Decisions to review
 
-- **Downgrade refuses while typed prices exist** (Codex R1 #8, accepted in R2): they are user data with no other copy, matching `planning_replan_001`.
+- **Downgrade refuses while any costing row exists** (typed prices, settings, and reconciliation flows the backfill can't rebuild), matching `planning_replan_001`.
 - **A9**: Library stock remainders take no share of a batch's cost in Phase 1 (bottle volume isn't recorded yet).
 - **A10**: no cost cache tables; every figure is computed on read.
 - New `UNIQUE (org_id, execution_id, id)` on `execution_steps` (target of the composite FK).

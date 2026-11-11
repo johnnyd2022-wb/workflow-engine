@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 
 costing_bp = Blueprint("costing", __name__)
 API = "/api/core/costing"
+MAX_BODY_BYTES = 16 * 1024
 
 
 def _org() -> UUID:
@@ -38,6 +39,9 @@ def _user_id():
 
 @costing_bp.before_request
 def _require_costing_feature():
+    request.max_content_length = MAX_BODY_BYTES
+    if request.content_length is not None and request.content_length > MAX_BODY_BYTES:
+        return jsonify({"error": "Request body too large"}), 413
     # No tenant yet: let @requires_auth answer (401) rather than turning it into a 404.
     org_id = getattr(g, "current_org_id", None)
     if not org_id:

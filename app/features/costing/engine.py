@@ -540,7 +540,10 @@ class CostEngine:
         target = _lot_date(item)
         candidates = []
         for other in self._material_index().get(normalise(item.name), []):
-            if other.id == item.id or not self._is_direct(other):
+            if other.id == item.id:
+                continue
+            self._charge(("lot", other.id))
+            if not self._is_direct(other):
                 continue
             factor = self._unit_factor(item.unit, other.unit)
             if factor is None:
