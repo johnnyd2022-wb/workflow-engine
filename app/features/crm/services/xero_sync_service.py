@@ -101,6 +101,7 @@ class XeroSyncService:
                 result.errors.extend(contacts_result.errors)
                 result.sales_phases_ok += 1
             except XeroTokenExpiredError:
+                self._fail_expired(job.id, org_id)
                 raise
             except Exception as e:
                 logger.exception("xero_contact_sync_failed", org_id=str(org_id))
@@ -121,6 +122,7 @@ class XeroSyncService:
                 result.errors.extend(invoices_result.errors)
                 result.sales_phases_ok += 1
             except XeroTokenExpiredError:
+                self._fail_expired(job.id, org_id)
                 raise
             except Exception as e:
                 logger.exception("xero_invoice_sync_failed", org_id=str(org_id))
@@ -135,6 +137,7 @@ class XeroSyncService:
                 result.errors.extend(credit_result.errors)
                 result.sales_phases_ok += 1
             except XeroTokenExpiredError:
+                self._fail_expired(job.id, org_id)
                 raise
             except Exception as e:
                 logger.exception("xero_credit_note_sync_failed", org_id=str(org_id))
@@ -606,6 +609,13 @@ class XeroSyncService:
             logger.exception("xero_purchases_sync_failed", org_id=str(org_id))
             result.purchases_status = "failed"
             result.errors.append(f"Purchases sync error: {e}")
+
+    def _fail_expired(self, job_id: UUID, org_id: UUID) -> None:
+        """The job row is committed before any phase runs, so a phase that re-raises token
+        expiry must close it first, or it would stay ``running`` for ever."""
+        self.db.rollback()
+        self.sync_job_repo.mark_failed(job_id, org_id, error_message="Xero connection expired; reconnect Xero")
+        self.db.commit()
 
     def _anchor_purchases(self, org_id: UUID) -> None:
         """Spec 8.1b: the first time a costing org syncs, today (NZ) becomes ``start_date``.

@@ -1106,3 +1106,47 @@ def test_r1_foreign_tax_and_totals_are_null(world, db):
     assert all(ln.amount_ex_tax is None and ln.tax_amount is None for ln in live_lines(db, org.id))
     (doc,) = documents(db, org.id)
     assert doc.total_ex_tax is None and doc.total_tax is None
+
+
+# --- build-review round 2 regressions (8.1b) ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("phase", ["get_all_contacts", "get_all_invoices", "fetch_all_credit_notes"])
+def test_r2_token_expiry_in_a_sales_phase_closes_the_job(world, db, monkeypatch, phase):
+    from app.features.crm.services import xero_api_client as module
+    from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
+
+    org, fake = world
+
+    def expired(self, **kw):
+        raise XeroTokenExpiredError("expired")
+
+    monkeypatch.setattr(module.XeroAPIClient, phase, expired)
+    with pytest.raises(XeroTokenExpiredError):
+        sync(db, org.id)
+    job = last_job(db, org.id)
+    assert job.status == "failed" and job.completed_at is not None
+
+
+def test_r2_override_does_not_keep_lines_of_a_non_expense_account(flask_app, world, db):  # noqa: F811
+    org, fake = world
+    admin = user_client(db, flask_app, org)
+    acct = account("810", "Purchases - Glass")
+    fake.accounts = [acct]
+    fake.transactions = [txn([line("810", "10")])]
+    sync(db, org.id)
+    assert admin.put(f"{API}/accounts/{acct.account_id}", json={"treatment": "stock"}).status_code == 200
+    fake.accounts = [account("810", "Glass stock", kind="INVENTORY", cls="ASSET", account_id=acct.account_id)]
+    fake.transactions = []
+    sync(db, org.id, full=False)
+    assert live_lines(db, org.id) == []
+
+
+def test_r2_missing_tax_makes_the_document_tax_total_unknown(world, db):
+    org, fake = world
+    li = LineItem(description="x", account_code="310", line_amount=10.0)
+    li.tax_amount = None
+    fake.transactions = [txn([li, line("311", "5", tax="0")], amounts="Exclusive")]
+    sync(db, org.id)
+    (doc,) = documents(db, org.id)
+    assert doc.total_ex_tax is None and doc.total_tax is None

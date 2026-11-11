@@ -116,18 +116,18 @@ def sync_accounts(db: Session, org_id: UUID, accounts: Iterable) -> dict[str, Xe
         row.status = _text(getattr(raw, "status", None))
         row.default_treatment = default_treatment(row.type, row.account_class, row.name)
         row.last_synced_at = now
-        if row.id is not None and row.treatment != before:
+        if row.id is not None and row.treatment != before and row.default_treatment is not None:
             changed.append(row)
     db.flush()
     for row in changed:
-        if row.treatment is None:
-            retire_account_lines(db, org_id, row)
-        else:
-            reclassify_account_lines(db, org_id, row)
+        reclassify_account_lines(db, org_id, row)
+    ineligible = [row for row in existing.values() if row.default_treatment is None and row.id is not None]
+    if ineligible:  # not an expense account (an override doesn't make it one)
+        retire_account_lines(db, org_id, *ineligible)
     return existing
 
 
-def retire_account_lines(db: Session, org_id: UUID, account: XeroAccount) -> int:
+def retire_account_lines(db: Session, org_id: UUID, *accounts: XeroAccount) -> int:
     """An account that is no longer an expense account: its live lines are superseded, as if
     Xero had dropped them (the one seam 8.1c extends to send recorded lines to review)."""
     now = utc_now()
@@ -135,7 +135,7 @@ def retire_account_lines(db: Session, org_id: UUID, account: XeroAccount) -> int
         db.query(PurchaseLine)
         .filter(
             PurchaseLine.org_id == org_id,
-            PurchaseLine.account_id == account.id,
+            PurchaseLine.account_id.in_([a.id for a in accounts]),
             PurchaseLine.superseded_at.is_(None),
         )
         .all()
@@ -415,11 +415,11 @@ def upsert_bank_transactions(
             )
             .all()
         )
-        if any(r[0] is None for r in totals):
+        if any(r[0] is None or r[1] is None for r in totals):
             doc.total_ex_tax, doc.total_tax = None, None
         else:
             doc.total_ex_tax = sum((r[0] for r in totals), Decimal("0"))
-            doc.total_tax = sum((r[1] or Decimal("0") for r in totals), Decimal("0"))
+            doc.total_tax = sum((r[1] for r in totals), Decimal("0"))
         if incoming:
             stats["documents"] += 1
     db.flush()
