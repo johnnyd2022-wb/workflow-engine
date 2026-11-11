@@ -27,10 +27,30 @@ UUID = postgresql.UUID(as_uuid=True)
 
 def upgrade():
     # Lets a flow name a step of its own org *and* its own execution (composite FK below).
-    # id is the primary key, so every existing row already satisfies it.
-    op.create_unique_constraint(
-        "uq_execution_steps_org_execution_id", "execution_steps", ["org_id", "execution_id", "id"]
-    )
+    # id is the primary key, so every existing row already satisfies it. Built CONCURRENTLY so
+    # execution_steps (append-growing, written by every step completion) is never write-locked
+    # while the index builds; then attached as the constraint, which is instant.
+    name = "uq_execution_steps_org_execution_id"
+    with op.get_context().autocommit_block():
+        bind = op.get_bind()
+        invalid = bind.execute(
+            text(
+                "SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                "WHERE c.relname = :name AND NOT i.indisvalid"
+            ),
+            {"name": name},
+        ).first()
+        if invalid:  # left behind by an interrupted run
+            op.drop_index(name, table_name="execution_steps", postgresql_concurrently=True, if_exists=True)
+        op.create_index(
+            name,
+            "execution_steps",
+            ["org_id", "execution_id", "id"],
+            unique=True,
+            postgresql_concurrently=True,
+            if_not_exists=True,
+        )
+    op.execute(f"ALTER TABLE execution_steps ADD CONSTRAINT {name} UNIQUE USING INDEX {name}")
     op.create_table(
         "cost_flows",
         sa.Column("id", UUID, primary_key=True),
