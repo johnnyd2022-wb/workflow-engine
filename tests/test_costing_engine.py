@@ -1174,3 +1174,21 @@ def test_r2_concurrent_first_settings_writes_both_succeed(world, db):
         t.join()
     assert errors == []
     assert service.get_settings(db, org.id)["use_last_known_price"] in (True, False)
+
+
+def test_audit_work_budget_caps_rows_loaded(world, db, monkeypatch):
+    """Security audit (8.1b): a long execution costs one semantic node but many loaded rows;
+    the operational budget stops it with too_large instead of letting a request run on."""
+    org, client = world
+    from app.features.costing import engine
+
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 50, 10)
+    execution, steps = workflow(db, org.id, [[], [], [], [], [{"name": "Gin", "unit": "L"}]])
+    complete(client, execution, steps[0], [(spirit, 10, "L")], [])
+    for st in steps[1:4]:
+        complete(client, execution, st, [], [])
+    complete(client, execution, steps[4], [], [{"name": "Gin", "quantity": 10, "unit": "L"}])
+    assert "too_large" not in execution_cost(db, org.id, execution.id)["warnings"]
+    monkeypatch.setattr(engine, "MAX_WORK", 4)
+    assert execution_cost(db, org.id, execution.id)["warnings"] == ["too_large"]

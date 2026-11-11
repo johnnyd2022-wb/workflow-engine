@@ -46,6 +46,9 @@ MONEY = Decimal("0.0001")
 UNIT = Decimal("0.000001")
 QTY = Decimal("0.0001")
 MAX_NODES = 20_000
+# Operational cap on rows a single computation may load (steps, flows), whatever the semantic
+# node count: bounds the work one request can make the database do.
+MAX_WORK = 200_000
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 _TYPE_RANK = {
@@ -156,6 +159,7 @@ class CostEngine:
         self._direct_memo: dict[UUID, LotCost] = {}
         self._materials: dict[str, list[InventoryItem]] | None = None
         self._charged: set[tuple] = set()
+        self._work = 0
 
     # --- public payloads -----------------------------------------------------------------
 
@@ -275,6 +279,11 @@ class CostEngine:
         if len(self._charged) > MAX_NODES:
             raise TooLargeError()
 
+    def _spend(self, rows: int) -> None:
+        self._work += rows
+        if self._work > MAX_WORK:
+            raise TooLargeError()
+
     def _deps(self, node: tuple) -> list[tuple]:
         if node[0] == "lot":
             item = self._get_lot(node[1])
@@ -357,6 +366,7 @@ class CostEngine:
                 .order_by(CostFlow.created_at, CostFlow.id)
                 .all()
             )
+            self._spend(len(self._in_flow_cache[item_id]))
         return self._in_flow_cache[item_id]
 
     def _entries(self, item_id: UUID) -> list[LotCostEntry]:
@@ -403,6 +413,7 @@ class CostEngine:
             .order_by(ExecutionStep.step_number, ExecutionStep.id)
             .all()
         )
+        self._spend(len(steps))
         index = {s.id: i for i, s in enumerate(steps)}
         consumed, outs = defaultdict(list), defaultdict(list)
         internal = set()
@@ -412,6 +423,7 @@ class CostEngine:
             .order_by(CostFlow.created_at, CostFlow.id)
             .all()
         )
+        self._spend(len(flows))
         for f in flows:
             position = index.get(f.execution_step_id)
             if f.direction == "in":
