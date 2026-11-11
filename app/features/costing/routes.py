@@ -175,6 +175,8 @@ def _parse_date(raw):
 
     if not raw:
         return None
+    if not isinstance(raw, str):
+        raise service.CostingError("Dates are YYYY-MM-DD")
     try:
         return date.fromisoformat(raw)
     except ValueError:

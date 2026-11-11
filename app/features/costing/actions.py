@@ -12,7 +12,6 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -757,28 +756,42 @@ def on_line_amount_changed(db: Session, line: PurchaseLine, old_amount: Decimal 
     if abs(new_not_stock) > abs(used_total):
         new_not_stock = used_total
     target = used_total - new_not_stock
-    scaled = {a.id: _q(_d(a.amount) * factor) for a in allocs}
-    remainder = target - sum(scaled.values(), ZERO)
+    # Work in magnitudes so spends and refunds share one rule: the rounding remainder goes to the
+    # largest allocation, or is taken from the largest first without crossing each row's floor
+    # (a spend row may reach $0; a refund row must stay below $0).
+    sign = Decimal("1") if old_alloc >= 0 else Decimal("-1")
+    floor = ZERO if sign > 0 else MONEY
+    size = {a.id: sign * _q(_d(a.amount) * factor) for a in allocs}
+    remainder = sign * target - sum(size.values(), ZERO)
     ordered = sorted(allocs, key=lambda a: (-abs(_d(a.amount)), a.created_at, str(a.id)))
     if remainder > 0:
-        scaled[ordered[0].id] += remainder
-    elif remainder < 0:  # take it from the largest first, never below zero
+        size[ordered[0].id] += remainder
+        remainder = ZERO
+    elif remainder < 0:
         for alloc in ordered:
-            take = min(-remainder, scaled[alloc.id])
-            scaled[alloc.id] -= take
+            take = min(-remainder, max(size[alloc.id] - floor, ZERO))
+            size[alloc.id] -= take
             remainder += take
             if remainder == 0:
                 break
+    if remainder != 0 or any(size[a.id] < floor for a in allocs):
+        # Too small to split across these rows (refunds can't be $0): a person decides.
+        _orphan(db, line, "amount_changed", "amount")
+        line.not_stock_amount = ZERO
+        derive_state(db, line, keep_skipped=True)
+        return
     for alloc in allocs:
-        alloc.amount = scaled[alloc.id]
+        alloc.amount = sign * size[alloc.id]
     line.not_stock_amount = new_not_stock
     line.review_reason = "amount_changed"
     derive_state(db, line, keep_skipped=True)
 
 
-def on_document_restored(db: Session, line: PurchaseLine) -> None:
+def on_document_restored(db: Session, line: PurchaseLine, old_amount: Decimal | None = None) -> None:
     """A voided purchase made active again in Xero: only what the void orphaned is priced by it
-    again, and only if the line still has an amount (not superseded, not needing a rate)."""
+    again, and only if the line still has an amount (not superseded, not needing a rate).
+    ``old_amount`` is the line's amount when it was voided: a change made while voided is then
+    handled like any other amount change (rescaled, or orphaned again across a sign change)."""
     if line.superseded_at is not None or line.amount_ex_tax is None:
         return
     orphaned = [a for a in line_allocations(db, line, statuses=("orphaned",)) if a.orphaned_by == "void"]
@@ -790,6 +803,9 @@ def on_document_restored(db: Session, line: PurchaseLine) -> None:
     if orphaned and not still and line.review_reason == "deleted_in_xero":
         line.review_reason = None
     db.flush()
+    if old_amount is not None and _d(old_amount) != _d(line.amount_ex_tax):
+        on_line_amount_changed(db, line, _d(old_amount))
+        db.flush()
     used = allocated(db, line) + _d(line.not_stock_amount)
     amount = _d(line.amount_ex_tax)
     if orphaned and (not _same_sign(used, amount) or abs(used) > abs(amount)):
@@ -869,8 +885,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
 
     payee = normalise(doc.payee_name)
     if payee:
-        previous = (
-            db.query(PurchaseLine, PurchaseDocument)
+        # Newest first, only live recorded spend lines that still price something; the payee is
+        # compared with the same Python normalisation rules use (casefold, not SQL lower), and
+        # only two narrow columns are read, with no limit that could hide an older match.
+        has_active = (
+            db.query(PurchaseAllocation.id)
+            .filter(
+                PurchaseAllocation.org_id == PurchaseLine.org_id,
+                PurchaseAllocation.purchase_line_id == PurchaseLine.id,
+                PurchaseAllocation.status == "active",
+                PurchaseAllocation.amount > 0,
+            )
+            .exists()
+        )
+        candidates = (
+            db.query(PurchaseLine.id, PurchaseDocument.payee_name)
             .join(
                 PurchaseDocument,
                 (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
@@ -878,21 +907,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
             .filter(
                 PurchaseLine.org_id == line.org_id,
                 PurchaseLine.id != line.id,
+                PurchaseLine.superseded_at.is_(None),
                 PurchaseLine.state.in_(("recorded", "partly_recorded")),
+                PurchaseLine.amount_ex_tax.isnot(None),
+                PurchaseLine.amount_ex_tax != 0,
                 PurchaseDocument.kind == "spend",
-                # same normalised payee, in SQL, so older purchases aren't cut off by newer ones
-                func.lower(func.regexp_replace(func.btrim(PurchaseDocument.payee_name), r"\s+", " ", "g")) == payee,
+                PurchaseDocument.status == "active",
+                has_active,
             )
-            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc())
-            .limit(20)
+            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
             .all()
         )
-        for prev, prev_doc in previous:
-            if normalise(prev_doc.payee_name) != payee or not prev.amount_ex_tax:
-                continue
+        match = next((lid for lid, name in candidates if normalise(name) == payee), None)
+        if match is not None:
+            prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
-            if not allocs:
-                continue
             out = []
             for a in allocs:
                 item = (
