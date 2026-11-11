@@ -140,9 +140,11 @@ def retire_account_lines(db: Session, org_id: UUID, *accounts: XeroAccount) -> i
         )
         .all()
     )
-    from app.features.costing.actions import on_line_gone
+    from app.features.costing.actions import lock_lines, on_line_gone
 
-    for ln in lines:
+    for ln in lock_lines(db, org_id, [ln.id for ln in lines]):
+        if ln.superseded_at is not None:
+            continue
         ln.superseded_at = now
         on_line_gone(db, ln)
     db.flush()
@@ -161,9 +163,11 @@ def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) ->
         )
         .all()
     )
-    from app.features.costing.actions import on_line_treatment_changed
+    from app.features.costing.actions import lock_lines, on_line_treatment_changed
 
-    for ln in lines:
+    for ln in lock_lines(db, org_id, [ln.id for ln in lines]):
+        if ln.superseded_at is not None:
+            continue
         before = ln.treatment
         ln.treatment = classify_line(ln, account)
         on_line_treatment_changed(db, ln, before, ln.treatment)
@@ -392,26 +396,10 @@ def upsert_bank_transactions(
                     .with_for_update()
                     .all()
                 ):
-                    on_line_gone(db, ln)
+                    on_line_gone(db, ln, cause="void")
                 db.flush()
             stats["documents"] += 1
             continue
-
-        if not was_active:
-            from app.features.costing.actions import on_document_restored
-
-            for ln in (
-                db.query(PurchaseLine)
-                .filter(
-                    PurchaseLine.org_id == org_id,
-                    PurchaseLine.document_id == doc.id,
-                    PurchaseLine.superseded_at.is_(None),
-                )
-                .with_for_update()
-                .all()
-            ):
-                on_document_restored(db, ln)
-            db.flush()
 
         live = {
             ln.line_key: ln
@@ -453,6 +441,20 @@ def upsert_bank_transactions(
                 ln.superseded_at = now
                 on_line_gone(db, ln)
         db.flush()
+        if not was_active:  # voided before, active again: after the incoming values are applied
+            from app.features.costing.actions import on_document_restored
+
+            for ln in (
+                db.query(PurchaseLine)
+                .filter(
+                    PurchaseLine.org_id == org_id,
+                    PurchaseLine.document_id == doc.id,
+                    PurchaseLine.superseded_at.is_(None),
+                )
+                .all()
+            ):
+                on_document_restored(db, ln)
+            db.flush()
 
         totals = (
             db.query(PurchaseLine.amount_ex_tax, PurchaseLine.tax_amount)

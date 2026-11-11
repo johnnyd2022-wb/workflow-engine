@@ -1217,3 +1217,73 @@ def test_r1_bad_refund_amounts_are_400(flask_app, world, db, amount):  # noqa: F
         headers={"Idempotency-Key": str(uuid4())},
     )
     assert response.status_code == 400, response.get_json()
+
+
+# --- build-review round 2 regressions (8.1c-1) ----------------------------------------------------
+
+
+def test_r2_restore_only_revives_what_the_void_orphaned(flask_app, world, db):  # noqa: F811
+    """needs-rate (orphaned for amount) -> void -> active again while still needing a rate:
+    the allocation stays orphaned and the lot stays estimated."""
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("FX then void", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", currency="AUD")
+    _resync_raw(world, db, txn_id, lid, "90", currency="AUD", status="DELETED")
+    _resync_raw(world, db, txn_id, lid, "90", currency="AUD")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    assert alloc.status == "orphaned"
+    assert lot_cost(db, org.id, alloc.inventory_item_id)["status"] == "estimated"
+
+
+def test_r2_amount_changed_while_voided_goes_to_review_on_restore(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Shrunk", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", status="DELETED")
+    _resync_raw(world, db, txn_id, lid, "50")
+    line_row = db.get(PurchaseLine, pl.id)
+    assert line_row.review_reason == "amount_changed"
+
+
+def test_r2_downscale_with_tiny_allocations_never_goes_negative(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "0.0004")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row(f"Tiny {n}", 1, "0.0001") for n in range(4)]))
+    _resync_raw(world, db, txn_id, lid, "0.0002")
+    amounts = [D(str(a.amount)) for a in _allocations(db, org.id, pl.id)]
+    assert all(a >= 0 for a in amounts) and sum(amounts) == D("0.0002")
+
+
+def test_r2_zero_dollar_line_can_be_marked_not_stock_and_reopened(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, _, _ = _sync_purchase(world, db, "0")
+    client = user_client(db, flask_app, org)
+    _assert_success(client.post(f"{API}/purchases/{pl.id}/not-stock", headers={"Idempotency-Key": str(uuid4())}))
+    db.expire_all()
+    assert db.get(PurchaseLine, pl.id).state == "not_stock"
+    _assert_success(client.post(f"{API}/purchases/{pl.id}/reopen", headers={"Idempotency-Key": str(uuid4())}))
+    db.expire_all()
+    assert db.get(PurchaseLine, pl.id).state == "open"
+
+
+def test_r2_account_retirement_orphans_recorded_lines_under_lock(flask_app, world, db):  # noqa: F811
+    from app.features.costing.purchase_sources import retire_account_lines
+    from app.features.crm.models.xero_account import XeroAccount
+
+    org = world["org"]
+    _, pl, _, _ = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Retired", 2, 90)]))
+    db.expire_all()
+    line_row = db.get(PurchaseLine, pl.id)
+    account = db.query(XeroAccount).filter(XeroAccount.org_id == org.id, XeroAccount.id == line_row.account_id).one()
+    retire_account_lines(db, org.id, account)
+    db.commit()
+    db.expire_all()
+    (alloc,) = _allocations(db, org.id, pl.id)
+    assert alloc.status == "orphaned" and alloc.orphaned_by == "gone"
+    assert db.get(PurchaseLine, pl.id).review_reason == "deleted_in_xero"
