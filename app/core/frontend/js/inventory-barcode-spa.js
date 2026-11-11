@@ -290,6 +290,25 @@
     form.setAttribute('data-barcode-inv-bound', '1');
     // Where the scanned stock goes; only shown with multiple sites on (site-picker.js).
     var sitePick = window.BizeSite ? window.BizeSite.mount(form.querySelector('[data-site-pick]')) : null;
+    // Live cost (8.1e-2): what this delivery cost, for people who may enter cost. Adding to a
+    // barcode already in stock prices just this delivery.
+    var costField = { value: function () { return null; } };
+    function attachCost() {
+      var unitSel = document.getElementById('barcode-inv-unit');
+      var qtyInput = document.getElementById('barcode-inv-quantity');
+      if (!unitSel || !window.BizECost || costField.attached) return;
+      costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
+        quantity: function () { return qtyInput.value; },
+        unit: function () { return unitSel.value; },
+        watch: [qtyInput, unitSel],
+        labelClass: 'spa-field-label',
+        inputClass: 'spa-inp',
+        hint: 'What this delivery cost. Lets Biz-E cost every batch made from it.',
+      });
+      costField.attached = true;
+    }
+    if (window.BizECost) attachCost(); else document.addEventListener('bizecost:ready', attachCost, { once: true });
+    var saveKey = null; // one key per delivery, kept across retries so a lost reply can't add it twice
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -321,22 +340,32 @@
         barcode: (formData.get('barcode') || '').trim() || null,
         source_method: 'barcode_scan',
       };
+      var paid = costField.value();
+      if (paid === false) {
+        if (window.showNotification) window.showNotification('error', 'Check total paid', 'Enter what was paid as an amount, like 45.00, or leave it blank.');
+        return false;
+      }
+      if (paid != null) payload.total_paid = paid;
       try {
         if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
           console.error('CoreAPI.createInventoryItem is not available.', payload);
           return false;
         }
         if (window.BizeSite) window.BizeSite.into(payload, sitePick);
-        await window.CoreAPI.createInventoryItem(payload);
+        if (!saveKey) saveKey = window.CoreAPI._newIdempotencyKey ? window.CoreAPI._newIdempotencyKey() : null;
+        await window.CoreAPI.createInventoryItem(payload, saveKey ? { idempotencyKey: saveKey } : {});
+        saveKey = null;
         if (window.showNotification) {
           window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');
         }
         this.reset();
         window.location.href = '/core';
       } catch (err) {
+        if (err && err.status && err.status < 500 && err.status !== 401) saveKey = null;
         console.error('Failed to create inventory item', err);
         if (window.showNotification) {
-          window.showNotification('error', 'Failed to Add Item', 'There was a problem saving this inventory item.');
+          var why = err && err.status === 400 && err.message ? err.message : 'There was a problem saving this inventory item.';
+          window.showNotification('error', 'Failed to Add Item', why);
         }
       }
       return false;

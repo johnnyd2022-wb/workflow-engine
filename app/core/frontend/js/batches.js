@@ -337,6 +337,8 @@
       set('core2-active-detail-id', batch.title);
       set('core2-active-detail-process', batch.workflow + ' · ' + stepText(batch));
       set('core2-active-detail-started', ['Started ' + formatDateTime(batch.started), batch.done + ' of ' + batch.total + ' steps done', ageText(batch)].join(' · '));
+      var costMount = document.getElementById('core2-active-detail-cost');
+      if (costMount && window.BizECost) window.BizECost.batchCard(batch.id, costMount);
       var host = document.getElementById('core2-active-detail-steps');
       host.textContent = '';
       batch.steps.forEach(function (s, idx) {

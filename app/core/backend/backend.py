@@ -232,6 +232,17 @@ def notifications_page():
     return render_template("notifications/notifications.html", active_page="core")
 
 
+@core_bp.route("/api/core/attention", methods=["GET"])
+@requires_auth
+def attention_items():
+    """Feature-contributed things that need this user (app/core/attention.py)."""
+    from uuid import UUID
+
+    from app.core.attention import collect
+
+    return jsonify({"items": collect(db_session, UUID(str(g.org_id)), getattr(g, "current_user", None))})
+
+
 @core_bp.route("/core/tasks", methods=["GET"])
 @requires_auth
 def tasks_page():

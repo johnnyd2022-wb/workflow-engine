@@ -117,6 +117,8 @@
      on a full load. See suppliers/suppliers.html. #}
   <script src="/ui/shared/quality-hold.js" defer></script>
   <script src="/ui/shared/recall-case.js" defer></script>
+  <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+  <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-view.js') }}" defer></script>
 {% endblock %}
 {% block workspace_links %}{% endblock %}

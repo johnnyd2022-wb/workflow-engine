@@ -522,3 +522,21 @@ def purchases_page():
     from flask import render_template
 
     return render_template("costing/purchases.html", active_page="core")
+
+
+@costing_bp.route("/core/costing/costs", methods=["GET"])
+@requires_auth
+def costs_page():
+    from flask import render_template
+
+    return render_template("costing/costs.html", active_page="core")
+
+
+def _register_attention() -> None:
+    from app.core.attention import register
+    from app.features.costing.attention import purchases_to_record
+
+    register("costing.purchases_to_record", purchases_to_record)
+
+
+_register_attention()

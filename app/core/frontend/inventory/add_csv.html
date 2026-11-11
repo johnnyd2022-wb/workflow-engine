@@ -69,9 +69,15 @@
     /* display:flex on these would otherwise beat the hidden attribute. */
     .csv-import-summary[hidden], [data-csv-site][hidden] { display: none; }
   </style>
+  <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+  <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script nonce="{{ csp_nonce() }}">
     (function() {
       var S = window.__csvInventoryPage = window.__csvInventoryPage || {};
+      // Live cost (8.1e-2): a Total Paid column / field for people who may enter cost.
+      S.canCost = false;
+      function loadCostAccess() { window.BizECost.me().then(function (who) { S.canCost = !!who.can_manage; }); }
+      if (window.BizECost) loadCostAccess(); else document.addEventListener('bizecost:ready', loadCostAccess, { once: true });
       S.csvValidatedData = null;
       S.pendingRows = null;
       S.acceptedRows = null;
@@ -315,6 +321,12 @@
                 '<label class="spa-field-label" for="csv-review-unit">Unit</label>' +
                 '<select id="csv-review-unit" class="spa-inp">' + unitOptionsHtml(row.unit) + '</select>' +
               '</div>' +
+              (S.canCost
+                ? '<div>' +
+                    '<label class="spa-field-label" for="csv-review-paid">Total paid (ex GST) <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                    '<input type="text" id="csv-review-paid" class="spa-inp" inputmode="decimal" value="' + escapeHtml(row.total_paid || '') + '" placeholder="0.00" autocomplete="off">' +
+                  '</div>'
+                : '') +
             '</section>' +
             '<section class="spa-form-section" aria-labelledby="csv-rev-source">' +
               '<h3 id="csv-rev-source" class="spa-form-section-title">Source</h3>' +
@@ -368,7 +380,9 @@
         var batchEl = document.getElementById('csv-review-batch');
         var purEl = document.getElementById('csv-review-purchase');
         var expEl = document.getElementById('csv-review-expiry');
+        var paidEl = document.getElementById('csv-review-paid');
         return Object.assign({}, row, {
+          total_paid: paidEl ? (paidEl.value || '').replace(/[$,\s]/g, '') || null : row.total_paid,
           name: nameEl ? (nameEl.value || '').trim() : row.name,
           quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
           unit: unitEl ? unitEl.value : row.unit,
@@ -551,6 +565,9 @@
           S.csvValidatedData._initial_row_count = (res.rows || []).length;
           S.lastFile = file;
           renderImportSummary(res);
+          if (res && res.total_paid_ignored && window.showNotification) {
+            window.showNotification('info', 'Total Paid not used', 'Your role can’t enter costs, so the Total Paid column was left out. The stock will still be added.');
+          }
           startReview();
         }).catch(function(err) {
           if (wrap) wrap.innerHTML = '<p style="padding: 16px; color: var(--error); margin: 0;">' + escapeHtml(err.message || 'Validation failed') + '</p>';
