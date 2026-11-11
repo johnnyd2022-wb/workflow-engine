@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -602,17 +602,20 @@ class XeroSyncService:
             result.purchases_status = "needs_reconnect"
         except XeroTokenExpiredError as e:
             # Recorded, not raised: the job must still be finalised with what sales did.
+            logger.warning("xero_purchases_token_expired", org_id=str(org_id), detail=str(e)[:200])
             result.purchases_status = "failed"
-            result.errors.append(f"Purchases sync error: Xero connection expired ({e})")
+            result.errors.append("Purchases sync failed: the Xero connection has expired; reconnect Xero")
         except Exception as e:
             # The savepoint has already undone only this phase; the sales work done earlier in
             # this sync is still pending and must not be rolled back with it.
             if client_module._is_insufficient_scope(e):
                 result.purchases_status = "needs_reconnect"
                 return
-            logger.exception("xero_purchases_sync_failed", org_id=str(org_id))
+            # Never echo the exception: it can carry SQL and Xero purchase data to the caller.
+            ref = uuid4().hex[:12]
+            logger.exception("xero_purchases_sync_failed", org_id=str(org_id), ref=ref, error_type=type(e).__name__)
             result.purchases_status = "failed"
-            result.errors.append(f"Purchases sync error: {e}")
+            result.errors.append(f"Purchases sync failed (ref {ref})")
 
     def historical_purchases(self, org_id: UUID, date_from, date_to) -> dict:
         """Live-cogs 8.1c-2: fetch and upsert every purchase dated in [date_from, date_to],

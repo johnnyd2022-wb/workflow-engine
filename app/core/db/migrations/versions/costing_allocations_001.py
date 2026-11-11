@@ -48,6 +48,7 @@ def upgrade():
         sa.Column("amount", sa.Numeric(18, 4), nullable=False),
         sa.Column("quantity", sa.Numeric(18, 4), nullable=False),
         sa.Column("status", sa.String(10), nullable=False, server_default="active"),
+        sa.Column("orphaned_by", sa.String(10), nullable=True),
         sa.Column("created_by_user_id", UUID, nullable=True),
         sa.Column("created_at", TS, nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", TS, nullable=False, server_default=sa.func.now()),
