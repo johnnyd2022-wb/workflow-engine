@@ -1168,3 +1168,21 @@ def test_r3_record_level_failures_everywhere_are_failed(world, db, monkeypatch):
     fake.fail_with = RuntimeError("down")
     sync(db, org.id)
     assert last_job(db, org.id).status == "failed"
+
+
+def test_costing_models_register_the_xero_accounts_table_on_their_own():
+    """A process that imports only the costing models (no CRM slice) must still be able to
+    flush a purchase line: its FK target has to be in the metadata."""
+    import subprocess
+    import sys
+
+    code = (
+        "from app.features.costing.models import PurchaseLine; "
+        "from app.core.db.models.models import Base; "
+        "import sqlalchemy as sa; "
+        "t = Base.metadata.tables['purchase_lines']; "
+        "[fk.column for fk in t.foreign_keys]; "
+        "assert 'xero_accounts' in Base.metadata.tables"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[-2000:]
