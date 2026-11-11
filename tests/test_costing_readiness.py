@@ -423,14 +423,8 @@ def test_r1_pricing_failure_after_insert_leaves_nothing_even_with_idempotency(wo
     assert db.query(ApiIdempotencyKey).filter(ApiIdempotencyKey.org_id == org.id).count() == 0
 
 
-def test_r1_total_paid_on_barcode_add_quantity_adds_no_price(world, db):
-    org, client = world
-    first = _add(client, barcode="9400000000017")
-    assert first.status_code == 201
-    again = _add(client, barcode="9400000000017", total_paid="50")
-    assert again.status_code in (200, 201), again.get_json()
-    assert again.get_json()["id"] == first.get_json()["id"]
-    assert db.query(LotCostEntry).filter(LotCostEntry.inventory_item_id == first.get_json()["id"]).count() == 0
+# Barcode add-quantity with total_paid: 8.1e-2 now prices the new `added` flow (spec AC91,
+# tests/test_costing_without_xero.py), replacing 8.1e-1's "not applied".
 
 
 def test_r1_total_paid_on_untracked_lot_is_all_or_nothing(world, db):

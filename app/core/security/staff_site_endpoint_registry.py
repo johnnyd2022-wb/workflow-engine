@@ -343,6 +343,7 @@ ENDPOINT_COVERAGE = {
     ("recalls.unreachable", "POST"): "blocked",
     ("recalls.quantities", "POST"): "blocked",
     ("costing.delete_lot_cost", "DELETE"): "blocked",
+    ("costing.costing_me", "GET"): "blocked",
     ("costing.get_accounts", "GET"): "blocked",
     ("costing.get_execution_cost", "GET"): "blocked",
     ("costing.put_account", "PUT"): "blocked",

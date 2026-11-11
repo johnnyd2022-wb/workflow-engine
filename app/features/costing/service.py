@@ -45,6 +45,41 @@ def parse_amount(raw: Any, what: str, *, allow_zero: bool) -> Decimal:
     return value
 
 
+def may_enter_cost(db: Session, user, org_id: UUID) -> bool:
+    """True when ``user`` may type a price for stock they add here: ``costs.manage`` in an org
+    with the costing feature. Add Inventory paths ignore a cost field otherwise."""
+    from app.core.security.access_policy import has_permission
+    from app.core.security.entitlements import org_has_feature
+    from app.features.costing import FEATURE_KEY
+
+    return bool(has_permission(user, "costs.manage") and org_has_feature(db, org_id, FEATURE_KEY))
+
+
+def created_flow(db: Session, org_id: UUID, item_id: UUID) -> CostFlow | None:
+    return (
+        db.query(CostFlow)
+        .filter(
+            CostFlow.org_id == org_id,
+            CostFlow.inventory_item_id == item_id,
+            CostFlow.direction == "in",
+            CostFlow.kind == "created",
+        )
+        .order_by(CostFlow.created_at, CostFlow.id)
+        .first()
+    )
+
+
+def price_new_lot(db: Session, org_id: UUID, item: InventoryItem, amount: Decimal, user_id=None) -> None:
+    """Price a lot just added by hand, CSV or scan on its ``created`` flow (no commit)."""
+    db.flush()
+    flow = created_flow(db, org_id, item.id)
+    if flow is None:
+        raise CostingError("This lot can't take a price when it's added")
+    set_lot_price(
+        db, org_id, item.id, amount=amount, quantity=item.quantity, kind="manual", cost_flow_id=flow.id, user_id=user_id
+    )
+
+
 def _parse_uuid(raw: Any) -> UUID | None:
     try:
         return UUID(str(raw))

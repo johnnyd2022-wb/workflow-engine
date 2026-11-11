@@ -186,6 +186,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("planning.static", None, PUBLIC),
     ("planning.*", _READ, "production.view"),
     ("planning.*", frozenset({"POST"}), "production.record"),
+    ("costing.costing_me", _READ, SIGNED_IN),  # "may I see cost?" — answered for everyone
     ("costing.*", _READ, "costs.view"),
     ("costing.*", None, "costs.manage"),
     # --- public: landing, static assets, sign-in, telemetry ingest

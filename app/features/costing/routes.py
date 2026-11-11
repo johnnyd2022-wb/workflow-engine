@@ -55,6 +55,8 @@ def _require_costing_feature():
     org_id = getattr(g, "current_org_id", None)
     if not org_id:
         return None
+    if request.endpoint == "costing.costing_me":
+        return None  # answers "is costing on for me?" itself, on or off
     if not org_has_feature(db_session(), org_id, FEATURE_KEY):
         logger.info("access_denied", reason="org_not_subscribed", feature=FEATURE_KEY, path=request.path)
         return jsonify({"error": "Not found"}), 404
@@ -78,6 +80,31 @@ def _body() -> dict:
     if not isinstance(data, dict):
         raise service.CostingError("Send a JSON object")
     return data
+
+
+@costing_bp.route(f"{API}/me", methods=["GET"])
+@requires_auth
+def costing_me():
+    """What the signed-in user may see and do with cost here (spec 8.1e-2). Never 403s: pages
+    call it to decide whether to show any cost element at all."""
+    from app.core.security.access_policy import has_permission
+
+    org = _org()
+    user = getattr(g, "current_user", None)
+    enabled = org_has_feature(db_session(), org, FEATURE_KEY)
+    can_view = bool(enabled and has_permission(user, "costs.view", "costs.manage"))
+    can_manage = bool(enabled and has_permission(user, "costs.manage"))
+    body = {"enabled": bool(enabled), "can_view": can_view, "can_manage": can_manage}
+    if can_view:
+        from app.features.costing import actions
+        from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+        connected = XeroTenantRepository(db_session).get_connected(org) is not None
+        body["xero_connected"] = connected
+        summary = actions.to_record_summary(db_session, org) if connected else {"count": 0, "newest": None}
+        body["purchases_to_record"] = summary["count"]
+        body["newest_to_record"] = summary["newest"]
+    return jsonify(body)
 
 
 @costing_bp.route(f"{API}/lots/<item_id>/cost", methods=["GET"])
