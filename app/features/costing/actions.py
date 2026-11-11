@@ -55,15 +55,25 @@ def _d(raw) -> Decimal:
 
 
 def get_line(db: Session, org_id: UUID, line_id: Any, *, for_update: bool = True) -> PurchaseLine:
+    """With ``for_update``, locks in the one order every writer uses: document, then line
+    (then lots, sorted by id). The sync's void/restore path takes the same order."""
     uid = _uuid(line_id)
     if uid is None:
         raise CostingNotFoundError("Purchase not found")
-    q = db.query(PurchaseLine).filter(PurchaseLine.org_id == org_id, PurchaseLine.id == uid)
-    if for_update:
-        q = q.with_for_update()
-    line = q.one_or_none()
+    line = db.query(PurchaseLine).filter(PurchaseLine.org_id == org_id, PurchaseLine.id == uid).one_or_none()
     if line is None:
         raise CostingNotFoundError("Purchase not found")
+    if for_update:
+        db.query(PurchaseDocument).filter(
+            PurchaseDocument.org_id == org_id, PurchaseDocument.id == line.document_id
+        ).with_for_update().one()
+        line = (
+            db.query(PurchaseLine)
+            .filter(PurchaseLine.org_id == org_id, PurchaseLine.id == uid)
+            .with_for_update()
+            .populate_existing()
+            .one()
+        )
     return line
 
 
@@ -105,18 +115,21 @@ def derive_state(db: Session, line: PurchaseLine, *, keep_skipped: bool = False)
     """Spec "Line arithmetic". ``skipped`` survives only when the caller says so."""
     if keep_skipped and line.state == "skipped":
         return
+    db.flush()  # the session doesn't autoflush: allocation changes must be visible to the query below
     amount = _d(line.amount_ex_tax) if line.amount_ex_tax is not None else None
-    alloc = allocated(db, line)
+    rows = line_allocations(db, line)
+    has_allocation = bool(rows)  # "something was allocated" is a row, even at $0
+    alloc = sum((_d(a.amount) for a in rows), ZERO)
     not_stock = _d(line.not_stock_amount)
     if amount is None:
         line.state = "open"
         return
     remaining = amount - alloc - not_stock
-    if alloc != 0 and remaining == 0:
+    if has_allocation and remaining == 0:
         line.state = "recorded"
-    elif amount != 0 and not_stock == amount:
+    elif not has_allocation and not_stock == amount and amount != 0:
         line.state = "not_stock"
-    elif alloc != 0:
+    elif has_allocation:
         line.state = "partly_recorded"
     else:
         line.state = "open"
@@ -270,6 +283,24 @@ def _date(raw) -> date | None:
         raise CostingError("expiry_date must be YYYY-MM-DD") from None
 
 
+def _lock_lots(db: Session, org_id: UUID, entries: list) -> dict:
+    """Validate each lot appears once, then lock them sorted by id (no lock-order deadlocks)."""
+    ids = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise CostingError("Each lot is an object")
+        uid = _uuid(entry.get("inventory_item_id"))
+        if uid is None:
+            raise CostingNotFoundError("Lot not found")
+        if uid in ids:
+            raise CostingError("Each lot can appear only once")
+        ids.append(uid)
+    locked = {}
+    for uid in sorted(ids, key=str):
+        locked[uid] = _qualifying_lot(db, org_id, uid)
+    return locked
+
+
 def _qualifying_lot(db: Session, org_id: UUID, item_id) -> InventoryItem:
     uid = _uuid(item_id)
     item = (
@@ -292,11 +323,10 @@ def link(db: Session, org_id: UUID, line_id, lots: list, rest: str | None, user_
         raise CostingError("Use refund for a refund")
     if not isinstance(lots, list) or not lots:
         raise CostingError("Choose at least one lot")
+    locked = _lock_lots(db, org_id, lots)
     plan = []
     for entry in lots:
-        if not isinstance(entry, dict):
-            raise CostingError("Each lot is an object")
-        item = _qualifying_lot(db, org_id, entry.get("inventory_item_id"))
+        item = locked[_uuid(entry.get("inventory_item_id"))]
         problem = _link_problem(db, org_id, item)
         if problem:
             raise CostingError(problem)
@@ -355,6 +385,16 @@ def _link_problem(db: Session, org_id: UUID, item: InventoryItem) -> str | None:
     return None
 
 
+def _refund_amount(raw) -> Decimal:
+    if isinstance(raw, str) and raw.strip().startswith("-"):
+        value = parse_amount(raw.strip()[1:], "Amount", allow_zero=False)
+    elif isinstance(raw, int | float) and not isinstance(raw, bool) and raw < 0:
+        value = parse_amount(str(-raw), "Amount", allow_zero=False)
+    else:
+        raise CostingError("A refund amount is a negative number")
+    return -value
+
+
 def refund(db: Session, org_id: UUID, line_id, lots: list, user_id=None) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     doc, remaining = _actionable(db, line)
@@ -362,20 +402,13 @@ def refund(db: Session, org_id: UUID, line_id, lots: list, user_id=None) -> Purc
         raise CostingError("Only a refund can reduce the cost of stock")
     if not isinstance(lots, list) or not lots:
         raise CostingError("Choose at least one lot")
+    locked = _lock_lots(db, org_id, lots)
     plan = []
     for entry in lots:
-        if not isinstance(entry, dict):
-            raise CostingError("Each lot is an object")
-        item = _qualifying_lot(db, org_id, entry.get("inventory_item_id"))
+        item = locked[_uuid(entry.get("inventory_item_id"))]
         if item.contract_customer_id:
             raise CostingError("Customer-owned stock costs you nothing")
-        try:
-            amount = Decimal(str(entry.get("amount")))
-        except (InvalidOperation, ValueError, TypeError):
-            raise CostingError("Amount must be a number") from None
-        if not amount.is_finite() or amount >= 0:
-            raise CostingError("A refund amount is negative")
-        plan.append((item, _q(amount)))
+        plan.append((item, _refund_amount(entry.get("amount"))))
     total = sum((p[1] for p in plan), ZERO)
     if total < remaining:  # both negative: can't refund more than the line
         raise CostingError(f"Refunds total {total}, more than the {remaining} on this purchase")
@@ -426,6 +459,8 @@ def reopen(db: Session, org_id: UUID, line_id) -> PurchaseLine:
 
 def review(db: Session, org_id: UUID, line_id, action: str) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
+    if line.amount_ex_tax is None:
+        raise CostingError("This purchase has no amount in your base currency yet")
     if line.review_reason is None:
         raise CostingError("Nothing to review on this purchase")
     if action == "keep":
@@ -449,17 +484,22 @@ def edit_allocations(db: Session, org_id: UUID, line_id, changes: list) -> Purch
     if not isinstance(changes, list) or not changes:
         raise CostingError("Send at least one allocation")
     current = {a.id: a for a in line_allocations(db, line, statuses=("active", "orphaned"))}
+    doc = _document(db, line)
+    purchase_live = doc.status == "active" and line.superseded_at is None
+    for item_id in sorted({a.inventory_item_id for a in current.values()}, key=str):
+        _qualifying_lot(db, org_id, item_id)  # lock, in id order
+    seen = set()
     for change in changes:
         if not isinstance(change, dict):
             raise CostingError("Each allocation is an object")
         alloc = current.get(_uuid(change.get("id")))
         if alloc is None:
             raise CostingNotFoundError("Allocation not found")
+        if alloc.id in seen:
+            raise CostingError("Each allocation can appear only once")
+        seen.add(alloc.id)
         if _d(alloc.amount) < 0:
-            amount = Decimal(str(change.get("amount")))
-            if amount >= 0:
-                raise CostingError("A refund amount is negative")
-            alloc.amount = _q(amount)
+            alloc.amount = _refund_amount(change.get("amount"))
         else:
             alloc.amount = parse_amount(change.get("amount"), "Amount", allow_zero=True)
             if change.get("quantity") not in (None, ""):
@@ -469,7 +509,8 @@ def edit_allocations(db: Session, org_id: UUID, line_id, changes: list) -> Purch
                 if quantity + others > _d(flow.quantity):
                     raise CostingError("That's more than the lot received")
                 alloc.quantity = quantity
-        alloc.status = "active"
+        if purchase_live:  # an edit never revives a purchase Xero no longer has
+            alloc.status = "active"
     db.flush()
     amount = _d(line.amount_ex_tax)
     used = allocated(db, line) + _d(line.not_stock_amount)
@@ -637,29 +678,54 @@ def _orphan(db: Session, line: PurchaseLine, reason: str) -> None:
 def on_line_amount_changed(db: Session, line: PurchaseLine, old_amount: Decimal | None) -> None:
     """Rescale what was recorded against a line whose Xero amount changed (spec table)."""
     new_amount = _d(line.amount_ex_tax) if line.amount_ex_tax is not None else None
-    if old_amount is None or new_amount is None or old_amount == new_amount:
+    if old_amount is None or old_amount == new_amount:
         return
     allocs = line_allocations(db, line, statuses=("active",))
-    if new_amount == 0 or not _same_sign(new_amount, old_amount) or old_amount == 0:
+    if new_amount is None or new_amount == 0 or old_amount == 0 or not _same_sign(new_amount, old_amount):
+        # No longer valued (needs a rate), zero, or the other sign: never rescale across that.
         if allocs:
             _orphan(db, line, "amount_changed")
         line.not_stock_amount = ZERO
         derive_state(db, line, keep_skipped=True)
         return
     factor = new_amount / old_amount
-    line.not_stock_amount = _q(_d(line.not_stock_amount) * factor)
-    if allocs:
-        before_total = sum((_d(a.amount) for a in allocs), ZERO)
-        scaled = {a.id: _q(_d(a.amount) * factor) for a in allocs}
-        expected = _q(before_total * factor)
-        remainder = expected - sum(scaled.values(), ZERO)
-        if remainder:
-            biggest = max(allocs, key=lambda a: (abs(_d(a.amount)), -a.created_at.timestamp()))
-            scaled[biggest.id] += remainder
-        for alloc in allocs:
-            alloc.amount = scaled[alloc.id]
-        line.review_reason = "amount_changed"
+    old_not_stock = _d(line.not_stock_amount)
+    if not allocs:
+        line.not_stock_amount = _q(old_not_stock * factor)
+        derive_state(db, line, keep_skipped=True)
+        return
+    # Round the line's whole used amount once, then split it: not-stock first, the rest across
+    # the allocations, so used never exceeds the new amount and the remainder lands somewhere.
+    old_alloc = sum((_d(a.amount) for a in allocs), ZERO)
+    used_total = _q((old_alloc + old_not_stock) * factor)
+    if abs(used_total) > abs(new_amount):
+        used_total = new_amount
+    new_not_stock = _q(old_not_stock * factor)
+    if abs(new_not_stock) > abs(used_total):
+        new_not_stock = used_total
+    target = used_total - new_not_stock
+    scaled = {a.id: _q(_d(a.amount) * factor) for a in allocs}
+    remainder = target - sum(scaled.values(), ZERO)
+    if remainder:
+        biggest = max(allocs, key=lambda a: (abs(_d(a.amount)), -a.created_at.timestamp()))
+        scaled[biggest.id] += remainder
+    for alloc in allocs:
+        alloc.amount = scaled[alloc.id]
+    line.not_stock_amount = new_not_stock
+    line.review_reason = "amount_changed"
     derive_state(db, line, keep_skipped=True)
+
+
+def on_document_restored(db: Session, line: PurchaseLine) -> None:
+    """A voided purchase made active again in Xero: what it paid for is priced by it again."""
+    if line.superseded_at is not None:
+        return
+    orphaned = line_allocations(db, line, statuses=("orphaned",))
+    for alloc in orphaned:
+        alloc.status = "active"
+    if line.review_reason == "deleted_in_xero":
+        line.review_reason = None
+    derive_state(db, line)
 
 
 def on_line_treatment_changed(db: Session, line: PurchaseLine, old: str | None, new: str | None) -> None:

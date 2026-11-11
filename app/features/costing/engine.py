@@ -458,10 +458,13 @@ class CostEngine:
                 fp[1] += _d(e.amount)
                 fp[3].add("free" if e.kind == "free" else "manual")
         refunds = ZERO
+        refund_status = ACTUAL
         for alloc in self._allocations(item.id):
             amount = _d(alloc.amount)
             if amount < 0:
                 refunds += amount
+                if alloc.status == "orphaned":  # the refund is gone from Xero
+                    refund_status = ESTIMATED
                 continue
             if alloc.cost_flow_id is None:
                 continue
@@ -532,6 +535,7 @@ class CostEngine:
             if unpriced > 0:
                 status = worst(status, ESTIMATED)
             if refunds:
+                status = worst(status, refund_status)
                 total_k += refunds
                 if total_k < 0:
                     total_k = ZERO

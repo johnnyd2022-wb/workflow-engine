@@ -1072,3 +1072,148 @@ def test_ac77_rescale_rounding_remainder_keeps_the_total(flask_app, world, db): 
     amounts = sorted(D(str(row.amount)) for row in _allocations(db, org.id, purchase_line.id))
     assert amounts == [D("36.6666"), D("36.6666"), D("36.6668")]
     assert sum(amounts) == D("110.0000")
+
+
+# --- build-review round 1 regressions (8.1c-1) ----------------------------------------------------
+
+
+def _resync_raw(world, db, txn_id, line_item_id, amount, **kw):
+    world["fake"].transactions = [
+        txn([line("310", amount, line_item_id=line_item_id)], txn_id=txn_id, on=PURCHASE_DATE, amounts="NoTax", **kw)
+    ]
+    assert sync(db, world["org"].id).success
+    db.expire_all()
+
+
+def test_r1_recorded_line_turning_needs_rate_is_orphaned_for_review(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("FX Juniper", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", currency="AUD")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    line_row = db.get(PurchaseLine, pl.id)
+    assert alloc.status == "orphaned" and line_row.review_reason == "amount_changed"
+    assert lot_cost(db, org.id, alloc.inventory_item_id)["status"] == "estimated"
+
+
+def test_r1_rescale_with_not_stock_never_exceeds_the_line(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "2")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Half", 1, 1)], rest="not_stock"))
+    _resync_raw(world, db, txn_id, lid, "0.0001")
+    line_row = db.get(PurchaseLine, pl.id)
+    used = sum(D(str(a.amount)) for a in _allocations(db, org.id, pl.id)) + D(str(line_row.not_stock_amount))
+    assert used == D("0.0001")
+
+
+@pytest.mark.parametrize("keep_first", [False, True])
+def test_r1_voided_then_active_again_is_restored(flask_app, world, db, keep_first):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Back Again", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", status="DELETED")
+    if keep_first:
+        _assert_success(
+            client.post(
+                f"{API}/purchases/{pl.id}/review", json={"action": "keep"}, headers={"Idempotency-Key": str(uuid4())}
+            )
+        )
+    _resync_raw(world, db, txn_id, lid, "90")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    line_row = db.get(PurchaseLine, pl.id)
+    assert alloc.status == "active" and line_row.review_reason is None and line_row.state == "recorded"
+    assert lot_cost(db, org.id, alloc.inventory_item_id)["status"] == "actual"
+
+
+def test_r1_voided_refund_makes_the_lot_estimated(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    item = lot(db, org.id, "Refunded Juniper", 2, "kg")
+    price(db, org.id, item.id, 90, 2)
+    _, pl, txn_id, lid = _sync_purchase(world, db, "20", kind="RECEIVE")
+    client = user_client(db, flask_app, org)
+    response = client.post(
+        f"{API}/purchases/{pl.id}/refund",
+        json={"lots": [{"inventory_item_id": str(item.id), "amount": "-20"}]},
+        headers={"Idempotency-Key": str(uuid4())},
+    )
+    _assert_success(response)
+    cost = lot_cost(db, org.id, item.id)
+    assert (D(cost["unit_cost"]), cost["status"]) == (D("35"), "actual")
+    _resync_raw(world, db, txn_id, lid, "20", kind="RECEIVE", status="DELETED")
+    assert lot_cost(db, org.id, item.id)["status"] == "estimated"
+
+
+def test_r1_editing_an_orphaned_allocation_keeps_it_orphaned(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Gone Juniper", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", status="DELETED")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    response = client.put(
+        f"{API}/purchases/{pl.id}/allocations", json={"allocations": [{"id": str(alloc.id), "amount": "80"}]}
+    )
+    _assert_success(response)
+    db.expire_all()
+    assert db.get(PurchaseAllocation, alloc.id).status == "orphaned"
+
+
+def test_r1_the_same_lot_twice_is_400_not_500(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    item = lot(db, org.id, "Twice", 2, "kg", purchase_date=PURCHASE_DATE)
+    _, pl, _, _ = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    lots = [{"inventory_item_id": str(item.id), "quantity": "1", "amount": "40"}] * 2
+    assert _link(client, pl.id, lots).status_code == 400
+    assert _allocations(db, org.id, pl.id) == []
+
+
+def test_r1_a_zero_dollar_allocation_counts_as_recorded(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, _, _ = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Free sample", 1, 0)], rest="not_stock"))
+    assert db.get(PurchaseLine, pl.id).state == "recorded"
+
+
+def test_r1_review_unlink_replays_with_the_same_key(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Replay", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "99")
+    key = str(uuid4())
+    first = client.post(f"{API}/purchases/{pl.id}/review", json={"action": "unlink"}, headers={"Idempotency-Key": key})
+    again = client.post(f"{API}/purchases/{pl.id}/review", json={"action": "unlink"}, headers={"Idempotency-Key": key})
+    assert first.status_code == 200 and again.status_code == 200
+    assert again.headers.get("Idempotent-Replay") == "true"
+
+
+def test_r1_review_on_a_needs_rate_line_is_400(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Rate", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", currency="AUD")
+    assert db.get(PurchaseLine, pl.id).review_reason is not None
+    response = client.post(
+        f"{API}/purchases/{pl.id}/review", json={"action": "keep"}, headers={"Idempotency-Key": str(uuid4())}
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("amount", ["abc", "NaN", "-1e30", "-0.00001", "20", None])
+def test_r1_bad_refund_amounts_are_400(flask_app, world, db, amount):  # noqa: F811
+    org = world["org"]
+    item = lot(db, org.id, "Refund target", 2, "kg")
+    _, pl, _, _ = _sync_purchase(world, db, "20", kind="RECEIVE")
+    client = user_client(db, flask_app, org)
+    response = client.post(
+        f"{API}/purchases/{pl.id}/refund",
+        json={"lots": [{"inventory_item_id": str(item.id), "amount": amount}]},
+        headers={"Idempotency-Key": str(uuid4())},
+    )
+    assert response.status_code == 400, response.get_json()

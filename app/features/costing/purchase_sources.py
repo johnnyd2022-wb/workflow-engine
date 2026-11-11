@@ -365,7 +365,7 @@ def upsert_bank_transactions(
         doc.currency_code = currency or None
         doc.currency_rate = _dec(getattr(t, "currency_rate", None))
         doc.fx_status = fx_status
-        was_active = doc.status == "active"
+        was_active = doc.status in (None, "active")  # a new document has nothing to restore
         doc.status = "voided" if voided else "active"
         doc.bank_account_name = getattr(bank, "name", None) if bank is not None else None
         doc.is_reconciled = getattr(t, "is_reconciled", None)
@@ -389,12 +389,29 @@ def upsert_bank_transactions(
                         PurchaseLine.document_id == doc.id,
                         PurchaseLine.superseded_at.is_(None),
                     )
+                    .with_for_update()
                     .all()
                 ):
                     on_line_gone(db, ln)
                 db.flush()
             stats["documents"] += 1
             continue
+
+        if not was_active:
+            from app.features.costing.actions import on_document_restored
+
+            for ln in (
+                db.query(PurchaseLine)
+                .filter(
+                    PurchaseLine.org_id == org_id,
+                    PurchaseLine.document_id == doc.id,
+                    PurchaseLine.superseded_at.is_(None),
+                )
+                .with_for_update()
+                .all()
+            ):
+                on_document_restored(db, ln)
+            db.flush()
 
         live = {
             ln.line_key: ln

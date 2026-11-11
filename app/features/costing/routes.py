@@ -241,23 +241,33 @@ def refund_purchase(line_id):
     return _purchase_card(line_id)
 
 
-@costing_bp.route(f"{API}/purchases/<line_id>/<action>", methods=["POST"])
-@requires_auth
-def simple_purchase_action(line_id, action):
-    from app.features.costing import actions
+def _simple(action_name):
+    def view(line_id):
+        from app.features.costing import actions
 
-    handlers = {"not-stock": actions.not_stock, "skip": actions.skip, "reopen": actions.reopen}
-    if action == "review":
-        choice = _body().get("action")
-        if choice == "unlink" and not has_permission(g.current_user, "inventory.adjust"):
-            return jsonify({"error": "Unlinking a purchase from stock needs inventory.adjust"}), 403
-        actions.review(db_session, _org(), line_id, choice)
-    elif action in handlers:
-        handlers[action](db_session, _org(), line_id)
-    else:
-        return jsonify({"error": "Not found"}), 404
-    db_session.commit()
-    return _purchase_card(line_id)
+        if action_name == "review":
+            choice = _body().get("action")
+            if choice == "unlink" and not has_permission(g.current_user, "inventory.adjust"):
+                return jsonify({"error": "Unlinking a purchase from stock needs inventory.adjust"}), 403
+            actions.review(db_session, _org(), line_id, choice)
+        else:
+            {"not-stock": actions.not_stock, "skip": actions.skip, "reopen": actions.reopen}[action_name](
+                db_session, _org(), line_id
+            )
+        db_session.commit()
+        return _purchase_card(line_id)
+
+    view.__name__ = f"purchase_{action_name.replace('-', '_')}"
+    return view
+
+
+for _action in ("not-stock", "skip", "reopen", "review"):
+    costing_bp.add_url_rule(
+        f"{API}/purchases/<line_id>/{_action}",
+        endpoint=f"purchase_{_action.replace('-', '_')}",
+        view_func=requires_auth(idempotent_write(f"costing_purchase_{_action}")(_simple(_action))),
+        methods=["POST"],
+    )
 
 
 @costing_bp.route(f"{API}/purchases/<line_id>/allocations", methods=["PUT"])
