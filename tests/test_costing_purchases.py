@@ -115,8 +115,11 @@ class FakeXero:
             fake.calls.append(("accounts", None))
             return fake.accounts
 
-        def get_bank_transactions(_self, modified_after=None, from_date=None):
-            fake.calls.append(("bank_transactions", {"modified_after": modified_after, "from_date": from_date}))
+        def get_bank_transactions(_self, modified_after=None, from_date=None, to_date=None):
+            call = {"modified_after": modified_after, "from_date": from_date}
+            if to_date is not None:  # historical runs (8.1c-2) bound the range
+                call["to_date"] = to_date
+            fake.calls.append(("bank_transactions", call))
             if fake.fail_with:
                 raise fake.fail_with
             return fake.transactions
