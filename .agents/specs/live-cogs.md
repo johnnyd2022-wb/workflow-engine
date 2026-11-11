@@ -1474,6 +1474,54 @@ To record also includes `skipped` lines (actionable), and Not stock lines carry 
 - AC85: historical run validation (from > to, future to, > 3 years) → 400; no scopes → 409.
 - AC86: bulk with > 200 or duplicate ids → 400.
 
+## 8.1e-1 build contract — readiness and "total paid" (backend)
+
+8.1e is split: **8.1e-1** (this) = the readiness API, Add Inventory "total paid", cost fields
+on existing detail APIs; **8.1e-2** = the lot cost panel, batch cost card and readiness page
+(UI, through `page-design`). No migration.
+
+**Products (round-2 gap 15).** A product is keyed by its step output definition: key
+`output:<source_output_id>` for `final_product` lots that carry one (from production flows),
+and for terminal-step output definitions with an id in any process; plus one legacy key per
+normalised name, `name:<normalised>`, for `final_product` lots without a `source_output_id`.
+Display name = the output definition's name (else the lot name). Two definitions with the same
+name are two products.
+
+**`GET /api/core/costing/readiness`** (`costs.view`) → `{products: [{key, name, ready,
+materials_total, materials_costed}]}` sorted by name. **`GET /readiness/<key>`** →
+`{key, name, basis: "latest_batch"|"declared_inputs", execution_id, ready, materials: [{name,
+inventory_item_id|null, costed, status}]}`; unknown key → 404.
+- `latest_batch`: the execution that most recently produced a lot of the product (latest
+  `produced` flow by `(created_at, id)`). Materials = every lot consumed by that execution that
+  isn't produced by it; a consumed lot produced by **another** execution is walked into that
+  execution the same way (iteratively, each execution once). A material lot is `costed` when
+  its lot cost status is `actual` or `estimated`. One row per lot, sorted by name.
+- `declared_inputs` (no batch yet): the declared `inputs` names of every step of the process
+  that declares the output; a material is costed when any directly priced lot of that
+  normalised name has an `actual` cost (the last-known-price rule). `inventory_item_id` null.
+- `ready` = every material costed (and at least one material).
+
+**Add Inventory "total paid".** `POST /api/core/inventory` accepts optional `total_paid`
+(money ≥ 0, ≤ 4 dp). When the user has `costs.manage` and the org has the `costing` feature, the
+lot and a flow price entry on its `created` flow (amount = total_paid, quantity = the lot's
+quantity) are written in **one transaction**; an invalid value → 400 and no lot. Otherwise the
+field is ignored. Not applied when the request adds quantity to an existing barcode lot.
+
+**Cost fields on detail APIs.** Not in this MR (each existing detail payload is owned by
+another slice); the 8.1e-2 UI reads the costing endpoints directly. AC40's "detail APIs omit
+cost fields" is satisfied trivially and stays pinned by a test that no existing inventory or
+execution payload contains `unit_cost`.
+
+**ACs (8.1e-1).** AC38, AC39, plus:
+- AC87: two output definitions both named "Gin" are two products; a lot without
+  `source_output_id` lands in `name:gin`.
+- AC88: a batch whose input WIP came from a different, earlier batch lists that batch's raw
+  materials too; each execution is walked once (a loop terminates).
+- AC89: `total_paid` without `costs.manage`, or without the feature, creates the lot and no
+  entry; `total_paid` "-1" or "abc" → 400 and no lot.
+- AC90: readiness is org-scoped (another org's key → 404; lists never cross orgs);
+  `costs.view` needed (PRODUCTION → 403).
+
 ## Open for 8.1b–e (round-2 review gaps not on the engine's path)
 
 Each must be resolved in this spec, with ACs, before its MR is built:
