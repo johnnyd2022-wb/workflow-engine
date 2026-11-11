@@ -432,6 +432,7 @@ def upsert_bank_transactions(
             .with_for_update()
         }
         keep: set[str] = set()
+        voided_amounts: dict = {}  # restoring: amount changes are applied after the allocations return
         for row in incoming:
             acct = row.pop("_account")
             current = live.get(row["line_key"])
@@ -452,7 +453,10 @@ def upsert_bank_transactions(
                     setattr(current, name, value)
                 classify_line(current, acct, payee=doc.payee_name, rules=rules)
                 db.flush()
-                on_line_amount_changed(db, current, before_amount)
+                if was_active:
+                    on_line_amount_changed(db, current, before_amount)
+                else:
+                    voided_amounts[current.id] = before_amount
                 on_line_treatment_changed(db, current, before_treatment, current.treatment)
             keep.add(row["line_key"])
             stats["lines"] += 1
@@ -473,7 +477,7 @@ def upsert_bank_transactions(
                 )
                 .all()
             ):
-                on_document_restored(db, ln)
+                on_document_restored(db, ln, old_amount=voided_amounts.get(ln.id))
             db.flush()
 
         totals = (

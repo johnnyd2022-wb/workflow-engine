@@ -1287,3 +1287,67 @@ def test_r2_account_retirement_orphans_recorded_lines_under_lock(flask_app, worl
     (alloc,) = _allocations(db, org.id, pl.id)
     assert alloc.status == "orphaned" and alloc.orphaned_by == "gone"
     assert db.get(PurchaseLine, pl.id).review_reason == "deleted_in_xero"
+
+
+# --- build-review round 3 regressions (8.1c-1) ----------------------------------------------------
+
+
+def test_r3_spend_restored_as_a_refund_stays_orphaned(flask_app, world, db):  # noqa: F811
+    """$90 spend recorded -> voided -> restored as a -$90 refund: the positive allocation must
+    not come back as an actual price."""
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Flipped", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", status="DELETED")
+    _resync_raw(world, db, txn_id, lid, "90", kind="RECEIVE")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    assert alloc.status == "orphaned" and alloc.orphaned_by == "amount"
+    assert db.get(PurchaseLine, pl.id).review_reason == "amount_changed"
+    assert lot_cost(db, org.id, alloc.inventory_item_id)["status"] == "estimated"
+
+
+def test_r3_same_sign_change_while_voided_is_rescaled_on_restore(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, "90")
+    client = user_client(db, flask_app, org)
+    _assert_success(_record(client, pl.id, [_row("Halved", 2, 90)]))
+    _resync_raw(world, db, txn_id, lid, "90", status="DELETED")
+    _resync_raw(world, db, txn_id, lid, "45")
+    (alloc,) = _allocations(db, org.id, pl.id)
+    assert alloc.status == "active" and D(str(alloc.amount)) == D("45")
+    assert db.get(PurchaseLine, pl.id).review_reason == "amount_changed"
+
+
+def _tiny_refunds(flask_app, world, db, total, parts):
+    org = world["org"]
+    _, pl, txn_id, lid = _sync_purchase(world, db, total, kind="RECEIVE")
+    client = user_client(db, flask_app, org)
+    lots_ = [lot(db, org.id, f"Refund {n}", 1, "kg") for n in range(len(parts))]
+    _assert_success(
+        client.post(
+            f"{API}/purchases/{pl.id}/refund",
+            json={"lots": [{"inventory_item_id": str(i.id), "amount": a} for i, a in zip(lots_, parts, strict=True)]},
+            headers={"Idempotency-Key": str(uuid4())},
+        )
+    )
+    return pl, txn_id, lid
+
+
+def test_r3_tiny_refund_downscale_that_cant_be_split_goes_to_review(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    pl, txn_id, lid = _tiny_refunds(flask_app, world, db, "0.0004", ["-0.0001"] * 4)
+    _resync_raw(world, db, txn_id, lid, "0.0002", kind="RECEIVE")  # must not abort the sync
+    allocs = _allocations(db, org.id, pl.id)
+    assert all(D(str(a.amount)) < 0 for a in allocs)
+    assert {a.status for a in allocs} == {"orphaned"}
+    assert db.get(PurchaseLine, pl.id).review_reason == "amount_changed"
+
+
+def test_r3_refund_downscale_keeps_every_row_negative(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    pl, txn_id, lid = _tiny_refunds(flask_app, world, db, "0.0009", ["-0.0003"] * 3)
+    _resync_raw(world, db, txn_id, lid, "0.0004", kind="RECEIVE")
+    allocs = _allocations(db, org.id, pl.id)
+    amounts = [D(str(a.amount)) for a in allocs if a.status == "active"]
+    assert len(amounts) == 3 and all(a < 0 for a in amounts) and sum(amounts) == D("-0.0004")
