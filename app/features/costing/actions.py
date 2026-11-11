@@ -12,7 +12,6 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -886,8 +885,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
 
     payee = normalise(doc.payee_name)
     if payee:
-        previous = (
-            db.query(PurchaseLine, PurchaseDocument)
+        # Newest first, only live recorded spend lines that still price something; the payee is
+        # compared with the same Python normalisation rules use (casefold, not SQL lower), and
+        # only two narrow columns are read, with no limit that could hide an older match.
+        has_active = (
+            db.query(PurchaseAllocation.id)
+            .filter(
+                PurchaseAllocation.org_id == PurchaseLine.org_id,
+                PurchaseAllocation.purchase_line_id == PurchaseLine.id,
+                PurchaseAllocation.status == "active",
+                PurchaseAllocation.amount > 0,
+            )
+            .exists()
+        )
+        candidates = (
+            db.query(PurchaseLine.id, PurchaseDocument.payee_name)
             .join(
                 PurchaseDocument,
                 (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
@@ -895,21 +907,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
             .filter(
                 PurchaseLine.org_id == line.org_id,
                 PurchaseLine.id != line.id,
+                PurchaseLine.superseded_at.is_(None),
                 PurchaseLine.state.in_(("recorded", "partly_recorded")),
+                PurchaseLine.amount_ex_tax.isnot(None),
+                PurchaseLine.amount_ex_tax != 0,
                 PurchaseDocument.kind == "spend",
-                # same normalised payee, in SQL, so older purchases aren't cut off by newer ones
-                func.lower(func.regexp_replace(func.btrim(PurchaseDocument.payee_name), r"\s+", " ", "g")) == payee,
+                PurchaseDocument.status == "active",
+                has_active,
             )
-            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc())
-            .limit(20)
+            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
             .all()
         )
-        for prev, prev_doc in previous:
-            if normalise(prev_doc.payee_name) != payee or not prev.amount_ex_tax:
-                continue
+        match = next((lid for lid, name in candidates if normalise(name) == payee), None)
+        if match is not None:
+            prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
-            if not allocs:
-                continue
             out = []
             for a in allocs:
                 item = (

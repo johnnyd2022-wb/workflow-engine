@@ -116,6 +116,11 @@ def validate(body: dict) -> dict:
     account = (raw_account.strip() or None) if raw_account is not None else None  # whitespace is no matcher
     payee = normalise(text_field("payee_pattern", 255))
     description = normalise(text_field("description_pattern", 500))
+    # casefold can lengthen text ("ß" -> "ss"): the stored, normalised value must fit too
+    if payee and len(payee) > 255:
+        raise CostingError("payee_pattern is at most 255 characters")
+    if description and len(description) > 500:
+        raise CostingError("description_pattern is at most 500 characters")
     if not (account or payee or description):
         raise CostingError("A rule needs an account, a payee or a description to match")
     match_type = body.get("match_type", "exact")
@@ -297,6 +302,7 @@ def reclassify_open_lines(db: Session, org_id: UUID) -> int:
             PurchaseLine.org_id == org_id,
             PurchaseLine.superseded_at.is_(None),
             PurchaseLine.state.in_(("open", "skipped")),
+            PurchaseDocument.status == "active",  # a voided purchase is not a live line
         )
         .with_for_update(of=PurchaseLine)
         .all()

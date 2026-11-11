@@ -745,3 +745,68 @@ def test_r1_historical_run_failure_after_accounts_rolls_back_and_is_sanitized(fl
     assert (settings.start_date, settings.purchases_cursor, settings.last_history_from) == before
     account = db.query(XeroAccount).filter(XeroAccount.org_id == org.id, XeroAccount.code == renamed.code).one()
     assert account.name == original_name, "account writes roll back with the run"
+
+
+# --- 8.1c-2 review round 2 regressions -------------------------------------------------------------------
+
+
+def test_r2_pattern_that_lengthens_when_normalised_is_400(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    assert _rule(client, payee_pattern="ẞ" * 200).status_code == 400
+
+
+def test_r2_last_time_matches_payees_the_way_rules_do(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    first = _purchase(world, db, "50", payee="Straße Botanicals", on=PURCHASE_DATE - timedelta(days=3))
+    _assert_success(_record(client, first, [_row("Orris", 1, 50)]))
+    card = _card(client, _purchase(world, db, "100", payee="STRASSE BOTANICALS"))
+    assert card["prefill"]["source"] == "last_time", card["prefill"]
+
+
+def test_r2_last_time_skips_voided_history_without_a_limit(flask_app, world, db):  # noqa: F811
+    from app.features.costing.models import PurchaseAllocation, PurchaseDocument
+
+    client = user_client(db, flask_app, world["org"])
+    good = _purchase(world, db, "50", payee="Busy Co", on=PURCHASE_DATE - timedelta(days=10))
+    _assert_success(_record(client, good, [_row("Good Orris", 1, 50)]))
+    newer = []
+    for n in range(25):
+        lid = _purchase(world, db, "10", payee="Busy Co", on=PURCHASE_DATE - timedelta(days=5))
+        _assert_success(_record(client, lid, [_row(f"Voided {n}", 1, 10)]))
+        newer.append(lid)
+    target = _purchase(world, db, "100", payee="Busy Co")  # synced before the voids, which a re-sync would undo
+    db.expire_all()
+    doc_ids = [db.get(PurchaseLine, lid).document_id for lid in newer]
+    db.query(PurchaseDocument).filter(PurchaseDocument.id.in_(doc_ids)).update(
+        {"status": "voided"}, synchronize_session=False
+    )
+    db.query(PurchaseAllocation).filter(PurchaseAllocation.purchase_line_id.in_(newer)).update(
+        {"status": "orphaned", "orphaned_by": "void"}, synchronize_session=False
+    )
+    db.commit()
+    card = _card(client, target)
+    assert card["prefill"]["source"] == "last_time"
+    assert [r["name"] for r in card["prefill"]["rows"]] == ["Good Orris"]
+
+
+def test_r2_rule_change_leaves_voided_purchases_alone(flask_app, world, db):  # noqa: F811
+    from app.features.costing.models import PurchaseDocument
+
+    client = user_client(db, flask_app, world["org"])
+    line_id = _purchase(world, db, "40", payee="Void Co")
+    db.expire_all()
+    doc_id = db.get(PurchaseLine, line_id).document_id
+    db.query(PurchaseDocument).filter(PurchaseDocument.id == doc_id).update({"status": "voided"})
+    db.commit()
+    before = _treatment(db, line_id)
+    assert _rule(client, payee_pattern="Void Co", treatment="not_stock").status_code == 201
+    db.expire_all()
+    row = db.get(PurchaseLine, line_id)
+    assert row.treatment == before and row.treatment_rule_id is None
+
+
+@pytest.mark.parametrize("bad", [[2026], {"y": 2026}, 20261001])
+def test_r2_non_string_dates_are_400(flask_app, world, db, bad):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    response = client.post(f"{API}/purchases/historical-run", json={"from": bad, "to": "2026-10-31"})
+    assert response.status_code == 400
