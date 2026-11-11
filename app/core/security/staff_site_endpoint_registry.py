@@ -352,6 +352,7 @@ ENDPOINT_COVERAGE = {
     ("costing.get_settings", "GET"): "blocked",
     ("costing.purchases_page", "GET"): "blocked",
     ("costing.costs_page", "GET"): "blocked",
+    ("costing.rules_page", "GET"): "blocked",
     ("costing.static", "GET"): "blocked",
     ("costing.readiness_detail", "GET"): "blocked",
     ("costing.readiness_list", "GET"): "blocked",

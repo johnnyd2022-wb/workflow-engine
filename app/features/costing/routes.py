@@ -524,6 +524,14 @@ def purchases_page():
     return render_template("costing/purchases.html", active_page="core")
 
 
+@costing_bp.route("/core/costing/rules", methods=["GET"])
+@requires_auth
+def rules_page():
+    from flask import render_template
+
+    return render_template("costing/rules.html", active_page="core")
+
+
 @costing_bp.route("/core/costing/costs", methods=["GET"])
 @requires_auth
 def costs_page():

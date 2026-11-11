@@ -131,3 +131,38 @@ def test_ac95_core_holds_no_costing_check_id():
         "app/core/frontend/js/feature-attention.js",
     ):
         assert "costing" not in (ROOT / path).read_text().lower(), path
+
+
+# --- purchase rules page -----------------------------------------------------------------------------------
+
+
+def test_rules_page_for_viewers_and_managers(flask_app, db):  # noqa: F811
+    org = new_org(db)
+    try:
+        manager = user_client(db, flask_app, org)
+        html = manager.get("/core/costing/rules").get_data(as_text=True)
+        assert "data-rules-root" in html and "costing/rules.js" in _content(html)
+        assert "data-rules-add>" in html
+        viewer = user_client(db, flask_app, org, permissions=["costs.view", "production.view"])
+        viewer_html = viewer.get("/core/costing/rules").get_data(as_text=True)
+        assert 'data-can-manage="false"' in viewer_html and "data-rules-add>" not in viewer_html
+        production = user_client(db, flask_app, org, role=UserRole.PRODUCTION)
+        assert production.get("/core/costing/rules").status_code == 403
+    finally:
+        purge(db, org)
+
+
+def test_rules_linked_from_settings_only_with_costing(flask_app, db):  # noqa: F811
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    org = new_org(db)
+    try:
+        FeatureSubscriptionRepository(db).grant(org.id, "crm")
+        db.commit()
+        client = user_client(db, flask_app, org)
+        assert 'href="/core/costing/rules"' in client.get("/crm/configuration").get_data(as_text=True)
+        FeatureSubscriptionRepository(db).revoke(org.id, "costing")
+        db.commit()
+        assert 'href="/core/costing/rules"' not in client.get("/crm/configuration").get_data(as_text=True)
+    finally:
+        purge(db, org)

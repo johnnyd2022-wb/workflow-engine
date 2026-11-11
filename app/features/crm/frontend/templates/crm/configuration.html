@@ -54,6 +54,21 @@
       </div>
     </section>
 
+    {% if show_purchase_rules %}
+    {# Live cost: the purchase-side twin of product mappings. #}
+    <section class="ss-section" id="purchase-rules" aria-labelledby="ss-purchase-rules-title">
+      <div class="ss-intro">
+        <div class="ss-intro__row">
+          <div>
+            <h2 id="ss-purchase-rules-title">Purchase rules</h2>
+            <p>How Biz-E treats purchases from Xero: what's stock, what isn't, and what to pre-fill when you record one.</p>
+          </div>
+          <a class="workspace-button ss-intro__action" href="/core/costing/rules">Open purchase rules</a>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     {# Product mappings: which Xero line is which of your products. #}
     <section class="ss-section" id="mappings" aria-labelledby="ss-mappings-title" data-ss-mappings>
       <div class="ss-intro">

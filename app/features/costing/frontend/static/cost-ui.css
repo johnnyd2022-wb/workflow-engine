@@ -77,3 +77,45 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 
 #page-content .cost-panel a, #page-content .cost-card a, #page-content .co-shell a:not(.workspace-button) {
   color: var(--ui-accent-strong); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Purchase rules */
+#page-content .ru-list, #page-content .ru-empty, #page-content .ru-shell > .workspace-caption { max-width: 880px; }
+#page-content .ru-shell .workspace-header__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#page-content .ru-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+#page-content .ru-rule { padding: 16px 18px; margin: 0; display: grid; gap: 10px; }
+#page-content .ru-rule.is-off { opacity: .7; }
+#page-content .ru-rule__head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+#page-content .ru-rule__when { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+#page-content .ru-rule__rows { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ui-text-muted); }
+#page-content .ru-rule__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#page-content .ru-empty { padding: 24px; }
+#page-content .ru-empty[hidden] { display: none; }
+#page-content .ru-empty h2 { margin: 0 0 6px; font-size: 17px; }
+#page-content .ru-dialog { position: fixed; inset: 0; margin: auto; height: fit-content; width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px); overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md);
+  background: var(--ui-surface); color: var(--ui-text); padding: 20px; }
+#page-content .ru-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+#page-content .ru-dialog h2 { margin: 0 0 12px; font-size: 18px; }
+#page-content .ru-dialog form { display: grid; gap: 14px; }
+#page-content .ru-fieldset { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); padding: 12px 14px; margin: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+#page-content .ru-fieldset legend { padding: 0 4px; font-size: 13px; font-weight: 600; }
+#page-content .ru-fieldset .cost-hint { grid-column: 1 / -1; }
+#page-content .ru-dialog input, #page-content .ru-dialog select { width: 100% !important; min-width: 0 !important; max-width: none !important; }
+#page-content .ru-template { display: grid; gap: 10px; }
+#page-content .ru-template[hidden] { display: none; }
+#page-content .ru-template h3 { margin: 0; font-size: 14px; }
+#page-content .ru-rows { display: grid; gap: 10px; }
+#page-content .ru-rows:empty { display: none; }
+#page-content .ru-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px 10px; align-items: end;
+  padding: 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); }
+#page-content .ru-row label[hidden] { display: none; }
+#page-content .ru-row__remove { justify-self: end; grid-column: -2 / -1; }
+#page-content .ru-template > .workspace-button { justify-self: start; }
+#page-content .ru-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 720px) {
+  #page-content .ru-fieldset { grid-template-columns: 1fr; }
+  #page-content .ru-row { grid-template-columns: 1fr 1fr; }
+  #page-content .ru-row__name { grid-column: 1 / -1; }
+  #page-content .ru-rule__head { flex-direction: column; }
+}

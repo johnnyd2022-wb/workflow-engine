@@ -69,6 +69,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core/site-transfers", "production", "inventory", "Stock transfers", "/core/inventory/view", None),
     Page("/core/costing/purchases", "production", "purchases", "Purchases", None, None),
     Page("/core/costing/costs", "production", "costs", "Costs", None, None),
+    Page("/core/costing/rules", "production", "purchases", "Purchase rules", "/core/costing/purchases", None),
     Page("/core/contracts", "production", "contracts", "Contract orders", None, None),
     Page("/core/contracts/materials", "production", "contracts", "Customer materials", "/core/contracts", None),
     Page("/core/suppliers", "production", "suppliers", "Suppliers", None, None),
