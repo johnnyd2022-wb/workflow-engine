@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKeyConstraint,
     Index,
@@ -161,5 +162,96 @@ class CostingSettings(TenantScoped, Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     use_last_known_price = Column(Boolean, nullable=False, default=True, server_default=sa.true())
+    # 8.1b: purchases are fetched from start_date on, incrementally from purchases_cursor.
+    start_date = Column(Date, nullable=True)
+    purchases_cursor = Column(DateTime(timezone=True), nullable=True)
+    purchases_tenant_id = Column(String(100), nullable=True)
+    base_currency = Column(String(3), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PurchaseDocument(TenantScoped, Base):
+    """A purchase as the accounting system holds it (8.1b: Xero spend / receive money)."""
+
+    __tablename__ = "purchase_documents"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_purchase_documents_org_id"),
+        UniqueConstraint("org_id", "source", "external_id", name="uq_purchase_documents_external"),
+        CheckConstraint("source IN ('xero_bank')", name="ck_purchase_documents_source"),
+        CheckConstraint("kind IN ('spend','refund')", name="ck_purchase_documents_kind"),
+        CheckConstraint("status IN ('active','voided')", name="ck_purchase_documents_status"),
+        CheckConstraint("fx_status IN ('ok','needs_rate')", name="ck_purchase_documents_fx"),
+        Index("ix_purchase_documents_org_date", "org_id", "document_date"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source = Column(String(20), nullable=False)
+    external_id = Column(String(100), nullable=False)
+    xero_tenant_id = Column(String(100), nullable=True)
+    kind = Column(String(10), nullable=False)
+    payee_name = Column(String(255), nullable=True)
+    xero_contact_id = Column(String(100), nullable=True)
+    document_date = Column(Date, nullable=True)
+    reference = Column(String(255), nullable=True)
+    currency_code = Column(String(3), nullable=True)
+    currency_rate = Column(Numeric(18, 8), nullable=True)
+    fx_status = Column(String(12), nullable=False, default="ok", server_default="ok")
+    status = Column(String(10), nullable=False)
+    total_ex_tax = Column(Numeric(18, 4), nullable=True)
+    total_tax = Column(Numeric(18, 4), nullable=True)
+    bank_account_name = Column(String(255), nullable=True)
+    is_reconciled = Column(Boolean, nullable=True)
+    external_updated_at = Column(DateTime(timezone=True), nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PurchaseLine(TenantScoped, Base):
+    """One line of a purchase, in base currency ex GST; refunds are negative."""
+
+    __tablename__ = "purchase_lines"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_purchase_lines_org_id"),
+        ForeignKeyConstraint(
+            ["org_id", "document_id"],
+            ["purchase_documents.org_id", "purchase_documents.id"],
+            name="fk_purchase_lines_document",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "account_id"],
+            ["xero_accounts.org_id", "xero_accounts.id"],
+            name="fk_purchase_lines_account",
+        ),
+        CheckConstraint("treatment IN ('stock','not_stock','duty','overhead')", name="ck_purchase_lines_treatment"),
+        Index(
+            "uq_purchase_lines_live_key",
+            "org_id",
+            "document_id",
+            "line_key",
+            unique=True,
+            postgresql_where=sa.text("superseded_at IS NULL"),
+        ),
+        Index("ix_purchase_lines_org_account", "org_id", "account_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), nullable=False)
+    account_id = Column(UUID(as_uuid=True), nullable=False)
+    line_key = Column(String(120), nullable=False)
+    position = Column(Integer, nullable=False)
+    fingerprint = Column(String(64), nullable=False)
+    description = Column(String(4000), nullable=True)
+    item_code = Column(String(100), nullable=True)
+    quantity = Column(Numeric(18, 4), nullable=True)
+    source_unit_amount = Column(Numeric(18, 4), nullable=True)
+    account_code = Column(String(50), nullable=True)
+    account_name = Column(String(255), nullable=True)
+    amount_ex_tax = Column(Numeric(18, 4), nullable=True)
+    tax_amount = Column(Numeric(18, 4), nullable=True)
+    treatment = Column(String(20), nullable=False)
+    superseded_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

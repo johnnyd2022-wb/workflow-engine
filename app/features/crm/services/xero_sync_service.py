@@ -37,6 +37,8 @@ class SyncResult:
     sales_allocated: int = 0
     sales_unmapped: int = 0
     sales_insufficient_stock: int = 0
+    purchases_synced: int = 0
+    purchases_status: str | None = None  # live-cogs 8.1b: synced | not_enabled | needs_reconnect | failed
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -46,7 +48,11 @@ class SyncResult:
     @property
     def partial(self) -> bool:
         return bool(self.errors) and (
-            self.contacts_synced > 0 or self.invoices_synced > 0 or self.credit_notes_synced > 0
+            self.contacts_synced > 0
+            or self.invoices_synced > 0
+            or self.credit_notes_synced > 0
+            or self.purchases_synced > 0
+            or self.purchases_status in ("failed", "synced")
         )
 
 
@@ -128,6 +134,8 @@ class XeroSyncService:
                 logger.exception("xero_credit_note_sync_failed", org_id=str(org_id))
                 result.errors.append(f"Credit note sync error: {e}")
 
+            self._run_purchases(api_client, org_id, tenant.xero_tenant_id, result, started_at=started_at)
+            self._record_purchases(job.id, org_id, result)
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
@@ -202,6 +210,8 @@ class XeroSyncService:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
 
+            self._run_purchases(api_client, org_id, tenant.xero_tenant_id, result, started_at=started_at)
+            self._record_purchases(job.id, org_id, result)
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
@@ -518,6 +528,97 @@ class XeroSyncService:
     # ------------------------------------------------------------------
     # Finalise job record
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Internal: purchases (live-cogs 8.1b)
+    # ------------------------------------------------------------------
+
+    PURCHASE_SCOPES = frozenset({"accounting.banktransactions.read", "accounting.settings.read"})
+
+    def _run_purchases(
+        self, api_client: XeroAPIClient, org_id: UUID, tenant_id: str, result: SyncResult, *, started_at
+    ) -> None:
+        """Spec 8.1b "Unit of work and failure". Never breaks sales: not entitled or not
+        consented is a status, not an error; any other failure rolls back only this phase's
+        savepoint (account cache included) and leaves its cursor where it was."""
+        from app.core.security.entitlements import org_has_feature
+        from app.features.costing import FEATURE_KEY
+        from app.features.costing.models import CostingSettings
+        from app.features.costing.purchase_sources import nz_today, sync_accounts, upsert_bank_transactions
+        from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+        from app.features.crm.services import xero_api_client as client_module
+
+        if not org_has_feature(self.db, org_id, FEATURE_KEY):
+            result.purchases_status = "not_enabled"
+            return
+        settings = self._costing_settings_for_update(org_id, CostingSettings)
+        if settings.start_date is None:  # the activation anchor: persisted before anything can fail
+            settings.start_date = nz_today()
+        self.db.commit()
+
+        token = XeroTokenRepository(self.db).get(org_id)
+        granted = (token.scopes or "").split() if token is not None else []
+        if granted and not self.PURCHASE_SCOPES <= set(granted):
+            result.purchases_status = "needs_reconnect"
+            return
+        try:
+            with start_span("xero.sync.purchases", attributes={"org_id": str(org_id)}):
+                with self.db.begin_nested():
+                    settings = self._costing_settings_for_update(org_id, CostingSettings)
+                    bootstrap = settings.purchases_cursor is None or settings.purchases_tenant_id != tenant_id
+                    base_currency = api_client.get_base_currency()
+                    accounts = sync_accounts(self.db, org_id, api_client.get_accounts())
+                    transactions = api_client.get_bank_transactions(
+                        modified_after=None if bootstrap else settings.purchases_cursor,
+                        from_date=settings.start_date if bootstrap else None,
+                    )
+                    stats = upsert_bank_transactions(
+                        self.db,
+                        org_id,
+                        transactions,
+                        accounts=accounts,
+                        base_currency=base_currency,
+                        start_date=settings.start_date,
+                        xero_tenant_id=tenant_id,
+                    )
+                    settings.base_currency = base_currency
+                    settings.purchases_tenant_id = tenant_id
+                    settings.purchases_cursor = started_at - RESUME_OVERLAP
+            result.purchases_synced = stats["documents"]
+            result.purchases_status = "synced"
+        except XeroTokenExpiredError:
+            raise
+        except Exception as e:
+            # The savepoint has already undone only this phase; the sales work done earlier in
+            # this sync is still pending and must not be rolled back with it.
+            if client_module._is_insufficient_scope(e):
+                result.purchases_status = "needs_reconnect"
+                return
+            logger.exception("xero_purchases_sync_failed", org_id=str(org_id))
+            result.purchases_status = "failed"
+            result.errors.append(f"Purchases sync error: {e}")
+
+    def _costing_settings_for_update(self, org_id: UUID, model):
+        from uuid import uuid4
+
+        from sqlalchemy.dialects.postgresql import insert
+
+        self.db.execute(
+            insert(model.__table__)
+            .values(id=uuid4(), org_id=org_id, use_last_known_price=True)
+            .on_conflict_do_nothing(index_elements=["org_id"])
+        )
+        return self.db.query(model).filter(model.org_id == org_id).with_for_update().one()
+
+    def _record_purchases(self, job_id: UUID, org_id: UUID, result: SyncResult) -> None:
+        """Put the purchases fields on the job; ``_finalise_job`` commits them with the rest."""
+        from app.features.crm.models.xero_sync_job import XeroSyncJob
+
+        job = self.db.query(XeroSyncJob).filter(XeroSyncJob.org_id == org_id, XeroSyncJob.id == job_id).one_or_none()
+        if job is not None:
+            job.purchases_synced = result.purchases_synced
+            job.purchases_status = result.purchases_status
+            self.db.flush()
 
     def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult, *, started_at: datetime) -> None:
         status = "failed"

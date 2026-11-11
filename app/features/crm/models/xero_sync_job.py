@@ -23,6 +23,9 @@ class XeroSyncJob(TenantScoped, Base):
     contacts_synced = Column(Integer, nullable=False, default=0)
     invoices_synced = Column(Integer, nullable=False, default=0)
     credit_notes_synced = Column(Integer, nullable=False, default=0, server_default="0")
+    # live-cogs 8.1b: the purchases phase (synced | not_enabled | needs_reconnect | failed)
+    purchases_synced = Column(Integer, nullable=False, default=0, server_default="0")
+    purchases_status = Column(String(20), nullable=True)
     error_message = Column(Text, nullable=True)
     error_details = Column(JSONB, nullable=True)
     triggered_by = Column(String(50), nullable=True)  # manual | oauth_connect | scheduled

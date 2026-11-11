@@ -22,6 +22,7 @@ from xero_python.accounting import (
     LineItem,
 )
 
+from app.features.costing.purchase_sources import nz_today
 from tests.costing_helpers import D, new_org, purge, user_client
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 
@@ -69,7 +70,7 @@ def txn(
     status="AUTHORISED",
     txn_id=None,
     payee="Moore Wilson",
-    on=date(2026, 11, 10),
+    on=None,
     amounts="Inclusive",
     rate=None,
     currency="NZD",
@@ -79,7 +80,7 @@ def txn(
         type=kind,
         status=status,
         contact=Contact(contact_id=str(uuid4()), name=payee),
-        date=on,
+        date=on or nz_today(),
         reference="card",
         currency_code=CurrencyCode(currency),
         currency_rate=rate,
@@ -99,11 +100,16 @@ class FakeXero:
         self.transactions = []
         self.calls = []
         self.fail_with = None
+        self.base_currency = "NZD"
 
     def install(self, monkeypatch):
         from app.features.crm.services import xero_api_client as module
 
         fake = self
+
+        def get_base_currency(_self):
+            fake.calls.append(("organisation", None))
+            return fake.base_currency
 
         def get_accounts(_self):
             fake.calls.append(("accounts", None))
@@ -119,6 +125,7 @@ class FakeXero:
         monkeypatch.setattr(module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
         monkeypatch.setattr(module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])
         monkeypatch.setattr(module.XeroAPIClient, "get_accounts", get_accounts)
+        monkeypatch.setattr(module.XeroAPIClient, "get_base_currency", get_base_currency)
         monkeypatch.setattr(module.XeroAPIClient, "get_bank_transactions", get_bank_transactions)
         return self
 
@@ -202,7 +209,7 @@ def test_ac1_spend_on_a_stock_account_is_stored_ex_gst(world, db):
     assert (doc.kind, doc.payee_name, doc.document_date, doc.status) == (
         "spend",
         "Moore Wilson",
-        date(2026, 11, 10),
+        nz_today(),
         "active",
     )
     assert D(str(ln.amount_ex_tax)) == D("90.0000") and D(str(ln.tax_amount)) == D("13.5000")
@@ -324,28 +331,6 @@ def test_ac65_line_amount_types(world, db, amounts, line_amount, tax, ex, stored
     assert (D(str(ln.amount_ex_tax)), D(str(ln.tax_amount))) == (D(ex), D(stored_tax))
 
 
-@pytest.mark.parametrize(
-    ("rate", "expected", "fx_status"),
-    [(0.75, "100.0000", "ok"), (None, "75.0000", "ok"), (1.0, "75.0000", "ok"), (0.0, None, "needs_rate")],
-)
-def test_ac66_currency_conversion(world, db, rate, expected, fx_status):
-    org, fake = world
-    fake.transactions = [txn([line("310", "75")], amounts="Exclusive", rate=rate, currency="AUD")]
-    sync(db, org.id)
-    (doc,) = documents(db, org.id)
-    (ln,) = live_lines(db, org.id)
-    assert doc.fx_status == fx_status
-    assert (D(str(ln.amount_ex_tax)) if ln.amount_ex_tax is not None else None) == (D(expected) if expected else None)
-
-
-def test_ac66_rounding_is_half_up_after_conversion(world, db):
-    org, fake = world
-    fake.transactions = [txn([line("310", "10.00")], amounts="Exclusive", rate=3.0, currency="AUD")]
-    sync(db, org.id)
-    (ln,) = live_lines(db, org.id)
-    assert D(str(ln.amount_ex_tax)) == D("3.3333")
-
-
 # --- AC67–AC69: identity and changes in Xero ----------------------------------------------------
 
 
@@ -444,7 +429,7 @@ def test_recoded_out_of_expense_supersedes_and_keeps_document(world, db):
 # --- AC70: account overrides ---------------------------------------------------------------------
 
 
-def test_ac70_account_override_persists_and_reclassifies(world, db, flask_app):  # noqa: F811
+def test_ac70_account_override_persists_and_reclassifies(flask_app, world, db):  # noqa: F811
     org, fake = world
     admin = user_client(db, flask_app, org)
     fake.transactions = [txn([line("429", "50")])]
@@ -470,7 +455,7 @@ def test_ac70_account_override_persists_and_reclassifies(world, db, flask_app): 
     assert [ln.treatment for ln in live_lines(db, org.id)] == ["not_stock"]
 
 
-def test_ac70_account_api_validation_permissions_and_isolation(world, db, flask_app):  # noqa: F811
+def test_ac70_account_api_validation_permissions_and_isolation(flask_app, world, db):  # noqa: F811
     org, fake = world
     admin = user_client(db, flask_app, org)
     sync(db, org.id)
@@ -576,37 +561,6 @@ def test_ac71_purchases_failure_is_partial_and_keeps_the_cursor(world, db, monke
 # --- AC72: start date and cursor -------------------------------------------------------------------
 
 
-def test_ac72_first_sync_sets_start_date_and_later_syncs_use_the_cursor(world, db):
-    from app.features.costing.models import CostingSettings
-    from app.features.costing.purchase_sources import nz_today
-
-    org, fake = world
-    fake.transactions = [txn([line("310", "10")]), txn([line("311", "20")])]
-    sync(db, org.id)
-    settings = db.query(CostingSettings).filter(CostingSettings.org_id == org.id).one()
-    assert settings.start_date == nz_today()
-    (first,) = fake.bank_calls()
-    assert first == {"modified_after": None, "from_date": settings.start_date}
-    assert last_job(db, org.id).purchases_synced == 2
-
-    sync(db, org.id, full=False)
-    second = fake.bank_calls()[1]
-    db.expire_all()
-    cursor = db.query(CostingSettings).filter(CostingSettings.org_id == org.id).one().purchases_cursor
-    assert second["from_date"] == settings.start_date
-    assert second["modified_after"] is not None and second["modified_after"] <= cursor + timedelta(minutes=10)
-
-
-def test_ac72_existing_start_date_is_kept(world, db):
-    from app.features.costing.models import CostingSettings
-
-    org, fake = world
-    db.add(CostingSettings(org_id=org.id, use_last_known_price=True, start_date=date(2026, 4, 1)))
-    db.commit()
-    sync(db, org.id)
-    assert fake.bank_calls()[0]["from_date"] == date(2026, 4, 1)
-
-
 # --- AC73: tenancy -------------------------------------------------------------------------------------
 
 
@@ -661,6 +615,10 @@ def test_api_client_bank_transactions_filters_type_date_and_pages(monkeypatch):
     assert 'Type=="SPEND"' in where and 'Type=="RECEIVE"' in where and "DateTime(2026,11,01)" in where.replace(" ", "")
     assert seen[0]["if_modified_since"] == datetime(2026, 11, 1, tzinfo=UTC)
 
+    seen.clear()
+    client.get_bank_transactions(modified_after=datetime(2026, 11, 1, tzinfo=UTC), from_date=None)
+    assert "Date" not in seen[0]["where"], "incremental fetches carry no date predicate"
+
 
 def test_money_is_decimal_not_float_rounded(world, db):
     """0.1 + 0.2 style float noise must not leak into stored amounts."""
@@ -669,3 +627,259 @@ def test_money_is_decimal_not_float_rounded(world, db):
     sync(db, org.id)
     amounts = sorted(D(str(ln.amount_ex_tax)) for ln in live_lines(db, org.id))
     assert amounts == [Decimal("0.2000"), Decimal("0.2000")]
+
+
+# --- spec v2 (after spec-critic) ---------------------------------------------------------------------
+
+
+def settings_row(db, org_id):
+    from app.features.costing.models import CostingSettings
+
+    db.expire_all()
+    return db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one()
+
+
+def test_ac64_keyword_near_miss_and_order(db, monkeypatch):
+    org = new_org(db)
+    try:
+        connect(db, org.id)
+        accounts = [
+            account("600", "Current account fees"),  # "current" must not match "rent"
+            account("601", "Duty-free rent"),  # duty is checked before overhead
+            account("602", "Rent", kind="EXPENSE"),  # an operating expense named rent is overhead too
+        ]
+        fake = FakeXero(accounts=accounts).install(monkeypatch)
+        fake.transactions = [txn([line(a.code, "10")]) for a in accounts]
+        sync(db, org.id)
+        got = {ln.account_code: ln.treatment for ln in live_lines(db, org.id)}
+        assert got == {"600": "stock", "601": "duty", "602": "overhead"}
+    finally:
+        purge(db, org)
+
+
+def test_ac65_negative_discount_on_a_spend_stays_negative(world, db):
+    org, fake = world
+    fake.transactions = [txn([line("310", "50"), line("310", "-5", description="Discount")], amounts="NoTax")]
+    sync(db, org.id)
+    amounts = sorted(D(str(ln.amount_ex_tax)) for ln in live_lines(db, org.id))
+    assert amounts == [D("-5.0000"), D("50.0000")]
+    assert D(str(documents(db, org.id)[0].total_ex_tax)) == D("45.0000")
+
+
+def test_ac66_base_currency_ignores_rate_and_foreign_is_held(world, db):
+    org, fake = world
+    fake.transactions = [
+        txn([line("310", "75")], amounts="Exclusive", rate=0.5, currency="NZD", payee="Base"),
+        txn([line("310", "75")], amounts="Exclusive", rate=0.75, currency="AUD", payee="Foreign"),
+    ]
+    sync(db, org.id)
+    docs = {d.payee_name: d for d in documents(db, org.id)}
+    base_line = live_lines(db, org.id, docs["Base"].id)[0]
+    foreign_line = live_lines(db, org.id, docs["Foreign"].id)[0]
+    assert docs["Base"].fx_status == "ok" and D(str(base_line.amount_ex_tax)) == D("75.0000")
+    assert docs["Foreign"].fx_status == "needs_rate" and foreign_line.amount_ex_tax is None
+    assert docs["Foreign"].total_ex_tax is None
+    assert settings_row(db, org.id).base_currency == "NZD"
+
+
+def test_ac66_base_currency_comes_from_xero(world, db):
+    org, fake = world
+    fake.base_currency = "AUD"
+    fake.transactions = [txn([line("310", "75")], amounts="Exclusive", currency="AUD")]
+    sync(db, org.id)
+    (ln,) = live_lines(db, org.id)
+    assert D(str(ln.amount_ex_tax)) == D("75.0000")
+    assert ("organisation", None) in fake.calls
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "same_row"),
+    [
+        (dict(amount="10"), dict(amount="10.00"), True),  # canonical decimals
+        (dict(description=None), dict(description=""), False),  # null is not empty
+        (dict(description="Gin | Tonic"), dict(description="Gin  |  Tonic"), True),  # whitespace only
+        (dict(tax="1"), dict(tax="2"), False),  # a tax-only change is a different line
+        (dict(description="Café"), dict(description="Café"), True),  # Unicode NFC
+    ],
+)
+def test_ac67_fingerprint_rules(world, db, first, second, same_row):
+    org, fake = world
+    tid = str(uuid4())
+
+    def build(opts):
+        return txn(
+            [
+                line(
+                    "310",
+                    opts.get("amount", "10"),
+                    tax=opts.get("tax", "0"),
+                    description=opts.get("description", "Shop"),
+                )
+            ],
+            txn_id=tid,
+            amounts="Exclusive",
+        )
+
+    fake.transactions = [build(first)]
+    sync(db, org.id)
+    (before,) = live_lines(db, org.id)
+    fake.transactions = [build(second)]
+    sync(db, org.id)
+    (after,) = live_lines(db, org.id)
+    assert (after.id == before.id) is same_row
+
+
+def test_ac70_renamed_code_keeps_lines_and_override(flask_app, world, db):  # noqa: F811
+    org, fake = world
+    admin = user_client(db, flask_app, org)
+    office = account("429", "Office Expense", kind="EXPENSE")
+    fake.accounts = [office]
+    lid = str(uuid4())
+    tid = str(uuid4())
+    li = line("429", "50", line_item_id=lid)
+    li.account_id = office.account_id
+    fake.transactions = [txn([li], txn_id=tid)]
+    sync(db, org.id)
+    admin.put(f"{API}/accounts/{office.account_id}", json={"treatment": "stock"})
+
+    renamed = account("4290", "Office Expense", kind="EXPENSE", account_id=office.account_id)
+    fake.accounts = [renamed]
+    li2 = line("4290", "50", line_item_id=lid)
+    li2.account_id = office.account_id
+    fake.transactions = [txn([li2], txn_id=tid)]
+    sync(db, org.id)
+    (ln,) = live_lines(db, org.id)
+    assert ln.account_code == "4290" and ln.treatment == "stock"
+
+
+def test_ac70_an_account_default_change_reclassifies_through_the_seam(world, db):
+    org, fake = world
+    acct = account("700", "Packaging")
+    fake.accounts = [acct]
+    fake.transactions = [txn([line("700", "10")])]
+    sync(db, org.id)
+    assert live_lines(db, org.id)[0].treatment == "stock"
+    fake.accounts = [account("700", "Freight in", account_id=acct.account_id)]  # renamed in Xero
+    fake.transactions = []
+    sync(db, org.id, full=False)
+    assert live_lines(db, org.id)[0].treatment == "overhead"
+
+
+def test_ac71_blank_scope_list_attempts_the_calls(db, monkeypatch):
+    org = new_org(db)
+    try:
+        connect(db, org.id, scopes="")
+        fake = FakeXero().install(monkeypatch)
+        fake.transactions = [txn([line("310", "10")])]
+        result = sync(db, org.id)
+        assert result.success
+        assert len(fake.bank_calls()) == 1 and last_job(db, org.id).purchases_status == "synced"
+    finally:
+        purge(db, org)
+
+
+def test_ac71_failure_after_accounts_rolls_back_the_account_cache(world, db, monkeypatch):
+    from app.features.crm.models.xero_account import XeroAccount
+
+    org, fake = world
+    sync(db, org.id)
+    before = {a.xero_account_id: a.name for a in db.query(XeroAccount).filter(XeroAccount.org_id == org.id)}
+    fake.accounts = [account(a.code, a.name + " RENAMED", account_id=a.account_id) for a in ACCOUNTS]
+    fake.fail_with = RuntimeError("bank feed down")
+    result = sync(db, org.id)
+    job = last_job(db, org.id)
+    assert job.status == "partial" and job.purchases_status == "failed" and not result.success
+    db.expire_all()
+    after = {a.xero_account_id: a.name for a in db.query(XeroAccount).filter(XeroAccount.org_id == org.id)}
+    assert after == before
+
+
+def test_ac72_bootstrap_then_incremental(world, db):
+    org, fake = world
+    fake.transactions = [txn([line("310", "10")]), txn([line("311", "20")])]
+    sync(db, org.id)
+    settings = settings_row(db, org.id)
+    assert settings.start_date == nz_today() and settings.purchases_cursor is not None
+    first = fake.bank_calls()[0]
+    assert first == {"modified_after": None, "from_date": settings.start_date}
+    assert last_job(db, org.id).purchases_synced == 2
+
+    cursor_before = settings_row(db, org.id).purchases_cursor
+    sync(db, org.id, full=False)
+    second = fake.bank_calls()[1]
+    assert second == {"modified_after": cursor_before, "from_date": None}
+    assert last_job(db, org.id).purchases_synced == 2, "an unchanged retry counts again"
+
+
+def test_ac72_start_date_persists_even_if_the_first_run_fails(world, db):
+    org, fake = world
+    fake.fail_with = RuntimeError("down")
+    sync(db, org.id)
+    assert settings_row(db, org.id).start_date == nz_today()
+    assert settings_row(db, org.id).purchases_cursor is None
+
+
+def test_ac72_stored_transaction_edited_to_before_start_is_still_updated(world, db):
+    org, fake = world
+    tid = str(uuid4())
+    lid = str(uuid4())
+    fake.transactions = [txn([line("310", "10", line_item_id=lid)], txn_id=tid)]
+    sync(db, org.id)
+    early = nz_today() - timedelta(days=30)
+    fake.transactions = [
+        txn([line("310", "12", line_item_id=lid)], txn_id=tid, on=early),
+        txn([line("310", "99")], on=early, payee="Never stored"),
+    ]
+    sync(db, org.id, full=False)
+    docs = documents(db, org.id)
+    assert [d.payee_name for d in docs] == ["Moore Wilson"]
+    assert docs[0].document_date == early
+    assert D(str(live_lines(db, org.id)[0].amount_ex_tax)) == D("12.0000")
+
+
+def test_ac72_existing_start_date_is_kept(world, db):
+    from app.features.costing.models import CostingSettings
+
+    org, fake = world
+    db.add(CostingSettings(org_id=org.id, use_last_known_price=True, start_date=date(2026, 4, 1)))
+    db.commit()
+    fake.transactions = [txn([line("310", "10")], on=date(2026, 5, 1))]
+    sync(db, org.id)
+    assert fake.bank_calls()[0]["from_date"] == date(2026, 4, 1)
+    assert len(documents(db, org.id)) == 1
+
+
+def test_ac72_a_different_tenant_bootstraps_again(world, db):
+    from app.features.crm.models.xero_tenant import XeroTenant
+
+    org, fake = world
+    sync(db, org.id)
+    tenant = db.query(XeroTenant).filter(XeroTenant.org_id == org.id).one()
+    tenant.xero_tenant_id = "another-xero-org"
+    db.commit()
+    sync(db, org.id, full=False)
+    call = fake.bank_calls()[-1]
+    assert call["modified_after"] is None and call["from_date"] == settings_row(db, org.id).start_date
+    assert settings_row(db, org.id).purchases_tenant_id == "another-xero-org"
+
+
+def test_ac73_a_line_cannot_reference_another_orgs_account(world, db):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.features.crm.models.xero_account import XeroAccount
+
+    org, fake = world
+    fake.transactions = [txn([line("310", "10")])]
+    sync(db, org.id)
+    other = new_org(db)
+    try:
+        foreign = XeroAccount(org_id=other.id, xero_account_id=str(uuid4()), code="X", account_class="EXPENSE")
+        db.add(foreign)
+        db.commit()
+        ln = live_lines(db, org.id)[0]
+        ln.account_id = foreign.id
+        with pytest.raises(IntegrityError, match="fk_purchase_lines_account"):
+            db.flush()
+        db.rollback()
+    finally:
+        purge(db, other)
