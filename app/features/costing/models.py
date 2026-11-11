@@ -28,6 +28,10 @@ from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
+# purchase_lines has a foreign key to xero_accounts: register that table in the metadata
+# wherever these models are imported, not only where the CRM slice happens to be loaded.
+from app.features.crm.models.xero_account import XeroAccount  # noqa: E402,F401
+
 IN_KINDS = ("created", "added", "produced", "transfer_in", "reconciled_in")
 OUT_KINDS = ("consumed",)
 DIRECT_KINDS = ("created", "added")  # inflows a price fact can pay for
