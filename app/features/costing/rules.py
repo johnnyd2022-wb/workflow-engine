@@ -53,9 +53,17 @@ def validate_template(template) -> list[dict] | None:
     for raw in template:
         if not isinstance(raw, dict):
             raise CostingError("Each template row is an object")
-        name, unit = str(raw.get("name") or "").strip(), str(raw.get("unit") or "").strip()
+        name, unit = raw.get("name"), raw.get("unit")
+        if not isinstance(name, str) or not isinstance(unit, str):
+            raise CostingError("A template row's name and unit are text")
+        name, unit = name.strip(), unit.strip()
         if not name or not unit:
             raise CostingError("Each template row needs a name and a unit")
+        if len(name) > 255 or len(unit) > 50:
+            raise CostingError("A template row's name or unit is too long")
+        for flag in ("ask_batch_number", "ask_expiry"):
+            if flag in raw and not isinstance(raw[flag], bool):
+                raise CostingError(f"{flag} must be true or false")
         kind = raw.get("inventory_type") or "raw_material"
         if kind not in ROW_TYPES:
             raise CostingError("inventory_type must be raw_material or final_product")
@@ -93,9 +101,21 @@ def validate(body: dict) -> dict:
     unknown = set(body) - FIELDS
     if unknown:
         raise CostingError(f"Unknown field(s): {', '.join(sorted(unknown))}")
-    account = str(body.get("account_code")).strip() if body.get("account_code") not in (None, "") else None
-    payee = normalise(body.get("payee_pattern"))
-    description = normalise(body.get("description_pattern"))
+
+    def text_field(name, limit):
+        raw = body.get(name)
+        if raw is None:
+            return None
+        if not isinstance(raw, str):
+            raise CostingError(f"{name} must be text")
+        if len(raw) > limit:
+            raise CostingError(f"{name} is at most {limit} characters")
+        return raw
+
+    raw_account = text_field("account_code", 50)
+    account = (raw_account.strip() or None) if raw_account is not None else None  # whitespace is no matcher
+    payee = normalise(text_field("payee_pattern", 255))
+    description = normalise(text_field("description_pattern", 500))
     if not (account or payee or description):
         raise CostingError("A rule needs an account, a payee or a description to match")
     match_type = body.get("match_type", "exact")
@@ -306,18 +326,36 @@ def remember(db: Session, org_id: UUID, line_id, user_id=None) -> PurchaseRule:
     if not normalise(doc.payee_name):
         raise CostingError("This purchase has no payee to remember")
     amount = Decimal(str(line.amount_ex_tax))
-    rows = []
+    from decimal import ROUND_DOWN
+
+    picked = []
     for alloc in actions.line_allocations(db, line):
-        if Decimal(str(alloc.amount)) < 0:
-            continue
+        if Decimal(str(alloc.amount)) <= 0:
+            continue  # refunds and $0 rows can't be a share of a later purchase
         item = (
             db.query(InventoryItem)
             .filter(InventoryItem.org_id == org_id, InventoryItem.id == alloc.inventory_item_id)
             .one()
         )
-        share = (Decimal(str(alloc.amount)) / amount * 100).quantize(Decimal("0.0001")) if amount else Decimal("0")
-        if share <= 0:
-            continue  # a $0 row can't be a share of a later purchase
+        picked.append((alloc, item))
+    # Shares rounded down to 4 dp, and the rounding residual given to the largest row, so they
+    # add up to exactly the recorded share of the purchase (never past 100%).
+    exact_total = (
+        (sum(Decimal(str(a.amount)) for a, _ in picked) / amount * 100).quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+        if amount
+        else Decimal("0")
+    )
+    shares = {
+        a.id: (Decimal(str(a.amount)) / amount * 100).quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+        for a, _ in picked
+    }
+    if picked:
+        largest = max(picked, key=lambda p: (Decimal(str(p[0].amount)), str(p[0].id)))[0]
+        shares[largest.id] += exact_total - sum(shares.values(), Decimal("0"))
+    rows = []
+    for alloc, item in picked:
+        if shares[alloc.id] <= 0:
+            continue
         rows.append(
             {
                 "name": item.name,
@@ -325,7 +363,7 @@ def remember(db: Session, org_id: UUID, line_id, user_id=None) -> PurchaseRule:
                 "inventory_type": item.inventory_type,
                 "quantity_mode": "fixed",
                 "quantity": str(alloc.quantity),
-                "share": str(share),
+                "share": str(shares[alloc.id]),
                 "ask_batch_number": bool(item.supplier_batch_number),
                 "ask_expiry": bool(item.expiry_date),
             }

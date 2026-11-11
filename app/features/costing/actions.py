@@ -12,6 +12,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -879,9 +880,11 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
                 PurchaseLine.id != line.id,
                 PurchaseLine.state.in_(("recorded", "partly_recorded")),
                 PurchaseDocument.kind == "spend",
+                # same normalised payee, in SQL, so older purchases aren't cut off by newer ones
+                func.lower(func.regexp_replace(func.btrim(PurchaseDocument.payee_name), r"\s+", " ", "g")) == payee,
             )
             .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc())
-            .limit(200)
+            .limit(20)
             .all()
         )
         for prev, prev_doc in previous:

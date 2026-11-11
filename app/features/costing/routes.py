@@ -186,14 +186,13 @@ def _parse_date(raw):
 def list_purchases():
     from app.features.costing import actions
 
+    historical = request.args.get("historical") in ("1", "true")
+    date_from, date_to = _parse_date(request.args.get("from")), _parse_date(request.args.get("to"))
+    if historical and (date_from is None or date_to is None or date_from > date_to):
+        raise service.CostingError("Historical lists need from and to (YYYY-MM-DD), from on or before to")
     return jsonify(
         actions.list_purchases(
-            db_session,
-            _org(),
-            request.args.get("tab", "to_record"),
-            _parse_date(request.args.get("from")),
-            _parse_date(request.args.get("to")),
-            historical=request.args.get("historical") in ("1", "true"),
+            db_session, _org(), request.args.get("tab", "to_record"), date_from, date_to, historical=historical
         )
     )
 
@@ -388,6 +387,15 @@ def bulk_purchases():
                 else:
                     line = actions.get_line(db_session, org, raw)
                     doc = actions._document(db_session, line)
+                    # A rule may only re-treat a live line nobody has recorded: open/skipped, on an
+                    # active document, not superseded, with no active or orphaned allocation.
+                    if (
+                        doc.status != "active"
+                        or line.superseded_at is not None
+                        or line.state not in ("open", "skipped")
+                        or actions.line_allocations(db_session, line, statuses=("active", "orphaned"))
+                    ):
+                        raise service.CostingError("Only open or skipped purchases with nothing recorded")
                     account = (
                         db_session.query(XeroAccount)
                         .filter(XeroAccount.org_id == org, XeroAccount.id == line.account_id)
@@ -411,8 +419,6 @@ def bulk_purchases():
 @costing_bp.route(f"{API}/purchases/historical-run", methods=["POST"])
 @requires_auth
 def historical_run():
-    from datetime import timedelta
-
     from app.features.costing.purchase_sources import nz_today
     from app.features.crm.services.xero_sync_service import PurchasesNeedReconnectError, XeroSyncService
 
@@ -424,13 +430,24 @@ def historical_run():
         raise service.CostingError("from is after to")
     if date_to > nz_today():
         raise service.CostingError("to can't be in the future")
-    if date_to - date_from > timedelta(days=3 * 366):
+    try:
+        three_years_on = date_from.replace(year=date_from.year + 3)
+    except ValueError:  # 29 Feb
+        three_years_on = date_from.replace(year=date_from.year + 3, day=28)
+    if date_to >= three_years_on:
         raise service.CostingError("A historical run covers at most 3 years")
     try:
         stats = XeroSyncService(db_session).historical_purchases(_org(), date_from, date_to)
     except PurchasesNeedReconnectError as error:
         db_session.rollback()
         return jsonify({"error": str(error), "code": "needs_reconnect"}), 409
+    except Exception as error:  # noqa: BLE001 - never echo Xero/SQL internals to the caller
+        from uuid import uuid4
+
+        db_session.rollback()
+        ref = uuid4().hex[:12]
+        logger.exception("costing_historical_run_failed", org_id=str(_org()), ref=ref, error_type=type(error).__name__)
+        return jsonify({"error": f"The historical run failed (ref {ref})", "code": "historical_failed"}), 502
     db_session.commit()
     return jsonify(
         {
