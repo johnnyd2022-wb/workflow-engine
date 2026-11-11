@@ -494,4 +494,7 @@ def readiness_detail(key):
 def purchases_page():
     from flask import render_template
 
-    return render_template("costing/purchases.html", active_page="core")
+    from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+    connected = XeroTenantRepository(db_session).get_connected(_org()) is not None
+    return render_template("costing/purchases.html", active_page="core", xero_connected=connected)
