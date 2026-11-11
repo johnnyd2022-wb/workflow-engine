@@ -440,3 +440,22 @@ def historical_run():
             "to": date_to.isoformat(),
         }
     )
+
+
+# --- 8.1e-1: readiness --------------------------------------------------------------------------------
+
+
+@costing_bp.route(f"{API}/readiness", methods=["GET"])
+@requires_auth
+def readiness_list():
+    from app.features.costing import readiness
+
+    return jsonify({"products": readiness.list_products(db_session, _org())})
+
+
+@costing_bp.route(f"{API}/readiness/<path:key>", methods=["GET"])
+@requires_auth
+def readiness_detail(key):
+    from app.features.costing import readiness
+
+    return jsonify(readiness.product_detail(db_session, _org(), key))

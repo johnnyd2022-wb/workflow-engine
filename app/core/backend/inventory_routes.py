@@ -699,6 +699,26 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         return jsonify({"inventory_items": result}), 200
 
+    def _costing_total_paid(data, org_id):
+        """The validated ``total_paid`` Decimal, or None when absent or not allowed here.
+        An invalid value raises ValueError (the route answers 400 before creating anything)."""
+        raw = data.get("total_paid")
+        if raw in (None, ""):
+            return None
+        from app.core.security.access_policy import has_permission
+        from app.core.security.entitlements import org_has_feature
+        from app.features.costing import FEATURE_KEY
+        from app.features.costing.service import CostingError, parse_amount
+
+        if not has_permission(getattr(g, "current_user", None), "costs.manage"):
+            return None
+        if not org_has_feature(db_session, org_id, FEATURE_KEY):
+            return None
+        try:
+            return parse_amount(raw, "total_paid", allow_zero=True)
+        except CostingError as error:
+            raise ValueError(str(error)) from None
+
     @bp.route("/api/core/inventory", methods=["POST"])
     @requires_auth
     @idempotent_write("inventory_create")  # GL-U03: a retried receipt can't add the stock twice
@@ -852,8 +872,12 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 except (TypeError, ValueError):
                     extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
 
+            # Live cost (8.1e-1): an optional "total paid" prices the new lot in the same
+            # transaction, for people who manage costs in an org with costing switched on.
+            total_paid = _costing_total_paid(data, org_id)
             try:
                 item = repo.create_inventory_item(
+                    commit=total_paid is None,
                     org_id=org_id,
                     name=name,
                     quantity=str(quantity),
@@ -875,6 +899,22 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 return jsonify(
                     {"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}
                 ), 409
+            if total_paid is not None:
+                from app.features.costing.actions import _created_flow
+                from app.features.costing.service import set_lot_price
+
+                flow = _created_flow(db_session, org_id, item.id)
+                set_lot_price(
+                    db_session,
+                    org_id,
+                    item.id,
+                    amount=total_paid,
+                    quantity=item.quantity,
+                    kind="manual",
+                    cost_flow_id=flow.id if flow is not None else None,
+                    user_id=getattr(g, "user_id", None) and UUID(str(g.user_id)),
+                )
+                db_session.commit()
 
             return (
                 jsonify(
