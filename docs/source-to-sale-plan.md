@@ -1217,9 +1217,10 @@ missing; never a silent $0.
     idempotent backfill; lot and batch cost computed on read (no caches); manual, free and
     customer-owned cost; last known price; `costs.view` / `costs.manage`; the `costing`
     feature. (!689)
-  - [ ] b. **Xero purchases in.** Scopes; chart of accounts with default treatments;
-    spend-money bank transactions into purchase documents and lines; changes and
-    deletions in Xero flagged for review, never deleting stock.
+  - [x] b. **Xero purchases in.** Scopes; chart of accounts with default treatments;
+    spend and receive money into purchase documents and lines; changes and deletions in
+    Xero tracked line by line, never deleting a stored line (review of recorded lines is
+    8.1c). (!690)
   - [ ] c. **Purchase rules and actions.** Rules (ignore a seller, seller or description
     always maps to a material, quantity and split); record, already in stock, not stock,
     skip; "remember this"; historical runs over any date range.
