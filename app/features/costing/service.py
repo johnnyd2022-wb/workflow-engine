@@ -83,6 +83,20 @@ def editable_reason(db: Session, org_id: UUID, item: InventoryItem) -> str | Non
     )
     if other:
         return "This lot's cost comes from where it was made or moved from"
+    from app.features.costing.models import PurchaseAllocation
+
+    paid = (
+        db.query(PurchaseAllocation.id)
+        .filter(
+            PurchaseAllocation.org_id == org_id,
+            PurchaseAllocation.inventory_item_id == item.id,
+            PurchaseAllocation.status.in_(("active", "orphaned")),
+            PurchaseAllocation.amount >= 0,
+        )
+        .first()
+    )
+    if paid:
+        return "This lot is priced by a purchase; change the purchase instead"
     return None
 
 

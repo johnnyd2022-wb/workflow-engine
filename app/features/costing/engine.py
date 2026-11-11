@@ -149,6 +149,7 @@ class CostEngine:
         self._lots: dict[UUID, InventoryItem | None] = {}
         self._in_flow_cache: dict[UUID, list[CostFlow]] = {}
         self._entry_cache: dict[UUID, list[LotCostEntry]] = {}
+        self._allocation_cache: dict[UUID, list] = {}
         self._transfer_cache: dict[UUID, InventoryItem | None] = {}
         self._exec_info: dict[UUID, ExecInfo | None] = {}
         self._memo: dict[tuple, object] = {}
@@ -372,6 +373,22 @@ class CostEngine:
             )
         return self._entry_cache[item_id]
 
+    def _allocations(self, item_id: UUID) -> list:
+        """Purchase allocations (8.1c) priced on this lot: active and orphaned."""
+        from app.features.costing.models import PurchaseAllocation
+
+        if item_id not in self._allocation_cache:
+            self._allocation_cache[item_id] = (
+                self.db.query(PurchaseAllocation)
+                .filter(
+                    PurchaseAllocation.org_id == self.org_id,
+                    PurchaseAllocation.inventory_item_id == item_id,
+                    PurchaseAllocation.status.in_(("active", "orphaned")),
+                )
+                .all()
+            )
+        return self._allocation_cache[item_id]
+
     def _transfer_source(self, item: InventoryItem) -> InventoryItem | None:
         if item.id in self._transfer_cache:
             return self._transfer_cache[item.id]
@@ -430,8 +447,30 @@ class CostEngine:
             return LotCost(ZERO, ACTUAL, "customer_owned")
         ins = self._in_flows(item.id)
         entries = self._entries(item.id)
-        flow_prices = {e.cost_flow_id: e for e in entries if e.cost_flow_id is not None}
         whole = next((e for e in entries if e.cost_flow_id is None), None)
+        # A flow's price = its active entry plus its positive purchase allocations (summed);
+        # negative allocations are refunds, applied once after pricing.
+        flow_prices: dict = defaultdict(lambda: [ZERO, ZERO, ACTUAL, set()])  # qty, amount, status, sources
+        for e in entries:
+            if e.cost_flow_id is not None:
+                fp = flow_prices[e.cost_flow_id]
+                fp[0] += _d(e.quantity)
+                fp[1] += _d(e.amount)
+                fp[3].add("free" if e.kind == "free" else "manual")
+        refunds = ZERO
+        for alloc in self._allocations(item.id):
+            amount = _d(alloc.amount)
+            if amount < 0:
+                refunds += amount
+                continue
+            if alloc.cost_flow_id is None:
+                continue
+            fp = flow_prices[alloc.cost_flow_id]
+            fp[0] += _d(alloc.quantity)
+            fp[1] += amount
+            fp[3].add("purchase")
+            if alloc.status == "orphaned":  # its purchase was deleted or changed in Xero
+                fp[2] = ESTIMATED
 
         parts: list[tuple[Decimal, Decimal, str]] = []
         missing: dict = {}
@@ -465,12 +504,12 @@ class CostEngine:
                 sources.add("production")
             else:
                 fp = flow_prices.get(f.id)
-                if fp is not None:
-                    pq, amount = _d(fp.quantity), _d(fp.amount)
-                    if pq > q:  # can't happen through the service; never price more than the flow
+                if fp is not None and fp[0] > 0:
+                    pq, amount, fstatus, fsources = fp
+                    if pq > q:  # can't happen through the services; never price more than the flow
                         amount, pq = amount * q / pq, q
-                    parts.append((pq, amount, ACTUAL))
-                    sources.add("free" if fp.kind == "free" else "manual")
+                    parts.append((pq, amount, fstatus))
+                    sources |= fsources
                     unpriced_direct += q - pq
                 else:
                     unpriced_direct += q
@@ -492,9 +531,16 @@ class CostEngine:
             status = worst(*(p[2] for p in parts))
             if unpriced > 0:
                 status = worst(status, ESTIMATED)
+            if refunds:
+                total_k += refunds
+                if total_k < 0:
+                    total_k = ZERO
+                    warnings.add("refund_exceeds_cost")
             unit = total_k / total_q if total_q > 0 else None
             source = sources.pop() if len(sources) == 1 else "mixed"
             return LotCost(unit, status, source, missing, warnings, total_q, unpriced)
+        if refunds:
+            warnings.add("refund_without_cost")
 
         if allow_estimate and self.use_last_known_price:
             estimate = self._estimate(item)

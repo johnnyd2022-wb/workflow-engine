@@ -1377,7 +1377,9 @@ review_reason, allocations[]}` and per-tab counts. `costs.view`.
 | document voided | nothing | allocations → `orphaned`; `review_reason = deleted_in_xero` |
 | line superseded (positional change or dropped) | nothing | allocations → `orphaned`; `review_reason = deleted_in_xero`; the replacement line is a new card |
 
-Rescaling never crosses zero: a new amount of 0 or with the other sign orphans instead.
+Rescaling never crosses zero: a new amount of 0 or with the other sign orphans the allocations instead
+(amounts kept as they were), sets `review_reason = amount_changed` and clears `not_stock_amount`.
+`GET /purchases` returns `{tab, counts: {to_record, recorded, skipped, not_stock}, cards: [...]}`.
 
 **ACs (8.1c-1).** AC5–AC9, AC11, AC12 (refund), AC30, AC34, AC35 above, adjusted: AC9's
 candidates *include* a lot with a manual price; plus:

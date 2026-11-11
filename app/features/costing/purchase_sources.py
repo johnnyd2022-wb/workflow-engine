@@ -140,8 +140,11 @@ def retire_account_lines(db: Session, org_id: UUID, *accounts: XeroAccount) -> i
         )
         .all()
     )
+    from app.features.costing.actions import on_line_gone
+
     for ln in lines:
         ln.superseded_at = now
+        on_line_gone(db, ln)
     db.flush()
     return len(lines)
 
@@ -158,8 +161,12 @@ def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) ->
         )
         .all()
     )
+    from app.features.costing.actions import on_line_treatment_changed
+
     for ln in lines:
+        before = ln.treatment
         ln.treatment = classify_line(ln, account)
+        on_line_treatment_changed(db, ln, before, ln.treatment)
     db.flush()
     return len(lines)
 
@@ -358,6 +365,7 @@ def upsert_bank_transactions(
         doc.currency_code = currency or None
         doc.currency_rate = _dec(getattr(t, "currency_rate", None))
         doc.fx_status = fx_status
+        was_active = doc.status == "active"
         doc.status = "voided" if voided else "active"
         doc.bank_account_name = getattr(bank, "name", None) if bank is not None else None
         doc.is_reconciled = getattr(t, "is_reconciled", None)
@@ -367,9 +375,24 @@ def upsert_bank_transactions(
         doc.external_updated_at = updated if isinstance(updated, datetime) else None
         doc.last_synced_at = now
         db.flush()
+        from app.features.costing.actions import on_line_amount_changed, on_line_gone, on_line_treatment_changed
+
         if voided:
             # Xero may send a voided transaction with no (or fewer) lines; its stored lines are
-            # what was bought and stay as they were (8.1c moves their allocations to review).
+            # what was bought and stay as they were. Only the change to voided sends what was
+            # recorded against them to review (a later re-sync of the void must not re-flag it).
+            if was_active:
+                for ln in (
+                    db.query(PurchaseLine)
+                    .filter(
+                        PurchaseLine.org_id == org_id,
+                        PurchaseLine.document_id == doc.id,
+                        PurchaseLine.superseded_at.is_(None),
+                    )
+                    .all()
+                ):
+                    on_line_gone(db, ln)
+                db.flush()
             stats["documents"] += 1
             continue
 
@@ -390,20 +413,28 @@ def upsert_bank_transactions(
             positional = row["line_key"].startswith("pos:")
             if current is not None and positional and current.fingerprint != row["fingerprint"]:
                 current.superseded_at = now  # a different line now sits at this position
+                on_line_gone(db, current)
                 db.flush()
                 current = None
             if current is None:
                 current = PurchaseLine(org_id=org_id, document_id=doc.id, **row, treatment="not_stock")
                 db.add(current)
+                current.treatment = classify_line(current, acct)
             else:
+                before_amount = current.amount_ex_tax
+                before_treatment = current.treatment
                 for name, value in row.items():
                     setattr(current, name, value)
-            current.treatment = classify_line(current, acct)
+                current.treatment = classify_line(current, acct)
+                db.flush()
+                on_line_amount_changed(db, current, before_amount)
+                on_line_treatment_changed(db, current, before_treatment, current.treatment)
             keep.add(row["line_key"])
             stats["lines"] += 1
         for key, ln in live.items():
             if key not in keep:
                 ln.superseded_at = now
+                on_line_gone(db, ln)
         db.flush()
 
         totals = (
