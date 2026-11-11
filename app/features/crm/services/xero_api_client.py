@@ -259,7 +259,7 @@ class XeroAPIClient:
         result = self._call_with_retry(api.get_accounts, self._xero_tenant_id)
         return list(result.accounts or [])
 
-    def get_bank_transactions(self, modified_after: datetime | None = None, from_date=None) -> list:
+    def get_bank_transactions(self, modified_after: datetime | None = None, from_date=None, to_date=None) -> list:
         """SPEND and RECEIVE bank transactions dated from ``from_date``, every status, all pages
         (live-cogs 8.1b; needs accounting.banktransactions.read)."""
         from xero_python.accounting import AccountingApi
@@ -268,6 +268,8 @@ class XeroAPIClient:
         where = '(Type=="SPEND" OR Type=="RECEIVE")'
         if from_date is not None:
             where += f" AND Date >= DateTime({from_date.year}, {from_date.month:02d}, {from_date.day:02d})"
+        if to_date is not None:  # historical runs (8.1c-2)
+            where += f" AND Date <= DateTime({to_date.year}, {to_date.month:02d}, {to_date.day:02d})"
         kwargs: dict = {"where": where}
         if modified_after:
             if modified_after.tzinfo is None:

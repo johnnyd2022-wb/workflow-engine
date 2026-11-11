@@ -58,6 +58,10 @@ class SyncResult:
         )
 
 
+class PurchasesNeedReconnectError(Exception):
+    """The connected Xero token can't read purchases (live-cogs 8.1c-2 historical runs)."""
+
+
 class XeroSyncService:
     """Syncs Xero contacts and invoices into local CRM tables.
 
@@ -609,6 +613,50 @@ class XeroSyncService:
             logger.exception("xero_purchases_sync_failed", org_id=str(org_id))
             result.purchases_status = "failed"
             result.errors.append(f"Purchases sync error: {e}")
+
+    def historical_purchases(self, org_id: UUID, date_from, date_to) -> dict:
+        """Live-cogs 8.1c-2: fetch and upsert every purchase dated in [date_from, date_to],
+        always (no modified-since), with the start-date filter lifted. Idempotent by upsert key.
+        Raises ``PurchasesNeedReconnectError`` without the purchases scopes."""
+        from app.features.costing.models import CostingSettings
+        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions
+        from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+        from app.features.crm.services import xero_api_client as client_module
+
+        tenant = self.tenant_repo.get_connected(org_id)
+        if not tenant:
+            raise PurchasesNeedReconnectError("Xero isn't connected")
+        token = XeroTokenRepository(self.db).get(org_id)
+        granted = (token.scopes or "").split() if token is not None else []
+        if not granted and token is None:
+            raise PurchasesNeedReconnectError("Xero isn't connected")
+        if granted and not self.PURCHASE_SCOPES <= set(granted):
+            raise PurchasesNeedReconnectError("Reconnect Xero to allow Biz-E to read purchases")
+        api_client = XeroAPIClient(self.db, org_id)
+        try:
+            with start_span("xero.sync.purchases_history", attributes={"org_id": str(org_id)}):
+                with self.db.begin_nested():
+                    settings = self._costing_settings_for_update(org_id, CostingSettings)
+                    base_currency = api_client.get_base_currency()
+                    accounts = sync_accounts(self.db, org_id, api_client.get_accounts())
+                    transactions = api_client.get_bank_transactions(
+                        modified_after=None, from_date=date_from, to_date=date_to
+                    )
+                    stats = upsert_bank_transactions(
+                        self.db,
+                        org_id,
+                        transactions,
+                        accounts=accounts,
+                        base_currency=base_currency,
+                        start_date=None,
+                        xero_tenant_id=tenant.xero_tenant_id,
+                    )
+                    settings.base_currency = base_currency
+                    settings.last_history_from = date_from
+                    settings.last_history_to = date_to
+        except client_module.XeroInsufficientScopeError:
+            raise PurchasesNeedReconnectError("Reconnect Xero to allow Biz-E to read purchases") from None
+        return stats
 
     def _fail_expired(self, job_id: UUID, org_id: UUID) -> None:
         """The job row is committed before any phase runs, so a phase that re-raises token

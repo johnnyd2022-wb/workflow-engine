@@ -583,22 +583,32 @@ def _in_flows(db: Session, org_id: UUID, item_id: UUID) -> list[CostFlow]:
 # --- the list and its tabs ----------------------------------------------------------------------------
 
 
-def tab_of(line: PurchaseLine, doc: PurchaseDocument, start_date: date | None) -> str | None:
-    """Spec "Tabs": one rule, first match wins."""
+def tab_of(line: PurchaseLine, doc: PurchaseDocument, start_date: date | None, historical: bool = False) -> str | None:
+    """Spec "Tabs": one rule, first match wins. Historical mode (8.1c-2) ignores the start date
+    and lists skipped lines as actionable."""
     if line.review_reason:
         return "to_record"
     if line.superseded_at is not None or doc.status != "active" or line.treatment != "stock":
         return None
     if line.amount_ex_tax is None:
         return None
+    if historical and line.state == "skipped":
+        return "to_record"
     if line.state in ("open", "partly_recorded"):
-        if start_date is not None and doc.document_date is not None and doc.document_date < start_date:
+        if (
+            not historical
+            and start_date is not None
+            and doc.document_date is not None
+            and doc.document_date < start_date
+        ):
             return None
         return "to_record"
     return {"recorded": "recorded", "skipped": "skipped", "not_stock": "not_stock"}.get(line.state)
 
 
-def list_purchases(db: Session, org_id: UUID, tab: str, date_from: date | None, date_to: date | None) -> dict:
+def list_purchases(
+    db: Session, org_id: UUID, tab: str, date_from: date | None, date_to: date | None, historical: bool = False
+) -> dict:
     if tab not in TABS:
         raise CostingError(f"tab must be one of {', '.join(TABS)}")
     settings = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
@@ -613,6 +623,9 @@ def list_purchases(db: Session, org_id: UUID, tab: str, date_from: date | None, 
         .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.position)
         .all()
     )
+    from app.features.costing.rules import active_rules
+
+    rules = active_rules(db, org_id)
     counts = {t: 0 for t in TABS}
     cards = []
     for line, doc in rows:
@@ -620,18 +633,22 @@ def list_purchases(db: Session, org_id: UUID, tab: str, date_from: date | None, 
             continue
         if date_to and (doc.document_date is None or doc.document_date > date_to):
             continue
-        which = tab_of(line, doc, start_date)
+        which = tab_of(line, doc, start_date, historical)
         if which is None:
             continue
         counts[which] += 1
         if which == tab:
-            cards.append(card(db, line, doc))
+            entry = card(db, line, doc, rules=rules)
+            if historical and which == "not_stock":
+                entry["undo"] = True
+            cards.append(entry)
     return {"tab": tab, "counts": counts, "cards": cards}
 
 
-def card(db: Session, line: PurchaseLine, doc: PurchaseDocument) -> dict:
+def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None) -> dict:
     remaining = open_amount(db, line)
     return {
+        "prefill": prefill(db, line, doc, remaining, rules),
         "line_id": str(line.id),
         "document": {
             "payee": doc.payee_name,
@@ -738,3 +755,119 @@ def on_line_treatment_changed(db: Session, line: PurchaseLine, old: str | None, 
 def on_line_gone(db: Session, line: PurchaseLine) -> None:
     """Voided in Xero, superseded, or retired: what was recorded goes to review."""
     _orphan(db, line, "deleted_in_xero")
+
+
+# --- pre-fill (8.1c-2) -----------------------------------------------------------------------------
+
+
+def _ask_flags(row: dict) -> list[str]:
+    ask = []
+    if row.get("quantity_mode") == "ask":
+        ask.append("quantity")
+    if row.get("ask_batch_number"):
+        ask.append("batch_number")
+    if row.get("ask_expiry"):
+        ask.append("expiry")
+    return ask
+
+
+def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: Decimal | None, rules=None):
+    """Spec "Pre-fill": the winning stock rule's template, else last time for this payee, else
+    one empty row for the whole open amount."""
+    if doc.kind != "spend" or remaining is None:
+        return None
+    from app.features.costing.rules import active_rules, normalise, winner
+
+    rules = active_rules(db, line.org_id) if rules is None else rules
+    rule = winner(rules, line.account_code, doc.payee_name, line.description)
+    if rule is not None and rule.treatment == "stock" and rule.template:
+        rows, used, rest_index = [], ZERO, None
+        for i, t in enumerate(rule.template):
+            if t.get("share") == "rest":
+                amount = None
+                rest_index = i
+            else:
+                amount = _q(remaining * _d(t["share"]) / 100)
+                used += amount
+            rows.append([t, amount])
+        if rest_index is not None:
+            rows[rest_index][1] = max(ZERO, remaining - used)
+        out = []
+        for t, amount in rows:
+            amount = amount if amount is not None else ZERO
+            mode = t.get("quantity_mode")
+            if mode == "fixed":
+                quantity = str(_d(t["quantity"]))
+            elif mode == "from_price" and _d(t.get("unit_price")) > 0:
+                quantity = str(_q(amount / _d(t["unit_price"])))
+            else:
+                quantity = None
+            out.append(
+                {
+                    "name": t["name"],
+                    "inventory_type": t.get("inventory_type", "raw_material"),
+                    "unit": t["unit"],
+                    "quantity": quantity,
+                    "amount": str(_q(amount)),
+                    "ask": _ask_flags(t),
+                }
+            )
+        return {"source": "rule", "rule_id": str(rule.id), "rows": out}
+
+    payee = normalise(doc.payee_name)
+    if payee:
+        previous = (
+            db.query(PurchaseLine, PurchaseDocument)
+            .join(
+                PurchaseDocument,
+                (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
+            )
+            .filter(
+                PurchaseLine.org_id == line.org_id,
+                PurchaseLine.id != line.id,
+                PurchaseLine.state.in_(("recorded", "partly_recorded")),
+                PurchaseDocument.kind == "spend",
+            )
+            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc())
+            .limit(200)
+            .all()
+        )
+        for prev, prev_doc in previous:
+            if normalise(prev_doc.payee_name) != payee or not prev.amount_ex_tax:
+                continue
+            allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
+            if not allocs:
+                continue
+            out = []
+            for a in allocs:
+                item = (
+                    db.query(InventoryItem)
+                    .filter(InventoryItem.org_id == line.org_id, InventoryItem.id == a.inventory_item_id)
+                    .one()
+                )
+                out.append(
+                    {
+                        "name": item.name,
+                        "inventory_type": item.inventory_type,
+                        "unit": item.unit,
+                        "quantity": str(_d(a.quantity)),
+                        "amount": str(_q(remaining * _d(a.amount) / _d(prev.amount_ex_tax))),
+                        "ask": [],
+                    }
+                )
+            return {"source": "last_time", "rule_id": None, "rows": out}
+
+    return {
+        "source": "none",
+        "rule_id": None,
+        "rows": [
+            {
+                "name": None,
+                "inventory_type": InventoryType.RAW_MATERIAL.value,
+                "unit": None,
+                "quantity": None,
+                "amount": str(_q(remaining)),
+                "ask": ["name", "unit", "quantity"],
+            }
+        ],
+    }
