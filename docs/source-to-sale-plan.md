@@ -1213,10 +1213,10 @@ missing; never a silent $0.
     already in Xero and stock is already traced in Biz-E; joining them gives cost per
     bottle without new data entry, and recording a purchase doubles as the reminder to
     load stock with quantity, batch number and expiry.
-  - [ ] a. **Cost engine.** `costing` slice; `cost_step_flows` from step completion with
-    backfill; lot and batch cost roll-up with recompute on any change and a rebuild
-    command; manual, free and customer-owned cost; last known price; `costs.view` /
-    `costs.manage`; `costing_enabled`.
+  - [ ] a. **Cost engine.** `costing` slice; `cost_flows` from Core's stock writes with an
+    idempotent backfill; lot and batch cost computed on read (no caches); manual, free and
+    customer-owned cost; last known price; `costs.view` / `costs.manage`; the `costing`
+    feature.
   - [ ] b. **Xero purchases in.** Scopes; chart of accounts with default treatments;
     spend-money bank transactions into purchase documents and lines; changes and
     deletions in Xero flagged for review, never deleting stock.
