@@ -129,6 +129,8 @@ def derive_state(db: Session, line: PurchaseLine, *, keep_skipped: bool = False)
         line.state = "recorded"
     elif not has_allocation and not_stock == amount and amount != 0:
         line.state = "not_stock"
+    elif not has_allocation and amount == 0 and line.state == "not_stock":
+        pass  # a $0 line someone marked not stock stays decided (reopen sets it open first)
     elif has_allocation:
         line.state = "partly_recorded"
     else:
@@ -435,6 +437,8 @@ def not_stock(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _, remaining = _actionable(db, line)
     line.not_stock_amount = _d(line.not_stock_amount) + remaining
+    if _d(line.amount_ex_tax) == 0 and not line_allocations(db, line):
+        line.state = "not_stock"  # nothing to subtract: the decision itself is the state
     derive_state(db, line)
     db.flush()
     return line
@@ -452,6 +456,7 @@ def reopen(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
     line.not_stock_amount = ZERO
+    line.state = "open"
     derive_state(db, line)
     db.flush()
     return line
@@ -684,12 +689,42 @@ def _has_allocations(db: Session, line: PurchaseLine) -> bool:
     return bool(line_allocations(db, line, statuses=("active", "orphaned")))
 
 
-def _orphan(db: Session, line: PurchaseLine, reason: str) -> None:
+def _orphan(db: Session, line: PurchaseLine, reason: str, cause: str) -> None:
+    """``cause`` (void | gone | amount) is kept on each allocation, so a later restore of the
+    document only revives what the void orphaned."""
     allocs = line_allocations(db, line, statuses=("active",))
     for alloc in allocs:
         alloc.status = "orphaned"
+        alloc.orphaned_by = cause
     if allocs or _has_allocations(db, line):
         line.review_reason = reason
+
+
+def lock_lines(db: Session, org_id: UUID, line_ids) -> list[PurchaseLine]:
+    """Lock lines in the one order every writer uses: their documents (by id), then the lines
+    (by id). Account-wide paths call this before inspecting allocations."""
+    ids = sorted({lid for lid in line_ids}, key=str)
+    if not ids:
+        return []
+    doc_ids = sorted(
+        {
+            r[0]
+            for r in db.query(PurchaseLine.document_id).filter(PurchaseLine.org_id == org_id, PurchaseLine.id.in_(ids))
+        },
+        key=str,
+    )
+    for doc_id in doc_ids:
+        db.query(PurchaseDocument).filter(
+            PurchaseDocument.org_id == org_id, PurchaseDocument.id == doc_id
+        ).with_for_update().one()
+    return (
+        db.query(PurchaseLine)
+        .filter(PurchaseLine.org_id == org_id, PurchaseLine.id.in_(ids))
+        .order_by(PurchaseLine.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
 
 
 def on_line_amount_changed(db: Session, line: PurchaseLine, old_amount: Decimal | None) -> None:
@@ -701,7 +736,7 @@ def on_line_amount_changed(db: Session, line: PurchaseLine, old_amount: Decimal 
     if new_amount is None or new_amount == 0 or old_amount == 0 or not _same_sign(new_amount, old_amount):
         # No longer valued (needs a rate), zero, or the other sign: never rescale across that.
         if allocs:
-            _orphan(db, line, "amount_changed")
+            _orphan(db, line, "amount_changed", "amount")
         line.not_stock_amount = ZERO
         derive_state(db, line, keep_skipped=True)
         return
@@ -721,27 +756,60 @@ def on_line_amount_changed(db: Session, line: PurchaseLine, old_amount: Decimal 
     if abs(new_not_stock) > abs(used_total):
         new_not_stock = used_total
     target = used_total - new_not_stock
-    scaled = {a.id: _q(_d(a.amount) * factor) for a in allocs}
-    remainder = target - sum(scaled.values(), ZERO)
-    if remainder:
-        biggest = max(allocs, key=lambda a: (abs(_d(a.amount)), -a.created_at.timestamp()))
-        scaled[biggest.id] += remainder
+    # Work in magnitudes so spends and refunds share one rule: the rounding remainder goes to the
+    # largest allocation, or is taken from the largest first without crossing each row's floor
+    # (a spend row may reach $0; a refund row must stay below $0).
+    sign = Decimal("1") if old_alloc >= 0 else Decimal("-1")
+    floor = ZERO if sign > 0 else MONEY
+    size = {a.id: sign * _q(_d(a.amount) * factor) for a in allocs}
+    remainder = sign * target - sum(size.values(), ZERO)
+    ordered = sorted(allocs, key=lambda a: (-abs(_d(a.amount)), a.created_at, str(a.id)))
+    if remainder > 0:
+        size[ordered[0].id] += remainder
+        remainder = ZERO
+    elif remainder < 0:
+        for alloc in ordered:
+            take = min(-remainder, max(size[alloc.id] - floor, ZERO))
+            size[alloc.id] -= take
+            remainder += take
+            if remainder == 0:
+                break
+    if remainder != 0 or any(size[a.id] < floor for a in allocs):
+        # Too small to split across these rows (refunds can't be $0): a person decides.
+        _orphan(db, line, "amount_changed", "amount")
+        line.not_stock_amount = ZERO
+        derive_state(db, line, keep_skipped=True)
+        return
     for alloc in allocs:
-        alloc.amount = scaled[alloc.id]
+        alloc.amount = sign * size[alloc.id]
     line.not_stock_amount = new_not_stock
     line.review_reason = "amount_changed"
     derive_state(db, line, keep_skipped=True)
 
 
-def on_document_restored(db: Session, line: PurchaseLine) -> None:
-    """A voided purchase made active again in Xero: what it paid for is priced by it again."""
-    if line.superseded_at is not None:
+def on_document_restored(db: Session, line: PurchaseLine, old_amount: Decimal | None = None) -> None:
+    """A voided purchase made active again in Xero: only what the void orphaned is priced by it
+    again, and only if the line still has an amount (not superseded, not needing a rate).
+    ``old_amount`` is the line's amount when it was voided: a change made while voided is then
+    handled like any other amount change (rescaled, or orphaned again across a sign change)."""
+    if line.superseded_at is not None or line.amount_ex_tax is None:
         return
-    orphaned = line_allocations(db, line, statuses=("orphaned",))
+    orphaned = [a for a in line_allocations(db, line, statuses=("orphaned",)) if a.orphaned_by == "void"]
     for alloc in orphaned:
         alloc.status = "active"
-    if line.review_reason == "deleted_in_xero":
+        alloc.orphaned_by = None
+    db.flush()  # no autoflush: the query below must see the reactivated rows
+    still = line_allocations(db, line, statuses=("orphaned",))
+    if orphaned and not still and line.review_reason == "deleted_in_xero":
         line.review_reason = None
+    db.flush()
+    if old_amount is not None and _d(old_amount) != _d(line.amount_ex_tax):
+        on_line_amount_changed(db, line, _d(old_amount))
+        db.flush()
+    used = allocated(db, line) + _d(line.not_stock_amount)
+    amount = _d(line.amount_ex_tax)
+    if orphaned and (not _same_sign(used, amount) or abs(used) > abs(amount)):
+        line.review_reason = "amount_changed"  # changed while voided: a person decides
     derive_state(db, line)
 
 
@@ -752,9 +820,10 @@ def on_line_treatment_changed(db: Session, line: PurchaseLine, old: str | None, 
         line.review_reason = "recoded"
 
 
-def on_line_gone(db: Session, line: PurchaseLine) -> None:
-    """Voided in Xero, superseded, or retired: what was recorded goes to review."""
-    _orphan(db, line, "deleted_in_xero")
+def on_line_gone(db: Session, line: PurchaseLine, cause: str = "gone") -> None:
+    """Voided in Xero (cause ``void``), superseded or retired (``gone``): what was recorded
+    goes to review."""
+    _orphan(db, line, "deleted_in_xero", cause)
 
 
 # --- pre-fill (8.1c-2) -----------------------------------------------------------------------------
@@ -816,8 +885,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
 
     payee = normalise(doc.payee_name)
     if payee:
-        previous = (
-            db.query(PurchaseLine, PurchaseDocument)
+        # Newest first, only live recorded spend lines that still price something; the payee is
+        # compared with the same Python normalisation rules use (casefold, not SQL lower), and
+        # only two narrow columns are read, with no limit that could hide an older match.
+        has_active = (
+            db.query(PurchaseAllocation.id)
+            .filter(
+                PurchaseAllocation.org_id == PurchaseLine.org_id,
+                PurchaseAllocation.purchase_line_id == PurchaseLine.id,
+                PurchaseAllocation.status == "active",
+                PurchaseAllocation.amount > 0,
+            )
+            .exists()
+        )
+        candidates = (
+            db.query(PurchaseLine.id, PurchaseDocument.payee_name)
             .join(
                 PurchaseDocument,
                 (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
@@ -825,19 +907,21 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
             .filter(
                 PurchaseLine.org_id == line.org_id,
                 PurchaseLine.id != line.id,
+                PurchaseLine.superseded_at.is_(None),
                 PurchaseLine.state.in_(("recorded", "partly_recorded")),
+                PurchaseLine.amount_ex_tax.isnot(None),
+                PurchaseLine.amount_ex_tax != 0,
                 PurchaseDocument.kind == "spend",
+                PurchaseDocument.status == "active",
+                has_active,
             )
-            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc())
-            .limit(200)
+            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
             .all()
         )
-        for prev, prev_doc in previous:
-            if normalise(prev_doc.payee_name) != payee or not prev.amount_ex_tax:
-                continue
+        match = next((lid for lid, name in candidates if normalise(name) == payee), None)
+        if match is not None:
+            prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
-            if not allocs:
-                continue
             out = []
             for a in allocs:
                 item = (

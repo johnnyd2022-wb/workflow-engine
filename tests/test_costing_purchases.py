@@ -553,7 +553,9 @@ def test_ac71_purchases_failure_is_partial_and_keeps_the_cursor(world, db, monke
 
     fake.fail_with = RuntimeError("Xero exploded")
     result = sync(db, org.id)
-    assert not result.success and any("exploded" in e for e in result.errors)
+    assert not result.success
+    assert not any("exploded" in e for e in result.errors), "exception text never reaches the caller"
+    assert any(e.startswith("Purchases sync failed (ref ") for e in result.errors)
     job = last_job(db, org.id)
     assert job.purchases_status == "failed"
     settings = db.query(CostingSettings).filter(CostingSettings.org_id == org.id).one()

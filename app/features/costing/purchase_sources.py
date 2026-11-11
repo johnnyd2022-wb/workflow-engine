@@ -145,9 +145,11 @@ def retire_account_lines(db: Session, org_id: UUID, *accounts: XeroAccount) -> i
         )
         .all()
     )
-    from app.features.costing.actions import on_line_gone
+    from app.features.costing.actions import lock_lines, on_line_gone
 
-    for ln in lines:
+    for ln in lock_lines(db, org_id, [ln.id for ln in lines]):
+        if ln.superseded_at is not None:
+            continue
         ln.superseded_at = now
         on_line_gone(db, ln)
     db.flush()
@@ -166,7 +168,7 @@ def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) ->
         )
         .all()
     )
-    from app.features.costing.actions import on_line_treatment_changed
+    from app.features.costing.actions import lock_lines, on_line_treatment_changed
     from app.features.costing.models import PurchaseDocument
     from app.features.costing.rules import active_rules
 
@@ -180,7 +182,9 @@ def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) ->
         if lines
         else {}
     )
-    for ln in lines:
+    for ln in lock_lines(db, org_id, [ln.id for ln in lines]):
+        if ln.superseded_at is not None:
+            continue
         before = ln.treatment
         classify_line(ln, account, payee=payees.get(ln.document_id), rules=rules)
         on_line_treatment_changed(db, ln, before, ln.treatment)
@@ -412,26 +416,10 @@ def upsert_bank_transactions(
                     .with_for_update()
                     .all()
                 ):
-                    on_line_gone(db, ln)
+                    on_line_gone(db, ln, cause="void")
                 db.flush()
             stats["documents"] += 1
             continue
-
-        if not was_active:
-            from app.features.costing.actions import on_document_restored
-
-            for ln in (
-                db.query(PurchaseLine)
-                .filter(
-                    PurchaseLine.org_id == org_id,
-                    PurchaseLine.document_id == doc.id,
-                    PurchaseLine.superseded_at.is_(None),
-                )
-                .with_for_update()
-                .all()
-            ):
-                on_document_restored(db, ln)
-            db.flush()
 
         live = {
             ln.line_key: ln
@@ -444,6 +432,7 @@ def upsert_bank_transactions(
             .with_for_update()
         }
         keep: set[str] = set()
+        voided_amounts: dict = {}  # restoring: amount changes are applied after the allocations return
         for row in incoming:
             acct = row.pop("_account")
             current = live.get(row["line_key"])
@@ -464,7 +453,10 @@ def upsert_bank_transactions(
                     setattr(current, name, value)
                 classify_line(current, acct, payee=doc.payee_name, rules=rules)
                 db.flush()
-                on_line_amount_changed(db, current, before_amount)
+                if was_active:
+                    on_line_amount_changed(db, current, before_amount)
+                else:
+                    voided_amounts[current.id] = before_amount
                 on_line_treatment_changed(db, current, before_treatment, current.treatment)
             keep.add(row["line_key"])
             stats["lines"] += 1
@@ -473,6 +465,20 @@ def upsert_bank_transactions(
                 ln.superseded_at = now
                 on_line_gone(db, ln)
         db.flush()
+        if not was_active:  # voided before, active again: after the incoming values are applied
+            from app.features.costing.actions import on_document_restored
+
+            for ln in (
+                db.query(PurchaseLine)
+                .filter(
+                    PurchaseLine.org_id == org_id,
+                    PurchaseLine.document_id == doc.id,
+                    PurchaseLine.superseded_at.is_(None),
+                )
+                .all()
+            ):
+                on_document_restored(db, ln, old_amount=voided_amounts.get(ln.id))
+            db.flush()
 
         totals = (
             db.query(PurchaseLine.amount_ex_tax, PurchaseLine.tax_amount)

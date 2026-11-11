@@ -46,6 +46,9 @@ MONEY = Decimal("0.0001")
 UNIT = Decimal("0.000001")
 QTY = Decimal("0.0001")
 MAX_NODES = 20_000
+# Operational cap on rows a single computation may load (steps, flows), whatever the semantic
+# node count: bounds the work one request can make the database do.
+MAX_WORK = 200_000
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 _TYPE_RANK = {
@@ -157,6 +160,7 @@ class CostEngine:
         self._direct_memo: dict[UUID, LotCost] = {}
         self._materials: dict[str, list[InventoryItem]] | None = None
         self._charged: set[tuple] = set()
+        self._work = 0
 
     # --- public payloads -----------------------------------------------------------------
 
@@ -276,6 +280,11 @@ class CostEngine:
         if len(self._charged) > MAX_NODES:
             raise TooLargeError()
 
+    def _spend(self, rows: int) -> None:
+        self._work += rows
+        if self._work > MAX_WORK:
+            raise TooLargeError()
+
     def _deps(self, node: tuple) -> list[tuple]:
         if node[0] == "lot":
             item = self._get_lot(node[1])
@@ -316,6 +325,49 @@ class CostEngine:
         return self._memo.get(("step", execution_id, position))
 
     # --- loading ---------------------------------------------------------------------------
+
+    def prime(self, item_ids) -> None:
+        """Bulk-load lots, in-flows, entries and allocations for many lots in four queries, so a
+        caller costing a list of lots (readiness) doesn't pay one round of queries per lot."""
+        from app.features.costing.models import PurchaseAllocation
+
+        ids = [i for i in {*item_ids} if i is not None and i not in self._in_flow_cache]
+        for start in range(0, len(ids), 1000):
+            chunk = ids[start : start + 1000]
+            for lot in self.db.query(InventoryItem).filter(
+                InventoryItem.org_id == self.org_id, InventoryItem.id.in_(chunk)
+            ):
+                self._lots.setdefault(lot.id, lot)
+            for item_id in chunk:
+                self._lots.setdefault(item_id, None)
+                self._in_flow_cache[item_id] = []
+                self._entry_cache.setdefault(item_id, [])
+                self._allocation_cache.setdefault(item_id, [])
+            flows = (
+                self.db.query(CostFlow)
+                .filter(
+                    CostFlow.org_id == self.org_id, CostFlow.inventory_item_id.in_(chunk), CostFlow.direction == "in"
+                )
+                .order_by(CostFlow.created_at, CostFlow.id)
+                .all()
+            )
+            self._spend(len(flows))
+            for flow in flows:
+                self._in_flow_cache[flow.inventory_item_id].append(flow)
+            fresh_entries = {i for i in chunk if not self._entry_cache[i]}
+            for entry in self.db.query(LotCostEntry).filter(
+                LotCostEntry.org_id == self.org_id,
+                LotCostEntry.inventory_item_id.in_(fresh_entries),
+                LotCostEntry.is_active.is_(True),
+            ):
+                self._entry_cache[entry.inventory_item_id].append(entry)
+            fresh_allocs = {i for i in chunk if not self._allocation_cache[i]}
+            for alloc in self.db.query(PurchaseAllocation).filter(
+                PurchaseAllocation.org_id == self.org_id,
+                PurchaseAllocation.inventory_item_id.in_(fresh_allocs),
+                PurchaseAllocation.status.in_(("active", "orphaned")),
+            ):
+                self._allocation_cache[alloc.inventory_item_id].append(alloc)
 
     def _get_lot(self, item_id: UUID) -> InventoryItem | None:
         if item_id not in self._lots:
@@ -358,6 +410,7 @@ class CostEngine:
                 .order_by(CostFlow.created_at, CostFlow.id)
                 .all()
             )
+            self._spend(len(self._in_flow_cache[item_id]))
         return self._in_flow_cache[item_id]
 
     def _entries(self, item_id: UUID) -> list[LotCostEntry]:
@@ -420,6 +473,7 @@ class CostEngine:
             .order_by(ExecutionStep.step_number, ExecutionStep.id)
             .all()
         )
+        self._spend(len(steps))
         index = {s.id: i for i, s in enumerate(steps)}
         consumed, outs = defaultdict(list), defaultdict(list)
         internal = set()
@@ -429,6 +483,7 @@ class CostEngine:
             .order_by(CostFlow.created_at, CostFlow.id)
             .all()
         )
+        self._spend(len(flows))
         for f in flows:
             position = index.get(f.execution_step_id)
             if f.direction == "in":

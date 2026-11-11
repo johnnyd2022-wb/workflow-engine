@@ -321,6 +321,7 @@ class PurchaseAllocation(TenantScoped, Base):
     amount = Column(Numeric(18, 4), nullable=False)
     quantity = Column(Numeric(18, 4), nullable=False)
     status = Column(String(10), nullable=False, default="active", server_default="active")
+    orphaned_by = Column(String(10), nullable=True)  # void | gone | amount: why it was orphaned
     created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
