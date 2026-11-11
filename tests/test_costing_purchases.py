@@ -529,16 +529,16 @@ def test_ac71_missing_scopes_need_reconnect_without_breaking_sales(db, monkeypat
 def test_ac71_insufficient_scope_from_xero_is_needs_reconnect(world, db):
     org, fake = world
 
-    class InsufficientScope(Exception):
+    class InsufficientScopeError(Exception):
         status = 403
-        body = '{"Type":"InsufficientScope"}'
+        body = '{"Type":"InsufficientScopeError"}'
 
-    fake.fail_with = InsufficientScope("insufficient_scope")
+    fake.fail_with = InsufficientScopeError("insufficient_scope")
     from app.features.crm.services import xero_api_client as module
 
     original = module._is_insufficient_scope
     try:
-        module._is_insufficient_scope = lambda error: isinstance(error, InsufficientScope) or original(error)
+        module._is_insufficient_scope = lambda error: isinstance(error, InsufficientScopeError) or original(error)
         result = sync(db, org.id)
     finally:
         module._is_insufficient_scope = original
