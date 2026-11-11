@@ -1102,8 +1102,9 @@ regular supplier. From then on new purchases arrive pre-filled.
   bottles carry it all (slightly overstating bottle cost; reused Library stock enters a later
   batch at 0). Rejected: a per-mL share, because bottle volume isn't recorded yet. Revisit with
   the Phase 2 litres split.
-- ASSUMPTION A11: Xero `CurrencyRate` is foreign units per one base unit, so base = amount ÷
-  rate (spec 8.1b). Unverified against a live multi-currency transaction; Whistlebird is NZD only.
+- ASSUMPTION A11: Xero's `CurrencyRate` direction is unverified, so Phase 1 stores foreign-currency
+  purchases with `fx_status = needs_rate` and no base amount. Verify against one real multi-currency
+  transaction, then convert (Whistlebird is NZD only, so nothing it buys is affected).
 - ASSUMPTION A10: Phase 1 stores no cost caches; every figure is computed on read. Rejected:
   stale-flag caches (the invalidation rules were the main source of review gaps, and current
   tenants are small).
@@ -1141,104 +1142,148 @@ regular supplier. From then on new purchases arrive pre-filled.
 
 ## 8.1b build contract — Xero purchases in
 
-This section is the definitive contract for MR 8.1b; where the "Data model" and "Xero sync
-changes" sections above say more than this, the rest arrives in 8.1c (rules, allocations, line
+This section is the definitive contract for MR 8.1b (v2, after spec-critic). Where "Data model"
+and "Xero sync changes" above say more, the rest arrives in 8.1c (rules, allocations, line
 state, review reasons) and Phase 2 (bills). 8.1b stores purchases and classifies them; nothing
 is shown to users yet and nothing is linked to stock.
 
 **Tables (migration `costing_purchases_001`).**
 
 - `xero_accounts` (crm slice): `id`, `org_id`, `xero_account_id` (unique per org), `code`, `name`,
-  `type`, `account_class`, `status`, `default_treatment` (from Layer 1, recomputed every sync),
-  `treatment_override` (nullable; set only through the accounts API, never touched by sync),
-  `last_synced_at`. Effective treatment = override, else default. This is where account
-  treatments persist (round-2 gap 13, account part).
+  `type`, `account_class`, `status`, `default_treatment` (Layer 1, recomputed every sync; null
+  for non-expense accounts), `treatment_override` (nullable; set only through the accounts API,
+  never by sync), `last_synced_at`. Effective account treatment = override, else default.
 - `purchase_documents` (costing slice): as in "Data model", with `source` = `xero_bank` only,
-  `kind` = `spend` | `refund`, plus `fx_status` (`ok` | `needs_rate`), `bank_account_name`,
-  `is_reconciled`. Unique `(org_id, source, external_id)`.
-- `purchase_lines`: `document_id` (composite FK, cascade), `line_key`, `position` (1-based),
-  `fingerprint`, `description`, `item_code`, `quantity`, `unit_amount`, `account_code`,
-  `account_name`, `amount_ex_tax`, `tax_amount` (both base currency, 4 dp; null when the
-  document `needs_rate`), `treatment`, `superseded_at`, timestamps. **Partial** unique index
-  `(org_id, document_id, line_key) WHERE superseded_at IS NULL`. 8.1c adds `treatment_rule_id`,
-  `treatment_override`, `state`, `not_stock_amount`, `review_reason`.
-- `costing_settings` gains `start_date` (date; set to today, NZ time, by the first purchases
-  sync if still null) and `purchases_cursor` (timestamptz).
+  `kind` = `spend` | `refund`, plus `xero_tenant_id`, `fx_status` (`ok` | `needs_rate`),
+  `bank_account_name`, `is_reconciled`. Unique `(org_id, source, external_id)` (Xero ids are
+  GUIDs). Totals are null when any live line's amount is null.
+- `purchase_lines`: `document_id` (composite FK, cascade), `account_id` (composite FK to
+  `xero_accounts (org_id, id)`; the line's account by Xero `AccountID`), `line_key`, `position`
+  (1-based), `fingerprint`, `description`, `item_code`, `quantity`, `source_unit_amount` (Xero's
+  `UnitAmount` as sent: document currency, the document's `LineAmountTypes`, unsigned as Xero
+  sends it), `account_code` / `account_name` (snapshots), `amount_ex_tax`, `tax_amount` (base
+  currency, 4 dp, signed — see Amounts; null when the document `needs_rate`), `treatment`,
+  `superseded_at`, timestamps. **Partial** unique index `(org_id, document_id, line_key) WHERE
+  superseded_at IS NULL`. 8.1c adds `treatment_rule_id`, `treatment_override`, `state`,
+  `not_stock_amount`, `review_reason`.
+- `costing_settings` gains `start_date` (date), `purchases_cursor` (timestamptz),
+  `purchases_tenant_id` (the Xero tenant the cursor belongs to), `base_currency` (3 letters,
+  from Xero's Organisation, refreshed every purchases sync).
 - `xero_sync_jobs` gains `purchases_synced INTEGER NOT NULL DEFAULT 0` and `purchases_status`
   (`synced` | `not_enabled` | `needs_reconnect` | `failed`, nullable).
 
-**What is fetched.** `BankTransactions` of `Type` `SPEND` or `RECEIVE` only (overpayments,
-prepayments and transfers are never stored), all statuses, paginated (100 per page), with
-`where=Date >= DateTime(start_date)` and `If-Modified-Since = purchases_cursor` when set. Its
-own cursor, so turning costing on later doesn't depend on the sales cursor. Accounts are fetched
-in full every run first.
+**SDK mapping (xero_python 4.x, tested with real model objects).** `Account.account_id`, `.code`,
+`.name`, `.type.value`, `._class` (a string), `.status`; `Organisation.base_currency.value`;
+`BankTransaction.bank_transaction_id`, `.type` (string), `.status` (string), `.contact.name` /
+`.contact_id`, `.date`, `.reference`, `.currency_code.value`, `.currency_rate`,
+`.line_amount_types.value`, `.bank_account.name`, `.is_reconciled`, `.updated_date_utc`,
+`.line_items`; `LineItem.line_item_id`, `.account_id`, `.account_code`, `.description`,
+`.item_code`, `.quantity`, `.unit_amount`, `.line_amount`, `.tax_amount`. Enums are read
+through `.value`, never `str()`.
 
-**What is stored.** A line is stored only if its `AccountCode` belongs to an account in
-`xero_accounts` with `account_class = EXPENSE`; lines on other or unknown accounts are skipped
-and counted. A document with no stored line is not stored (an existing one is kept, with its
-lines superseded). Status `AUTHORISED` → `active`; `DELETED` / `VOIDED` → `voided`, lines kept.
+**What is fetched.** First the Organisation (base currency) and the full chart of accounts.
+Then `BankTransactions` with `where=(Type=="SPEND" OR Type=="RECEIVE")`, all statuses, every page
+(100 per page). **Bootstrap** (no cursor, or the connected tenant isn't `purchases_tenant_id`):
+also `AND Date >= DateTime(start_date)`, no modified-since. **Incremental**: modified-since =
+`purchases_cursor` only, no date predicate; locally, a transaction is accepted if its
+`external_id` is already stored (whatever its date now) or its date is on/after `start_date`.
+So a stored transaction edited to an earlier date is still updated. Overpayments, prepayments
+and transfers are never stored.
+
+**Which lines are stored.** A line's account is the cached account whose `xero_account_id` =
+`LineItem.AccountID`; if the line has no `AccountID`, the one cached account with that
+`AccountCode` (none or several → unknown). A line is stored only when that account has
+`account_class = EXPENSE`; other and unknown accounts are skipped (logged). A transaction with no
+storable line is not stored; an already-stored one is kept and its live lines are superseded.
+Status `AUTHORISED` → `active`; `DELETED` / `VOIDED` → `voided`, lines kept.
 
 **Amounts.** Per line, ex-tax in the document currency: `LineAmountTypes` `Exclusive` →
-`LineAmount`; `Inclusive` → `LineAmount − TaxAmount`; `NoTax` → `LineAmount` (tax 0). Then base
-currency: if `CurrencyRate` is null or exactly 1, the amount is already base; if it is > 0, base =
-amount ÷ `CurrencyRate` (ASSUMPTION A11 — Xero's rate is foreign units per base unit; verify
-against one real multi-currency transaction before any non-NZD producer relies on it); if it is
-≤ 0, the document is `fx_status = needs_rate` and its line amounts are null. Round half-up to
-4 dp after conversion. `kind = spend` keeps the sign; `kind = refund` (a `RECEIVE`) stores
-amounts negated. Document totals are the sums of its stored lines.
+`LineAmount`; `Inclusive` → `LineAmount − TaxAmount`; `NoTax` → `LineAmount`, tax 0. Base
+currency: a document in the org's `base_currency` is taken as is (its rate is ignored). A
+**foreign-currency document is stored with `fx_status = needs_rate` and null base amounts** in
+Phase 1: the direction of Xero's `CurrencyRate` is unverified (ASSUMPTION A11), and a wrong
+guess would misprice stock silently. Signs: stored = `sign × source`, `sign = +1` for `SPEND`,
+`−1` for `RECEIVE` (refund); a negative source line (a discount) therefore stays negative on a
+spend. Round half-up to 4 dp.
 
-**Line identity (round-2 gap 9).** With a `LineItemID`, `line_key` = that id and a later sync
-updates the line in place. Without one, `line_key = pos:<n>` and `fingerprint` = SHA-256 of
-`normalise(description) | account_code | item_code | amount_ex_tax | quantity`. On each sync, for
-the document's incoming lines: a live line with the same key and fingerprint is kept (amounts
-refreshed only if the fingerprint matches, i.e. unchanged); same key, different fingerprint →
-the old line gets `superseded_at` and a new line is inserted; a live line whose key isn't
-returned gets `superseded_at`. So a reordered or inserted line never silently becomes another
-line. (With allocations in 8.1c, a superseded line with allocations goes to review.)
+**Line identity.** Two branches. **With a `LineItemID`**: `line_key` = that id; a later sync
+updates the row in place whatever changed. **Without**: `line_key = pos:<n>`; the `fingerprint`
+= SHA-256 of canonical JSON (sorted keys, no spaces) of `{description, account_id, item_code,
+quantity, source_unit_amount, amount_ex_tax, tax_amount}`, where text is Unicode-NFC,
+whitespace-collapsed and stripped (null stays JSON null, distinct from ""), and decimals are
+canonical strings (`Decimal.normalize()`, so `10` and `10.00` match). Same key and same
+fingerprint → the row is kept; same key, different fingerprint → the old row is superseded and
+a new row inserted; a live key not returned → superseded. Example: A, B then A, X, B keeps
+`pos:1` (A), supersedes the old `pos:2` (B), inserts new `pos:2` (X) and `pos:3` (B).
 
-**Treatment.** Each stored line's `treatment` = the effective treatment of its account at the
-time of the sync (rules arrive in 8.1c). A `PUT` to an account's treatment re-classifies every
-live line on that account immediately.
+**Treatment.** One seam, `classify_line(line, account)` in `purchase_sources.py`: in 8.1b it
+returns the account's effective treatment; 8.1c extends it with rule and manual precedence.
+Sync, account PUT and account-default changes all go through it; nothing bulk-writes a
+treatment.
 
-**Gating and failure.** The purchases phase runs in `full_sync` and `incremental_sync` after
-sales, only when the org holds the `costing` feature (else `purchases_status = not_enabled`, no
-API call). If the stored token's scopes lack `accounting.banktransactions.read` or
-`accounting.settings.read`, or Xero answers insufficient-scope, `purchases_status =
-needs_reconnect`, no error is added (sales results and the sales cursor are unaffected). Any
-other failure in the phase rolls back only the purchases savepoint, adds an error (job
-`partial`), leaves `purchases_cursor` unchanged, and `purchases_status = failed`. On success
-`purchases_cursor = started_at − RESUME_OVERLAP`. Scopes `accounting.banktransactions.read` and
-`accounting.settings.read` are added to `XERO_SCOPES`.
+**Account default keywords (Layer 1, exact).** Name is casefolded and split into words on
+anything that isn't a letter or digit. Checked in order: a word starting with `excise` or `duty`
+→ `duty`; a word starting with `rent`, `wage`, `salar`, `power`, `light`, `heating`, `fuel`,
+`vehicle`, `freight`, `courier`, `postage` → `overhead`; otherwise `DIRECTCOSTS` → `stock`, any
+other `EXPENSE` account → `not_stock`. ("Current" does not match `rent`: no word starts with it.)
+
+**Unit of work and failure.**
+1. If the org lacks the `costing` feature: `purchases_status = not_enabled`; nothing else.
+2. `start_date` is persisted (committed on its own) before any scope or API check, the first
+   time the phase runs for the org: today in NZ time. It is the activation anchor and never
+   moves on its own.
+3. Scopes: only a **non-blank** stored scope list that lacks `accounting.banktransactions.read`
+   or `accounting.settings.read` is rejected up front (`needs_reconnect`); a blank or null list
+   is unknown, so the calls are attempted and an insufficient-scope answer from Xero also gives
+   `needs_reconnect`. Neither adds an error.
+4. The organisation, accounts, documents, lines and the new `purchases_cursor` /
+   `purchases_tenant_id` / `base_currency` are written in **one savepoint**. Helpers never
+   commit. Any other failure rolls back only that savepoint (account-cache changes included),
+   adds an error and sets `purchases_status = failed`.
+5. The job is finalised once, with its purchases fields, in the sync's own commit. A sync
+   whose sales phases succeeded (even with zero rows) and whose purchases phase failed is
+   `partial`. The sales cursor only advances on a fully successful sync, as today; re-fetching
+   sales is idempotent.
+6. On success `purchases_cursor = started_at − RESUME_OVERLAP`.
+
+`purchases_synced` = remote transactions processed this run that have at least one stored line
+(an unchanged retry counts again). Skipped lines and documents are logged, not stored.
 
 **API.** `GET /api/core/costing/accounts` (expense accounts with `default_treatment`,
 `treatment_override`, effective `treatment`, live line count) — `costs.view`;
 `PUT /api/core/costing/accounts/<xero_account_id>` `{"treatment": "stock"|"not_stock"|"duty"|
-"overhead"|null}` (null clears the override) — `costs.manage`; 404 for another org's account.
+"overhead"|null}` exactly (null clears the override) — `costs.manage`; returns the account row;
+404 for another org's or a non-expense account. Downgrade of `costing_purchases_001` refuses
+while any `treatment_override` exists.
 
 **ACs (8.1b).** AC1–AC4 above (read through the service, not a tab, until 8.1c), and:
-- AC64: each Layer-1 default row, one test each (excise/duty → `duty`; rent/freight/… →
-  `overhead`; other `DIRECTCOSTS` → `stock`; other `EXPENSE` → `not_stock`); a line on a
-  non-expense or unknown account, and `SPEND-TRANSFER` / `SPEND-OVERPAYMENT` /
-  `RECEIVE-PREPAYMENT` transactions, are not stored.
+- AC64: every Layer-1 keyword maps as listed (one case each), near-misses don't ("Current account
+  fees" → `stock`); non-expense and unknown accounts, and `SPEND-TRANSFER` / `SPEND-OVERPAYMENT`
+  / `RECEIVE-PREPAYMENT`, are not stored; a mixed transaction keeps only its expense lines.
 - AC65: `Inclusive` $103.50 with $13.50 tax → 90.0000; `Exclusive` 90 → 90.0000; `NoTax` 90 →
-  90.0000, tax 0.
-- AC66: `CurrencyRate` 0.75 on a 75.00 line → 100.0000; rate null or 1 → unchanged; rate 0 →
-  `needs_rate`, amounts null.
-- AC67: positional lines A, B; a resync returning B, A (reordered) supersedes both and inserts
-  two new lines with the right content; returning A, X, B supersedes `pos:2` and `pos:3`
-  appropriately and keeps `pos:1`; an unchanged resync changes nothing (same line ids).
-- AC68: a line with a `LineItemID` whose amount changes is updated in place (same line id).
-- AC69: a transaction later returned `DELETED` marks the document `voided` and keeps its lines.
+  90.0000, tax 0; a negative discount line on a spend stays negative.
+- AC66: a base-currency document ignores its rate; a foreign document is `needs_rate` with null
+  amounts and null totals; base currency comes from Xero's Organisation.
+- AC67: positional A, B → unchanged resync keeps both rows; B, A supersedes both and inserts two;
+  A, X, B as in the example; `10` vs `10.00`, `None` vs `""`, a `|` in a description, and a
+  tax-only change behave as the fingerprint rule says.
+- AC68: a line with a `LineItemID` is updated in place whatever changes; a dropped id is
+  superseded.
+- AC69: `DELETED` voids the document and keeps its lines.
 - AC70: an account override survives the next accounts sync, re-classifies that account's live
-  lines at once, and `null` reverts to the default; another org's account → 404; `costs.view`
-  only → 403 on PUT.
-- AC71: without the `costing` feature no bank-transaction call is made and `purchases_status =
-  not_enabled`; with missing scopes → `needs_reconnect`, job `completed` if sales succeeded;
-  a purchases exception → job `partial`, sales rows committed, `purchases_cursor` unchanged.
-- AC72: first purchases sync sets `start_date` to today and filters by it; a second sync passes
-  `purchases_cursor` as modified-since; `purchases_synced` on the job equals documents upserted.
-- AC73: two orgs with the same Xero transaction id store separate documents; account and
-  document queries never cross orgs.
+  lines (through `classify_line`), and `null` reverts; a renamed account code keeps its lines
+  (matched by `AccountID`) and the override still applies; validation 400s; `costs.view` only →
+  403; another org's account → 404 and its lines untouched.
+- AC71: without the feature no Xero call and `not_enabled`; a non-blank scope list lacking a
+  scope → `needs_reconnect`, job `completed`; a blank list → calls attempted; insufficient-scope
+  from Xero → `needs_reconnect`; a purchases exception after accounts were written → job
+  `partial`, account cache unchanged, `purchases_cursor` unchanged, sales phases ran.
+- AC72: the first run sets `start_date` (kept even if that run fails) and fetches with the date
+  predicate and no modified-since; the next uses modified-since only; a stored transaction edited
+  to before `start_date` is still updated; a new one dated before it is ignored; a different
+  connected tenant bootstraps again; `purchases_synced` counts as defined.
+- AC73: two orgs with the same Xero transaction and account ids store separate rows; a line can't
+  reference another org's account (composite FK).
 
 ## Open for 8.1b–e (round-2 review gaps not on the engine's path)
 
