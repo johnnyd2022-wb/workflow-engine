@@ -34,23 +34,23 @@ def _key():
 
 
 def _purchase(
-    world, db, amount, *, payee="Botanical Supply Co", account_code="310", description="Shop", on=PURCHASE_DATE
+    w, db, amount, *, payee="Botanical Supply Co", account_code="310", description="Shop", on=PURCHASE_DATE
 ):
     """Sync one purchase (keeping earlier ones) and return its line id."""
-    _set_start_date(db, world["org"].id)
+    _set_start_date(db, w["org"].id)
     t = txn(
         [line(account_code, amount, line_item_id=str(uuid4()), description=description)],
         payee=payee,
         on=on,
         amounts="NoTax",
     )
-    world.setdefault("all", []).append(t)
-    world["fake"].transactions = list(world["all"])
-    assert sync(db, world["org"].id).success
+    w.setdefault("all", []).append(t)
+    w["fake"].transactions = list(w["all"])
+    assert sync(db, w["org"].id).success
     db.expire_all()
     row = (
         db.query(PurchaseLine)
-        .filter(PurchaseLine.org_id == world["org"].id, PurchaseLine.line_key == t.line_items[0].line_item_id)
+        .filter(PurchaseLine.org_id == w["org"].id, PurchaseLine.line_key == t.line_items[0].line_item_id)
         .one()
     )
     return row.id
