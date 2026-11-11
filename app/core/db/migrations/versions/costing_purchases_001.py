@@ -3,8 +3,8 @@
 `xero_accounts` (chart of accounts cache with a person-set treatment override),
 `purchase_documents` / `purchase_lines` (Xero spend and receive money, ex GST, base currency),
 `costing_settings.start_date` / `purchases_cursor`, and the purchases counters on
-`xero_sync_jobs`. Additive. Downgrade refuses while an account override is recorded (a person's
-decision with no other copy); purchase rows are re-fetchable from Xero.
+`xero_sync_jobs`. Additive. Downgrade refuses while any account override, purchase, or purchases start date/cursor exists:
+the start date anchors what can be fetched again, so purchases are not simply re-fetchable.
 
 Revision ID: costing_purchases_001
 Revises: costing_engine_001
@@ -136,8 +136,17 @@ def upgrade():
 
 
 def downgrade():
-    if op.get_bind().execute(text("SELECT 1 FROM xero_accounts WHERE treatment_override IS NOT NULL LIMIT 1")).first():
-        raise RuntimeError("Account treatments have been set by people; downgrading would lose them")
+    bind = op.get_bind()
+    for table, why in (
+        ("xero_accounts WHERE treatment_override IS NOT NULL", "account treatments set by people"),
+        ("purchase_documents", "purchases (the original start date would be lost, so they couldn't all be fetched again)"),
+        (
+            "costing_settings WHERE start_date IS NOT NULL OR purchases_cursor IS NOT NULL",
+            "the purchases start date and cursor",
+        ),
+    ):
+        if bind.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).first():
+            raise RuntimeError(f"Downgrading would lose {why}")
     op.drop_column("xero_sync_jobs", "purchases_status")
     op.drop_column("xero_sync_jobs", "purchases_synced")
     op.drop_column("costing_settings", "base_currency")

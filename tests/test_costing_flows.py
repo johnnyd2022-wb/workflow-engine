@@ -427,27 +427,20 @@ def test_migration_downgrade_refuses_every_costing_table(monkeypatch, occupied):
         migration.downgrade()
 
 
-def test_migration_creates_and_drops_tenant_org_indexes(monkeypatch):
-    import app.core.db.migrations.versions.costing_engine_001 as migration
+def test_migration_creates_tenant_org_indexes_and_the_concurrent_step_key(db):
+    """Checked on the migrated schema itself (round-tripped down/up in CI's migration job and
+    locally): the TenantScoped org indexes exist, and the execution_steps key is a valid
+    unique index attached as a constraint (built CONCURRENTLY, so never left invalid)."""
+    from sqlalchemy import text
 
-    created = []
-    dropped = []
-    monkeypatch.setattr(migration.op, "create_unique_constraint", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(migration.op, "create_table", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(migration.op, "create_index", lambda name, *_args, **_kwargs: created.append(name))
-    migration.upgrade()
-
-    class _EmptyBind:
-        @staticmethod
-        def execute(_statement):
-            return type("Result", (), {"first": lambda self: None})()
-
-    monkeypatch.setattr(migration.op, "get_bind", lambda: _EmptyBind())
-    monkeypatch.setattr(migration.op, "drop_table", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(migration.op, "drop_constraint", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(migration.op, "drop_index", lambda name, **_kwargs: dropped.append(name))
-    migration.downgrade()
-
-    expected = {"ix_cost_flows_org_id", "ix_lot_cost_entries_org_id", "ix_costing_settings_org_id"}
-    assert expected <= set(created)
-    assert expected <= set(dropped)
+    names = {r[0] for r in db.execute(text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"))}
+    assert {"ix_cost_flows_org_id", "ix_lot_cost_entries_org_id", "ix_costing_settings_org_id"} <= names
+    row = db.execute(
+        text(
+            "SELECT i.indisvalid, i.indisunique, con.contype FROM pg_index i "
+            "JOIN pg_class c ON c.oid = i.indexrelid "
+            "LEFT JOIN pg_constraint con ON con.conindid = i.indexrelid AND con.contype = 'u' "
+            "WHERE c.relname = 'uq_execution_steps_org_execution_id'"
+        )
+    ).one()
+    assert row == (True, True, "u")
