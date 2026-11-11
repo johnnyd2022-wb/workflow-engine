@@ -33,9 +33,7 @@ def _key():
     return {"Idempotency-Key": str(uuid4())}
 
 
-def _purchase(
-    w, db, amount, *, payee="Botanical Supply Co", account_code="310", description="Shop", on=PURCHASE_DATE
-):
+def _purchase(w, db, amount, *, payee="Botanical Supply Co", account_code="310", description="Shop", on=PURCHASE_DATE):
     """Sync one purchase (keeping earlier ones) and return its line id."""
     _set_start_date(db, w["org"].id)
     t = txn(
@@ -509,3 +507,241 @@ def test_ac85_historical_run_without_scopes_is_409(flask_app, db, monkeypatch): 
         assert response.status_code == 409 and response.get_json()["code"] == "needs_reconnect"
     finally:
         purge(db, org)
+
+
+# --- 8.1c-2 review round 1 regressions -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("state", ["recorded", "partly_recorded"])
+def test_r1_bulk_apply_rule_leaves_recorded_lines_alone(flask_app, world, db, state):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    line_id = _purchase(world, db, "40", payee="Kept Co")
+    spend = "40" if state == "recorded" else "15"
+    _assert_success(_record(client, line_id, [_row("Juniper", 1, spend)]))
+    db.expire_all()
+    assert db.get(PurchaseLine, line_id).state == state
+    before = _treatment(db, line_id)
+    _rule(client, payee_pattern="Kept Co", treatment="not_stock")
+    body = client.post(f"{API}/purchases/bulk", json={"line_ids": [str(line_id)], "action": "apply_rule"}).get_json()
+    assert body["results"][0]["ok"] is False
+    db.expire_all()
+    row = db.get(PurchaseLine, line_id)
+    assert row.treatment == before and row.treatment_rule_id is None
+
+
+def test_r1_bulk_apply_rule_leaves_superseded_lines_alone(flask_app, world, db):  # noqa: F811
+    from datetime import UTC, datetime
+
+    client = user_client(db, flask_app, world["org"])
+    line_id = _purchase(world, db, "40", payee="Gone Co")
+    db.query(PurchaseLine).filter(PurchaseLine.id == line_id).update({"superseded_at": datetime.now(UTC)})
+    db.commit()
+    _rule(client, payee_pattern="Gone Co", treatment="not_stock")
+    body = client.post(f"{API}/purchases/bulk", json={"line_ids": [str(line_id)], "action": "apply_rule"}).get_json()
+    assert body["results"][0]["ok"] is False
+    assert _treatment(db, line_id) == "stock"
+
+
+def test_r1_bulk_rolls_back_only_the_item_that_failed_after_mutating(flask_app, world, db, monkeypatch):  # noqa: F811
+    from app.features.costing import actions, service
+
+    client = user_client(db, flask_app, world["org"])
+    a, b, c = (_purchase(world, db, "10", payee=f"Roll {n}") for n in "ABC")
+    real_skip = actions.skip
+
+    def skip_then_fail(session, org_id, raw):
+        result = real_skip(session, org_id, raw)
+        session.flush()
+        if str(raw) == str(b):
+            raise service.CostingError("boom after the write")
+        return result
+
+    monkeypatch.setattr(actions, "skip", skip_then_fail)
+    body = client.post(f"{API}/purchases/bulk", json={"line_ids": [str(a), str(b), str(c)], "action": "skip"})
+    results = {r["line_id"]: r["ok"] for r in body.get_json()["results"]}
+    assert results == {str(a): True, str(b): False, str(c): True}
+    db.expire_all()
+    assert [db.get(PurchaseLine, x).state for x in (a, b, c)] == ["skipped", "open", "skipped"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"account_code": "   "},
+        {"account_code": "   ", "payee_pattern": "  "},
+    ],
+)
+def test_r1_whitespace_only_account_is_not_a_matcher(flask_app, world, db, body):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    assert _rule(client, **body).status_code == 400, "no real matcher left"
+
+
+def test_r1_whitespace_account_with_a_payee_is_payee_only(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    made = _rule(client, account_code="   ", payee_pattern="Space Co")
+    assert made.status_code == 201, made.get_json()
+    assert made.get_json()["account_code"] is None
+    assert _rule(client, payee_pattern="Space Co").status_code == 409, "same matchers as the payee-only rule"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"payee_pattern": {"x": 1}},
+        {"payee_pattern": ["a"]},
+        {"account_code": 310},
+        {"account_code": "9" * 51},
+        {"payee_pattern": "p" * 256},
+        {"payee_pattern": "X", "description_pattern": "d" * 501},
+        {
+            "payee_pattern": "X",
+            "template": [
+                {"name": ["A"], "unit": "kg", "inventory_type": "raw_material", "quantity_mode": "ask", "share": "rest"}
+            ],
+        },
+        {
+            "payee_pattern": "X",
+            "template": [
+                {
+                    "name": "A" * 256,
+                    "unit": "kg",
+                    "inventory_type": "raw_material",
+                    "quantity_mode": "ask",
+                    "share": "rest",
+                }
+            ],
+        },
+        {
+            "payee_pattern": "X",
+            "template": [
+                {
+                    "name": "A",
+                    "unit": "kg",
+                    "inventory_type": "raw_material",
+                    "quantity_mode": "ask",
+                    "share": "rest",
+                    "ask_expiry": "false",
+                }
+            ],
+        },
+    ],
+)
+def test_r1_rule_validation_types_and_lengths(flask_app, world, db, body):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    response = _rule(client, **body)
+    assert response.status_code == 400, (body, response.status_code)
+
+
+def test_r1_remember_shares_never_exceed_100_percent(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    first = _purchase(world, db, "6", payee="Thirds Co")
+    _assert_success(_record(client, first, [_row("A", 1, 1), _row("B", 1, 1), _row("C", 1, 4)]))
+    made = client.post(f"{API}/purchases/{first}/remember", headers=_key())
+    assert made.status_code in (200, 201), made.get_json()
+    shares = [D(r["share"]) for r in made.get_json()["template"]]
+    assert sum(shares) == D("100"), shares
+    assert max(shares) == D("66.6668") and shares.count(D("16.6666")) == 2
+
+
+def test_r1_last_time_prefill_survives_many_newer_purchases(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    first = _purchase(world, db, "50", payee="Rare Supplier", on=PURCHASE_DATE - timedelta(days=3))
+    _assert_success(_record(client, first, [_row("Orris", 1, 50)]))
+    # 201 newer recorded purchases from other payees, written directly so the test stays fast
+    template = db.get(PurchaseLine, first)
+    from app.features.costing.models import PurchaseAllocation, PurchaseDocument
+
+    doc = db.get(PurchaseDocument, template.document_id)
+    alloc = db.query(PurchaseAllocation).filter(PurchaseAllocation.purchase_line_id == first).one()
+    for n in range(201):
+        new_doc = PurchaseDocument(
+            **{
+                c.name: getattr(doc, c.name)
+                for c in PurchaseDocument.__table__.columns
+                if c.name not in ("id", "external_id", "payee_name", "document_date", "created_at", "updated_at")
+            },
+            external_id=f"noise-{n}-{uuid4()}",
+            payee_name=f"Noise {n}",
+            document_date=PURCHASE_DATE,
+        )
+        db.add(new_doc)
+        db.flush()
+        new_line = PurchaseLine(
+            **{
+                c.name: getattr(template, c.name)
+                for c in PurchaseLine.__table__.columns
+                if c.name not in ("id", "document_id", "line_key", "fingerprint", "created_at", "updated_at")
+            },
+            document_id=new_doc.id,
+            line_key=f"noise-{n}",
+            fingerprint=f"noise-{n}",
+        )
+        db.add(new_line)
+        db.flush()
+        db.add(
+            PurchaseAllocation(
+                **{
+                    c.name: getattr(alloc, c.name)
+                    for c in PurchaseAllocation.__table__.columns
+                    if c.name not in ("id", "purchase_line_id", "created_at", "updated_at")
+                },
+                purchase_line_id=new_line.id,
+            )
+        )
+    db.commit()
+    card = _card(client, _purchase(world, db, "100", payee="Rare Supplier"))
+    assert card["prefill"]["source"] == "last_time", card["prefill"]
+
+
+def test_r1_historical_list_needs_both_dates(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    for query in ("historical=1", "historical=1&from=2026-10-01", "historical=1&from=2026-10-31&to=2026-10-01"):
+        assert client.get(f"{API}/purchases?tab=to_record&{query}").status_code == 400, query
+
+
+@pytest.mark.parametrize(
+    ("date_from", "date_to", "ok"),
+    [
+        ("2023-01-01", "2025-12-31", True),
+        ("2023-01-01", "2026-01-01", False),
+        ("2023-01-01", "2026-01-03", False),
+    ],
+)
+def test_r1_historical_run_is_three_calendar_years(flask_app, world, db, date_from, date_to, ok):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    sync(db, world["org"].id)
+    status = client.post(f"{API}/purchases/historical-run", json={"from": date_from, "to": date_to}).status_code
+    assert (status == 200) is ok, status
+
+
+def test_r1_historical_run_failure_after_accounts_rolls_back_and_is_sanitized(flask_app, world, db, monkeypatch):  # noqa: F811
+    from app.features.crm.models.xero_account import XeroAccount
+    from app.features.crm.services import xero_api_client as module
+
+    org, fake = world["org"], world["fake"]
+    client = user_client(db, flask_app, org)
+    sync(db, org.id)
+    settings = db.query(CostingSettings).filter(CostingSettings.org_id == org.id).one()
+    before = (settings.start_date, settings.purchases_cursor, settings.last_history_from)
+    from tests.test_costing_purchases import account as xero_account
+
+    first = fake.accounts[0]
+    original_name = (
+        db.query(XeroAccount).filter(XeroAccount.org_id == org.id, XeroAccount.code == first.code).one().name
+    )
+    renamed = xero_account(first.code, "Renamed during a failed run", account_id=first.account_id)
+    fake.accounts = [renamed, *fake.accounts[1:]]  # a copy: the shared ACCOUNTS list stays untouched
+
+    def explode(_self, **_kwargs):
+        raise RuntimeError("SECRET relation purchase_lines value Botanical")
+
+    monkeypatch.setattr(module.XeroAPIClient, "get_bank_transactions", explode)
+    response = client.post(f"{API}/purchases/historical-run", json={"from": "2026-10-01", "to": "2026-10-31"})
+    assert response.status_code == 502
+    payload = response.get_json()
+    assert payload["code"] == "historical_failed" and "SECRET" not in payload["error"]
+    db.expire_all()
+    settings = db.query(CostingSettings).filter(CostingSettings.org_id == org.id).one()
+    assert (settings.start_date, settings.purchases_cursor, settings.last_history_from) == before
+    account = db.query(XeroAccount).filter(XeroAccount.org_id == org.id, XeroAccount.code == renamed.code).one()
+    assert account.name == original_name, "account writes roll back with the run"
