@@ -875,6 +875,16 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
             # Live cost (8.1e-1): an optional "total paid" prices the new lot in the same
             # transaction, for people who manage costs in an org with costing switched on.
             total_paid = _costing_total_paid(data, org_id)
+            if total_paid is not None:
+                # Checked before anything is written: a batch's output takes its cost from the
+                # batch, and a price needs a quantity to divide by.
+                if source_execution_id or source_execution_step_id:
+                    return jsonify({"error": "A lot made by a batch takes its cost from the batch"}), 400
+                try:
+                    if Decimal(str(quantity)) <= 0:
+                        raise ValueError
+                except (InvalidOperation, ValueError):
+                    return jsonify({"error": "total_paid needs a quantity above zero"}), 400
             try:
                 item = repo.create_inventory_item(
                     commit=total_paid is None,
@@ -901,20 +911,27 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 ), 409
             if total_paid is not None:
                 from app.features.costing.actions import _created_flow
-                from app.features.costing.service import set_lot_price
+                from app.features.costing.service import CostingError, set_lot_price
 
-                flow = _created_flow(db_session, org_id, item.id)
-                set_lot_price(
-                    db_session,
-                    org_id,
-                    item.id,
-                    amount=total_paid,
-                    quantity=item.quantity,
-                    kind="manual",
-                    cost_flow_id=flow.id if flow is not None else None,
-                    user_id=getattr(g, "user_id", None) and UUID(str(g.user_id)),
-                )
-                db_session.commit()
+                # One transaction: the lot and its price land together or not at all.
+                try:
+                    flow = _created_flow(db_session, org_id, item.id)
+                    if flow is None:
+                        raise CostingError("This lot can't take a price when it's added")
+                    set_lot_price(
+                        db_session,
+                        org_id,
+                        item.id,
+                        amount=total_paid,
+                        quantity=item.quantity,
+                        kind="manual",
+                        cost_flow_id=flow.id,
+                        user_id=getattr(g, "user_id", None) and UUID(str(g.user_id)),
+                    )
+                    db_session.commit()
+                except CostingError as error:
+                    db_session.rollback()
+                    return jsonify({"error": str(error)}), 400
 
             return (
                 jsonify(
@@ -934,8 +951,10 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 201,
             )
         except ValueError as e:
+            db_session.rollback()  # never let the idempotency wrapper commit a half-made lot
             return jsonify({"error": str(e)}), 400
         except Exception:
+            db_session.rollback()
             # Log the full error for debugging but return generic message to client
             logger.exception("Error creating inventory item")
             return jsonify({"error": "Failed to create inventory item"}), 500
