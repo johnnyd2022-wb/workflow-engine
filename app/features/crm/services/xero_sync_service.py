@@ -99,7 +99,7 @@ class XeroSyncService:
                     contacts_result = self._sync_contacts(api_client, org_id, tenant.xero_tenant_id, incremental=False)
                 result.contacts_synced = contacts_result.contacts_synced
                 result.errors.extend(contacts_result.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if contacts_result.errors else 1
             except XeroTokenExpiredError:
                 self._fail_expired(job.id, org_id)
                 raise
@@ -120,7 +120,7 @@ class XeroSyncService:
                 result.sales_unmapped = invoices_result.sales_unmapped
                 result.sales_insufficient_stock = invoices_result.sales_insufficient_stock
                 result.errors.extend(invoices_result.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if invoices_result.errors else 1
             except XeroTokenExpiredError:
                 self._fail_expired(job.id, org_id)
                 raise
@@ -135,7 +135,7 @@ class XeroSyncService:
                     )
                 result.credit_notes_synced = credit_result.credit_notes_synced
                 result.errors.extend(credit_result.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if credit_result.errors else 1
             except XeroTokenExpiredError:
                 self._fail_expired(job.id, org_id)
                 raise
@@ -177,7 +177,7 @@ class XeroSyncService:
                     )
                 result.contacts_synced = r.contacts_synced
                 result.errors.extend(r.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if r.errors else 1
             except Exception as e:
                 logger.exception("xero_incremental_contact_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
@@ -195,7 +195,7 @@ class XeroSyncService:
                     )
                 result.credit_notes_synced = r.credit_notes_synced
                 result.errors.extend(r.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if r.errors else 1
             except Exception as e:
                 logger.exception("xero_incremental_credit_note_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
@@ -218,7 +218,7 @@ class XeroSyncService:
                 result.sales_unmapped = r.sales_unmapped
                 result.sales_insufficient_stock = r.sales_insufficient_stock
                 result.errors.extend(r.errors)
-                result.sales_phases_ok += 1
+                result.sales_phases_ok += 0 if r.errors else 1
             except Exception as e:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))

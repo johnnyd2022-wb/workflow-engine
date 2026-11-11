@@ -1150,3 +1150,21 @@ def test_r2_missing_tax_makes_the_document_tax_total_unknown(world, db):
     sync(db, org.id)
     (doc,) = documents(db, org.id)
     assert doc.total_ex_tax is None and doc.total_tax is None
+
+
+def test_r3_record_level_failures_everywhere_are_failed(world, db, monkeypatch):
+    """Codex R3: sales phases that fetched records but saved none (every record errored) are not
+    successes; with purchases also failing the job is failed, not partial."""
+    from app.features.crm.services import xero_sync_service as module
+    from app.features.crm.services.xero_sync_service import SyncResult
+
+    org, fake = world
+
+    def broken(self, *args, **kwargs):
+        return SyncResult(errors=["record failed"])
+
+    for name in ("_sync_contacts", "_sync_invoices", "_sync_credit_notes"):
+        monkeypatch.setattr(module.XeroSyncService, name, broken)
+    fake.fail_with = RuntimeError("down")
+    sync(db, org.id)
+    assert last_job(db, org.id).status == "failed"
