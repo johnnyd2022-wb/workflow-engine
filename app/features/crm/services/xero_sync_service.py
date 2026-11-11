@@ -39,6 +39,7 @@ class SyncResult:
     sales_insufficient_stock: int = 0
     purchases_synced: int = 0
     purchases_status: str | None = None  # live-cogs 8.1b: synced | not_enabled | needs_reconnect | failed
+    sales_phases_ok: int = 0  # sales phases that finished without a phase-level exception
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -52,7 +53,8 @@ class SyncResult:
             or self.invoices_synced > 0
             or self.credit_notes_synced > 0
             or self.purchases_synced > 0
-            or self.purchases_status in ("failed", "synced")
+            # live-cogs 8.1b: sales phases finished (even with zero rows) but purchases failed
+            or (self.purchases_status == "failed" and self.sales_phases_ok > 0)
         )
 
 
@@ -83,6 +85,7 @@ class XeroSyncService:
 
             started_at = datetime.now(UTC)
             job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
+            self._anchor_purchases(org_id)
             self.db.commit()
 
             result = SyncResult()
@@ -96,6 +99,7 @@ class XeroSyncService:
                     contacts_result = self._sync_contacts(api_client, org_id, tenant.xero_tenant_id, incremental=False)
                 result.contacts_synced = contacts_result.contacts_synced
                 result.errors.extend(contacts_result.errors)
+                result.sales_phases_ok += 1
             except XeroTokenExpiredError:
                 raise
             except Exception as e:
@@ -115,6 +119,7 @@ class XeroSyncService:
                 result.sales_unmapped = invoices_result.sales_unmapped
                 result.sales_insufficient_stock = invoices_result.sales_insufficient_stock
                 result.errors.extend(invoices_result.errors)
+                result.sales_phases_ok += 1
             except XeroTokenExpiredError:
                 raise
             except Exception as e:
@@ -128,6 +133,7 @@ class XeroSyncService:
                     )
                 result.credit_notes_synced = credit_result.credit_notes_synced
                 result.errors.extend(credit_result.errors)
+                result.sales_phases_ok += 1
             except XeroTokenExpiredError:
                 raise
             except Exception as e:
@@ -152,6 +158,7 @@ class XeroSyncService:
             modified_after = tenant.last_successful_sync_at
             started_at = datetime.now(UTC)
             job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "incremental", triggered_by)
+            self._anchor_purchases(org_id)
             self.db.commit()
 
             result = SyncResult()
@@ -167,6 +174,7 @@ class XeroSyncService:
                     )
                 result.contacts_synced = r.contacts_synced
                 result.errors.extend(r.errors)
+                result.sales_phases_ok += 1
             except Exception as e:
                 logger.exception("xero_incremental_contact_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
@@ -184,6 +192,7 @@ class XeroSyncService:
                     )
                 result.credit_notes_synced = r.credit_notes_synced
                 result.errors.extend(r.errors)
+                result.sales_phases_ok += 1
             except Exception as e:
                 logger.exception("xero_incremental_credit_note_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
@@ -206,6 +215,7 @@ class XeroSyncService:
                 result.sales_unmapped = r.sales_unmapped
                 result.sales_insufficient_stock = r.sales_insufficient_stock
                 result.errors.extend(r.errors)
+                result.sales_phases_ok += 1
             except Exception as e:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
@@ -544,18 +554,13 @@ class XeroSyncService:
         from app.core.security.entitlements import org_has_feature
         from app.features.costing import FEATURE_KEY
         from app.features.costing.models import CostingSettings
-        from app.features.costing.purchase_sources import nz_today, sync_accounts, upsert_bank_transactions
+        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions
         from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
         from app.features.crm.services import xero_api_client as client_module
 
         if not org_has_feature(self.db, org_id, FEATURE_KEY):
             result.purchases_status = "not_enabled"
             return
-        settings = self._costing_settings_for_update(org_id, CostingSettings)
-        if settings.start_date is None:  # the activation anchor: persisted before anything can fail
-            settings.start_date = nz_today()
-        self.db.commit()
-
         token = XeroTokenRepository(self.db).get(org_id)
         granted = (token.scopes or "").split() if token is not None else []
         if granted and not self.PURCHASE_SCOPES <= set(granted):
@@ -586,8 +591,12 @@ class XeroSyncService:
                     settings.purchases_cursor = started_at - RESUME_OVERLAP
             result.purchases_synced = stats["documents"]
             result.purchases_status = "synced"
-        except XeroTokenExpiredError:
-            raise
+        except client_module.XeroInsufficientScopeError:
+            result.purchases_status = "needs_reconnect"
+        except XeroTokenExpiredError as e:
+            # Recorded, not raised: the job must still be finalised with what sales did.
+            result.purchases_status = "failed"
+            result.errors.append(f"Purchases sync error: Xero connection expired ({e})")
         except Exception as e:
             # The savepoint has already undone only this phase; the sales work done earlier in
             # this sync is still pending and must not be rolled back with it.
@@ -597,6 +606,20 @@ class XeroSyncService:
             logger.exception("xero_purchases_sync_failed", org_id=str(org_id))
             result.purchases_status = "failed"
             result.errors.append(f"Purchases sync error: {e}")
+
+    def _anchor_purchases(self, org_id: UUID) -> None:
+        """Spec 8.1b: the first time a costing org syncs, today (NZ) becomes ``start_date``.
+        Written with the job row, before any sales or purchases work, and never moved after."""
+        from app.core.security.entitlements import org_has_feature
+        from app.features.costing import FEATURE_KEY
+        from app.features.costing.models import CostingSettings
+        from app.features.costing.purchase_sources import nz_today
+
+        if not org_has_feature(self.db, org_id, FEATURE_KEY):
+            return
+        settings = self._costing_settings_for_update(org_id, CostingSettings)
+        if settings.start_date is None:
+            settings.start_date = nz_today()
 
     def _costing_settings_for_update(self, org_id: UUID, model):
         from uuid import uuid4

@@ -1,0 +1,2 @@
+FAILED tests/test_data_export.py::test_every_secret_looking_column_is_dropped_or_declared_safe
+1 failed, 4272 passed, 31 skipped, 1347 warnings in 1027.22s (0:17:07)

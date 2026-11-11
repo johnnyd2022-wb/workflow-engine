@@ -883,3 +883,226 @@ def test_ac73_a_line_cannot_reference_another_orgs_account(world, db):
         db.rollback()
     finally:
         purge(db, other)
+
+
+# --- build-review round 1 regressions (8.1b) ----------------------------------------------------------
+
+
+def test_r1_scope_error_translated_by_the_client_is_needs_reconnect(world, db):
+    from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
+
+    org, fake = world
+    fake.fail_with = XeroInsufficientScopeError("The Xero connection does not allow this change")
+    result = sync(db, org.id)
+    job = last_job(db, org.id)
+    assert result.success and job.status == "completed" and job.purchases_status == "needs_reconnect"
+
+
+@pytest.mark.parametrize("status", ["DELETED", "VOIDED"])
+def test_r1_voided_with_no_lines_keeps_its_lines(world, db, status):
+    org, fake = world
+    tid = str(uuid4())
+    fake.transactions = [txn([line("310", "10"), line("311", "20")], txn_id=tid)]
+    sync(db, org.id)
+    kept = sorted(ln.id for ln in live_lines(db, org.id))
+    fake.transactions = [txn([], txn_id=tid, status=status)]
+    sync(db, org.id, full=False)
+    (doc,) = documents(db, org.id)
+    assert doc.status == "voided"
+    assert sorted(ln.id for ln in live_lines(db, org.id)) == kept
+
+
+def test_r1_a_voided_transaction_never_seen_is_not_stored(world, db):
+    org, fake = world
+    fake.transactions = [txn([line("310", "10")], status="DELETED")]
+    sync(db, org.id)
+    assert documents(db, org.id) == []
+
+
+def test_r1_token_expiry_in_purchases_still_finalises_the_job(world, db):
+    from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
+
+    org, fake = world
+    fake.fail_with = XeroTokenExpiredError("expired")
+    result = sync(db, org.id)
+    job = last_job(db, org.id)
+    assert not result.success
+    assert job.status in ("partial", "failed") and job.status != "running"
+    assert job.purchases_status == "failed" and job.completed_at is not None
+
+
+def test_r1_start_date_is_anchored_even_without_scopes(db, monkeypatch):
+    org = new_org(db)
+    try:
+        connect(db, org.id, scopes="openid accounting.contacts accounting.invoices offline_access")
+        FakeXero().install(monkeypatch)
+        sync(db, org.id)
+        assert settings_row(db, org.id).start_date == nz_today()
+    finally:
+        purge(db, org)
+
+
+def test_r1_every_phase_failing_is_failed_not_partial(world, db, monkeypatch):
+    from app.features.crm.services import xero_api_client as module
+
+    org, fake = world
+
+    def boom(self, **kw):
+        raise RuntimeError("down")
+
+    for name in ("get_all_contacts", "get_all_invoices", "fetch_all_credit_notes"):
+        monkeypatch.setattr(module.XeroAPIClient, name, boom)
+    fake.fail_with = RuntimeError("down")
+    sync(db, org.id)
+    assert last_job(db, org.id).status == "failed"
+
+
+def test_r1_zero_row_sales_with_purchases_failure_is_partial(world, db):
+    org, fake = world
+    fake.fail_with = RuntimeError("down")
+    sync(db, org.id)
+    assert last_job(db, org.id).status == "partial"
+
+
+@pytest.mark.parametrize(
+    ("amounts", "line_amount", "tax"),
+    [("Exclusive", None, "1"), ("Inclusive", "11", None), ("Inclusive", None, None)],
+)
+def test_r1_missing_amounts_are_unknown_not_zero(world, db, amounts, line_amount, tax):
+    org, fake = world
+    li = LineItem(description="?", account_code="310", line_amount=None if line_amount is None else float(line_amount))
+    li.tax_amount = None if tax is None else float(tax)
+    fake.transactions = [txn([li], amounts=amounts)]
+    sync(db, org.id)
+    (ln,) = live_lines(db, org.id)
+    assert ln.amount_ex_tax is None
+    (doc,) = documents(db, org.id)
+    assert doc.total_ex_tax is None and doc.total_tax is None
+
+
+def test_r1_account_no_longer_an_expense_retires_its_lines(world, db):
+    org, fake = world
+    acct = account("800", "Purchases - Botanicals")
+    fake.accounts = [acct]
+    fake.transactions = [txn([line("800", "10")])]
+    sync(db, org.id)
+    assert len(live_lines(db, org.id)) == 1
+    fake.accounts = [account("800", "Botanicals stock", kind="INVENTORY", cls="ASSET", account_id=acct.account_id)]
+    fake.transactions = []
+    sync(db, org.id, full=False)
+    assert live_lines(db, org.id) == []
+    assert len(documents(db, org.id)) == 1
+
+
+def test_r1_unit_amount_keeps_xero_precision(world, db):
+    org, fake = world
+    li = line("310", "10")
+    li.unit_amount = 1.123456
+    fake.transactions = [txn([li])]
+    sync(db, org.id)
+    assert D(str(live_lines(db, org.id)[0].source_unit_amount)) == D("1.123456")
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Excise", "duty"),
+        ("Duty", "duty"),
+        ("Rent", "overhead"),
+        ("Wages", "overhead"),
+        ("Salaries", "overhead"),
+        ("Power", "overhead"),
+        ("Lighting", "overhead"),
+        ("Heating", "overhead"),
+        ("Fuel", "overhead"),
+        ("Vehicle", "overhead"),
+        ("Freight", "overhead"),
+        ("Courier", "overhead"),
+        ("Postage", "overhead"),
+        ("Ingredients", "stock"),
+        ("Torrent", "stock"),  # a word that merely contains "rent"
+        ("Production", "stock"),  # contains "duct", not a duty word
+    ],
+)
+def test_r1_each_keyword_alone(name, expected):
+    from app.features.costing.purchase_sources import default_treatment
+
+    assert default_treatment("DIRECTCOSTS", "EXPENSE", name) == expected
+
+
+def test_r1_notax_ignores_a_tax_amount_xero_sends(world, db):
+    org, fake = world
+    fake.transactions = [txn([line("310", "90", tax="13.50")], amounts="NoTax")]
+    sync(db, org.id)
+    (ln,) = live_lines(db, org.id)
+    assert (D(str(ln.amount_ex_tax)), D(str(ln.tax_amount))) == (D("90.0000"), D("0.0000"))
+
+
+def test_r1_inserted_line_supersedes_old_b_and_inserts_x_and_new_b(world, db):
+    org, fake = world
+    tid = str(uuid4())
+    fake.transactions = [txn([line("310", "10", description="A"), line("311", "20", description="B")], txn_id=tid)]
+    sync(db, org.id)
+    old_b = live_lines(db, org.id)[1].id
+    fake.transactions = [
+        txn(
+            [line("310", "10", description="A"), line("310", "5", description="X"), line("311", "20", description="B")],
+            txn_id=tid,
+        )
+    ]
+    sync(db, org.id)
+    new = live_lines(db, org.id)
+    assert old_b not in {ln.id for ln in new}
+    superseded = [ln for ln in all_lines(db, org.id) if ln.superseded_at is not None]
+    assert [ln.id for ln in superseded] == [old_b]
+
+
+def test_r1_line_item_id_row_survives_moving_and_recoding(world, db):
+    org, fake = world
+    tid, lid = str(uuid4()), str(uuid4())
+    fake.transactions = [txn([line("310", "10", line_item_id=lid), line("311", "1")], txn_id=tid)]
+    sync(db, org.id)
+    row = next(ln for ln in live_lines(db, org.id) if ln.line_key == lid)
+    fake.transactions = [txn([line("311", "1"), line("320", "12", line_item_id=lid)], txn_id=tid)]
+    sync(db, org.id)
+    again = next(ln for ln in live_lines(db, org.id) if ln.line_key == lid)
+    assert again.id == row.id and again.position == 2 and again.account_code == "320" and again.treatment == "duty"
+
+
+def test_r1_cross_org_put_leaves_the_other_orgs_lines_alone(flask_app, world, db):  # noqa: F811
+    org, fake = world
+    fake.transactions = [txn([line("429", "50")])]
+    sync(db, org.id)
+    other = new_org(db)
+    try:
+        intruder = user_client(db, flask_app, other)
+        office = next(a for a in ACCOUNTS if a.code == "429")
+        assert intruder.put(f"{API}/accounts/{office.account_id}", json={"treatment": "stock"}).status_code == 404
+        assert [ln.treatment for ln in live_lines(db, org.id)] == ["not_stock"]
+    finally:
+        purge(db, other)
+
+
+def test_r1_cursor_is_started_at_minus_overlap_and_unstorable_counts_zero(world, db):
+    from app.features.crm.services.xero_sync_service import RESUME_OVERLAP
+
+    org, fake = world
+    fake.transactions = [txn([line("090", "5")]), txn([line("310", "10")])]
+    sync(db, org.id)
+    job = last_job(db, org.id)
+    cursor = settings_row(db, org.id).purchases_cursor
+    assert job.purchases_synced == 1, "a transaction with no storable line counts zero"
+    assert (
+        job.started_at - RESUME_OVERLAP - timedelta(seconds=5)
+        <= cursor
+        <= job.started_at - RESUME_OVERLAP + timedelta(seconds=5)
+    )
+
+
+def test_r1_foreign_tax_and_totals_are_null(world, db):
+    org, fake = world
+    fake.transactions = [txn([line("310", "11", tax="1"), line("311", "5", tax="0")], currency="AUD")]
+    sync(db, org.id)
+    assert all(ln.amount_ex_tax is None and ln.tax_amount is None for ln in live_lines(db, org.id))
+    (doc,) = documents(db, org.id)
+    assert doc.total_ex_tax is None and doc.total_tax is None

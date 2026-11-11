@@ -246,7 +246,7 @@ class PurchaseLine(TenantScoped, Base):
     description = Column(String(4000), nullable=True)
     item_code = Column(String(100), nullable=True)
     quantity = Column(Numeric(18, 4), nullable=True)
-    source_unit_amount = Column(Numeric(18, 4), nullable=True)
+    source_unit_amount = Column(Numeric(18, 6), nullable=True)  # as Xero sent it
     account_code = Column(String(50), nullable=True)
     account_name = Column(String(255), nullable=True)
     amount_ex_tax = Column(Numeric(18, 4), nullable=True)

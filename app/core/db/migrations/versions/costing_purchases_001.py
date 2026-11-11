@@ -91,7 +91,7 @@ def upgrade():
         sa.Column("description", sa.String(4000), nullable=True),
         sa.Column("item_code", sa.String(100), nullable=True),
         sa.Column("quantity", sa.Numeric(18, 4), nullable=True),
-        sa.Column("source_unit_amount", sa.Numeric(18, 4), nullable=True),
+        sa.Column("source_unit_amount", sa.Numeric(18, 6), nullable=True),
         sa.Column("account_code", sa.String(50), nullable=True),
         sa.Column("account_name", sa.String(255), nullable=True),
         sa.Column("amount_ex_tax", sa.Numeric(18, 4), nullable=True),
@@ -122,6 +122,9 @@ def upgrade():
         postgresql_where=sa.text("superseded_at IS NULL"),
     )
     op.create_index("ix_purchase_lines_org_account", "purchase_lines", ["org_id", "account_id"])
+    # TenantScoped declares org_id(index=True): keep the schema equal to the models.
+    for table in ("xero_accounts", "purchase_documents", "purchase_lines"):
+        op.create_index(f"ix_{table}_org_id", table, ["org_id"])
     op.add_column("costing_settings", sa.Column("start_date", sa.Date(), nullable=True))
     op.add_column("costing_settings", sa.Column("purchases_cursor", TS, nullable=True))
     op.add_column("costing_settings", sa.Column("purchases_tenant_id", sa.String(100), nullable=True))
@@ -141,6 +144,8 @@ def downgrade():
     op.drop_column("costing_settings", "purchases_tenant_id")
     op.drop_column("costing_settings", "purchases_cursor")
     op.drop_column("costing_settings", "start_date")
+    for table in ("xero_accounts", "purchase_documents", "purchase_lines"):
+        op.drop_index(f"ix_{table}_org_id", table_name=table)
     op.drop_index("ix_purchase_lines_org_account", table_name="purchase_lines")
     op.drop_index("uq_purchase_lines_live_key", table_name="purchase_lines")
     op.drop_table("purchase_lines")

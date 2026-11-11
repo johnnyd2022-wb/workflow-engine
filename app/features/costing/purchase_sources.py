@@ -120,8 +120,30 @@ def sync_accounts(db: Session, org_id: UUID, accounts: Iterable) -> dict[str, Xe
             changed.append(row)
     db.flush()
     for row in changed:
-        reclassify_account_lines(db, org_id, row)
+        if row.treatment is None:
+            retire_account_lines(db, org_id, row)
+        else:
+            reclassify_account_lines(db, org_id, row)
     return existing
+
+
+def retire_account_lines(db: Session, org_id: UUID, account: XeroAccount) -> int:
+    """An account that is no longer an expense account: its live lines are superseded, as if
+    Xero had dropped them (the one seam 8.1c extends to send recorded lines to review)."""
+    now = utc_now()
+    lines = (
+        db.query(PurchaseLine)
+        .filter(
+            PurchaseLine.org_id == org_id,
+            PurchaseLine.account_id == account.id,
+            PurchaseLine.superseded_at.is_(None),
+        )
+        .all()
+    )
+    for ln in lines:
+        ln.superseded_at = now
+    db.flush()
+    return len(lines)
 
 
 def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) -> int:
@@ -285,11 +307,18 @@ def upsert_bank_transactions(
             if acct is None or acct.account_class != "EXPENSE" or acct.treatment is None:
                 stats["skipped_lines"] += 1
                 continue
-            line_amount = _dec(getattr(li, "line_amount", None)) or Decimal("0")
-            tax = Decimal("0") if amount_types == "NoTax" else (_dec(getattr(li, "tax_amount", None)) or Decimal("0"))
-            ex_tax = line_amount - tax if amount_types == "Inclusive" else line_amount
+            # Unknown stays unknown: a missing or malformed amount is never priced as $0.
+            line_amount = _dec(getattr(li, "line_amount", None))
+            tax = Decimal("0") if amount_types == "NoTax" else _dec(getattr(li, "tax_amount", None))
+            if line_amount is None:
+                ex_tax = None
+            elif amount_types == "Inclusive":
+                ex_tax = None if tax is None else line_amount - tax
+            else:
+                ex_tax = line_amount
             if fx_status == "ok":
-                ex_base, tax_base = _money(sign * ex_tax), _money(sign * tax)
+                ex_base = None if ex_tax is None else _money(sign * ex_tax)
+                tax_base = None if tax is None else _money(sign * tax)
             else:
                 ex_base, tax_base = None, None
             line_item_id = getattr(li, "line_item_id", None)
@@ -310,8 +339,9 @@ def upsert_bank_transactions(
             row["_account"] = acct
             incoming.append(row)
 
-        if doc is None and not incoming:
-            stats["skipped_documents"] += 1
+        voided = (_text(getattr(t, "status", None)) or "").upper() in ("DELETED", "VOIDED")
+        if doc is None and (not incoming or voided):
+            stats["skipped_documents"] += 1  # never stored, and nothing to keep
             continue
         if doc is None:
             doc = PurchaseDocument(org_id=org_id, source=SOURCE, external_id=external_id)
@@ -328,8 +358,7 @@ def upsert_bank_transactions(
         doc.currency_code = currency or None
         doc.currency_rate = _dec(getattr(t, "currency_rate", None))
         doc.fx_status = fx_status
-        status = (_text(getattr(t, "status", None)) or "").upper()
-        doc.status = "voided" if status in ("DELETED", "VOIDED") else "active"
+        doc.status = "voided" if voided else "active"
         doc.bank_account_name = getattr(bank, "name", None) if bank is not None else None
         doc.is_reconciled = getattr(t, "is_reconciled", None)
         updated = getattr(t, "updated_date_utc", None)
@@ -338,6 +367,11 @@ def upsert_bank_transactions(
         doc.external_updated_at = updated if isinstance(updated, datetime) else None
         doc.last_synced_at = now
         db.flush()
+        if voided:
+            # Xero may send a voided transaction with no (or fewer) lines; its stored lines are
+            # what was bought and stay as they were (8.1c moves their allocations to review).
+            stats["documents"] += 1
+            continue
 
         live = {
             ln.line_key: ln

@@ -1195,7 +1195,10 @@ and transfers are never stored.
 `AccountCode` (none or several → unknown). A line is stored only when that account has
 `account_class = EXPENSE`; other and unknown accounts are skipped (logged). A transaction with no
 storable line is not stored; an already-stored one is kept and its live lines are superseded.
-Status `AUTHORISED` → `active`; `DELETED` / `VOIDED` → `voided`, lines kept.
+Status `AUTHORISED` → `active`; `DELETED` / `VOIDED` → `voided`: a stored document's lines
+are kept exactly as they were, whatever lines Xero sends with the void (often none); a voided
+transaction never stored before is not stored. An account that stops being an expense account
+has its live lines superseded (`retire_account_lines`, the seam 8.1c extends for recorded lines).
 
 **Amounts.** Per line, ex-tax in the document currency: `LineAmountTypes` `Exclusive` →
 `LineAmount`; `Inclusive` → `LineAmount − TaxAmount`; `NoTax` → `LineAmount`, tax 0. Base
@@ -1204,7 +1207,9 @@ currency: a document in the org's `base_currency` is taken as is (its rate is ig
 Phase 1: the direction of Xero's `CurrencyRate` is unverified (ASSUMPTION A11), and a wrong
 guess would misprice stock silently. Signs: stored = `sign × source`, `sign = +1` for `SPEND`,
 `−1` for `RECEIVE` (refund); a negative source line (a discount) therefore stays negative on a
-spend. Round half-up to 4 dp.
+spend. Round half-up to 4 dp. A missing or malformed `LineAmount` (or, for `Inclusive`, a missing
+`TaxAmount`) leaves the amount **null**, never 0; such a line makes the document totals null.
+`source_unit_amount` is NUMERIC(18,6).
 
 **Line identity.** Two branches. **With a `LineItemID`**: `line_key` = that id; a later sync
 updates the row in place whatever changed. **Without**: `line_key = pos:<n>`; the `fingerprint`
@@ -1229,8 +1234,8 @@ other `EXPENSE` account → `not_stock`. ("Current" does not match `rent`: no wo
 
 **Unit of work and failure.**
 1. If the org lacks the `costing` feature: `purchases_status = not_enabled`; nothing else.
-2. `start_date` is persisted (committed on its own) before any scope or API check, the first
-   time the phase runs for the org: today in NZ time. It is the activation anchor and never
+2. `start_date` is set with the sync job row (same commit, before any sales or purchases work),
+   the first time a costing org syncs: today in NZ time. It is the activation anchor and never
    moves on its own.
 3. Scopes: only a **non-blank** stored scope list that lacks `accounting.banktransactions.read`
    or `accounting.settings.read` is rejected up front (`needs_reconnect`); a blank or null list
@@ -1240,7 +1245,9 @@ other `EXPENSE` account → `not_stock`. ("Current" does not match `rent`: no wo
    `purchases_tenant_id` / `base_currency` are written in **one savepoint**. Helpers never
    commit. Any other failure rolls back only that savepoint (account-cache changes included),
    adds an error and sets `purchases_status = failed`.
-5. The job is finalised once, with its purchases fields, in the sync's own commit. A sync
+5. An expired token during the purchases phase is recorded as `failed` with an error, not
+   raised, so the job is still finalised. The job is finalised once, with its purchases
+   fields, in the sync's own commit. A sync
    whose sales phases succeeded (even with zero rows) and whose purchases phase failed is
    `partial`. The sales cursor only advances on a fully successful sync, as today; re-fetching
    sales is idempotent.
