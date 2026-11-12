@@ -537,8 +537,17 @@ def _lot_abv(
     item: InventoryItem,
     profile: AlcoholProductProfile | None,
     step: ExecutionStep | None = None,
+    *,
+    step_first: bool = False,
 ) -> Decimal | None:
-    raw = (item.extra_data or {}).get("abv_percent")
+    """ABV from the lot, else the step that made it, else the product profile. ``step_first``: the
+    caller names the producing step (an output reconciled into an older lot), so that step's ABV
+    wins over whatever the older lot recorded."""
+    raw = None
+    if step_first and step is not None:
+        raw = (step.execution_data or {}).get(ABV_PROMPT_LABEL)
+    if raw in (None, ""):
+        raw = (item.extra_data or {}).get("abv_percent")
     if raw in (None, "") and (item.source_execution_step_id or step is not None):
         step = step or session.get(ExecutionStep, item.source_execution_step_id)
         raw = (step.execution_data or {}).get(ABV_PROMPT_LABEL) if step is not None else None
@@ -860,7 +869,7 @@ def measure(
         override = step_overrides[index] if step_overrides is not None else None
         override_id = override if isinstance(override, UUID) else override.id if override is not None else None
         step = steps.get(override_id) if override_id is not None else steps.get(item.source_execution_step_id)
-        abv = _lot_abv(session, item, profile, step)
+        abv = _lot_abv(session, item, profile, step, step_first=override_id is not None)
         lal = (litres * abv / 100).quantize(_Q4, ROUND_HALF_UP) if litres is not None and abv is not None else None
         rate = resolve_rate(rates, tariff_item_for(profile, abv), on) if profile else None
         duty = duty_for(rate, litres.quantize(_Q4, ROUND_HALF_UP), lal) if lal is not None else None
