@@ -11,7 +11,6 @@ The third is the business turning it on. Records made without a site always land
 default site, whatever the gates say.
 """
 
-from app.core.db.models.feature_subscription import FeatureSubscription
 from app.utils.config_loader import config
 
 FEATURE_KEY = "multi_site"
@@ -21,16 +20,10 @@ def entitled(session, org_id) -> bool:
     """The deployment and the organisation's subscription both allow multiple sites."""
     if not config.multi_site_enabled:
         return False
-    return (
-        session.query(FeatureSubscription.id)
-        .filter(
-            FeatureSubscription.org_id == org_id,
-            FeatureSubscription.feature_key == FEATURE_KEY,
-            FeatureSubscription.active.is_(True),
-        )
-        .first()
-        is not None
-    )
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    # Through the repository so a request reads the org's features once (cached per request).
+    return FeatureSubscriptionRepository(session).is_active(org_id, FEATURE_KEY)
 
 
 def sites_on(session, org_id, multiple_sites_enabled: bool) -> bool:

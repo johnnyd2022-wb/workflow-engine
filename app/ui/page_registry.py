@@ -20,7 +20,7 @@ class Page:
     tab: str | None  # the section sub-nav tab it is shown under; None for a section root or a page with no tab
     title: str
     parent: str | None = None  # path of the page a breadcrumb leads back to; None for a tab's own page
-    feature: str | None = None  # feature flag/subscription the page needs: "crm" or "compliant"
+    feature: str | None = None  # feature flag/subscription the page needs: "crm", "compliant" or "costing"
 
 
 PAGES: tuple[Page, ...] = (
@@ -67,9 +67,9 @@ PAGES: tuple[Page, ...] = (
     Page("/core/stocktake", "production", "inventory", "Stocktake", "/core/inventory/view", None),
     Page("/core/sourcemap", "production", "inventory", "Trace and recall", "/core/inventory/view", None),
     Page("/core/site-transfers", "production", "inventory", "Stock transfers", "/core/inventory/view", None),
-    Page("/core/costing/purchases", "production", "purchases", "Purchases", None, None),
-    Page("/core/costing/costs", "production", "costs", "Costs", None, None),
-    Page("/core/costing/rules", "production", "purchases", "Purchase rules", "/core/costing/purchases", None),
+    Page("/core/costing/purchases", "production", "purchases", "Purchases", None, "costing"),
+    Page("/core/costing/costs", "production", "costs", "Costs", None, "costing"),
+    Page("/core/costing/rules", "production", "purchases", "Purchase rules", "/core/costing/purchases", "costing"),
     Page("/core/contracts", "production", "contracts", "Contract orders", None, None),
     Page("/core/contracts/materials", "production", "contracts", "Customer materials", "/core/contracts", None),
     Page("/core/suppliers", "production", "suppliers", "Suppliers", None, None),

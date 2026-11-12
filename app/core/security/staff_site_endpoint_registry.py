@@ -201,7 +201,7 @@ ENDPOINT_COVERAGE = {
     ("core.list_untracked_items", "GET"): "blocked",
     ("core.list_wastage", "GET"): "blocked",
     ("core.notifications_page", "GET"): "blocked",
-    ("core.attention_items", "GET"): "blocked",
+    ("attention.attention_items", "GET"): "blocked",
     ("core.process_docs_config", "GET"): "blocked",
     ("core.process_docs_delete", "DELETE"): "blocked",
     ("core.process_docs_download", "GET"): "blocked",

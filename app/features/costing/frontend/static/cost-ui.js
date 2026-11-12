@@ -20,6 +20,11 @@
     var meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : '';
   }
+  /* One retry key per logical action (remove this entry, mark this lot free), kept until the
+     server answers for certain, so a retry after a lost reply replays instead of repeating. */
+  var actionKeys = {};
+  function keyFor(id) { return actionKeys[id] || (actionKeys[id] = newKey()); }
+  function settle(id, err) { if (!err || (err.status && err.status < 500 && err.status !== 409)) delete actionKeys[id]; }
   function newKey() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
     return 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -155,9 +160,10 @@
               remove.setAttribute('aria-label', 'Remove ' + label);
               remove.addEventListener('click', function () {
                 remove.disabled = true;
-                request('DELETE', API + '/lots/' + encodeURIComponent(itemId) + '/cost/' + encodeURIComponent(entry.id), null, newKey())
-                  .then(function (next) { render(next); if (options.onChange) options.onChange(next); })
-                  .catch(function (err) { remove.disabled = false; showError(err.message); });
+                var removeId = 'delete:' + entry.id;
+                request('DELETE', API + '/lots/' + encodeURIComponent(itemId) + '/cost/' + encodeURIComponent(entry.id), null, keyFor(removeId))
+                  .then(function (next) { settle(removeId); render(next); if (options.onChange) options.onChange(next); })
+                  .catch(function (err) { settle(removeId, err); remove.disabled = false; showError(err.message); });
               });
               li.appendChild(remove);
             }
@@ -224,9 +230,9 @@
         });
         free.addEventListener('click', function () {
           free.disabled = true;
-          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'free', replace: 'all' }, newKey())
-            .then(function (next) { render(next); if (options.onChange) options.onChange(next); })
-            .catch(function (err) { free.disabled = false; showError(err.message); });
+          request('PUT', API + '/lots/' + encodeURIComponent(itemId) + '/cost', { kind: 'free', replace: 'all' }, keyFor('free:' + itemId))
+            .then(function (next) { settle('free:' + itemId); render(next); if (options.onChange) options.onChange(next); })
+            .catch(function (err) { settle('free:' + itemId, err); free.disabled = false; showError(err.message); });
         });
         return wrap;
       }
@@ -379,7 +385,8 @@
     handle.ready.then(function (who) {
       if (!who.can_manage) return;
       var wrap = el('div', 'cost-add-field ' + (options.className || ''));
-      var id = 'cost-total-paid-' + Math.random().toString(36).slice(2, 8);
+      // Stable id (one field per form): a boosted visit must render the same page as a full load.
+      var id = options.id || 'cost-total-paid';
       var label = el('label', options.labelClass || 'cost-field__label', 'Total paid (ex GST) ');
       label.htmlFor = id;
       label.appendChild(el('span', 'cost-optional', '(optional)'));

@@ -44,3 +44,23 @@ def collect(db, org_id: UUID, user) -> list[dict]:
             except Exception:  # noqa: BLE001
                 pass
     return items
+
+
+def _blueprint():
+    from flask import Blueprint, g, jsonify
+
+    from app.core.db import db_session
+    from app.core.security.permissions import requires_auth
+
+    bp = Blueprint("attention", __name__)
+
+    @bp.route("/api/core/attention", methods=["GET"])
+    @requires_auth
+    def attention_items():
+        """Feature-contributed things that need this user (Home, Notifications)."""
+        return jsonify({"items": collect(db_session, UUID(str(g.org_id)), getattr(g, "current_user", None))})
+
+    return bp
+
+
+attention_bp = _blueprint()

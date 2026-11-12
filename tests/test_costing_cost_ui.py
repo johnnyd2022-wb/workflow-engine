@@ -166,3 +166,24 @@ def test_rules_linked_from_settings_only_with_costing(flask_app, db):  # noqa: F
         assert 'href="/core/costing/rules"' not in client.get("/crm/configuration").get_data(as_text=True)
     finally:
         purge(db, org)
+
+
+def test_feature_cache_is_per_request_and_forgets_on_grant(flask_app, db):  # noqa: F811
+    """Feature checks read one cached set per request (nav query budget); a grant or revoke in
+    the same request is seen, and nothing carries over between requests."""
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    org = new_org(db, grant=False)
+    try:
+        repo = FeatureSubscriptionRepository(db)
+        with flask_app.test_request_context("/"):
+            assert repo.is_active(org.id, "costing") is False
+            repo.grant(org.id, "costing")
+            assert repo.is_active(org.id, "costing") is True
+            repo.revoke(org.id, "costing")
+            assert repo.is_active(org.id, "costing") is False
+        repo.grant(org.id, "costing")
+        with flask_app.test_request_context("/"):
+            assert repo.is_active(org.id, "costing") is True
+    finally:
+        purge(db, org)

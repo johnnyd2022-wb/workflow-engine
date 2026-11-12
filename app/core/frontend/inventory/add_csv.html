@@ -471,7 +471,8 @@
             showDropZoneOnly();
           }
         }).catch(function(err) {
-          if (err && err.status && err.status < 500) {
+          // 409 "still in progress" isn't final: the first save may yet land, so keep the key.
+          if (err && err.status && err.status < 500 && err.status !== 409) {
             S.commitKey = null; // refused for certain: nothing was added
             window.showNotification && window.showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
             showDropZoneOnly();
