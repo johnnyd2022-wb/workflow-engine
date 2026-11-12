@@ -18,6 +18,7 @@ from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth, requires_permission
 from app.features.costing import FEATURE_KEY, service
 from app.features.costing.engine import CostEngine
+from app.features.costing.rules import RuleConflictError
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -174,6 +175,8 @@ def _parse_date(raw):
 
     if not raw:
         return None
+    if not isinstance(raw, str):
+        raise service.CostingError("Dates are YYYY-MM-DD")
     try:
         return date.fromisoformat(raw)
     except ValueError:
@@ -185,13 +188,13 @@ def _parse_date(raw):
 def list_purchases():
     from app.features.costing import actions
 
+    historical = request.args.get("historical") in ("1", "true")
+    date_from, date_to = _parse_date(request.args.get("from")), _parse_date(request.args.get("to"))
+    if historical and (date_from is None or date_to is None or date_from > date_to):
+        raise service.CostingError("Historical lists need from and to (YYYY-MM-DD), from on or before to")
     return jsonify(
         actions.list_purchases(
-            db_session,
-            _org(),
-            request.args.get("tab", "to_record"),
-            _parse_date(request.args.get("from")),
-            _parse_date(request.args.get("to")),
+            db_session, _org(), request.args.get("tab", "to_record"), date_from, date_to, historical=historical
         )
     )
 
@@ -250,10 +253,17 @@ def _simple(action_name):
             if choice == "unlink" and not has_permission(g.current_user, "inventory.adjust"):
                 return jsonify({"error": "Unlinking a purchase from stock needs inventory.adjust"}), 403
             actions.review(db_session, _org(), line_id, choice)
+        elif action_name == "not-stock":
+            body = request.get_json(silent=True) or {}
+            if not isinstance(body, dict) or set(body) - {"always"} or not isinstance(body.get("always", False), bool):
+                raise service.CostingError('Send nothing, or {"always": true}')
+            line = actions.not_stock(db_session, _org(), line_id)
+            if body.get("always"):
+                from app.features.costing import rules
+
+                rules.not_stock_rule(db_session, _org(), line, actions._document(db_session, line), user_id=_user_id())
         else:
-            {"not-stock": actions.not_stock, "skip": actions.skip, "reopen": actions.reopen}[action_name](
-                db_session, _org(), line_id
-            )
+            {"skip": actions.skip, "reopen": actions.reopen}[action_name](db_session, _org(), line_id)
         db_session.commit()
         return _purchase_card(line_id)
 
@@ -279,3 +289,174 @@ def edit_purchase_allocations(line_id):
     actions.edit_allocations(db_session, _org(), line_id, _body().get("allocations"))
     db_session.commit()
     return _purchase_card(line_id)
+
+
+# --- 8.1c-2: rules, remember, bulk, historical runs ---------------------------------------------------
+
+
+@costing_bp.errorhandler(RuleConflictError)
+def _conflict(error):
+    db_session.rollback()
+    return jsonify({"error": str(error)}), 409
+
+
+@costing_bp.route(f"{API}/rules", methods=["GET"])
+@requires_auth
+def list_rules():
+    from app.features.costing import rules
+    from app.features.costing.models import PurchaseRule
+
+    rows = (
+        db_session.query(PurchaseRule)
+        .filter(PurchaseRule.org_id == _org())
+        .order_by(PurchaseRule.created_at, PurchaseRule.id)
+        .all()
+    )
+    return jsonify({"rules": [rules.as_dict(r) for r in rows]})
+
+
+@costing_bp.route(f"{API}/rules", methods=["POST"])
+@requires_auth
+def create_rule():
+    from app.features.costing import rules
+
+    rule = rules.create(db_session, _org(), _body(), user_id=_user_id())
+    db_session.commit()
+    return jsonify(rules.as_dict(rule)), 201
+
+
+@costing_bp.route(f"{API}/rules/<rule_id>", methods=["PUT"])
+@requires_auth
+def update_rule(rule_id):
+    from app.features.costing import rules
+
+    rule = rules.update(db_session, _org(), rule_id, _body())
+    db_session.commit()
+    return jsonify(rules.as_dict(rule))
+
+
+@costing_bp.route(f"{API}/rules/<rule_id>", methods=["DELETE"])
+@requires_auth
+def delete_rule(rule_id):
+    from app.features.costing import rules
+
+    rules.delete(db_session, _org(), rule_id)
+    db_session.commit()
+    return jsonify({"deleted": True})
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/remember", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_purchase_remember")
+def remember_purchase(line_id):
+    from app.features.costing import rules
+
+    rule = rules.remember(db_session, _org(), line_id, user_id=_user_id())
+    db_session.commit()
+    return jsonify(rules.as_dict(rule)), 201
+
+
+BULK_ACTIONS = ("skip", "not_stock", "apply_rule")
+
+
+@costing_bp.route(f"{API}/purchases/bulk", methods=["POST"])
+@requires_auth
+def bulk_purchases():
+    from app.features.costing import actions, rules
+    from app.features.costing.purchase_sources import classify_line
+    from app.features.crm.models.xero_account import XeroAccount
+
+    data = _body()
+    ids, action = data.get("line_ids"), data.get("action")
+    if action not in BULK_ACTIONS:
+        raise service.CostingError(f"action must be one of {', '.join(BULK_ACTIONS)}")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 200:
+        raise service.CostingError("Send 1 to 200 line_ids")
+    if len({str(i) for i in ids}) != len(ids):
+        raise service.CostingError("Each line can appear only once")
+    org = _org()
+    active = rules.active_rules(db_session, org) if action == "apply_rule" else None
+    results = []
+    for raw in ids:
+        try:
+            with db_session.begin_nested():
+                if action == "skip":
+                    actions.skip(db_session, org, raw)
+                    results.append({"line_id": str(raw), "ok": True})
+                elif action == "not_stock":
+                    actions.not_stock(db_session, org, raw)
+                    results.append({"line_id": str(raw), "ok": True})
+                else:
+                    line = actions.get_line(db_session, org, raw)
+                    doc = actions._document(db_session, line)
+                    # A rule may only re-treat a live line nobody has recorded: open/skipped, on an
+                    # active document, not superseded, with no active or orphaned allocation.
+                    if (
+                        doc.status != "active"
+                        or line.superseded_at is not None
+                        or line.state not in ("open", "skipped")
+                        or actions.line_allocations(db_session, line, statuses=("active", "orphaned"))
+                    ):
+                        raise service.CostingError("Only open or skipped purchases with nothing recorded")
+                    account = (
+                        # nosemgrep: sqlalchemy-query-in-for-loop — bulk acts per line in its own savepoint (max 200).
+                        db_session.query(XeroAccount)
+                        .filter(XeroAccount.org_id == org, XeroAccount.id == line.account_id)
+                        .one()
+                    )
+                    before = line.treatment
+                    classify_line(line, account, payee=doc.payee_name, rules=active)
+                    actions.on_line_treatment_changed(db_session, line, before, line.treatment)
+                    db_session.flush()
+                    results.append(
+                        {"line_id": str(raw), "ok": True, "card": actions.card(db_session, line, doc, rules=active)}
+                    )
+        except service.CostingNotFoundError:
+            results.append({"line_id": str(raw), "ok": False, "error": "not found"})
+        except service.CostingError as error:
+            results.append({"line_id": str(raw), "ok": False, "error": str(error)})
+    db_session.commit()
+    return jsonify({"results": results})
+
+
+@costing_bp.route(f"{API}/purchases/historical-run", methods=["POST"])
+@requires_auth
+def historical_run():
+    from app.features.costing.purchase_sources import nz_today
+    from app.features.crm.services.xero_sync_service import PurchasesNeedReconnectError, XeroSyncService
+
+    data = _body()
+    if set(data) - {"from", "to"} or not data.get("from") or not data.get("to"):
+        raise service.CostingError("Send from and to (YYYY-MM-DD)")
+    date_from, date_to = _parse_date(data["from"]), _parse_date(data["to"])
+    if date_from > date_to:
+        raise service.CostingError("from is after to")
+    if date_to > nz_today():
+        raise service.CostingError("to can't be in the future")
+    try:
+        three_years_on = date_from.replace(year=date_from.year + 3)
+    except ValueError:  # 29 Feb
+        three_years_on = date_from.replace(year=date_from.year + 3, day=28)
+    if date_to >= three_years_on:
+        raise service.CostingError("A historical run covers at most 3 years")
+    try:
+        stats = XeroSyncService(db_session).historical_purchases(_org(), date_from, date_to)
+    except PurchasesNeedReconnectError as error:
+        db_session.rollback()
+        return jsonify({"error": str(error), "code": "needs_reconnect"}), 409
+    except Exception as error:  # noqa: BLE001 - never echo Xero/SQL internals to the caller
+        from uuid import uuid4
+
+        db_session.rollback()
+        ref = uuid4().hex[:12]
+        logger.exception("costing_historical_run_failed", org_id=str(_org()), ref=ref, error_type=type(error).__name__)
+        return jsonify({"error": f"The historical run failed (ref {ref})", "code": "historical_failed"}), 502
+    db_session.commit()
+    return jsonify(
+        {
+            "documents": stats["documents"],
+            "lines": stats["lines"],
+            "from": date_from.isoformat(),
+            "to": date_to.isoformat(),
+        }
+    )

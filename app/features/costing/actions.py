@@ -589,22 +589,32 @@ def _in_flows(db: Session, org_id: UUID, item_id: UUID) -> list[CostFlow]:
 # --- the list and its tabs ----------------------------------------------------------------------------
 
 
-def tab_of(line: PurchaseLine, doc: PurchaseDocument, start_date: date | None) -> str | None:
-    """Spec "Tabs": one rule, first match wins."""
+def tab_of(line: PurchaseLine, doc: PurchaseDocument, start_date: date | None, historical: bool = False) -> str | None:
+    """Spec "Tabs": one rule, first match wins. Historical mode (8.1c-2) ignores the start date
+    and lists skipped lines as actionable."""
     if line.review_reason:
         return "to_record"
     if line.superseded_at is not None or doc.status != "active" or line.treatment != "stock":
         return None
     if line.amount_ex_tax is None:
         return None
+    if historical and line.state == "skipped":
+        return "to_record"
     if line.state in ("open", "partly_recorded"):
-        if start_date is not None and doc.document_date is not None and doc.document_date < start_date:
+        if (
+            not historical
+            and start_date is not None
+            and doc.document_date is not None
+            and doc.document_date < start_date
+        ):
             return None
         return "to_record"
     return {"recorded": "recorded", "skipped": "skipped", "not_stock": "not_stock"}.get(line.state)
 
 
-def list_purchases(db: Session, org_id: UUID, tab: str, date_from: date | None, date_to: date | None) -> dict:
+def list_purchases(
+    db: Session, org_id: UUID, tab: str, date_from: date | None, date_to: date | None, historical: bool = False
+) -> dict:
     if tab not in TABS:
         raise CostingError(f"tab must be one of {', '.join(TABS)}")
     settings = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
@@ -619,25 +629,35 @@ def list_purchases(db: Session, org_id: UUID, tab: str, date_from: date | None, 
         .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.position)
         .all()
     )
+    from app.features.costing.rules import active_rules
+
+    rules = active_rules(db, org_id)
     counts = {t: 0 for t in TABS}
     cards = []
+    history = None  # built once, on the first card that needs it
     for line, doc in rows:
         if date_from and (doc.document_date is None or doc.document_date < date_from):
             continue
         if date_to and (doc.document_date is None or doc.document_date > date_to):
             continue
-        which = tab_of(line, doc, start_date)
+        which = tab_of(line, doc, start_date, historical)
         if which is None:
             continue
         counts[which] += 1
         if which == tab:
-            cards.append(card(db, line, doc))
+            if history is None and tab == "to_record":
+                history = last_time_index(db, org_id)
+            entry = card(db, line, doc, rules=rules, history=history)
+            if historical and which == "not_stock":
+                entry["undo"] = True
+            cards.append(entry)
     return {"tab": tab, "counts": counts, "cards": cards}
 
 
-def card(db: Session, line: PurchaseLine, doc: PurchaseDocument) -> dict:
+def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
     return {
+        "prefill": prefill(db, line, doc, remaining, rules, history),
         "line_id": str(line.id),
         "document": {
             "payee": doc.payee_name,
@@ -808,3 +828,156 @@ def on_line_gone(db: Session, line: PurchaseLine, cause: str = "gone") -> None:
     """Voided in Xero (cause ``void``), superseded or retired (``gone``): what was recorded
     goes to review."""
     _orphan(db, line, "deleted_in_xero", cause)
+
+
+# --- pre-fill (8.1c-2) -----------------------------------------------------------------------------
+
+
+def _ask_flags(row: dict) -> list[str]:
+    ask = []
+    if row.get("quantity_mode") == "ask":
+        ask.append("quantity")
+    if row.get("ask_batch_number"):
+        ask.append("batch_number")
+    if row.get("ask_expiry"):
+        ask.append("expiry")
+    return ask
+
+
+def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
+    """Normalised payee -> the two newest live recorded spend lines that still price something
+    (two, so a card can skip itself). One query per request: a list builds it once for every
+    card. Payees are compared with the rules' own normalisation (casefold, not SQL lower)."""
+    from app.features.costing.rules import normalise
+
+    has_active = (
+        db.query(PurchaseAllocation.id)
+        .filter(
+            PurchaseAllocation.org_id == PurchaseLine.org_id,
+            PurchaseAllocation.purchase_line_id == PurchaseLine.id,
+            PurchaseAllocation.status == "active",
+            PurchaseAllocation.amount > 0,
+        )
+        .exists()
+    )
+    rows = (
+        db.query(PurchaseLine.id, PurchaseDocument.payee_name)
+        .join(
+            PurchaseDocument,
+            (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
+        )
+        .filter(
+            PurchaseLine.org_id == org_id,
+            PurchaseLine.superseded_at.is_(None),
+            PurchaseLine.state.in_(("recorded", "partly_recorded")),
+            PurchaseLine.amount_ex_tax.isnot(None),
+            PurchaseLine.amount_ex_tax != 0,
+            PurchaseDocument.kind == "spend",
+            PurchaseDocument.status == "active",
+            has_active,
+        )
+        .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
+        .all()
+    )
+    index: dict[str, list] = {}
+    for line_id, payee in rows:
+        key = normalise(payee)
+        if key:
+            bucket = index.setdefault(key, [])
+            if len(bucket) < 2:
+                bucket.append(line_id)
+    return index
+
+
+def prefill(
+    db: Session,
+    line: PurchaseLine,
+    doc: PurchaseDocument,
+    remaining: Decimal | None,
+    rules=None,
+    history: dict | None = None,
+):
+    """Spec "Pre-fill": the winning stock rule's template, else last time for this payee, else
+    one empty row for the whole open amount."""
+    if doc.kind != "spend" or remaining is None:
+        return None
+    from app.features.costing.rules import active_rules, normalise, winner
+
+    rules = active_rules(db, line.org_id) if rules is None else rules
+    rule = winner(rules, line.account_code, doc.payee_name, line.description)
+    if rule is not None and rule.treatment == "stock" and rule.template:
+        rows, used, rest_index = [], ZERO, None
+        for i, t in enumerate(rule.template):
+            if t.get("share") == "rest":
+                amount = None
+                rest_index = i
+            else:
+                amount = _q(remaining * _d(t["share"]) / 100)
+                used += amount
+            rows.append([t, amount])
+        if rest_index is not None:
+            rows[rest_index][1] = max(ZERO, remaining - used)
+        out = []
+        for t, amount in rows:
+            amount = amount if amount is not None else ZERO
+            mode = t.get("quantity_mode")
+            if mode == "fixed":
+                quantity = str(_d(t["quantity"]))
+            elif mode == "from_price" and _d(t.get("unit_price")) > 0:
+                quantity = str(_q(amount / _d(t["unit_price"])))
+            else:
+                quantity = None
+            out.append(
+                {
+                    "name": t["name"],
+                    "inventory_type": t.get("inventory_type", "raw_material"),
+                    "unit": t["unit"],
+                    "quantity": quantity,
+                    "amount": str(_q(amount)),
+                    "ask": _ask_flags(t),
+                }
+            )
+        return {"source": "rule", "rule_id": str(rule.id), "rows": out}
+
+    payee = normalise(doc.payee_name)
+    if payee:
+        history = last_time_index(db, line.org_id) if history is None else history
+        match = next((lid for lid in history.get(payee, ()) if lid != line.id), None)
+        if match is not None:
+            prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
+            allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
+            items = {
+                i.id: i
+                for i in db.query(InventoryItem).filter(
+                    InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
+                )
+            }
+            out = []
+            for a in allocs:
+                item = items[a.inventory_item_id]
+                out.append(
+                    {
+                        "name": item.name,
+                        "inventory_type": item.inventory_type,
+                        "unit": item.unit,
+                        "quantity": str(_d(a.quantity)),
+                        "amount": str(_q(remaining * _d(a.amount) / _d(prev.amount_ex_tax))),
+                        "ask": [],
+                    }
+                )
+            return {"source": "last_time", "rule_id": None, "rows": out}
+
+    return {
+        "source": "none",
+        "rule_id": None,
+        "rows": [
+            {
+                "name": None,
+                "inventory_type": InventoryType.RAW_MATERIAL.value,
+                "unit": None,
+                "quantity": None,
+                "amount": str(_q(remaining)),
+                "ask": ["name", "unit", "quantity"],
+            }
+        ],
+    }

@@ -22,7 +22,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
@@ -170,6 +170,8 @@ class CostingSettings(TenantScoped, Base):
     start_date = Column(Date, nullable=True)
     purchases_cursor = Column(DateTime(timezone=True), nullable=True)
     purchases_tenant_id = Column(String(100), nullable=True)
+    last_history_from = Column(Date, nullable=True)  # 8.1c-2: the last historical run, for "resume"
+    last_history_to = Column(Date, nullable=True)
     base_currency = Column(String(3), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
@@ -246,6 +248,13 @@ class PurchaseLine(TenantScoped, Base):
             postgresql_where=sa.text("superseded_at IS NULL"),
         ),
         Index("ix_purchase_lines_org_account", "org_id", "account_id"),
+        ForeignKeyConstraint(
+            ["org_id", "treatment_rule_id"],
+            ["purchase_rules.org_id", "purchase_rules.id"],
+            name="fk_purchase_lines_rule",
+            ondelete="SET NULL (treatment_rule_id)",
+            use_alter=True,
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -268,6 +277,7 @@ class PurchaseLine(TenantScoped, Base):
     state = Column(String(20), nullable=False, default="open", server_default="open")
     not_stock_amount = Column(Numeric(18, 4), nullable=False, default=0, server_default="0")
     review_reason = Column(String(20), nullable=True)
+    treatment_rule_id = Column(UUID(as_uuid=True), nullable=True)  # 8.1c-2: the rule that decided
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -312,6 +322,45 @@ class PurchaseAllocation(TenantScoped, Base):
     quantity = Column(Numeric(18, 4), nullable=False)
     status = Column(String(10), nullable=False, default="active", server_default="active")
     orphaned_by = Column(String(10), nullable=True)  # void | gone | amount: why it was orphaned
+    created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PurchaseRule(TenantScoped, Base):
+    """How to treat (and pre-fill) purchases matching a payee / description / account.
+    Patterns are stored normalised. Spec "8.1c-2 build contract"."""
+
+    __tablename__ = "purchase_rules"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_purchase_rules_org_id"),
+        CheckConstraint(
+            "account_code IS NOT NULL OR payee_pattern IS NOT NULL OR description_pattern IS NOT NULL",
+            name="ck_purchase_rules_matcher",
+        ),
+        CheckConstraint("match_type IN ('exact','contains')", name="ck_purchase_rules_match_type"),
+        CheckConstraint("treatment IN ('stock','not_stock','duty','overhead')", name="ck_purchase_rules_treatment"),
+        CheckConstraint("template IS NULL OR treatment = 'stock'", name="ck_purchase_rules_template_stock"),
+        Index(
+            "uq_purchase_rules_matchers",
+            "org_id",
+            sa.text("coalesce(account_code, '')"),
+            sa.text("coalesce(payee_pattern, '')"),
+            sa.text("coalesce(description_pattern, '')"),
+            "match_type",
+            unique=True,
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    account_code = Column(String(50), nullable=True)
+    payee_pattern = Column(String(255), nullable=True)
+    description_pattern = Column(String(500), nullable=True)
+    match_type = Column(String(10), nullable=False, default="exact")
+    treatment = Column(String(20), nullable=False)
+    template = Column(JSONB(none_as_null=True), nullable=True)  # Python None is SQL NULL, not JSON null
+    auto_record = Column(Boolean, nullable=False, default=False, server_default=sa.false())
+    is_active = Column(Boolean, nullable=False, default=True, server_default=sa.true())
     created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

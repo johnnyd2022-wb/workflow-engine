@@ -83,10 +83,15 @@ def default_treatment(account_type: str | None, account_class: str | None, name:
     return "stock" if (account_type or "").upper() == "DIRECTCOSTS" else "not_stock"
 
 
-def classify_line(line: PurchaseLine, account: XeroAccount) -> str:
-    """The one place a line's treatment is decided. 8.1b: the account's effective treatment.
-    8.1c adds rule and manual precedence here, so nothing else may write ``treatment``."""
-    return account.treatment
+def classify_line(line: PurchaseLine, account: XeroAccount, *, payee: str | None = None, rules=None) -> str:
+    """The one place a line's treatment is decided: the winning purchase rule (8.1c-2), else the
+    account's effective treatment. Sets ``treatment`` and ``treatment_rule_id``."""
+    from app.features.costing.rules import winner
+
+    rule = winner(rules or [], line.account_code, payee, line.description) if rules else None
+    line.treatment = rule.treatment if rule is not None else account.treatment
+    line.treatment_rule_id = rule.id if rule is not None else None
+    return line.treatment
 
 
 # --- accounts ----------------------------------------------------------------------------------
@@ -164,12 +169,24 @@ def reclassify_account_lines(db: Session, org_id: UUID, account: XeroAccount) ->
         .all()
     )
     from app.features.costing.actions import lock_lines, on_line_treatment_changed
+    from app.features.costing.models import PurchaseDocument
+    from app.features.costing.rules import active_rules
 
+    rules = active_rules(db, org_id)
+    payees = (
+        dict(
+            db.query(PurchaseDocument.id, PurchaseDocument.payee_name).filter(
+                PurchaseDocument.org_id == org_id, PurchaseDocument.id.in_({ln.document_id for ln in lines})
+            )
+        )
+        if lines
+        else {}
+    )
     for ln in lock_lines(db, org_id, [ln.id for ln in lines]):
         if ln.superseded_at is not None:
             continue
         before = ln.treatment
-        ln.treatment = classify_line(ln, account)
+        classify_line(ln, account, payee=payees.get(ln.document_id), rules=rules)
         on_line_treatment_changed(db, ln, before, ln.treatment)
     db.flush()
     return len(lines)
@@ -282,6 +299,9 @@ def upsert_bank_transactions(
             by_code.setdefault(acct.code, []).append(acct)
     stats = {"documents": 0, "lines": 0, "skipped_lines": 0, "skipped_documents": 0}
     now = utc_now()
+    from app.features.costing.rules import active_rules
+
+    rules = active_rules(db, org_id)
 
     for t in transactions or []:
         kind = STORED_TYPES.get((_text(getattr(t, "type", None)) or "").upper())
@@ -427,13 +447,13 @@ def upsert_bank_transactions(
             if current is None:
                 current = PurchaseLine(org_id=org_id, document_id=doc.id, **row, treatment="not_stock")
                 db.add(current)
-                current.treatment = classify_line(current, acct)
+                classify_line(current, acct, payee=doc.payee_name, rules=rules)
             else:
                 before_amount = current.amount_ex_tax
                 before_treatment = current.treatment
                 for name, value in row.items():
                     setattr(current, name, value)
-                current.treatment = classify_line(current, acct)
+                classify_line(current, acct, payee=doc.payee_name, rules=rules)
                 db.flush()
                 if was_active:
                     on_line_amount_changed(db, current, before_amount)
