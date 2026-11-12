@@ -150,6 +150,8 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             if row is not None:
                 if quantity > ZERO:
                     row["unconverted"] += 1
+                    if purchase_id is not None:
+                        row["purchases"].add(purchase_id)
             return  # a refund on a lot priced in another unit belongs to a price left out above
         converted_amount = amount
         converted_quantity = quantity / factor if quantity > ZERO else ZERO
@@ -177,89 +179,8 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             if purchase_id is not None and quantity > ZERO:
                 row["purchases"].add(purchase_id)
 
-    direct_flows = {}
-    for item_id in by_id:
-        direct_flows[item_id] = [
-            flow for flow in engine._in_flows(item_id) if flow.kind not in ("produced", "reconciled_in", "transfer_in")
-        ]
-    direct_flow_ids = {item_id: {flow.id for flow in item_flows} for item_id, item_flows in direct_flows.items()}
-
-    for allocation, _line, document in allocations:
-        item = by_id[allocation.inventory_item_id]
-        amount, quantity = Decimal(str(allocation.amount)), Decimal(str(allocation.quantity))
-        if not amount.is_finite() or not quantity.is_finite():
-            continue
-        # Refunds carry no quantity and reduce the amount in their purchase document month.
-        if amount >= ZERO and quantity > ZERO and allocation.cost_flow_id not in direct_flow_ids[item.id]:
-            # Flow allocations are added below with the same proportional cap as manual entries.
-            add_fact(item, document.document_date, amount, quantity, "purchase", str(document.id), allocation.id)
-        elif amount < ZERO:
-            add_fact(item, document.document_date, amount, ZERO, "refund", str(document.id), allocation.id)
-    for item_id, item in by_id.items():
-        item_entries = entries_by_lot[item_id]
-        whole = next((entry for entry in item_entries if entry.cost_flow_id is None), None)
-        flow_entries: dict[UUID, list[LotCostEntry]] = defaultdict(list)
-        for entry in item_entries:
-            if entry.cost_flow_id is not None:
-                flow_entries[entry.cost_flow_id].append(entry)
-
-        unpriced_direct = ZERO
-        for flow in direct_flows[item_id]:
-            flow_quantity = Decimal(str(flow.quantity))
-            prices = flow_entries.get(flow.id, [])
-            priced_quantity = sum((Decimal(str(entry.quantity)) for entry in prices), ZERO)
-            flow_allocations = [
-                (allocation, document)
-                for allocation, _line, document in allocations
-                if allocation.inventory_item_id == item_id
-                and allocation.cost_flow_id == flow.id
-                and allocation.amount >= ZERO
-                and allocation.quantity > ZERO
-            ]
-            priced_quantity += sum(
-                (Decimal(str(allocation.quantity)) for allocation, _document in flow_allocations), ZERO
-            )
-            effective_quantity = min(priced_quantity, flow_quantity)
-            scale = effective_quantity / priced_quantity if priced_quantity > ZERO else ZERO
-            for entry in prices:
-                quantity = Decimal(str(entry.quantity)) * scale
-                amount = Decimal(str(entry.amount)) * scale
-                if quantity > ZERO:
-                    add_fact(
-                        item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind, fact_id=entry.id
-                    )
-            for allocation, document in flow_allocations:
-                quantity = Decimal(str(allocation.quantity)) * scale
-                amount = Decimal(str(allocation.amount)) * scale
-                if quantity > ZERO:
-                    add_fact(
-                        item,
-                        document.document_date,
-                        amount,
-                        quantity,
-                        "purchase",
-                        str(document.id),
-                        allocation.id,
-                    )
-            unpriced_direct += flow_quantity - effective_quantity
-
-        if whole is not None:
-            whole_amount = Decimal(str(whole.amount))
-            whole_quantity = Decimal(str(whole.quantity))
-            if unpriced_direct > ZERO:
-                amount = unpriced_direct * whole_amount / whole_quantity
-                add_fact(
-                    item, whole.created_at or datetime.now(UTC), amount, unpriced_direct, whole.kind, fact_id=whole.id
-                )
-            elif not engine._in_flows(item_id):
-                add_fact(
-                    item,
-                    whole.created_at or datetime.now(UTC),
-                    whole_amount,
-                    whole_quantity,
-                    whole.kind,
-                    fact_id=whole.id,
-                )
+    for fact in _effective_facts(engine, by_id, allocations, entries_by_lot):
+        add_fact(*fact)
 
     month_rows = []
     cursor = start
@@ -308,6 +229,98 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     }
 
 
+def _effective_facts(engine, by_id, allocations, entries_by_lot):
+    """Every price fact the engine would use for these lots, as
+    (lot, when, amount, quantity, source, purchase_id, fact_id): purchases, refunds, flow
+    entries capped together with flow allocations, and a whole-lot price only on the direct
+    quantity nothing else priced. History and the picker both read this, so they agree."""
+    facts = []
+
+    def emit(lot, when, amount, quantity, source, purchase_id=None, fact_id=None):
+        facts.append((lot, when, amount, quantity, source, purchase_id, fact_id))
+
+    direct_flows = {}
+    for item_id in by_id:
+        direct_flows[item_id] = [
+            flow for flow in engine._in_flows(item_id) if flow.kind not in ("produced", "reconciled_in", "transfer_in")
+        ]
+    direct_flow_ids = {item_id: {flow.id for flow in item_flows} for item_id, item_flows in direct_flows.items()}
+
+    for allocation, _line, document in allocations:
+        item = by_id[allocation.inventory_item_id]
+        amount, quantity = Decimal(str(allocation.amount)), Decimal(str(allocation.quantity))
+        if not amount.is_finite() or not quantity.is_finite():
+            continue
+        # Refunds carry no quantity and reduce the amount in their purchase document month.
+        if amount >= ZERO and quantity > ZERO and allocation.cost_flow_id not in direct_flow_ids[item.id]:
+            # Flow allocations are added below with the same proportional cap as manual entries.
+            emit(item, document.document_date, amount, quantity, "purchase", str(document.id), allocation.id)
+        elif amount < ZERO:
+            emit(item, document.document_date, amount, ZERO, "refund", str(document.id), allocation.id)
+    for item_id, item in by_id.items():
+        item_entries = entries_by_lot[item_id]
+        whole = next((entry for entry in item_entries if entry.cost_flow_id is None), None)
+        flow_entries: dict[UUID, list[LotCostEntry]] = defaultdict(list)
+        for entry in item_entries:
+            if entry.cost_flow_id is not None:
+                flow_entries[entry.cost_flow_id].append(entry)
+
+        unpriced_direct = ZERO
+        for flow in direct_flows[item_id]:
+            flow_quantity = Decimal(str(flow.quantity))
+            prices = flow_entries.get(flow.id, [])
+            priced_quantity = sum((Decimal(str(entry.quantity)) for entry in prices), ZERO)
+            flow_allocations = [
+                (allocation, document)
+                for allocation, _line, document in allocations
+                if allocation.inventory_item_id == item_id
+                and allocation.cost_flow_id == flow.id
+                and allocation.amount >= ZERO
+                and allocation.quantity > ZERO
+            ]
+            priced_quantity += sum(
+                (Decimal(str(allocation.quantity)) for allocation, _document in flow_allocations), ZERO
+            )
+            effective_quantity = min(priced_quantity, flow_quantity)
+            scale = effective_quantity / priced_quantity if priced_quantity > ZERO else ZERO
+            for entry in prices:
+                quantity = Decimal(str(entry.quantity)) * scale
+                amount = Decimal(str(entry.amount)) * scale
+                if quantity > ZERO:
+                    emit(item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind, fact_id=entry.id)
+            for allocation, document in flow_allocations:
+                quantity = Decimal(str(allocation.quantity)) * scale
+                amount = Decimal(str(allocation.amount)) * scale
+                if quantity > ZERO:
+                    emit(
+                        item,
+                        document.document_date,
+                        amount,
+                        quantity,
+                        "purchase",
+                        str(document.id),
+                        allocation.id,
+                    )
+            unpriced_direct += flow_quantity - effective_quantity
+
+        if whole is not None:
+            whole_amount = Decimal(str(whole.amount))
+            whole_quantity = Decimal(str(whole.quantity))
+            if unpriced_direct > ZERO:
+                amount = unpriced_direct * whole_amount / whole_quantity
+                emit(item, whole.created_at or datetime.now(UTC), amount, unpriced_direct, whole.kind, fact_id=whole.id)
+            elif not engine._in_flows(item_id):
+                emit(
+                    item,
+                    whole.created_at or datetime.now(UTC),
+                    whole_amount,
+                    whole_quantity,
+                    whole.kind,
+                    fact_id=whole.id,
+                )
+    return facts
+
+
 def material_history(db: Session, org_id: UUID, material: str, date_from: str | None, date_to: str | None) -> dict:
     return _history(db, org_id, material, date_from, date_to)
 
@@ -321,6 +334,7 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
     all_lots = [item for group in groups.values() for item in group]
     allocations, entries = _facts(db, org_id, all_lots)
     engine = CostEngine(db, org_id)
+    engine.prime(item.id for item in all_lots)
     allocations_by_item: dict[UUID, list] = defaultdict(list)
     entries_by_item: dict[UUID, list] = defaultdict(list)
     for allocation_row in allocations:
@@ -339,37 +353,31 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
 
 
 def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | None:
-    """Latest direct price fact, bulk-loaded for this material group."""
+    """The latest price for this material group, from the same facts history uses."""
     by_id = {item.id: item for item in lots}
-    latest = None
-    for allocation, _line, document in allocations:
-        if allocation.amount < ZERO or allocation.quantity <= ZERO or document.document_date is None:
-            continue
-        lot = by_id[allocation.inventory_item_id]
-        factor = engine._unit_factor(unit, lot.unit)
-        if factor is None:
-            continue
-        key = (_purchase_datetime(document.document_date), str(document.id), "purchase", str(allocation.id))
-        candidate = (key, Decimal(str(allocation.amount)) / Decimal(str(allocation.quantity)) * factor)
-        if latest is None or candidate[0] > latest[0]:
-            latest = candidate
+    entries_by_lot: dict[UUID, list[LotCostEntry]] = defaultdict(list)
     for entry in entries:
-        if not entry.quantity or entry.quantity <= ZERO:
+        entries_by_lot[entry.inventory_item_id].append(entry)
+    latest = None
+    priced = False
+    for lot, when, amount, quantity, source, purchase_id, fact_id in _effective_facts(
+        engine, by_id, allocations, entries_by_lot
+    ):
+        if quantity <= ZERO:
             continue
-        lot = by_id[entry.inventory_item_id]
+        priced = True
         factor = engine._unit_factor(unit, lot.unit)
         if factor is None:
             continue
-        occurred_at = _nz_datetime(entry.created_at) if entry.created_at else datetime.min.replace(tzinfo=NZ)
-        key = (occurred_at, "", entry.kind, str(entry.id))
-        candidate = (key, Decimal(str(entry.amount)) / Decimal(str(entry.quantity)) * factor)
-        if latest is None or candidate[0] > latest[0]:
-            latest = candidate
-    if latest is None:
+        local_when = _nz_datetime(when) if isinstance(when, datetime) else _purchase_datetime(when)
+        key = (local_when, str(purchase_id or ""), source, str(fact_id or ""))
+        if latest is None or key > latest[0]:
+            latest = (key, amount / quantity * factor)
+    if not priced:
         return None
     return {
         "name": min((item.name for item in lots), key=lambda name: (normalise(name), name.casefold())),
         "unit": unit,
-        "latest_unit_price": unit_str(latest[1]),
-        "latest_date": latest[0][0].date().isoformat(),
+        "latest_unit_price": unit_str(latest[1]) if latest else None,
+        "latest_date": latest[0][0].date().isoformat() if latest else None,
     }
