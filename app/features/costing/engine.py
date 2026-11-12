@@ -776,6 +776,7 @@ class CostEngine:
                 {
                     "inventory_item_id": str(f.inventory_item_id),
                     "flow_id": str(f.id),
+                    "execution_step_id": str(f.execution_step_id) if f.execution_step_id else None,
                     "kind": f.kind,
                     "name": lot.name if lot is not None else None,
                     "step_number": step.step_number,

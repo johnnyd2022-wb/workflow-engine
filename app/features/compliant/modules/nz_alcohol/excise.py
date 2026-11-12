@@ -539,7 +539,7 @@ def _lot_abv(
     step: ExecutionStep | None = None,
 ) -> Decimal | None:
     raw = (item.extra_data or {}).get("abv_percent")
-    if raw in (None, "") and item.source_execution_step_id:
+    if raw in (None, "") and (item.source_execution_step_id or step is not None):
         step = step or session.get(ExecutionStep, item.source_execution_step_id)
         raw = (step.execution_data or {}).get(ABV_PROMPT_LABEL) if step is not None else None
     if raw in (None, "") and profile is not None and profile.abv_percent is not None:
@@ -814,7 +814,13 @@ def _s(value) -> str:
     return f"{Decimal(str(value)).normalize():f}"
 
 
-def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]:
+def measure(
+    session: Session,
+    org_id: UUID,
+    pairs: list,
+    on: date,
+    step_overrides: list[UUID | ExecutionStep | None] | None = None,
+) -> list[dict]:
     """Litres, ABV, LAL and duty at ``on`` for (item, quantity) pairs: stocktake lines, stock position.
 
     Fields are None where they can't be worked out (not an excise product, no pack volume,
@@ -827,6 +833,12 @@ def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]
     }
     rates = session.query(ExciseRate).filter(ExciseRate.org_id == org_id).all()
     step_ids = {item.source_execution_step_id for item, _ in pairs if item.source_execution_step_id}
+    if step_overrides is not None:
+        step_ids.update(
+            override if isinstance(override, UUID) else override.id
+            for override in step_overrides
+            if override is not None
+        )
     steps = (
         {
             step.id: step
@@ -838,14 +850,17 @@ def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]
         else {}
     )
     out = []
-    for item, quantity in pairs:
+    for index, (item, quantity) in enumerate(pairs):
         profile = profiles.get(_base_name(item.name).casefold())
         qty = Decimal(str(quantity))
         if not qty.is_finite():
             out.append({"litres": None, "abv_percent": None, "lal": None, "duty": None})
             continue
         litres = _litres(abs(qty), item.unit, profile)
-        abv = _lot_abv(session, item, profile, steps.get(item.source_execution_step_id))
+        override = step_overrides[index] if step_overrides is not None else None
+        override_id = override if isinstance(override, UUID) else override.id if override is not None else None
+        step = steps.get(override_id) if override_id is not None else steps.get(item.source_execution_step_id)
+        abv = _lot_abv(session, item, profile, step)
         lal = (litres * abv / 100).quantize(_Q4, ROUND_HALF_UP) if litres is not None and abv is not None else None
         rate = resolve_rate(rates, tariff_item_for(profile, abv), on) if profile else None
         duty = duty_for(rate, litres.quantize(_Q4, ROUND_HALF_UP), lal) if lal is not None else None

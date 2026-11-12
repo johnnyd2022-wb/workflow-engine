@@ -41,12 +41,14 @@ def attach(db_session: Session, org_id: UUID, result: dict) -> dict:
         if lot_ids
         else {}
     )
-    pairs = [
-        (lots[item_id], Decimal(str(output["quantity"])))
-        for output, item_id in zip(outputs, lot_ids, strict=True)
-        if item_id in lots
-    ]
-    measured = excise.measure(db_session, org_id, pairs, on)
+    pairs = []
+    step_overrides = []
+    for output, item_id in zip(outputs, lot_ids, strict=True):
+        if item_id not in lots:
+            continue
+        pairs.append((lots[item_id], Decimal(str(output["quantity"]))))
+        step_overrides.append(UUID(output["execution_step_id"]) if output.get("execution_step_id") else None)
+    measured = excise.measure(db_session, org_id, pairs, on, step_overrides=step_overrides)
     duty_by_lot = {}
     for (item, quantity), measure in zip(pairs, measured, strict=True):
         duty_by_lot.setdefault(item.id, []).append((quantity, measure))

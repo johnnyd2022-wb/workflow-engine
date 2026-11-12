@@ -94,6 +94,51 @@ def test_ac115_gin_duty_per_unit_and_landed_cost_match_excise_measure(db, world)
     )
 
 
+def test_reconciled_output_duty_uses_producing_step_abv(db, world):
+    from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
+
+    spirit = lot(db, world["org"].id, "Neutral spirit", 10, "L")
+    execution, (step,) = workflow(db, world["org"].id, [[{"name": "House Gin", "unit": "bottles"}]])
+    existing = lot(
+        db,
+        world["org"].id,
+        "House Gin",
+        100,
+        "bottles",
+        inventory_type="work_in_progress",
+        extra_data={"untracked": True, "remaining_balance_to_reconcile": "100"},
+    )
+    response = world["client"].post(
+        f"/api/core/executions/{execution.id}/steps/{step.id}/complete",
+        json={
+            "actual_inputs": [
+                {"name": spirit.name, "quantity": "10", "unit": "L", "inventory_item_id": str(spirit.id)}
+            ],
+            "actual_outputs": [
+                {
+                    "name": "House Gin",
+                    "quantity": "100",
+                    "unit": "bottles",
+                    "untracked_item_id": str(existing.id),
+                }
+            ],
+            "execution_data": {ABV_PROMPT_LABEL: "40"},
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    body = _response(world, execution)
+    output = body["outputs"][0]
+    assert output["execution_step_id"] == str(step.id)
+    measured = excise.measure(
+        db,
+        world["org"].id,
+        [(existing, Decimal("100"))],
+        date.fromisoformat(body["duty_today"]["on"]),
+        step_overrides=[step.id],
+    )[0]
+    assert output["duty_today"]["total"] == str(Decimal(measured["duty"]).quantize(Decimal("0.0001")))
+
+
 def test_ac116_nz_alcohol_off_is_not_tracked(db, world):
     from app.features.compliant.models.compliance_profile import ComplianceProfile
 
