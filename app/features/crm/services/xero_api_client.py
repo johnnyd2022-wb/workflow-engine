@@ -239,6 +239,51 @@ class XeroAPIClient:
 
         return invoices
 
+    def get_base_currency(self) -> str:
+        """The Xero organisation's base currency code, e.g. "NZD" (live-cogs 8.1b)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        result = self._call_with_retry(api.get_organisations, self._xero_tenant_id)
+        organisations = result.organisations or []
+        if not organisations or organisations[0].base_currency is None:
+            raise ValueError("Xero returned no base currency")
+        currency = organisations[0].base_currency
+        return str(getattr(currency, "value", currency))
+
+    def get_accounts(self) -> list:
+        """The whole chart of accounts (live-cogs 8.1b; needs accounting.settings.read)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        result = self._call_with_retry(api.get_accounts, self._xero_tenant_id)
+        return list(result.accounts or [])
+
+    def get_bank_transactions(self, modified_after: datetime | None = None, from_date=None) -> list:
+        """SPEND and RECEIVE bank transactions dated from ``from_date``, every status, all pages
+        (live-cogs 8.1b; needs accounting.banktransactions.read)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        where = '(Type=="SPEND" OR Type=="RECEIVE")'
+        if from_date is not None:
+            where += f" AND Date >= DateTime({from_date.year}, {from_date.month:02d}, {from_date.day:02d})"
+        kwargs: dict = {"where": where}
+        if modified_after:
+            if modified_after.tzinfo is None:
+                modified_after = modified_after.replace(tzinfo=UTC)
+            kwargs["if_modified_since"] = modified_after
+        transactions: list = []
+        page = 1
+        while True:
+            result = self._call_with_retry(api.get_bank_transactions, self._xero_tenant_id, page=page, **kwargs)
+            batch = result.bank_transactions or []
+            transactions.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return transactions
+
     def fetch_all_credit_notes(self, modified_after: datetime | None = None) -> list:
         """Return all ACCRECCREDIT notes, with each page using the normal Xero retry policy."""
         from xero_python.accounting import AccountingApi

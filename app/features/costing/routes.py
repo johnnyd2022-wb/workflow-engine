@@ -125,3 +125,33 @@ def put_settings():
     result = service.set_settings(db_session, _org(), **_body())
     db_session.commit()
     return jsonify(result)
+
+
+# --- 8.1b: account treatments --------------------------------------------------------------
+
+
+@costing_bp.route(f"{API}/accounts", methods=["GET"])
+@requires_auth
+def get_accounts():
+    from app.features.costing.purchase_sources import list_accounts
+
+    return jsonify({"accounts": list_accounts(db_session, _org())})
+
+
+@costing_bp.route(f"{API}/accounts/<xero_account_id>", methods=["PUT"])
+@requires_auth
+def put_account(xero_account_id):
+    from app.features.costing.purchase_sources import PurchaseSourceError, list_accounts, set_account_treatment
+
+    data = _body()
+    if set(data) != {"treatment"}:
+        raise service.CostingError('Send only {"treatment": ...}')
+    try:
+        set_account_treatment(db_session, _org(), xero_account_id, data["treatment"])
+    except PurchaseSourceError as error:
+        raise service.CostingError(str(error)) from None
+    except LookupError:
+        raise service.CostingNotFoundError("Account not found") from None
+    db_session.commit()
+    row = next((a for a in list_accounts(db_session, _org()) if a["xero_account_id"] == str(xero_account_id)), None)
+    return jsonify(row)
