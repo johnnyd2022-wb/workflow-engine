@@ -256,3 +256,37 @@ def test_a_note_xero_no_longer_returns_is_not_fetched_on_every_sync(db):
         assert note.raw_fields["line_tax_amounts"] == {} and note.raw_fields["total_tax"] == "15"
     finally:
         purge(db, org)
+
+
+def test_the_backfill_request_uses_xeros_filter_grammar(monkeypatch):
+    """Review r13: the real request, not a fake of the whole method: Guid() IDs, upper-case OR/AND,
+    batches of 40, sales credit notes only."""
+    from types import SimpleNamespace
+
+    import xero_python.accounting as accounting
+
+    from app.features.crm.services.xero_api_client import XeroAPIClient
+
+    calls = []
+
+    class FakeAccounting:
+        def __init__(self, _client):
+            pass
+
+        def get_credit_notes(self, tenant_id, **kwargs):
+            calls.append((tenant_id, kwargs))
+            return SimpleNamespace(credit_notes=[])
+
+    monkeypatch.setattr(accounting, "AccountingApi", FakeAccounting)
+    client = XeroAPIClient.__new__(XeroAPIClient)
+    client._xero_tenant_id = "tenant-1"
+    client._get_api_client = lambda: object()
+    client._call_with_retry = lambda fn, *a, **kw: fn(*a, **kw)
+    ids = [f"00000000-0000-0000-0000-{i:012d}" for i in range(45)]
+    client.fetch_credit_notes_by_ids(ids)
+
+    assert [len(kw["where"].split(" OR ")) for _, kw in calls] == [40, 5]
+    where = calls[0][1]["where"]
+    assert where.startswith('Type=="ACCRECCREDIT" AND (CreditNoteID==Guid("00000000-0000-0000-0000-000000000000")')
+    assert " or " not in where and " and " not in where and "guid(" not in where
+    assert all(tenant == "tenant-1" and kw["page"] == 1 for tenant, kw in calls)

@@ -363,8 +363,10 @@ class XeroAPIClient:
             batch = credit_note_ids[start : start + 40]
             if not batch:
                 continue
-            ids_filter = " or ".join(f'CreditNoteID==guid("{credit_note_id}")' for credit_note_id in batch)
-            where = f'Type=="ACCRECCREDIT" and ({ids_filter})'
+            # Same filter grammar as the other where clauses here: == comparisons, upper-case AND/OR,
+            # Guid("...") for an ID (Xero's documented form).
+            ids_filter = " OR ".join(f'CreditNoteID==Guid("{credit_note_id}")' for credit_note_id in batch)
+            where = f'Type=="ACCRECCREDIT" AND ({ids_filter})'
             result = self._call_with_retry(api.get_credit_notes, tenant_id, where=where, page=1)
             credit_notes.extend(getattr(result, "credit_notes", None) or [])
         return credit_notes
