@@ -280,6 +280,7 @@ def upsert_bank_transactions(
             continue
         external_id = str(external_id)
         doc = (
+            # nosemgrep: sqlalchemy-query-in-for-loop — per-document upsert under that document's row lock; a Xero page is at most 100 transactions.
             db.query(PurchaseDocument)
             .filter(
                 PurchaseDocument.org_id == org_id,
@@ -375,6 +376,7 @@ def upsert_bank_transactions(
 
         live = {
             ln.line_key: ln
+            # nosemgrep: sqlalchemy-query-in-for-loop — per-document upsert under that document's row lock; a Xero page is at most 100 transactions.
             for ln in db.query(PurchaseLine)
             .filter(
                 PurchaseLine.org_id == org_id,
@@ -407,6 +409,7 @@ def upsert_bank_transactions(
         db.flush()
 
         totals = (
+            # nosemgrep: sqlalchemy-query-in-for-loop — per-document upsert under that document's row lock; a Xero page is at most 100 transactions.
             db.query(PurchaseLine.amount_ex_tax, PurchaseLine.tax_amount)
             .filter(
                 PurchaseLine.org_id == org_id,
