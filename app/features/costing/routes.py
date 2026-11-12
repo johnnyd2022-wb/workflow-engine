@@ -399,6 +399,7 @@ def bulk_purchases():
                     ):
                         raise service.CostingError("Only open or skipped purchases with nothing recorded")
                     account = (
+                        # nosemgrep: sqlalchemy-query-in-for-loop — bulk acts per line in its own savepoint (max 200).
                         db_session.query(XeroAccount)
                         .filter(XeroAccount.org_id == org, XeroAccount.id == line.account_id)
                         .one()

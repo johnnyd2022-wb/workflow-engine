@@ -946,13 +946,15 @@ def prefill(
         if match is not None:
             prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
+            items = {
+                i.id: i
+                for i in db.query(InventoryItem).filter(
+                    InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
+                )
+            }
             out = []
             for a in allocs:
-                item = (
-                    db.query(InventoryItem)
-                    .filter(InventoryItem.org_id == line.org_id, InventoryItem.id == a.inventory_item_id)
-                    .one()
-                )
+                item = items[a.inventory_item_id]
                 out.append(
                     {
                         "name": item.name,
