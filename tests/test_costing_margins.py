@@ -26,6 +26,8 @@ from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-ex
 
 API = "/api/core/costing/margins"
 GIN = "Wildflower"
+from app.features.costing.engine import normalise  # noqa: E402
+
 D = Decimal
 SOLD = date(2026, 10, 7)
 
@@ -113,10 +115,12 @@ def world(db, flask_app):  # noqa: F811
     yield {"org": org, "client": client, "db": db, "sell": sell, "lot": lot, "allocate": allocate}
 
     db.rollback()
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
     for model in (
+        SalesReturn,
         XeroCreditNoteLine,
         XeroCreditNote,
         SalesFifoAllocation,
@@ -248,6 +252,7 @@ def test_foreign_currency_revenue_is_not_tracked(world, db):
 
 
 def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, db):
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
@@ -269,23 +274,24 @@ def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, 
     )
     db.add(note)
     db.flush()
-    db.add(
-        XeroCreditNoteLine(
-            org_id=org.id,
-            credit_note_id=note.id,
-            line_key="c1",
-            description="Wildflower Gin 700ml",
-            quantity=D("2"),
-            line_amount=D("80"),
-            product_mapping_id=mapping.id,
-        )
+    credit_line = XeroCreditNoteLine(
+        org_id=org.id,
+        credit_note_id=note.id,
+        line_key="c1",
+        description="Wildflower Gin 700ml",
+        quantity=D("2"),
+        line_amount=D("80"),
+        product_mapping_id=mapping.id,
     )
+    db.add(credit_line)
     db.commit()
+    _record_credit_return(world, db, credit_line, batch, quantity="2")
     try:
         row = _row(world)
         assert (D(row["units"]), D(row["revenue"])) == (D("8"), D("320"))
         assert D(row["cost"]) == D("40") and row["cost_status"] == "estimated"
     finally:
+        db.query(SalesReturn).filter(SalesReturn.org_id == org.id).delete()
         db.query(XeroCreditNoteLine).filter(XeroCreditNoteLine.org_id == org.id).delete()
         db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id).delete()
         db.commit()
@@ -309,19 +315,84 @@ def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(20
     )
     db.add(note)
     db.flush()
+    line = XeroCreditNoteLine(
+        org_id=org.id,
+        credit_note_id=note.id,
+        line_key="c1",
+        description="Wildflower Gin 700ml",
+        quantity=D(quantity),
+        line_amount=D(amount),
+        product_mapping_id=mapping.id,
+    )
+    db.add(line)
+    db.commit()
+    return line
+
+
+def _record_credit_return(world, db, line, batch, quantity="2"):
+    from app.features.crm.models.sales_return import SalesReturn
+
     db.add(
-        XeroCreditNoteLine(
-            org_id=org.id,
-            credit_note_id=note.id,
-            line_key="c1",
-            description="Wildflower Gin 700ml",
+        SalesReturn(
+            org_id=world["org"].id,
+            credit_note_line_id=line.id,
+            product_name=GIN,
             quantity=D(quantity),
-            line_amount=D(amount),
-            product_mapping_id=mapping.id,
+            unit="bottles",
+            condition="resaleable",
+            received_on=date(2026, 10, 21),
+            original_lot_id=batch.id,
+            resulting_lot_id=batch.id,
         )
     )
     db.commit()
-    return note
+
+
+def test_credit_without_return_keeps_all_production_cost(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    _credit(world, db, amount="120", quantity="3")
+
+    row = _row(world)
+    assert D(row["cost"]) == D("50")
+
+
+def test_partial_credit_return_reverses_only_returned_units_cost(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    line = _credit(world, db, amount="120", quantity="3")
+    _record_credit_return(world, db, line, batch, quantity="2")
+
+    row = _row(world)
+    assert D(row["cost"]) == D("40")
+
+
+def test_partial_return_still_reverses_cost_after_no_return_decision(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    line = _credit(world, db, amount="120", quantity="3")
+    _record_credit_return(world, db, line, batch, quantity="2")
+    line.no_return_note = "Customer retained the remaining unit"
+    db.commit()
+
+    row = _row(world)
+    assert D(row["cost"]) == D("40")
+
+
+def test_margins_report_includes_org_base_currency_and_defaults_to_nzd(world, db):
+    from app.features.costing.models import CostingSettings
+
+    body = world["client"].get(f"{API}?from=2026-10&to=2026-10").get_json()
+    assert body["currency"] == "NZD"
+
+    settings = CostingSettings(org_id=world["org"].id, base_currency="AUD")
+    db.add(settings)
+    db.commit()
+    body = world["client"].get(f"{API}?from=2026-10&to=2026-10").get_json()
+    assert body["currency"] == "AUD"
 
 
 def test_credit_reverses_cost_at_its_month_sales_average(world, db):
@@ -329,7 +400,8 @@ def test_credit_reverses_cost_at_its_month_sales_average(world, db):
     world["lot"]("Other product stock $4", unit_cost="4")
     invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
     world["allocate"](invoice, "l1", high, 10)
-    _credit(world, db)
+    line = _credit(world, db)
+    _record_credit_return(world, db, line, high)
 
     row = _row(world)
     assert D(row["cost"]) == D("80")
@@ -341,7 +413,8 @@ def test_credit_without_month_sales_falls_back_to_all_time_average(world, db):
     world["lot"]("Other stock $4", unit_cost="4")
     invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
     world["allocate"](invoice, "l1", high, 10)
-    _credit(world, db, day=date(2026, 11, 20))
+    line = _credit(world, db, day=date(2026, 11, 20))
+    _record_credit_return(world, db, line, high)
 
     row = _row(world, month="2026-11")
     assert D(row["cost"]) == D("-14")
@@ -719,3 +792,70 @@ def test_r5_unrelated_products_are_never_primed(world, db):
     primed = set(costs.engine._in_flow_cache)
     assert sold.id in primed
     assert not primed & {item.id for item in unrelated}
+    fetched = {item.id for items in costs._lots_by_name.values() for item in items}
+    assert not fetched & {item.id for item in unrelated}, "unrelated lots never leave the database"
+
+
+def test_r6_library_stock_and_spacing_still_match_the_product_in_sql(world, db):
+    from app.features.costing.margins import _Costs
+    from tests.costing_helpers import lot as make_lot
+
+    library = make_lot(
+        db, world["org"].id, f"  {GIN.upper()}  - Library stock", 1, "bottles", inventory_type="final_product"
+    )
+    db.commit()
+    costs = _Costs(db, world["org"].id, products={GIN})
+    assert library.id in {item.id for item in costs._lots_by_name[normalise(GIN)]}
+
+
+def test_r6_a_lineage_too_big_to_prime_reads_unknown_not_a_500(world, monkeypatch):
+    from app.features.costing import engine as engine_module
+
+    batch = world["lot"]("B1", unit_cost="4")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](inv, "l1", batch, 2)
+    monkeypatch.setattr(engine_module, "MAX_WORK", 0)
+    response = world["client"].get(f"{API}?from=2026-10&to=2026-10")
+    assert response.status_code == 200, response.get_json()
+    (row,) = [r for r in response.get_json()["rows"] if r["product"] == GIN]
+    assert row["cost"] is None and row["cost_status"] == "unknown"
+
+
+def test_r6_one_unmeasurable_sale_leaves_a_mixed_months_margin_unknown(world, monkeypatch):
+    """A month with one measured and one unmeasured sale has no margin: half the duty isn't the duty."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    _enable_alcohol(world)
+    first, second = world["lot"]("B1", unit_cost="4"), world["lot"]("B2", unit_cost="4")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](inv, "l1", first, 1)
+    world["allocate"](inv, "l1", second, 1)
+    real = excise.measure
+
+    def half_measured(db, org, pairs, on, **kw):
+        out = real(db, org, pairs, on, **kw)
+        return [dict(out[0], duty="1.00")] + [dict(r, duty=None) for r in out[1:]]
+
+    monkeypatch.setattr(excise, "measure", half_measured)
+    row = _row(world)
+    assert row["duty"] is None and row["margin"] is None
+
+
+def test_r7_a_lot_over_the_engine_budget_voids_the_product_average(world, monkeypatch):
+    """Review r7: an unallocated sale is costed at the product's average; if one of its lots can't be
+    costed (engine budget), that lot may be the dear one, so the average is unknown, not the rest's."""
+    from app.features.costing import engine as engine_module
+
+    world["lot"]("Cheap", unit_cost="4")
+    dear = world["lot"]("Dear", unit_cost="100")
+    world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])  # no allocation: loose units use the average
+    real = engine_module.CostEngine._solve
+
+    def over_budget_for_dear(self, key):
+        if key == ("lot", dear.id):
+            raise engine_module.TooLargeError()
+        return real(self, key)
+
+    monkeypatch.setattr(engine_module.CostEngine, "_solve", over_budget_for_dear)
+    row = _row(world)
+    assert row["cost"] is None and row["cost_status"] == "unknown" and row["margin"] is None

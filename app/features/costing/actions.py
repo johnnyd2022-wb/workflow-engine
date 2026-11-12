@@ -702,7 +702,11 @@ def _lot_names(db: Session, line: PurchaseLine) -> dict:
 
 def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
+    allocations = line_allocations(db, line, statuses=("active", "orphaned"))
+    active_allocations = [allocation for allocation in allocations if allocation.status == "active"]
     return {
+        "auto_recorded": bool(active_allocations)
+        and all(allocation.created_by_user_id is None for allocation in active_allocations),
         "prefill": prefill(db, line, doc, remaining, rules, history),
         "line_id": str(line.id),
         "document": {
@@ -729,7 +733,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
                 "quantity": str(_d(a.quantity)),
                 "status": a.status,
             }
-            for a in line_allocations(db, line, statuses=("active", "orphaned"))
+            for a in allocations
         ],
     }
 
@@ -937,6 +941,21 @@ def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
     return index
 
 
+def _settle_rounding(rows: list, residual: Decimal) -> None:
+    """Make share rows add up to the line exactly. A shortfall goes to the last row; an excess comes
+    off the largest rows first, never taking a row below zero."""
+    if residual >= 0:
+        rows[-1][1] += residual
+        return
+    owed = -residual
+    for row in sorted(rows, key=lambda r: r[1], reverse=True):
+        take = min(row[1], owed)
+        row[1] -= take
+        owed -= take
+        if owed <= 0:
+            return
+
+
 def prefill(
     db: Session,
     line: PurchaseLine,
@@ -965,6 +984,11 @@ def prefill(
             rows.append([t, amount])
         if rest_index is not None:
             rows[rest_index][1] = max(ZERO, remaining - used)
+            # Shares just under 100% can round up past the line (six 16.5% rows on $0.01); the excess
+            # comes back off the largest rows so the rows still add up to the line.
+            _settle_rounding(rows, remaining - used - rows[rest_index][1])
+        elif rows and sum((_d(t["share"]) for t, _ in rows), ZERO) == 100:
+            _settle_rounding(rows, remaining - used)  # shares cover the line: rounding must not leave a gap
         out = []
         for t, amount in rows:
             amount = amount if amount is not None else ZERO

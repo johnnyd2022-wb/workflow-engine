@@ -12,10 +12,21 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
-from app.features.costing.engine import ACTUAL, ESTIMATED, PARTIAL, UNKNOWN, CostEngine, TooLargeError, normalise, worst
+from app.features.costing.engine import (
+    _LIBRARY_SUFFIX,
+    ACTUAL,
+    ESTIMATED,
+    PARTIAL,
+    UNKNOWN,
+    CostEngine,
+    TooLargeError,
+    normalise,
+    worst,
+)
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -64,19 +75,32 @@ class _Costs:
         self.db, self.org_id = db, org_id
         self._unit: dict = {}
         self._average: dict = {}
+        self._oversized: set = set()  # lots the engine ran out of budget on: never "uncosted"
         wanted = {normalise(p) for p in products}
         self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
-        finished = (
-            db.query(InventoryItem)
-            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
-            .all()
-            if wanted
-            else []
-        )
+        finished = []
+        if wanted:
+            # Match in SQL the way normalise() does (trimmed, lower case, single spaces, Library stock
+            # counted as its product), so unrelated finished lots never leave the database.
+            name = func.lower(func.regexp_replace(func.trim(InventoryItem.name), r"\s+", " ", "g"))
+            finished = (
+                db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                    or_(name.in_(wanted), name.in_([w + _LIBRARY_SUFFIX for w in wanted])),
+                )
+                .all()
+            )
         for item in finished:
             if normalise(item.name) in wanted:
                 self._lots_by_name[normalise(item.name)].append(item)
-        self.engine.prime({*sold_lot_ids, *(item.id for items in self._lots_by_name.values() for item in items)})
+        try:
+            self.engine.prime({*sold_lot_ids, *(item.id for items in self._lots_by_name.values() for item in items)})
+        except TooLargeError:
+            # Lineage too big to load up front: cost lot by lot instead, and any lot over budget reads
+            # unknown (lot() catches it) rather than the report failing.
+            self.engine = CostEngine(db, org_id)
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:
         if item.id not in self._unit:
@@ -84,6 +108,7 @@ class _Costs:
                 cost = self.engine._solve(("lot", item.id))
             except TooLargeError:
                 self._unit[item.id] = (None, UNKNOWN)
+                self._oversized.add(item.id)
             else:
                 unit = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
                 self._unit[item.id] = (unit, cost.status if cost.status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN)
@@ -97,6 +122,10 @@ class _Costs:
             total, units = ZERO, ZERO
             for item in lots:
                 unit, status = self.lot(item)
+                if item.id in self._oversized:
+                    # A lot we couldn't cost might be the dear one: no average beats a wrong one.
+                    total, units = ZERO, ZERO
+                    break
                 if unit is None or status not in (ACTUAL, ESTIMATED):
                     continue
                 qty = Decimal(str(item.quantity or 0))
@@ -208,7 +237,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         foreign = credit["currency"] and credit["currency"].upper() != base_currency
         amount = None if foreign else credit["amount"]
         row.add_revenue(None if amount is None else -amount)
-        if credit["returned"]:
+        if credit["returned_units"] > 0:
             month_cost, month_units = sales_costs.get(
                 (normalise(credit["product"]), month_start(credit["date"])), (ZERO, ZERO)
             )
@@ -216,8 +245,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             if average is None:
                 row.statuses.append(UNKNOWN)
             else:
-                row.cost -= credit["units"] * average
-                row.cost_units -= credit["units"]
+                row.cost -= credit["returned_units"] * average
+                row.cost_units -= credit["returned_units"]
                 row.statuses.append(ESTIMATED)
         row.lines.append(
             {
@@ -259,17 +288,28 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 "lines": row.lines,
             }
         )
-    return {"from": start.strftime("%Y-%m"), "to": end.strftime("%Y-%m"), "rows": out}
+    return {"from": start.strftime("%Y-%m"), "to": end.strftime("%Y-%m"), "currency": base_currency, "rows": out}
 
 
 def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
     """Authorised/paid sales credit notes on mapped lines, dated in [start, end)."""
     from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
+    returned = (
+        db.query(
+            SalesReturn.org_id.label("org_id"),
+            SalesReturn.credit_note_line_id.label("line_id"),
+            func.sum(SalesReturn.quantity).label("quantity"),
+        )
+        .filter(SalesReturn.org_id == org_id, SalesReturn.credit_note_line_id.isnot(None))
+        .group_by(SalesReturn.org_id, SalesReturn.credit_note_line_id)
+        .subquery()
+    )
     rows = (
-        db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping)
+        db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping, func.coalesce(returned.c.quantity, 0))
         .join(
             XeroCreditNote,
             (XeroCreditNote.org_id == XeroCreditNoteLine.org_id)
@@ -279,6 +319,10 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
             ProductMapping,
             (ProductMapping.org_id == XeroCreditNoteLine.org_id)
             & (ProductMapping.id == XeroCreditNoteLine.product_mapping_id),
+        )
+        .outerjoin(
+            returned,
+            (returned.c.org_id == XeroCreditNoteLine.org_id) & (returned.c.line_id == XeroCreditNoteLine.id),
         )
         .filter(
             XeroCreditNoteLine.org_id == org_id,
@@ -290,18 +334,21 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
         .all()
     )
     out = []
-    for line, note, mapping in rows:
+    for line, note, mapping, returned_quantity in rows:
         quantity = Decimal(str(line.quantity or 0))
         if not quantity.is_finite() or quantity <= 0:
             continue
+        units_per_line = int(mapping.units_per_line or 1)
+        units = quantity * units_per_line
+        returned_units = min(Decimal(str(returned_quantity)) * units_per_line, units)
         out.append(
             {
                 "product": mapping.biz_e_product_name,
                 "date": note.date,
                 "reference": note.number or note.xero_credit_note_id,
-                "units": quantity * int(mapping.units_per_line or 1),
+                "units": units,
+                "returned_units": returned_units,
                 "amount": None if line.line_amount is None else Decimal(str(line.line_amount)),
-                "returned": not line.no_return_note,
                 "currency": note.currency,
             }
         )

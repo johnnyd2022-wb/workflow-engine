@@ -397,7 +397,8 @@ def _upsert_documents(
     for acct in accounts.values():
         if acct.code:
             by_code.setdefault(acct.code, []).append(acct)
-    stats = {"documents": 0, "lines": 0, "skipped_lines": 0, "skipped_documents": 0}
+    stats = {"documents": 0, "lines": 0, "skipped_lines": 0, "skipped_documents": 0, "auto_recorded": 0}
+    newly_created: list[tuple[PurchaseLine, PurchaseDocument]] = []
     now = utc_now()
     from app.features.costing.rules import active_rules
 
@@ -546,6 +547,7 @@ def _upsert_documents(
                 current = PurchaseLine(org_id=org_id, document_id=doc.id, **row, treatment="not_stock")
                 db.add(current)
                 classify_line(current, acct, payee=doc.payee_name, rules=rules)
+                newly_created.append((current, doc))
             else:
                 before_amount = current.amount_ex_tax
                 before_treatment = current.treatment
@@ -598,5 +600,67 @@ def _upsert_documents(
         if incoming:
             stats["documents"] += 1
     db.flush()
+    if newly_created:
+        from app.features.costing import actions
+        from app.features.costing.rules import winner
+
+        for new_line, new_doc in newly_created:
+            rule = winner(rules, new_line.account_code, new_doc.payee_name, new_line.description)
+            if (
+                rule is None
+                or not rule.auto_record
+                or rule.treatment != "stock"
+                or new_line.treatment != "stock"
+                or new_doc.kind != "spend"
+                or new_doc.status != "active"
+                or new_line.superseded_at is not None
+                or new_line.amount_ex_tax is None
+                or new_line.state != "open"
+            ):
+                continue
+            try:
+                with db.begin_nested():
+                    suggestion = actions.prefill(
+                        db,
+                        new_line,
+                        new_doc,
+                        actions.open_amount(db, new_line),
+                        rules=rules,
+                        history={},
+                    )
+                    if suggestion is None or suggestion["source"] != "rule":
+                        continue
+                    matched_rule = next((r for r in rules if str(r.id) == suggestion["rule_id"]), None)
+                    if matched_rule is None:
+                        raise actions.CostingError("The matching purchase rule is no longer available")
+                    recorded_line = actions.record(
+                        db,
+                        org_id,
+                        new_line.id,
+                        suggestion["rows"],
+                        rest="later",
+                        user_id=None,
+                    )
+                    if recorded_line.state != "recorded" or actions.open_amount(db, recorded_line) != Decimal("0"):
+                        raise actions.CostingError("Auto-record did not record the full purchase line")
+                stats["auto_recorded"] += 1
+            except actions.CostingError as error:
+                logger.warning(
+                    "purchase_auto_record_failed",
+                    org_id=str(org_id),
+                    line_id=str(new_line.id),
+                    error_type=type(error).__name__,
+                )
+            except Exception as error:
+                from uuid import uuid4
+
+                ref = uuid4().hex[:12]
+                logger.exception(
+                    "purchase_auto_record_failed_unexpected",
+                    org_id=str(org_id),
+                    line_id=str(new_line.id),
+                    ref=ref,
+                    error_type=type(error).__name__,
+                )
     logger.info("purchase_sources_upserted", org_id=str(org_id), **stats)
     return stats

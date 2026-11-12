@@ -1632,6 +1632,28 @@ quantity, amount = the open amount. A rule or last time still wins.
   (bootstrap from `start_date`, then modified-since) and historical runs fetch them for the range.
 - AC101: a bill line's quantity and item code are stored on the line; the card says "Bill".
 
+## 8.1f-3c build contract — auto-record rules
+
+A stock rule whose template leaves nothing to ask can record matching purchases itself (spec Q2).
+
+- `auto_record: true` is accepted only for a `stock` rule with a template whose rows are all `fixed` or
+  `from_price`, ask for no batch number or expiry, and cover the whole line (shares total 100 or a
+  `rest` row). Anything else is 400.
+- After each purchases upsert (sync, historical run; bank transactions and bills), each line created
+  in that upsert that is open, active, base-currency priced, a spend, and won by an auto rule is recorded
+  through `actions.prefill` + `actions.record` as the system (no user), one savepoint per line. A failure
+  is logged and leaves the line open; the sync still succeeds. Stats count `auto_recorded`.
+- Cards carry `auto_recorded: true` when every active allocation has no user. Undo is the existing
+  review / unlink path.
+
+| AC | Behaviour | Test |
+|---|---|---|
+| AC110 | Validation accepts a full template, refuses ask / gaps / non-stock | `test_auto_record_rule_validation` |
+| AC111 | A new matching line is recorded with the template's lots, amounts and quantities; re-sync never doubles | `test_new_matching_spend_is_recorded_from_rule_template` |
+| AC112 | Lines from before the rule, refunds and needs-rate lines are untouched | `test_rule_does_not_touch_existing_open_line_and_excludes_refunds_and_needs_rate` |
+| AC113 | A failing record leaves the line open and the sync green | `test_auto_record_failure_isolated_and_sync_succeeds` |
+| AC114 | Historical runs auto-record too and report the count | `test_historical_upsert_auto_records_and_reports_count` |
+
 ## 8.1e-2 build contract — cost where people look, and cost without Xero
 
 Added 12 Nov 2026 at the founder's request: **costing must work for an org with no Xero bank
@@ -1713,6 +1735,50 @@ a clear "Back to new purchases" exit. 409 needs-reconnect shown as a reconnect p
   dark theme, and on arrival by boosted navigation (script bound to the page root).
 - AC97: without `costs.view` (or without the feature) the inventory detail, batch detail,
   Add Inventory and Home pages render no cost element and make no costing write.
+
+## 8.1f-3b build contract — duty if sold today
+
+**What it answers:** What duty would apply if each produced lot were sold today, and what its landed unit cost would be when production cost is known. Duty rates remain in the NZ Alcohol excise module.
+
+**Response shape:**
+
+```json
+{
+  "duty_today": {
+    "tracked": true,
+    "on": "YYYY-MM-DD",
+    "per_unit": "money|null",
+    "total": "money|null",
+    "landed_per_unit": "money|null"
+  },
+  "outputs": [
+    {
+      "...": "existing output fields",
+      "duty_today": {
+        "tracked": true,
+        "on": "YYYY-MM-DD",
+        "per_unit": "money|null",
+        "total": "money|null",
+        "landed_per_unit": "money|null",
+        "missing": "optional reason"
+      }
+    }
+  ]
+}
+```
+
+For multiple outputs, the top-level `total` summarizes duty across them; per-unit and landed values are lot-specific and remain null there. Each output carries its own values.
+
+**Acceptance criteria and tests:**
+
+- AC115 — Gin duty and landed cost match `excise.measure`: `test_ac115_gin_duty_per_unit_and_landed_cost_match_excise_measure`
+- AC116 — NZ Alcohol disabled returns untracked duty: `test_ac116_nz_alcohol_off_is_not_tracked`
+- AC117 — Missing profile returns tracked duty with a reason: `test_ac117_missing_alcohol_profile_is_tracked_with_reason`
+- AC118 — Duty uses produced quantity after stock is consumed: `test_ac118_duty_uses_produced_quantity_not_remaining_stock`
+- AC119 — Query count stays flat for two versus five outputs: `test_ac119_measure_query_count_is_constant_for_two_and_five_outputs`
+- AC126 — Excise measurement runs once for all output lots: `test_ac126_excise_measure_runs_once_for_all_output_lots`
+- AC127 — Execution duty remains org-isolated: `test_ac127_execution_duty_remains_org_isolated`
+- AC128 — Batch card reads `duty_today`: `test_ac128_batch_card_reads_duty_today`
 
 ## 8.1f-3d build contract — litres split
 
