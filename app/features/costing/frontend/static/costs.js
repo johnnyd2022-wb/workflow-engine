@@ -257,30 +257,46 @@
       return (change > 0 ? 'Up ' : 'Down ') + Math.abs(change) + '%' + span + ' (' + price(first.average_unit_cost) + ' → ' + price(last.average_unit_cost) + per(unit) + ').';
     }
 
+    /* A dot per month on a scale fitted to the prices (a 2% rise is visible), joined by a line.
+       Dots, not bars: bars would have to start at $0 to be honest, which flattens every change. */
     function chart(h, priced) {
       var months = allMonths(h.from, h.to);
       var byKey = {};
       h.months.forEach(function (row) { byKey[row.month] = row; });
-      var max = 0;
-      priced.forEach(function (row) { var v = Number(row.average_unit_cost); if (v > max) max = v; });
+      var values = priced.map(function (row) { return Number(row.average_unit_cost); });
+      var lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
+      var pad = Math.max((hi - lo) * 0.15, hi * 0.02, 0.01);
+      lo -= pad; hi += pad;
+      function height(v) { return 8 + 72 * (v - lo) / (hi - lo); } // % of the plot, room above for labels
       var first = priced[0].month, last = priced[priced.length - 1].month;
       var wrap = el('div', 'co-bars');
       wrap.setAttribute('role', 'img');
       wrap.setAttribute('aria-label', 'Average price per month, ' + monthName(h.from, true) + ' to ' +
         monthName(h.to, true) + '. Each month is listed below.');
       wrap.style.setProperty('--co-months', String(months.length));
+      var NS = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('class', 'co-bars__line');
+      svg.setAttribute('viewBox', '0 0 100 100');
+      svg.setAttribute('preserveAspectRatio', 'none');
+      svg.setAttribute('aria-hidden', 'true');
+      var points = [];
       months.forEach(function (k, i) {
         var col = el('div', 'co-bars__col');
         var row = byKey[k];
         var v = row && row.average_unit_cost != null ? Number(row.average_unit_cost) : NaN;
         var plot = el('div', 'co-bars__plot');
-        if (isFinite(v) && max > 0) {
-          var bar = el('span', 'co-bars__bar');
-          if (k === first || k === last) bar.appendChild(el('span', 'co-bars__value', price(row.average_unit_cost)));
-          bar.style.height = Math.max(3, Math.round(100 * v / max)) + '%';
-          bar.title = monthName(k, true) + ': ' + price(row.average_unit_cost) + per(h.unit) + ' average, ' +
+        if (isFinite(v)) {
+          var y = height(v);
+          points.push(((i + 0.5) / months.length * 100).toFixed(2) + ',' + (100 - y).toFixed(2));
+          var dot = el('span', 'co-bars__dot');
+          dot.style.bottom = y + '%';
+          dot.tabIndex = 0;
+          dot.title = monthName(k, true) + ': ' + price(row.average_unit_cost) + per(h.unit) + ' average, ' +
             row.purchases + (row.purchases === 1 ? ' purchase' : ' purchases');
-          plot.appendChild(bar);
+          dot.setAttribute('aria-label', dot.title);
+          if (k === first || k === last) dot.appendChild(el('span', 'co-bars__value', price(row.average_unit_cost)));
+          plot.appendChild(dot);
         }
         col.appendChild(plot);
         var label = el('span', 'co-bars__label', monthName(k, false));
@@ -288,6 +304,11 @@
         col.appendChild(label);
         wrap.appendChild(col);
       });
+      var line = document.createElementNS(NS, 'polyline');
+      line.setAttribute('points', points.join(' '));
+      line.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(line);
+      wrap.insertBefore(svg, wrap.firstChild);
       return wrap;
     }
 
