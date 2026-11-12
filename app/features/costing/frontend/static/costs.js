@@ -194,8 +194,12 @@
       button.setAttribute('aria-controls', detailId);
       button.appendChild(el('span', 'co-row__name', m.name));
       var figure = el('span', 'co-price');
-      figure.appendChild(el('span', 'co-price__value', price(m.latest_unit_price) + per(m.unit)));
-      figure.appendChild(el('span', 'co-price__when', 'last paid ' + shortDate(m.latest_date)));
+      if (m.latest_unit_price == null) {
+        figure.appendChild(el('span', 'co-price__when', 'Priced in other units'));
+      } else {
+        figure.appendChild(el('span', 'co-price__value', price(m.latest_unit_price) + per(m.unit)));
+        figure.appendChild(el('span', 'co-price__when', 'last paid ' + shortDate(m.latest_date)));
+      }
       button.appendChild(figure);
       var chevron = el('span', 'co-row__chevron');
       chevron.setAttribute('aria-hidden', 'true');
@@ -221,7 +225,9 @@
         detail.replaceChildren();
         var priced = h.months.filter(function (row) { return row.average_unit_cost != null; });
         if (!priced.length) {
-          detail.appendChild(el('p', 'cost-muted', 'Nothing bought in the last year. The latest price is from ' + shortDate(m.latest_date) + '.'));
+          detail.appendChild(el('p', 'cost-muted', m.latest_date
+            ? 'Nothing bought in the last year. The latest price is from ' + shortDate(m.latest_date) + '.'
+            : 'Nothing bought in the last year in a unit that compares with ' + (h.unit || 'its main unit') + '.'));
           return;
         }
         detail.appendChild(el('p', 'co-trend', trend(priced, h.unit)));
