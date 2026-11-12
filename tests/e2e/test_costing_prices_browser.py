@@ -304,7 +304,8 @@ def _two_months(page, app_url, first, last, quantity="2"):
     ("first", "last", "says"),
     [
         ("10.000000", "10.040000", "Up 0.4% from Oct 2026 to Nov 2026"),
-        ("0.000000", "5.000000", "Up from free from Oct 2026 to Nov 2026"),
+        ("0.000000", "5.000000", "Up from Oct 2026 to Nov 2026 ($0.00 → $5.00"),
+        ("0.000000", "-2.000000", "Down from Oct 2026 to Nov 2026"),
         ("10.000000", "9.000000", "Down 10% from Oct 2026 to Nov 2026"),
         ("10.000000", "10.000000", "Steady at $10.00"),
     ],

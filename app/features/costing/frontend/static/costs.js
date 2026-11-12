@@ -272,7 +272,7 @@
       var span = ' from ' + monthName(first.month, true) + ' to ' + monthName(last.month, true);
       var both = ' (' + price(first.average_unit_cost) + ' → ' + price(last.average_unit_cost) + per(unit) + ')';
       if (b === a) return 'Steady at ' + price(last.average_unit_cost) + per(unit) + span + '.';
-      if (a === 0) return 'Up from free' + span + both + '.'; // no percentage from a $0 start
+      if (a <= 0) return (b > a ? 'Up' : 'Down') + span + both + '.'; // no percentage from $0 or less (refunds)
       var pct = Math.abs((b - a) / a * 100);
       var shown = pct < 1 ? (pct < 0.1 ? 'under 0.1' : pct.toFixed(1)) : String(Math.round(pct));
       return (b > a ? 'Up ' : 'Down ') + shown + '%' + span + both + '.';
