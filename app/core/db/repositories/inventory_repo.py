@@ -891,11 +891,20 @@ class InventoryRepository:
         return query.first()
 
     def get_inventory_item_by_id_for_update(self, item_id: UUID, org_id: UUID) -> InventoryItem | None:
-        """Get inventory item by ID with row-level lock (FOR UPDATE)."""
+        """Get inventory item by ID with row-level lock (FOR UPDATE).
+
+        ``populate_existing`` matters: a caller that already loaded this row (the barcode route
+        does) would otherwise get the identity map's copy back, with the quantity it read before
+        the lock, and two concurrent deliveries would each add to the same stale figure. The flush
+        first keeps any change this session hasn't written yet (autoflush is off), since
+        ``populate_existing`` reloads the row over it.
+        """
+        self.db.flush()
         return (
             self.db.query(InventoryItem)
             .filter(InventoryItem.id == item_id, InventoryItem.org_id == org_id)
             .with_for_update()
+            .populate_existing()
             .one_or_none()
         )
 
