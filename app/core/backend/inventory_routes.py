@@ -699,6 +699,26 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         return jsonify({"inventory_items": result}), 200
 
+    def _costing_total_paid(data, org_id):
+        """The validated ``total_paid`` Decimal, or None when absent or not allowed here.
+        An invalid value raises ValueError (the route answers 400 before creating anything)."""
+        raw = data.get("total_paid")
+        if raw in (None, ""):
+            return None
+        from app.core.security.access_policy import has_permission
+        from app.core.security.entitlements import org_has_feature
+        from app.features.costing import FEATURE_KEY
+        from app.features.costing.service import CostingError, parse_amount
+
+        if not has_permission(getattr(g, "current_user", None), "costs.manage"):
+            return None
+        if not org_has_feature(db_session, org_id, FEATURE_KEY):
+            return None
+        try:
+            return parse_amount(raw, "total_paid", allow_zero=True)
+        except CostingError as error:
+            raise ValueError(str(error)) from None
+
     @bp.route("/api/core/inventory", methods=["POST"])
     @requires_auth
     @idempotent_write("inventory_create")  # GL-U03: a retried receipt can't add the stock twice
@@ -852,8 +872,22 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 except (TypeError, ValueError):
                     extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
 
+            # Live cost (8.1e-1): an optional "total paid" prices the new lot in the same
+            # transaction, for people who manage costs in an org with costing switched on.
+            total_paid = _costing_total_paid(data, org_id)
+            if total_paid is not None:
+                # Checked before anything is written: a batch's output takes its cost from the
+                # batch, and a price needs a quantity to divide by.
+                if source_execution_id or source_execution_step_id:
+                    return jsonify({"error": "A lot made by a batch takes its cost from the batch"}), 400
+                try:
+                    if Decimal(str(quantity)) <= 0:
+                        raise ValueError
+                except (InvalidOperation, ValueError):
+                    return jsonify({"error": "total_paid needs a quantity above zero"}), 400
             try:
                 item = repo.create_inventory_item(
+                    commit=total_paid is None,
                     org_id=org_id,
                     name=name,
                     quantity=str(quantity),
@@ -875,6 +909,29 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 return jsonify(
                     {"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}
                 ), 409
+            if total_paid is not None:
+                from app.features.costing.actions import _created_flow
+                from app.features.costing.service import CostingError, set_lot_price
+
+                # One transaction: the lot and its price land together or not at all.
+                try:
+                    flow = _created_flow(db_session, org_id, item.id)
+                    if flow is None:
+                        raise CostingError("This lot can't take a price when it's added")
+                    set_lot_price(
+                        db_session,
+                        org_id,
+                        item.id,
+                        amount=total_paid,
+                        quantity=item.quantity,
+                        kind="manual",
+                        cost_flow_id=flow.id,
+                        user_id=getattr(g, "user_id", None) and UUID(str(g.user_id)),
+                    )
+                    db_session.commit()
+                except CostingError as error:
+                    db_session.rollback()
+                    return jsonify({"error": str(error)}), 400
 
             return (
                 jsonify(
@@ -894,8 +951,10 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 201,
             )
         except ValueError as e:
+            db_session.rollback()  # never let the idempotency wrapper commit a half-made lot
             return jsonify({"error": str(e)}), 400
         except Exception:
+            db_session.rollback()
             # Log the full error for debugging but return generic message to client
             logger.exception("Error creating inventory item")
             return jsonify({"error": "Failed to create inventory item"}), 500

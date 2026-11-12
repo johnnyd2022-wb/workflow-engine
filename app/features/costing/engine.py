@@ -326,6 +326,53 @@ class CostEngine:
 
     # --- loading ---------------------------------------------------------------------------
 
+    def prime(self, item_ids) -> None:
+        """Bulk-load lots, in-flows, entries and allocations for many lots in four queries, so a
+        caller costing a list of lots (readiness) doesn't pay one round of queries per lot."""
+        from app.features.costing.models import PurchaseAllocation
+
+        ids = [i for i in {*item_ids} if i is not None and i not in self._in_flow_cache]
+        for start in range(0, len(ids), 1000):
+            chunk = ids[start : start + 1000]
+            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+            for lot in self.db.query(InventoryItem).filter(
+                InventoryItem.org_id == self.org_id, InventoryItem.id.in_(chunk)
+            ):
+                self._lots.setdefault(lot.id, lot)
+            for item_id in chunk:
+                self._lots.setdefault(item_id, None)
+                self._in_flow_cache[item_id] = []
+                self._entry_cache.setdefault(item_id, [])
+                self._allocation_cache.setdefault(item_id, [])
+            flows = (
+                # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+                self.db.query(CostFlow)
+                .filter(
+                    CostFlow.org_id == self.org_id, CostFlow.inventory_item_id.in_(chunk), CostFlow.direction == "in"
+                )
+                .order_by(CostFlow.created_at, CostFlow.id)
+                .all()
+            )
+            self._spend(len(flows))
+            for flow in flows:
+                self._in_flow_cache[flow.inventory_item_id].append(flow)
+            fresh_entries = {i for i in chunk if not self._entry_cache[i]}
+            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+            for entry in self.db.query(LotCostEntry).filter(
+                LotCostEntry.org_id == self.org_id,
+                LotCostEntry.inventory_item_id.in_(fresh_entries),
+                LotCostEntry.is_active.is_(True),
+            ):
+                self._entry_cache[entry.inventory_item_id].append(entry)
+            fresh_allocs = {i for i in chunk if not self._allocation_cache[i]}
+            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+            for alloc in self.db.query(PurchaseAllocation).filter(
+                PurchaseAllocation.org_id == self.org_id,
+                PurchaseAllocation.inventory_item_id.in_(fresh_allocs),
+                PurchaseAllocation.status.in_(("active", "orphaned")),
+            ):
+                self._allocation_cache[alloc.inventory_item_id].append(alloc)
+
     def _get_lot(self, item_id: UUID) -> InventoryItem | None:
         if item_id not in self._lots:
             self._lots[item_id] = (
