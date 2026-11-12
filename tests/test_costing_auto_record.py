@@ -328,3 +328,49 @@ def test_rounding_cent_moves_the_from_price_quantity_with_it(flask_app, world, d
     allocations = _allocations(db, world["org"].id, purchase_line.id)
     pairs = sorted((D(a.amount), D(a.quantity)) for a in allocations)
     assert pairs == [(D("0.0033"), D("0.3300")), (D("0.0033"), D("0.3300")), (D("0.0034"), D("0.3400"))]
+
+
+def test_r4_switching_an_automatic_rule_off_needs_no_stock_permission(flask_app, world, db):  # noqa: F811
+    admin = user_client(db, flask_app, world["org"])
+    limited = user_client(db, flask_app, world["org"], permissions=["costs.manage", "costs.view"])
+    automated = _rule(admin, payee_pattern="Switch Off Supplier", auto_record=True, template=_auto_template())
+    assert automated.status_code == 201, automated.get_json()
+    off = limited.put(f"{API}/rules/{automated.get_json()['id']}", json={**automated.get_json(), "is_active": False})
+    assert off.status_code == 200, off.get_json()
+    assert off.get_json()["is_active"] is False
+    back_on = limited.put(f"{API}/rules/{automated.get_json()['id']}", json={**off.get_json(), "is_active": True})
+    assert back_on.status_code == 403, "switching an automatic rule back on records stock again"
+    page = limited.get("/core/costing/rules").get_data(as_text=True)
+    assert 'data-can-auto="false"' in page
+
+
+def test_r4_over_rounding_never_makes_a_row_negative(flask_app, world, db):  # noqa: F811
+    """Review r4: six 16.5% rows and one 1% row on $0.01 round up past the total; the excess comes off
+    the largest rows, never pushing the 1% row below zero, and the line still records."""
+    client = user_client(db, flask_app, world["org"])
+    template = [
+        {
+            "name": f"Item {i}",
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": "16.5",
+        }
+        for i in range(6)
+    ] + [
+        {
+            "name": "Small",
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": "1",
+        }
+    ]
+    assert _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=template).status_code == 201
+    _doc, purchase_line = _sync_line(world, db, amount="0.01")
+    allocations = _allocations(db, world["org"].id, purchase_line.id)
+    assert purchase_line.state == "recorded"
+    assert all(D(a.amount) >= 0 for a in allocations)
+    assert sum((D(a.amount) for a in allocations), D("0")) == D("0.0100")

@@ -116,6 +116,7 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 #page-content .ru-auto { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); cursor: pointer; }
 #page-content .ru-dialog .ru-auto input[type="checkbox"] { width: 18px !important; min-width: 18px !important; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--ui-accent); }
 #page-content .ru-auto > span { display: grid; gap: 2px; }
+#page-content .ru-auto[hidden] { display: none; }
 #page-content .ru-auto__label { font-size: 14px; font-weight: 600; }
 #page-content .ru-rule__auto { margin: 0; font-size: 13px; font-weight: 600; color: var(--ui-accent); }
 #page-content .ru-rows:empty { display: none; }

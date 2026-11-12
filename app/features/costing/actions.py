@@ -941,6 +941,21 @@ def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
     return index
 
 
+def _settle_rounding(rows: list, residual: Decimal) -> None:
+    """Make share rows add up to the line exactly. A shortfall goes to the last row; an excess comes
+    off the largest rows first, never taking a row below zero."""
+    if residual >= 0:
+        rows[-1][1] += residual
+        return
+    owed = -residual
+    for row in sorted(rows, key=lambda r: r[1], reverse=True):
+        take = min(row[1], owed)
+        row[1] -= take
+        owed -= take
+        if owed <= 0:
+            return
+
+
 def prefill(
     db: Session,
     line: PurchaseLine,
@@ -970,7 +985,7 @@ def prefill(
         if rest_index is not None:
             rows[rest_index][1] = max(ZERO, remaining - used)
         elif rows and sum((_d(t["share"]) for t, _ in rows), ZERO) == 100:
-            rows[-1][1] += remaining - used  # shares cover the line: the last row takes the rounding cent
+            _settle_rounding(rows, remaining - used)  # shares cover the line: rounding must not leave a gap
         out = []
         for t, amount in rows:
             amount = amount if amount is not None else ZERO
