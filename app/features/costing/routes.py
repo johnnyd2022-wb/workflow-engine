@@ -471,6 +471,39 @@ def historical_run():
 # --- 8.1e-1: readiness --------------------------------------------------------------------------------
 
 
+@costing_bp.route(f"{API}/margins", methods=["GET"])
+@requires_auth
+def margins_report():
+    """8.1f-2: margin per product per month. Revenue is sales data: costs.view (the policy) and
+    sales.view both (AC47)."""
+    from datetime import date
+
+    from app.features.costing import margins
+    from app.features.costing.purchase_sources import nz_today
+
+    if not has_permission(getattr(g, "current_user", None), "sales.view"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    def month(raw, default):
+        if raw in (None, ""):
+            return default
+        try:
+            year, mon = (int(p) for p in str(raw).split("-"))
+            return date(year, mon, 1)
+        except (ValueError, TypeError):
+            raise service.CostingError("Months are YYYY-MM") from None
+
+    this_month = margins.month_start(nz_today())
+    six_back = date(this_month.year - (this_month.month <= 5), (this_month.month - 6) % 12 + 1, 1)
+    start = month(request.args.get("from"), six_back)
+    end = month(request.args.get("to"), this_month)
+    if start > end:
+        raise service.CostingError("from is after to")
+    if (end.year - start.year) * 12 + end.month - start.month + 1 > margins.MAX_MONTHS:
+        raise service.CostingError(f"At most {margins.MAX_MONTHS} months at a time")
+    return jsonify(margins.report(db_session, _org(), start, end))
+
+
 @costing_bp.route(f"{API}/readiness", methods=["GET"])
 @requires_auth
 def readiness_list():
