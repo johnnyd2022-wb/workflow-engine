@@ -1549,6 +1549,8 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Accounting sources other than Xero (the `purchase_sources` seam leaves room).
 - Time tracking (Phase 4 absorbs labour as a configured rate, not tracked hours).
 
+
+
 ## 8.1f-1 build contract — bills and supplier credits in
 
 Phase 2 starts with what the founder asked for at the outset: purchases that arrive as **bills**
@@ -1697,3 +1699,15 @@ a clear "Back to new purchases" exit. 409 needs-reconnect shown as a reconnect p
   dark theme, and on arrival by boosted navigation (script bound to the page root).
 - AC97: without `costs.view` (or without the feature) the inventory detail, batch detail,
   Add Inventory and Home pages render no cost element and make no costing write.
+
+## 8.1f-3d build contract — litres split
+
+Opt-in per org: `costing_settings.split_basis` is `quantity` (default; every existing result unchanged) or `litres`. Under litres, a step's outputs without a configured `cost_share` are weighted by litres — from an L/ml unit, or a count unit × the matching alcohol profile's pack volume — and Library stock takes its litres share (A9 revisited). If any free output's litres can't be worked out, that step falls back to the quantity rule with `split_assumed`. Percent and byproduct shares behave as before. `GET/PUT /settings` carry `split_basis` (`costs.manage` to change).
+
+- **AC120:** Quantity basis keeps Library stock at zero share — `test_ac120_quantity_basis_keeps_library_remainder_at_zero_share`.
+- **AC121:** Litres basis splits 10 × 700 ml bottles and 2 L Library stock as 7:2, with the pool allocated exactly — `test_ac121_litres_basis_splits_bottles_and_library_stock_exactly`.
+- **AC122:** Missing pack volume falls back to quantity and sets `split_assumed` — `test_ac122_missing_pack_volume_falls_back_to_quantity_and_marks_assumed`.
+- **AC123:** Percent cost share remains honored under litres basis — `test_ac123_percent_cost_share_is_preserved_under_litres_basis`.
+- **AC124:** Settings GET/PUT, invalid value rejection, and org isolation — `test_ac124_settings_get_put_validation_and_tenant_isolation`.
+- **AC125:** Migration column default and constraint — `test_ac125_split_basis_migration_has_default_and_check_constraint`; upgrade/downgrade round-trip also passed on the private `cogsl` DB.
+
