@@ -41,6 +41,25 @@ def test_a_stale_session_adds_to_the_committed_quantity(db):
         assert refs[-2:] == ["delivery-a", "delivery-b"], "neither delivery's audit entry is overwritten"
         added = sorted(Decimal(str(f.quantity)) for f in flows(db, org.id, item.id, kind="added"))
         assert added == [Decimal("2"), Decimal("3")], "each delivery leaves its own stock flow"
+        from app.core.db.models.entity_event import EntityEvent
+
+        events = (
+            db.query(EntityEvent)
+            .filter(
+                EntityEvent.org_id == org.id,
+                EntityEvent.entity_id == item.id,
+                EntityEvent.event_type == "inventory_item.quantity_adjusted",
+            )
+            .all()
+        )
+        steps = sorted(
+            (Decimal(e.payload["quantity_before"]), Decimal(e.payload["quantity_after"]), Decimal(e.payload["delta"]))
+            for e in events
+        )
+        assert steps == [
+            (Decimal("5"), Decimal("7"), Decimal("2")),
+            (Decimal("7"), Decimal("10"), Decimal("3")),
+        ], "the activity history shows 5 to 7 then 7 to 10, not two changes from 5"
     finally:
         first.close()
         second.close()
