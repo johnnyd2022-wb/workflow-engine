@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.tenant_scope import unscoped
-from tests.costing_helpers import lot, new_org, purge
+from tests.costing_helpers import flows, lot, new_org, purge
 
 
 def test_a_stale_session_adds_to_the_committed_quantity(db):
@@ -27,10 +27,20 @@ def test_a_stale_session_adds_to_the_committed_quantity(db):
             stale_first = first.get(InventoryItem, item.id)
             stale_second = second.get(InventoryItem, item.id)
             assert Decimal(str(stale_first.quantity)) == Decimal(str(stale_second.quantity)) == Decimal("5")
-            InventoryRepository(first).add_quantity_to_inventory_item(item.id, org.id, "2")  # commits
-            InventoryRepository(second).add_quantity_to_inventory_item(item.id, org.id, "3")  # stale copy loaded
+            for session, qty, ref in ((first, "2", "delivery-a"), (second, "3", "delivery-b")):
+                InventoryRepository(session).add_quantity_to_inventory_item(
+                    item.id,
+                    org.id,
+                    qty,
+                    extra_data_merge={"inventory_audit_history": [{"source_method": "barcode", "ref": ref}]},
+                )  # each commits; the second still held its stale copy
         db.expire_all()
-        assert Decimal(str(db.get(InventoryItem, item.id).quantity)) == Decimal("10")
+        refreshed = db.get(InventoryItem, item.id)
+        assert Decimal(str(refreshed.quantity)) == Decimal("10")
+        refs = [entry.get("ref") for entry in (refreshed.extra_data or {}).get("inventory_audit_history", [])]
+        assert refs[-2:] == ["delivery-a", "delivery-b"], "neither delivery's audit entry is overwritten"
+        added = sorted(Decimal(str(f.quantity)) for f in flows(db, org.id, item.id, kind="added"))
+        assert added == [Decimal("2"), Decimal("3")], "each delivery leaves its own stock flow"
     finally:
         first.close()
         second.close()
