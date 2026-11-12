@@ -126,7 +126,23 @@
       if (rows.some(function (r) { return r.revenue == null; })) {
         notes.push('Some months have sales with no usable amount (another currency, or no line amounts from Xero), so their revenue and margin show as —.');
       }
-      if (notes.length) { els.note.textContent = notes.join(' '); els.note.hidden = false; }
+      els.note.replaceChildren();
+      if (notes.length) els.note.appendChild(document.createTextNode(notes.join(' ')));
+      // Tracked but unmeasured: no alcohol profile, ABV or rate for these products. Say which, and where to fix it.
+      var unmeasured = [];
+      rows.forEach(function (r) {
+        if (r.duty_tracked && r.duty == null && unmeasured.indexOf(r.product) < 0) unmeasured.push(r.product);
+      });
+      if (unmeasured.length) {
+        if (notes.length) els.note.appendChild(document.createTextNode(' '));
+        els.note.appendChild(document.createTextNode('Duty couldn’t be worked out for ' + unmeasured.join(', ') +
+          ' — give ' + (unmeasured.length === 1 ? 'it' : 'them') + ' a pack size, ABV and tariff in '));
+        var link = el('a', null, 'Customs settings');
+        link.href = '/compliant/nz-alcohol/customs/settings';
+        els.note.appendChild(link);
+        els.note.appendChild(document.createTextNode('.'));
+      }
+      els.note.hidden = !(notes.length || unmeasured.length);
     }
 
     function product(p) {
