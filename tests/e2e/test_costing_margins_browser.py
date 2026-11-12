@@ -156,3 +156,54 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
     expect(page.locator("[data-margins-empty]")).to_be_hidden()
 
     assert len(responses) >= 3
+
+
+def test_a_month_with_any_unknown_figure_is_left_out_of_the_range_total(margins_user, page, app_url):
+    """Review r4: two products in January, one with no usable revenue: January's revenue is left out
+    of the total entirely (not $100 of it), and the summary says so."""
+
+    def row(product, revenue):
+        return {
+            "product": product,
+            "month": "2026-01",
+            "units": 1,
+            "revenue": revenue,
+            "cost": 10,
+            "duty_tracked": False,
+            "duty": None,
+            "margin": None if revenue is None else 90,
+            "margin_percent": None,
+            "average_cost_per_unit": 10,
+            "cost_status": "actual",
+            "lines": [],
+        }
+
+    body = {"from": "2026-01", "to": "2026-01", "currency": "NZD", "rows": [row("Gin", 100), row("Limoncello", None)]}
+    page.route("**/api/core/costing/margins**", lambda route: route.fulfill(json=body))
+    page.goto(app_url + PAGE)
+    page.locator("[data-margins-root][aria-busy='false']").wait_for()
+    summary = page.locator("[data-margins-summary]")
+    expect(summary).to_contain_text("Complete for 0 of 1 months")
+    expect(summary).not_to_contain_text("$100.00")
+
+
+def test_a_slow_report_never_rewrites_the_page_navigated_to(margins_user, page, app_url):
+    """Review r4: the default range is written to the address only while Margins is still showing."""
+    import time
+
+    def slow(route):
+        time.sleep(1.5)
+        route.fulfill(json=_report())
+
+    page.route("**/api/core/costing/margins**", slow)
+    page.goto(app_url + PAGE)
+    page.evaluate("""() => {
+      const link = document.createElement('a');
+      link.href = '/core/inventory/view';
+      document.querySelector('#page-content').prepend(link);
+      window.htmx.process(link);
+      link.click();
+    }""")
+    page.wait_for_url("**/core/inventory/view")
+    page.wait_for_timeout(2500)
+    assert "from=" not in page.url and page.url.endswith("/core/inventory/view")

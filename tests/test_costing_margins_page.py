@@ -41,3 +41,24 @@ def test_margins_page_absent_without_costing(flask_app, db):  # noqa: F811
         assert f'href="{PAGE}"' not in client.get("/crm/analytics").get_data(as_text=True)
     finally:
         purge(db, org)
+
+
+def test_the_margins_tab_shows_only_to_people_who_can_open_it(flask_app, db):  # noqa: F811
+    """Review r4: the page needs costs.view AND sales.view, so the tab must too (tabs are any-of)."""
+    from app.ui.page_registry import SECTION_TABS
+
+    (tab,) = [t for t in SECTION_TABS["sales"] if t.key == "margins"]
+    org = new_org(db)
+    try:
+        FeatureSubscriptionRepository(db).grant(org.id, "crm")
+        db.commit()
+        costs_only = user_client(db, flask_app, org, permissions=["costs.view", "production.view"])
+        assert f'href="{PAGE}"' not in costs_only.get("/core/costing/costs").get_data(as_text=True)
+        assert costs_only.get(PAGE).status_code == 403
+        sales_only = user_client(db, flask_app, org, permissions=["sales.view"])
+        assert f'href="{PAGE}"' not in sales_only.get("/crm/analytics").get_data(as_text=True)
+        both = user_client(db, flask_app, org, permissions=["sales.view", "costs.view"])
+        assert f'href="{PAGE}"' in both.get("/crm/analytics").get_data(as_text=True)
+    finally:
+        purge(db, org)
+    assert tab.requires_all == ("costs.view", "sales.view")

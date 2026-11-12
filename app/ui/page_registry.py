@@ -195,6 +195,7 @@ class Tab:
     path: str
     requires: tuple[str, ...] = ()
     when: str | None = None
+    requires_all: tuple[str, ...] = ()  # and every one of these (a page that needs two kinds of access)
 
 
 SECTION_LABELS = {
@@ -244,7 +245,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
         # Live cost (8.1f-2): profit per product per month; costing orgs, needs cost and sales access.
-        Tab("margins", "Margins", "/core/costing/margins", ("costs.view",), when="costing"),
+        Tab("margins", "Margins", "/core/costing/margins", when="costing", requires_all=("costs.view", "sales.view")),
         # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales. GL-U02b: one name
         # per place: the estimate lives in Sales, the filing draft in Compliance → Customs.
         Tab("excise", "Excise estimate", "/crm/excise", ("sales.view",), when="nz_alcohol"),

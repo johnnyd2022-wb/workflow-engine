@@ -27,17 +27,22 @@
       months: 0, missingRevenue: 0, missingCost: 0, missingDuty: 0, missingMargin: 0, marginRevenue: 0 };
     var all = {}, noRevenue = {}, noCost = {}, noDuty = {}, noMargin = {};
     function plus(a, b) { return b == null ? a : (a || 0) + b; }
+    // First mark which calendar months are incomplete, across every product in them; then add up
+    // only complete months, so "complete for N of M months" is exactly what the total covers.
     rows.forEach(function (r) {
-      t.units += Number(r.units);
       all[r.month] = true;
       if (r.revenue == null) noRevenue[r.month] = true;
       if (r.cost == null) noCost[r.month] = true;
       if (r.duty_tracked && r.duty == null) noDuty[r.month] = true;
       if (r.margin == null) noMargin[r.month] = true;
-      t.revenue = plus(t.revenue, num(r.revenue));
-      t.cost = plus(t.cost, num(r.cost));
-      if (r.duty_tracked) t.duty = plus(t.duty, num(r.duty)); else t.dutyTracked = false;
-      if (r.margin != null) { t.margin = plus(t.margin, num(r.margin)); t.marginRevenue += num(r.revenue) || 0; }
+    });
+    rows.forEach(function (r) {
+      t.units += Number(r.units);
+      if (!noRevenue[r.month]) t.revenue = plus(t.revenue, num(r.revenue));
+      if (!noCost[r.month]) t.cost = plus(t.cost, num(r.cost));
+      if (!r.duty_tracked) t.dutyTracked = false;
+      else if (!noDuty[r.month]) t.duty = plus(t.duty, num(r.duty));
+      if (!noMargin[r.month]) { t.margin = plus(t.margin, num(r.margin)); t.marginRevenue += num(r.revenue) || 0; }
       t.statuses.push(r.cost_status);
     });
     // Calendar months, not product-months: "revenue from 1 of 6 months".
@@ -101,7 +106,9 @@
       money = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: body.currency || 'NZD' });
       if (!els.from.value) els.from.value = body.from;
       if (!els.to.value) els.to.value = body.to;
-      // The range shown is the range shared: write the API's defaults into the address too.
+      // The range shown is the range shared: write the API's defaults into the address too, but
+      // only while this page is still the one on screen (a slow reply can land after navigation).
+      if (!root.isConnected || window.location.pathname !== '/core/costing/margins') return;
       var url = new URL(window.location.href);
       if (url.searchParams.get('from') !== body.from || url.searchParams.get('to') !== body.to) {
         url.searchParams.set('from', body.from);
