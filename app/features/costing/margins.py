@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
-from app.features.costing.engine import ACTUAL, ESTIMATED, UNKNOWN, CostEngine, TooLargeError, normalise, worst
+from app.features.costing.engine import ACTUAL, ESTIMATED, PARTIAL, UNKNOWN, CostEngine, TooLargeError, normalise, worst
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -75,7 +75,7 @@ class _Costs:
                 self._unit[item.id] = (None, UNKNOWN)
             else:
                 unit = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
-                self._unit[item.id] = (unit, cost.status if unit is not None else UNKNOWN)
+                self._unit[item.id] = (unit, cost.status if cost.status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN)
         return self._unit[item.id]
 
     def average(self, product: str) -> Decimal | None:
@@ -162,6 +162,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             any_lot = costs.any_lot(sale.product_name)
             if duty_on and any_lot is not None:
                 duty_pairs[sale.sold_on].append((row, any_lot, loose))
+            elif duty_on:
+                row.add_duty(None)
         row.lines.append(
             {
                 "reference": sale.reference,
@@ -216,7 +218,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
     out = []
     for (product, month), row in sorted(rows.items(), key=lambda kv: (-kv[0][1].toordinal(), kv[0][0].casefold())):
         status = worst(*row.statuses) if row.statuses else ACTUAL
-        known_cost = status != UNKNOWN
+        known_cost = status not in (PARTIAL, UNKNOWN)
         cost = row.cost if known_cost else None
         tracked_duty = row.duty if row.duty_tracked else None
         margin = None

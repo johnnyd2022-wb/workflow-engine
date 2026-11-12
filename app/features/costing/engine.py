@@ -27,7 +27,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
@@ -327,8 +327,7 @@ class CostEngine:
     # --- loading ---------------------------------------------------------------------------
 
     def prime(self, item_ids) -> None:
-        """Bulk-load lots, in-flows, entries and allocations for many lots in four queries, so a
-        caller costing a list of lots (readiness) doesn't pay one round of queries per lot."""
+        """Bulk-load lots and cost inputs, plus execution graphs reachable from those lots."""
         from app.features.costing.models import PurchaseAllocation
 
         ids = [i for i in {*item_ids} if i is not None and i not in self._in_flow_cache]
@@ -372,6 +371,63 @@ class CostEngine:
                 PurchaseAllocation.status.in_(("active", "orphaned")),
             ):
                 self._allocation_cache[alloc.inventory_item_id].append(alloc)
+
+        pending = {
+            flow.execution_id
+            for flows in self._in_flow_cache.values()
+            for flow in flows
+            if flow.execution_id is not None and flow.kind in ("produced", "reconciled_in")
+        }
+        while pending:
+            execution_ids = [execution_id for execution_id in pending if execution_id not in self._exec_info]
+            pending.clear()
+            for start in range(0, len(execution_ids), 1000):
+                chunk = execution_ids[start : start + 1000]
+                steps = (
+                    self.db.query(  # nosemgrep: sqlalchemy-query-in-for-loop — one bulk query per 1,000 execution IDs.
+                        ExecutionStep
+                    )
+                    .options(joinedload(ExecutionStep.step))
+                    .filter(ExecutionStep.org_id == self.org_id, ExecutionStep.execution_id.in_(chunk))
+                    .order_by(ExecutionStep.execution_id, ExecutionStep.step_number, ExecutionStep.id)
+                    .all()
+                )
+                flows = (
+                    self.db.query(  # nosemgrep: sqlalchemy-query-in-for-loop — one bulk query per 1,000 execution IDs.
+                        CostFlow
+                    )
+                    .filter(CostFlow.org_id == self.org_id, CostFlow.execution_id.in_(chunk))
+                    .order_by(CostFlow.execution_id, CostFlow.created_at, CostFlow.id)
+                    .all()
+                )
+                self._spend(len(steps) + len(flows))
+                steps_by_execution: dict[UUID, list[ExecutionStep]] = defaultdict(list)
+                flows_by_execution: dict[UUID, list[CostFlow]] = defaultdict(list)
+                for step in steps:
+                    steps_by_execution[step.execution_id].append(step)
+                for flow in flows:
+                    flows_by_execution[flow.execution_id].append(flow)
+                consumed_lot_ids = set()
+                for execution_id in chunk:
+                    execution_steps = steps_by_execution[execution_id]
+                    index = {step.id: i for i, step in enumerate(execution_steps)}
+                    consumed, outs = defaultdict(list), defaultdict(list)
+                    internal = set()
+                    for flow in flows_by_execution[execution_id]:
+                        position = index.get(flow.execution_step_id)
+                        if flow.direction == "in":
+                            internal.add(flow.inventory_item_id)
+                        if flow.direction == "out":
+                            consumed_lot_ids.add(flow.inventory_item_id)
+                        if position is None:
+                            continue
+                        (consumed if flow.direction == "out" else outs)[position].append(flow)
+                    self._exec_info[execution_id] = ExecInfo(execution_steps, index, consumed, outs, internal)
+
+                new_lot_ids = [item_id for item_id in consumed_lot_ids if item_id not in self._in_flow_cache]
+                if new_lot_ids:
+                    # Inputs get the same bulk load (lots, entries, allocations, their executions).
+                    self.prime(new_lot_ids)
 
     def _get_lot(self, item_id: UUID) -> InventoryItem | None:
         if item_id not in self._lots:
