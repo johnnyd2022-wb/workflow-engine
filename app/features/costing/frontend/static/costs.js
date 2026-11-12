@@ -29,6 +29,8 @@
       howto: root.querySelector('[data-costs-howto]'),
       list: root.querySelector('[data-costs-list]'),
       empty: root.querySelector('[data-costs-empty]'),
+      prices: root.querySelector('[data-prices]'),
+      pricesList: root.querySelector('[data-prices-list]'),
     };
     var canManage = root.getAttribute('data-can-manage') === 'true';
 
@@ -40,6 +42,7 @@
         els.error.hidden = false;
       })
       .finally(function () { root.setAttribute('aria-busy', 'false'); });
+    loadPrices();
 
     function render(products, who) {
       if (!products.length) {
@@ -149,6 +152,178 @@
       }).catch(function (err) {
         detail.replaceChildren(el('p', 'cost-error', 'Couldn’t load this product: ' + err.message));
       });
+    }
+
+    /* ------------------------------------------------ what you pay for materials (8.1f-3a) */
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function monthName(key, withYear) {
+      var parts = key.split('-');
+      var name = MONTHS[Number(parts[1]) - 1] || key;
+      return withYear ? name + ' ' + parts[0] : name;
+    }
+    function shortDate(iso) {
+      var d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
+      if (isNaN(d)) return iso;
+      return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    function price(raw) {
+      if (raw == null) return '—';
+      var n = Number(raw);
+      if (!isFinite(n)) return '—';
+      var digits = Math.abs(n) >= 1 || n === 0 ? 2 : 4;
+      return '$' + n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: digits });
+    }
+    function per(unit) { return unit ? ' / ' + unit : ''; }
+
+    function loadPrices() {
+      get(API + '/materials').then(function (d) {
+        var materials = d.materials || [];
+        if (!materials.length) return;
+        els.pricesList.replaceChildren();
+        materials.forEach(function (m) { els.pricesList.appendChild(priceRow(m)); });
+        els.prices.hidden = false;
+      }).catch(function () { /* the readiness list is the page; prices are extra */ });
+    }
+
+    function priceRow(m) {
+      var li = el('li', 'co-row');
+      var button = el('button', 'co-row__head');
+      button.type = 'button';
+      button.setAttribute('aria-expanded', 'false');
+      var detailId = 'co-price-' + m.name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      button.setAttribute('aria-controls', detailId);
+      button.appendChild(el('span', 'co-row__name', m.name));
+      var figure = el('span', 'co-price');
+      figure.appendChild(el('span', 'co-price__value', price(m.latest_unit_price) + per(m.unit)));
+      figure.appendChild(el('span', 'co-price__when', 'last paid ' + shortDate(m.latest_date)));
+      button.appendChild(figure);
+      var chevron = el('span', 'co-row__chevron');
+      chevron.setAttribute('aria-hidden', 'true');
+      button.appendChild(chevron);
+      li.appendChild(button);
+      var detail = el('div', 'co-row__detail');
+      detail.id = detailId;
+      detail.hidden = true;
+      li.appendChild(detail);
+      var loaded = false;
+      button.addEventListener('click', function () {
+        var open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        detail.hidden = !open;
+        if (open && !loaded) { loaded = true; loadHistory(m, detail); }
+      });
+      return li;
+    }
+
+    function loadHistory(m, detail) {
+      detail.appendChild(el('p', 'cost-muted', 'Loading…'));
+      get(API + '/materials/' + encodeURIComponent(m.name) + '/history').then(function (h) {
+        detail.replaceChildren();
+        var priced = h.months.filter(function (row) { return row.average_unit_cost != null; });
+        if (!priced.length) {
+          detail.appendChild(el('p', 'cost-muted', 'Nothing bought in the last year. The latest price is from ' + shortDate(m.latest_date) + '.'));
+          return;
+        }
+        detail.appendChild(el('p', 'co-trend', trend(priced, h.unit)));
+        if (priced.length > 1) detail.appendChild(chart(h, priced));
+        if (priced.length > 1) detail.appendChild(monthsTable(priced, h.unit));
+        var unconverted = h.months.reduce(function (n, row) { return n + (row.unconverted || 0); }, 0);
+        if (unconverted) {
+          detail.appendChild(el('p', 'cost-muted', unconverted === 1
+            ? 'One price was in a unit that can’t be compared with ' + h.unit + ', so it’s left out.'
+            : unconverted + ' prices were in a unit that can’t be compared with ' + h.unit + ', so they’re left out.'));
+        }
+      }).catch(function (err) {
+        detail.replaceChildren(el('p', 'cost-error', 'Couldn’t load prices: ' + err.message));
+      });
+    }
+
+    function trend(priced, unit) {
+      var first = priced[0], last = priced[priced.length - 1];
+      if (priced.length === 1) {
+        return 'Bought in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + ' on average.';
+      }
+      var a = Number(first.average_unit_cost), b = Number(last.average_unit_cost);
+      if (!a) return 'Last bought in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + '.';
+      var change = Math.round((b - a) / a * 100);
+      var span = ' from ' + monthName(first.month, true) + ' to ' + monthName(last.month, true);
+      if (change === 0) return 'Steady at about ' + price(last.average_unit_cost) + per(unit) + span + '.';
+      return (change > 0 ? 'Up ' : 'Down ') + Math.abs(change) + '%' + span + ' (' + price(first.average_unit_cost) + ' → ' + price(last.average_unit_cost) + per(unit) + ').';
+    }
+
+    function chart(h, priced) {
+      var months = allMonths(h.from, h.to);
+      var byKey = {};
+      h.months.forEach(function (row) { byKey[row.month] = row; });
+      var max = 0;
+      priced.forEach(function (row) { var v = Number(row.average_unit_cost); if (v > max) max = v; });
+      var first = priced[0].month, last = priced[priced.length - 1].month;
+      var wrap = el('div', 'co-bars');
+      wrap.setAttribute('role', 'img');
+      wrap.setAttribute('aria-label', 'Average price per month, ' + monthName(h.from, true) + ' to ' +
+        monthName(h.to, true) + '. Each month is listed below.');
+      wrap.style.setProperty('--co-months', String(months.length));
+      months.forEach(function (k, i) {
+        var col = el('div', 'co-bars__col');
+        var row = byKey[k];
+        var v = row && row.average_unit_cost != null ? Number(row.average_unit_cost) : NaN;
+        var plot = el('div', 'co-bars__plot');
+        if (isFinite(v) && max > 0) {
+          var bar = el('span', 'co-bars__bar');
+          if (k === first || k === last) bar.appendChild(el('span', 'co-bars__value', price(row.average_unit_cost)));
+          bar.style.height = Math.max(3, Math.round(100 * v / max)) + '%';
+          bar.title = monthName(k, true) + ': ' + price(row.average_unit_cost) + per(h.unit) + ' average, ' +
+            row.purchases + (row.purchases === 1 ? ' purchase' : ' purchases');
+          plot.appendChild(bar);
+        }
+        col.appendChild(plot);
+        var label = el('span', 'co-bars__label', monthName(k, false));
+        if (months.length > 12 && i % 2) label.classList.add('co-bars__label--skip');
+        col.appendChild(label);
+        wrap.appendChild(col);
+      });
+      return wrap;
+    }
+
+    function allMonths(from, to) {
+      var out = [], y = Number(from.slice(0, 4)), mo = Number(from.slice(5, 7));
+      var ey = Number(to.slice(0, 4)), em = Number(to.slice(5, 7));
+      while (y < ey || (y === ey && mo <= em)) {
+        out.push(y + '-' + (mo < 10 ? '0' : '') + mo);
+        mo += 1; if (mo > 12) { mo = 1; y += 1; }
+      }
+      return out;
+    }
+
+    function monthsTable(priced, unit) {
+      var wrap = el('details', 'co-months-toggle');
+      wrap.appendChild(el('summary', '', 'Each month'));
+      var table = el('table', 'co-months');
+      var head = el('tr');
+      var ranged = priced.some(function (row) { return row.min_unit_price !== row.max_unit_price; });
+      var heads = ['Month', 'Average' + per(unit), 'Bought'];
+      if (ranged) heads.push('Range');
+      heads.forEach(function (t, i) {
+        var th = el('th', i === 3 ? 'co-months__range' : '', t);
+        th.scope = 'col';
+        head.appendChild(th);
+      });
+      var thead = el('thead'); thead.appendChild(head); table.appendChild(thead);
+      var tbody = el('tbody');
+      priced.slice().reverse().forEach(function (row) {
+        var tr = el('tr');
+        tr.appendChild(el('td', '', monthName(row.month, true)));
+        tr.appendChild(el('td', '', price(row.average_unit_cost)));
+        tr.appendChild(el('td', '', Number(row.priced_quantity).toLocaleString('en-NZ', { maximumFractionDigits: 3 }) + (unit ? ' ' + unit : '')));
+        if (ranged) {
+          tr.appendChild(el('td', 'co-months__range', row.min_unit_price === row.max_unit_price
+            ? price(row.min_unit_price) : price(row.min_unit_price) + '–' + price(row.max_unit_price)));
+        }
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      return wrap;
     }
   }
 

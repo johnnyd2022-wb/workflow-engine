@@ -22,6 +22,11 @@
     <p>A product appears here once a workflow makes it, or once you add finished stock.</p>
     <a class="workspace-button" href="/core/processes">Go to Workflows</a>
   </div>
+  <section class="co-prices" data-prices hidden aria-labelledby="co-prices-title">
+    <h2 class="co-section-title" id="co-prices-title">What you pay for materials</h2>
+    <p class="co-section-lead">The latest price for each material. Open one to see what you paid each month over the last year.</p>
+    <ul class="co-list" data-prices-list aria-label="Materials"></ul>
+  </section>
   <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script src="{{ url_for('costing.static', filename='costs.js') }}" defer></script>
 </div>
