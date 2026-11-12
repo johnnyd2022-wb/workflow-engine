@@ -440,3 +440,30 @@ def test_r2_same_document_allocations_use_higher_allocation_id_for_latest(world,
     assert doc.document_date == date(2026, 11, 10)
     assert history["latest"]["unit_price"] == "30.000000"
     assert picker["latest_unit_price"] == "30.000000"
+
+
+def test_r4_an_unconvertible_purchase_still_counts_and_lists(world, db):
+    org, client = world["org"], world["client"]
+    lot(db, org.id, "Odd Unit", 1, "kg")
+    lot(db, org.id, "Odd Unit", 1, "kg")
+    _purchase(world["sync"], db, client, 6, 2, name="Odd Unit", unit="bottles")
+    (month,) = _history(client, "Odd Unit", **{"from": "2026-11", "to": "2026-11"}).get_json()["months"]
+    assert (month["unconverted"], month["purchases"]) == (1, 1)
+    row = next(m for m in client.get(f"{API}/materials").get_json()["materials"] if m["name"] == "Odd Unit")
+    assert row["latest_unit_price"] is None
+
+
+def test_r4_picker_ignores_a_whole_lot_price_the_engine_displaces(world, db):
+    org = world["org"]
+    item = lot(db, org.id, "Displaced", 2, "kg")
+    created = next(flow for flow in flows(db, org.id, item.id, kind="created"))
+    flow_price = price(db, org.id, item.id, 90, 2, cost_flow_id=created.id)
+    whole = price(db, org.id, item.id, 80, 2)
+    flow_price.created_at = datetime(2026, 11, 10, 1, tzinfo=UTC)
+    whole.created_at = datetime(2026, 11, 10, 2, tzinfo=UTC)  # newer, but covers nothing unpriced
+    db.commit()
+    history = _history(world["client"], "Displaced", **{"from": "2026-11", "to": "2026-11"}).get_json()["latest"]
+    picker = next(
+        m for m in world["client"].get(f"{API}/materials").get_json()["materials"] if m["name"] == "Displaced"
+    )
+    assert history["unit_price"] == picker["latest_unit_price"] == "45.000000"
