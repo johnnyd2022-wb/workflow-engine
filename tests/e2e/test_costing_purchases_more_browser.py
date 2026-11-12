@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -11,6 +10,7 @@ from playwright.sync_api import expect
 
 from app.core.db.models.user import UserRole
 from app.features.costing.models import PurchaseAllocation, PurchaseDocument, PurchaseLine
+from app.features.costing.purchase_sources import nz_today
 from tests.costing_helpers import lot, lot_cost, price
 from tests.e2e.conftest import csrf_headers, login_through_ui
 from tests.e2e.test_costing_purchases_browser import _org_with_purchases
@@ -40,7 +40,7 @@ def _refund_line(db, org_id, source_line):
         external_id=f"e2e-refund-{uuid4()}",
         kind="refund",
         payee_name="Botanical Supply Co",
-        document_date=date.today(),
+        document_date=nz_today(),
         currency_code="NZD",
         status="active",
         total_ex_tax=Decimal("20"),
@@ -71,7 +71,7 @@ def _refund_line(db, org_id, source_line):
 def test_refund_picker_lowers_the_selected_lots_cost(manager, page, app_url, db):
     (source_line_id,) = _org_with_purchases(db, manager, ["40"])
     source_line = db.get(PurchaseLine, source_line_id)
-    item = lot(db, manager, "Refund picker juniper", 2, "kg", purchase_date=date.today())
+    item = lot(db, manager, "Refund picker juniper", 2, "kg", purchase_date=nz_today())
     price(db, manager, item.id, 40, 2)
     refund = _refund_line(db, manager, source_line)
 
@@ -92,7 +92,7 @@ def test_refund_picker_lowers_the_selected_lots_cost(manager, page, app_url, db)
 
 def test_already_in_stock_shows_quantity_and_links_without_creating_lot(manager, page, app_url, db):
     (line_id,) = _org_with_purchases(db, manager, ["30"])
-    item = lot(db, manager, "Existing juniper lot", 7, "kg", purchase_date=date.today())
+    item = lot(db, manager, "Existing juniper lot", 7, "kg", purchase_date=nz_today())
     before_ids = {row[0] for row in db.query(PurchaseAllocation.inventory_item_id).all()}
 
     _open_purchases(page, app_url)
