@@ -7,6 +7,7 @@ also 404s unless the org holds the ``costing`` feature.
 
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
@@ -495,12 +496,15 @@ def margins_report():
         return jsonify({"error": "Forbidden"}), 403
 
     def month(raw, default):
-        if raw in (None, ""):
+        if raw is None:
             return default
+        match = re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", raw)
+        if match is None:
+            raise service.CostingError("Months are YYYY-MM") from None
+        year, mon = (int(part) for part in raw.split("-"))
         try:
-            year, mon = (int(p) for p in str(raw).split("-"))
             return date(year, mon, 1)
-        except (ValueError, TypeError):
+        except ValueError:
             raise service.CostingError("Months are YYYY-MM") from None
 
     this_month = margins.month_start(nz_today())
