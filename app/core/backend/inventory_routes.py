@@ -789,11 +789,71 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         "supplier_batch_number": (data.get("supplier_batch_number") or "").strip() or None,
                     }
                     extra_merge = {"inventory_audit_history": [audit_entry]}
+                    # 8.1e-2: what this delivery cost prices the new ``added`` flow, in the same
+                    # transaction as the add; the lot's earlier prices stay as they were.
+                    added_paid = _costing_total_paid(data, org_id)
+                    if added_paid is not None:
+                        try:
+                            if Decimal(str(quantity)) <= 0:
+                                raise ValueError
+                        except (InvalidOperation, ValueError):
+                            return jsonify({"error": "total_paid needs a quantity above zero"}), 400
+                    before_flows = set()
+                    if added_paid is not None:
+                        from app.features.costing.models import CostFlow
+
+                        # Lock the lot first, so a concurrent delivery can't add its flow between
+                        # this snapshot and ours (the add itself locks the same row again).
+                        repo.get_inventory_item_by_id_for_update(existing.id, org_id)
+                        before_flows = {
+                            fid
+                            for (fid,) in db_session.query(CostFlow.id).filter(
+                                CostFlow.org_id == org_id,
+                                CostFlow.inventory_item_id == existing.id,
+                                CostFlow.kind == "added",
+                            )
+                        }
                     updated = repo.add_quantity_to_inventory_item(
-                        existing.id, org_id, str(quantity), extra_data_merge=extra_merge, commit=True
+                        existing.id,
+                        org_id,
+                        str(quantity),
+                        extra_data_merge=extra_merge,
+                        commit=added_paid is None,
                     )
                     if not updated:
+                        db_session.rollback()
                         return jsonify({"error": "Failed to add quantity to existing item"}), 500
+                    if added_paid is not None:
+                        from app.features.costing import service as costing_service
+                        from app.features.costing.models import CostFlow
+
+                        try:
+                            db_session.flush()
+                            new_flows = [
+                                f
+                                for f in db_session.query(CostFlow).filter(
+                                    CostFlow.org_id == org_id,
+                                    CostFlow.inventory_item_id == existing.id,
+                                    CostFlow.kind == "added",
+                                )
+                                if f.id not in before_flows
+                            ]
+                            if len(new_flows) != 1:
+                                raise costing_service.CostingError("This delivery can't take a price")
+                            costing_service.set_lot_price(
+                                db_session,
+                                org_id,
+                                existing.id,
+                                amount=added_paid,
+                                quantity=new_flows[0].quantity,
+                                kind="manual",
+                                cost_flow_id=new_flows[0].id,
+                                user_id=getattr(g, "user_id", None) and UUID(str(g.user_id)),
+                            )
+                            db_session.commit()
+                        except costing_service.CostingError as error:
+                            db_session.rollback()
+                            return jsonify({"error": str(error)}), 400
                     return (
                         jsonify(
                             {

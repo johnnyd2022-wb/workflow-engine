@@ -1,0 +1,65 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Purchase rules{% endblock %}
+{% block body_class %}costing-rules-page{% endblock %}
+{% block content %}
+{# Inside the content block: a boosted navigation swaps only #page-content. #}
+<link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+<div class="ru-shell workspace-overview workspace-page" data-rules-root
+     data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}" aria-busy="true">
+  <header class="workspace-header">
+    <div>
+      <h1>Purchase rules</h1>
+      <p>How Biz-E treats a purchase from Xero before you see it: what's stock, what isn't, and what to pre-fill.</p>
+    </div>
+    <div class="workspace-header__actions">
+      <a class="workspace-button" href="/core/costing/purchases">Purchases</a>
+      {% if can('costs.manage') %}<button type="button" class="workspace-button workspace-button--primary" data-rules-add>Add a rule</button>{% endif %}
+    </div>
+  </header>
+
+  <div class="workspace-notice" role="alert" data-rules-error hidden></div>
+  <p class="workspace-caption" data-rules-state>Loading…</p>
+  <ul class="ru-list" data-rules-list aria-label="Rules"></ul>
+  <div class="ru-empty workspace-card" data-rules-empty hidden>
+    <h2>No rules yet</h2>
+    <p>Biz-E sorts purchases by their Xero account until you add one. The quickest way is “Remember this” after recording a purchase.</p>
+  </div>
+
+  <dialog class="ru-dialog" data-rules-dialog aria-labelledby="ru-dialog-title">
+    <form method="dialog" hx-boost="false" data-rules-form novalidate>
+      <h2 id="ru-dialog-title" data-rules-dialog-title>Add a rule</h2>
+      <fieldset class="ru-fieldset">
+        <legend>Applies to purchases where</legend>
+        <label class="cost-field"><span class="cost-field__label">Payee</span>
+          <input type="text" name="payee_pattern" maxlength="255" autocomplete="off" placeholder="e.g. Moore Wilson"></label>
+        <label class="cost-field"><span class="cost-field__label">Description</span>
+          <input type="text" name="description_pattern" maxlength="500" autocomplete="off" placeholder="e.g. juniper"></label>
+        <label class="cost-field"><span class="cost-field__label">Xero account code</span>
+          <input type="text" name="account_code" maxlength="50" autocomplete="off" placeholder="e.g. 310"></label>
+        <label class="cost-field"><span class="cost-field__label">Payee and description</span>
+          <select name="match_type"><option value="exact">are exactly this</option><option value="contains">contain this</option></select></label>
+        <p class="cost-hint">Fill in at least one. A purchase must match every one you fill in.</p>
+      </fieldset>
+      <label class="cost-field"><span class="cost-field__label">Treat it as</span>
+        <select name="treatment">
+          <option value="stock">Stock to record</option>
+          <option value="not_stock">Not stock</option>
+          <option value="duty">Duty</option>
+          <option value="overhead">Overhead</option>
+        </select></label>
+      <section class="ru-template" data-rules-template>
+        <h3>Pre-fill these items <span class="cost-optional">(optional)</span></h3>
+        <div class="ru-rows" data-rules-rows></div>
+        <button type="button" class="workspace-button" data-rules-add-row>Add an item</button>
+        <p class="cost-hint">Shares are a % of the purchase. Leave one as “the rest” and it takes what's left.</p>
+      </section>
+      <p class="cost-error" role="alert" id="ru-dialog-error" tabindex="-1" data-rules-dialog-error></p>
+      <div class="ru-dialog__actions">
+        <button type="button" class="workspace-button" data-rules-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-rules-save>Save rule</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="{{ url_for('costing.static', filename='rules.js') }}" defer></script>
+</div>
+{% endblock %}

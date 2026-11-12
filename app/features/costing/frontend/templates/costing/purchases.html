@@ -14,6 +14,7 @@
       <p>What you bought, from Xero. Record each one into stock and its cost follows into every batch.</p>
     </div>
     <div class="workspace-header__actions">
+      <a class="workspace-button" href="/core/costing/rules">Rules</a>
       {% if can('costs.manage') and xero_connected %}<button type="button" class="workspace-button" data-history-open>Load earlier purchases</button>{% endif %}
     </div>
   </header>
@@ -26,6 +27,7 @@
     <p>Biz-E can read what you buy from Xero and ask you to record it into stock. Without it, enter what you paid when you add stock — there's a “Total paid” box on every Add Inventory screen — or on a lot's cost panel.</p>
     <div class="pu-noxero__actions">
       <a class="workspace-button workspace-button--primary" href="/core/inventory/add">Add stock</a>
+      <a class="workspace-button" href="/core/costing/costs">See what's costed</a>
       {% if can('sales.manage') %}<a class="workspace-button" href="/core/integrations">Connect Xero</a>{% endif %}
     </div>
   </div>

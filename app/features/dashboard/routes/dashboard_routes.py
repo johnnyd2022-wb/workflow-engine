@@ -790,6 +790,14 @@ def _dashboard_compliant_workspace_summary(
         return unavailable
 
 
+def _attention_items(org_id) -> list[dict]:
+    from flask import g
+
+    from app.core.attention import collect
+
+    return collect(db_session, org_id, getattr(g, "current_user", None))
+
+
 def _dashboard_build_action_board(
     tasks_summary: dict[str, Any],
     compliance: dict[str, Any],
@@ -798,6 +806,7 @@ def _dashboard_build_action_board(
     check_results: list[Any] | None = None,
     stalled_batches: int = 0,
     today: date | None = None,
+    extra: list[dict] | None = None,
 ) -> dict[str, Any]:
     findings = (compliance or {}).get("findings") or {}
     output_expiry = findings.get("output_expiry") or {}
@@ -894,6 +903,8 @@ def _dashboard_build_action_board(
                     "workspace": "Compliance",
                 }
             )
+
+    candidates.extend(extra or [])  # feature-contributed (app/core/attention.py)
 
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
     items = [item for item in candidates if (item.get("count") or 0) > 0]
@@ -1025,6 +1036,7 @@ def get_dashboard_summary():
         check_results=check_results,
         stalled_batches=int(operations_week_summary.get("stalled_active_over_48h") or 0),
         today=today,
+        extra=_attention_items(org_id),
     )
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),

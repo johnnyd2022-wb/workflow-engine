@@ -422,6 +422,8 @@
             </div>
           </section>
           </div>
+          <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+          <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
           <script src="{{ url_for('core.serve_core_js', filename='batches.js') }}" defer></script>
           {% endif %}
 
@@ -453,6 +455,7 @@
                 <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
                 <h4 class="core2-active-detail-heading">Steps</h4>
                 <div class="core2-active-detail-steps" id="core2-active-detail-steps"></div>
+                <div class="cost-card-mount" id="core2-active-detail-cost" hidden></div>
               </div>
               <div class="core2-active-detail-foot">
                 <button type="button" class="workspace-button" data-core2-detail-close>Close</button>
