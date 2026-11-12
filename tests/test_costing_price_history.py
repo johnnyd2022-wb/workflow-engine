@@ -9,7 +9,8 @@ from uuid import UUID
 import pytest
 
 from app.core.db.models.user import UserRole
-from app.features.costing.models import PurchaseAllocation, PurchaseDocument, PurchaseLine
+from app.features.costing import price_history
+from app.features.costing.models import LotCostEntry, PurchaseAllocation, PurchaseDocument, PurchaseLine
 from tests.costing_helpers import flows, lot, new_org, price, purge, user_client
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 from tests.test_costing_allocations import _record, _row, _sync_purchase, connect
@@ -52,6 +53,16 @@ def _history(client, name="Juniper", **params):
     query = "&".join(f"{'from' if key == 'from_' else key}={value}" for key, value in params.items())
     suffix = f"?{query}" if query else ""
     return client.get(f"{API}/materials/{name}/history{suffix}")
+
+
+def _reverse_price_facts(monkeypatch):
+    load_facts = price_history._facts
+
+    def reversed_facts(*args):
+        allocations, entries = load_facts(*args)
+        return list(reversed(allocations)), list(reversed(entries))
+
+    monkeypatch.setattr(price_history, "_facts", reversed_facts)
 
 
 def test_ac105_weighted_average_across_two_purchases(world, db):
@@ -352,20 +363,80 @@ def test_r2_a_zero_dollar_purchase_is_a_price(world, db):
     body = _history(world["client"], "Gifted Juniper", **{"from": "2026-11", "to": "2026-11"}).get_json()
     (month,) = body["months"]
     assert D(month["average_unit_cost"]) == D("0") and D(month["priced_quantity"]) == D("5")
+    assert month["purchases"] == 1
     assert D(body["latest"]["unit_price"]) == D("0")
     names = [m["name"] for m in world["client"].get(f"{API}/materials").get_json()["materials"]]
     assert "Gifted Juniper" in names
 
 
-def test_r2_identical_timestamps_pick_the_same_latest_in_history_and_picker(world, db):
+def test_r2_identical_timestamps_pick_the_same_latest_in_history_and_picker(world, db, monkeypatch):
     org = world["org"]
     item = lot(db, org.id, "Tie Break", 2, "kg")
     first = price(db, org.id, item.id, 10, 1)
     created = next(flow for flow in flows(db, org.id, item.id, kind="created"))
     second = price(db, org.id, item.id, 30, 1, cost_flow_id=created.id)
-    first.id, second.id = UUID(int=9), UUID(int=1)
+    first.id, second.id = UUID(int=1), UUID(int=9)
     first.created_at = second.created_at = datetime(2026, 11, 10, 1, tzinfo=UTC)
     db.commit()
+    _reverse_price_facts(monkeypatch)
     history = _history(world["client"], "Tie Break", **{"from": "2026-11", "to": "2026-11"}).get_json()["latest"]
     picker = world["client"].get(f"{API}/materials").get_json()["materials"][0]
-    assert history["unit_price"] == picker["latest_unit_price"]
+    assert history["unit_price"] == "30.000000"
+    assert picker["latest_unit_price"] == "30.000000"
+
+
+def test_r2_flow_cap_scales_purchase_allocation_and_manual_entry_together(world, db):
+    _doc, line, item = _purchase(world["sync"], db, world["client"], 20, 2, name="Capped Herb")
+    allocation = (
+        db.query(PurchaseAllocation)
+        .filter(PurchaseAllocation.org_id == world["org"].id, PurchaseAllocation.purchase_line_id == line.id)
+        .one()
+    )
+    manual = LotCostEntry(
+        org_id=world["org"].id,
+        inventory_item_id=item.id,
+        cost_flow_id=allocation.cost_flow_id,
+        kind="manual",
+        amount=D("30"),
+        quantity=D("2"),
+        created_at=datetime(2026, 11, 10, 12, tzinfo=UTC),
+    )
+    db.add(manual)
+    db.commit()
+
+    response = _history(world["client"], "Capped Herb", **{"from": "2026-11", "to": "2026-11"})
+    assert response.status_code == 200, response.get_json()
+    month = response.get_json()["months"][0]
+    assert D(month["amount"]) == D("25")
+    assert D(month["priced_quantity"]) == D("2")
+    assert D(month["average_unit_cost"]) == D("12.5")
+    assert month["purchases"] == 1
+
+
+def test_r2_same_document_allocations_use_higher_allocation_id_for_latest(world, db, monkeypatch):
+    doc, line, *_ = _sync_purchase(
+        world["sync"], db, amount="40", on=date(2026, 11, 10), description="Split Herb purchase", payee="Split supplier"
+    )
+    response = _record(
+        world["client"],
+        line.id,
+        [_row("Split Herb", 1, 10), _row("Split Herb", 1, 30)],
+    )
+    assert response.status_code == 200, response.get_json()
+    allocations = (
+        db.query(PurchaseAllocation)
+        .filter(PurchaseAllocation.org_id == world["org"].id, PurchaseAllocation.purchase_line_id == line.id)
+        .all()
+    )
+    assert len(allocations) == 2
+    lower_price_allocation = next(allocation for allocation in allocations if D(allocation.amount) == D("10"))
+    higher_price_allocation = next(allocation for allocation in allocations if D(allocation.amount) == D("30"))
+    lower_price_allocation.id, higher_price_allocation.id = UUID(int=1), UUID(int=9)
+    db.commit()
+    _reverse_price_facts(monkeypatch)
+
+    history = _history(world["client"], "Split Herb", **{"from": "2026-11", "to": "2026-11"}).get_json()
+    picker = world["client"].get(f"{API}/materials").get_json()["materials"][0]
+    assert doc.document_date == date(2026, 11, 10)
+    assert history["latest"]["unit_price"] == "30.000000"
+    assert picker["latest_unit_price"] == "30.000000"

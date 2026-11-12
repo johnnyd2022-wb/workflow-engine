@@ -174,8 +174,15 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             row["quantity"] += converted_quantity
             if converted_price is not None:
                 row["prices"].append(converted_price)
-            if purchase_id is not None and amount > ZERO:
+            if purchase_id is not None and quantity > ZERO:
                 row["purchases"].add(purchase_id)
+
+    direct_flows = {}
+    for item_id in by_id:
+        direct_flows[item_id] = [
+            flow for flow in engine._in_flows(item_id) if flow.kind not in ("produced", "reconciled_in", "transfer_in")
+        ]
+    direct_flow_ids = {item_id: {flow.id for flow in item_flows} for item_id, item_flows in direct_flows.items()}
 
     for allocation, _line, document in allocations:
         item = by_id[allocation.inventory_item_id]
@@ -183,7 +190,8 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         if not amount.is_finite() or not quantity.is_finite():
             continue
         # Refunds carry no quantity and reduce the amount in their purchase document month.
-        if amount >= ZERO and quantity > ZERO:  # $0 is a price (the engine costs it at $0)
+        if amount >= ZERO and quantity > ZERO and allocation.cost_flow_id not in direct_flow_ids[item.id]:
+            # Flow allocations are added below with the same proportional cap as manual entries.
             add_fact(item, document.document_date, amount, quantity, "purchase", str(document.id), allocation.id)
         elif amount < ZERO:
             add_fact(item, document.document_date, amount, ZERO, "refund", str(document.id), allocation.id)
@@ -196,15 +204,21 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
                 flow_entries[entry.cost_flow_id].append(entry)
 
         unpriced_direct = ZERO
-        for flow in engine._in_flows(item_id):
-            if flow.kind in ("produced", "reconciled_in", "transfer_in"):
-                continue
+        for flow in direct_flows[item_id]:
             flow_quantity = Decimal(str(flow.quantity))
             prices = flow_entries.get(flow.id, [])
             priced_quantity = sum((Decimal(str(entry.quantity)) for entry in prices), ZERO)
-            for allocation in engine._allocations(item_id):
-                if allocation.cost_flow_id == flow.id and allocation.amount >= ZERO and allocation.quantity > ZERO:
-                    priced_quantity += Decimal(str(allocation.quantity))
+            flow_allocations = [
+                (allocation, document)
+                for allocation, _line, document in allocations
+                if allocation.inventory_item_id == item_id
+                and allocation.cost_flow_id == flow.id
+                and allocation.amount >= ZERO
+                and allocation.quantity > ZERO
+            ]
+            priced_quantity += sum(
+                (Decimal(str(allocation.quantity)) for allocation, _document in flow_allocations), ZERO
+            )
             effective_quantity = min(priced_quantity, flow_quantity)
             scale = effective_quantity / priced_quantity if priced_quantity > ZERO else ZERO
             for entry in prices:
@@ -213,6 +227,19 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
                 if quantity > ZERO:
                     add_fact(
                         item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind, fact_id=entry.id
+                    )
+            for allocation, document in flow_allocations:
+                quantity = Decimal(str(allocation.quantity)) * scale
+                amount = Decimal(str(allocation.amount)) * scale
+                if quantity > ZERO:
+                    add_fact(
+                        item,
+                        document.document_date,
+                        amount,
+                        quantity,
+                        "purchase",
+                        str(document.id),
+                        allocation.id,
                     )
             unpriced_direct += flow_quantity - effective_quantity
 
