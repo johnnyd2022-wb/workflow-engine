@@ -1596,6 +1596,28 @@ quantity, amount = the open amount. A rule or last time still wins.
   (bootstrap from `start_date`, then modified-since) and historical runs fetch them for the range.
 - AC101: a bill line's quantity and item code are stored on the line; the card says "Bill".
 
+## 8.1f-3c build contract — auto-record rules
+
+A stock rule whose template leaves nothing to ask can record matching purchases itself (spec Q2).
+
+- `auto_record: true` is accepted only for a `stock` rule with a template whose rows are all `fixed` or
+  `from_price`, ask for no batch number or expiry, and cover the whole line (shares total 100 or a
+  `rest` row). Anything else is 400.
+- After each purchases upsert (sync, historical run; bank transactions and bills), each line created
+  in that upsert that is open, active, base-currency priced, a spend, and won by an auto rule is recorded
+  through `actions.prefill` + `actions.record` as the system (no user), one savepoint per line. A failure
+  is logged and leaves the line open; the sync still succeeds. Stats count `auto_recorded`.
+- Cards carry `auto_recorded: true` when every active allocation has no user. Undo is the existing
+  review / unlink path.
+
+| AC | Behaviour | Test |
+|---|---|---|
+| AC110 | Validation accepts a full template, refuses ask / gaps / non-stock | `test_auto_record_rule_validation` |
+| AC111 | A new matching line is recorded with the template's lots, amounts and quantities; re-sync never doubles | `test_new_matching_spend_is_recorded_from_rule_template` |
+| AC112 | Lines from before the rule, refunds and needs-rate lines are untouched | `test_rule_does_not_touch_existing_open_line_and_excludes_refunds_and_needs_rate` |
+| AC113 | A failing record leaves the line open and the sync green | `test_auto_record_failure_isolated_and_sync_succeeds` |
+| AC114 | Historical runs auto-record too and report the count | `test_historical_upsert_auto_records_and_reports_count` |
+
 ## 8.1e-2 build contract — cost where people look, and cost without Xero
 
 Added 12 Nov 2026 at the founder's request: **costing must work for an org with no Xero bank

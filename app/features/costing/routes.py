@@ -361,7 +361,15 @@ def list_rules():
 def create_rule():
     from app.features.costing import rules
 
-    rule = rules.create(db_session, _org(), _body(), user_id=_user_id())
+    data = _body()
+    if data.get("auto_record") is True and not has_permission(g.current_user, "inventory.adjust"):
+        return jsonify(
+            {
+                "error": "Only someone who can adjust stock can make a rule record automatically.",
+                "code": "permission_denied",
+            }
+        ), 403
+    rule = rules.create(db_session, _org(), data, user_id=_user_id())
     db_session.commit()
     return jsonify(rules.as_dict(rule)), 201
 
@@ -372,7 +380,25 @@ def create_rule():
 def update_rule(rule_id):
     from app.features.costing import rules
 
-    rule = rules.update(db_session, _org(), rule_id, _body())
+    data = _body()
+    current = rules.get_rule(db_session, _org(), rule_id)
+    resulting_auto_record = data.get("auto_record", current.auto_record)
+    resulting_active = data.get("is_active", current.is_active)
+    # Switching automation (or the rule) off is always allowed; keeping it recording stock needs
+    # the same permission as recording stock by hand.
+    if (
+        resulting_auto_record is True
+        and resulting_active is not False
+        and not has_permission(g.current_user, "inventory.adjust")
+    ):
+        return jsonify(
+            {
+                "error": "Only someone who can adjust stock can change a rule that records automatically. "
+                "You can switch automatic recording off.",
+                "code": "permission_denied",
+            }
+        ), 403
+    rule = rules.update(db_session, _org(), rule_id, data)
     db_session.commit()
     return jsonify(rules.as_dict(rule))
 
@@ -499,6 +525,7 @@ def historical_run():
         {
             "documents": stats["documents"],
             "lines": stats["lines"],
+            "auto_recorded": stats.get("auto_recorded", 0),
             "from": date_from.isoformat(),
             "to": date_to.isoformat(),
         }

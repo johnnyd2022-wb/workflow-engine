@@ -5,7 +5,8 @@
 {# Inside the content block: a boosted navigation swaps only #page-content. #}
 <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
 <div class="ru-shell workspace-overview workspace-page" data-rules-root
-     data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}" aria-busy="true">
+     data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}"
+     data-can-auto="{{ 'true' if can('inventory.adjust') else 'false' }}" aria-busy="true">
   <header class="workspace-header">
     <div>
       <h1>Purchase rules</h1>
@@ -52,6 +53,11 @@
         <div class="ru-rows" data-rules-rows></div>
         <button type="button" class="workspace-button" data-rules-add-row>Add an item</button>
         <p class="cost-hint">Shares are a % of the purchase. Leave one as “the rest” and it takes what's left.</p>
+        <label class="ru-auto">
+          <input type="checkbox" name="auto_record" data-rules-auto>
+          <span><span class="ru-auto__label">Record these automatically</span>
+            <span class="cost-hint" data-rules-auto-hint>New matching purchases go straight into stock with these items. Each item needs a fixed quantity or a price per unit, and the shares must cover the whole purchase.</span></span>
+        </label>
       </section>
       <p class="cost-error" role="alert" id="ru-dialog-error" tabindex="-1" data-rules-dialog-error></p>
       <div class="ru-dialog__actions">

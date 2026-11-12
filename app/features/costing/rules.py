@@ -20,7 +20,16 @@ TREATMENTS = ("stock", "not_stock", "duty", "overhead")
 MATCH_TYPES = ("exact", "contains")
 QUANTITY_MODES = ("fixed", "from_price", "ask")
 ROW_TYPES = ("raw_material", "final_product")
-FIELDS = {"account_code", "payee_pattern", "description_pattern", "match_type", "treatment", "template", "is_active"}
+FIELDS = {
+    "account_code",
+    "payee_pattern",
+    "description_pattern",
+    "match_type",
+    "treatment",
+    "template",
+    "auto_record",
+    "is_active",
+}
 
 
 class RuleConflictError(CostingError):
@@ -132,6 +141,22 @@ def validate(body: dict) -> dict:
     template = validate_template(body.get("template"))
     if template is not None and treatment != "stock":
         raise CostingError("Only a stock rule has a template")
+    auto_record = body.get("auto_record", False)
+    if not isinstance(auto_record, bool):
+        raise CostingError("auto_record must be true or false")
+    if auto_record:
+        if treatment != "stock":
+            raise CostingError("auto_record is only allowed for stock rules")
+        if template is None:
+            raise CostingError("auto_record requires a template")
+        if any(row["quantity_mode"] == "ask" for row in template):
+            raise CostingError("auto_record templates cannot ask for quantity")
+        if any(row["ask_batch_number"] or row["ask_expiry"] for row in template):
+            raise CostingError("auto_record templates cannot ask for batch number or expiry")
+        if not any(row["share"] == "rest" for row in template) and sum(
+            (Decimal(row["share"]) for row in template), Decimal("0")
+        ) != Decimal("100"):
+            raise CostingError("auto_record template shares must total 100 or include a rest row")
     active = body.get("is_active", True)
     if not isinstance(active, bool):
         raise CostingError("is_active must be true or false")
@@ -142,6 +167,7 @@ def validate(body: dict) -> dict:
         "match_type": match_type,
         "treatment": treatment,
         "template": template,
+        "auto_record": auto_record,
         "is_active": active,
     }
 
@@ -155,6 +181,7 @@ def as_dict(rule: PurchaseRule) -> dict:
         "match_type": rule.match_type,
         "treatment": rule.treatment,
         "template": rule.template,
+        "auto_record": rule.auto_record,
         "is_active": rule.is_active,
         "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
     }
@@ -194,7 +221,18 @@ def create(db: Session, org_id: UUID, body: dict, user_id=None) -> PurchaseRule:
 
 def update(db: Session, org_id: UUID, rule_id, body: dict) -> PurchaseRule:
     rule = get_rule(db, org_id, rule_id)
-    clean = validate({k: v for k, v in body.items() if k in FIELDS})
+    current = {
+        "account_code": rule.account_code,
+        "payee_pattern": rule.payee_pattern,
+        "description_pattern": rule.description_pattern,
+        "match_type": rule.match_type,
+        "treatment": rule.treatment,
+        "template": rule.template,
+        "auto_record": rule.auto_record,
+        "is_active": rule.is_active,
+    }
+    current.update({k: v for k, v in body.items() if k in FIELDS})
+    clean = validate(current)
     for name, value in clean.items():
         setattr(rule, name, value)
     rule.updated_at = utc_now()
