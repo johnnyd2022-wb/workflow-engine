@@ -97,11 +97,16 @@ def price(db, org_id, item_id, amount, quantity, *, kind="manual", cost_flow_id=
     return entry
 
 
-def lot_cost(db, org_id, item_id):
+def lot_cost(db, org_id, item_id, *, primed=False):
+    """``primed`` goes through the bulk loader (``prime``) that Margins and Readiness use, which
+    has its own ``org_id`` filters, instead of the lazy per-lot walk."""
     from app.features.costing.engine import CostEngine
 
     db.expire_all()
-    return CostEngine(db, org_id).lot(item_id)
+    engine = CostEngine(db, org_id)
+    if primed:
+        engine.prime([item_id])
+    return engine.lot(item_id)
 
 
 def execution_cost(db, org_id, execution_id):
@@ -183,6 +188,22 @@ def produced_lots(db, org_id, execution_step_id):
 
 def by_name(rows, key="name"):
     return {r[key]: r for r in rows}
+
+
+def bypass_foreign_keys(db):
+    """Switch FK enforcement off for the current transaction only (``SET LOCAL``), so a test can
+    store the cross-org row the composite keys normally make unrepresentable and prove the
+    engine's own ``org_id`` filters hold without them. The ``replica`` role also switches off
+    ordinary triggers, so the immutability triggers on ``inventory_items`` do not fire either:
+    a test that forges such a row needs no ``app.migration_mode``. It ends at the next
+    commit/rollback and takes no table lock. Needs a superuser role (the test DB's, local and
+    CI, is one)."""
+    import pytest
+    from sqlalchemy import text
+
+    if not db.execute(text("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")).scalar():
+        pytest.skip("needs a superuser DB role to set session_replication_role")
+    db.execute(text("SET LOCAL session_replication_role = replica"))
 
 
 def purge(db, *orgs):

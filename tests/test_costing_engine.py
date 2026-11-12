@@ -12,6 +12,7 @@ from app.core.db.models.inventory_item import InventoryType
 from tests.costing_helpers import (
     D,
     by_name,
+    bypass_foreign_keys,
     complete,
     execution_cost,
     flows,
@@ -871,6 +872,118 @@ def test_ac42_a_flow_cannot_point_at_another_orgs_lot(world, db):
         with pytest.raises(IntegrityError, match="fk_cost_flows_item"):
             db.flush()
         db.rollback()
+    finally:
+        purge(db, other)
+
+
+@pytest.mark.parametrize(
+    ("case", "constraint"),
+    [
+        ("foreign_execution", "fk_cost_flows_execution"),
+        ("foreign_step_of_own_execution", "fk_cost_flows_execution_step"),
+    ],
+)
+def test_ac42_a_flow_cannot_point_at_another_orgs_execution_or_step(world, db, case, constraint):
+    """The item key above is one of three composite keys. A forged produced/consumed edge into
+    another org's execution or step is just as unrepresentable, so the walk's `_info` and
+    `_deps` can never be handed another org's batch through cost_flows."""
+    from uuid import uuid4
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.features.costing.models import CostFlow
+
+    org, _ = world
+    other = new_org(db)
+    try:
+        own_lot = lot(db, org.id, "Spirit", 10, "L")
+        theirs_execution, (theirs_step,) = workflow(db, other.id, [[{"name": "Gin", "unit": "L"}]])
+        my_execution, _ = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+        if case == "foreign_execution":
+            # step left null so only the execution key can object
+            edge = {"execution_id": theirs_execution.id}
+        else:
+            # my execution, their step: only the (execution, step) pair key can object
+            edge = {"execution_id": my_execution.id, "execution_step_id": theirs_step.id}
+        db.add(
+            CostFlow(
+                org_id=org.id,
+                inventory_item_id=own_lot.id,
+                direction="in",
+                kind="added",
+                quantity=D("1"),
+                source_key=f"forged:{uuid4()}",
+                write_reason="test",
+                reconstructed=False,
+                **edge,
+            )
+        )
+        with pytest.raises(IntegrityError, match=f'"{constraint}"'):
+            db.flush()
+        db.rollback()
+    finally:
+        purge(db, other)
+
+
+@pytest.mark.parametrize("primed", [False, True], ids=["lazy_walk", "bulk_prime"])
+def test_ac42_a_forged_produced_flow_never_carries_another_orgs_batch(world, db, primed):
+    """The pair of keys above cannot be defeated in a normal session. With FK enforcement off
+    for one transaction a produced flow can name another org's batch, and the walk's own
+    `org_id` filters must leave that lot unpriced rather than inherit the batch's cost, whether the
+    lot is costed by the lazy walk (`_info`) or by the bulk loader Margins and Readiness use (`prime`)."""
+    from uuid import uuid4
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.features.costing.models import CostFlow
+
+    org, client = world
+    juniper = lot(db, org.id, "Juniper", 1, "kg")
+    price(db, org.id, juniper.id, 45, 1)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "bottles"}]])
+    complete(client, execution, step, [(juniper, 1, "kg")], [{"name": "Gin", "quantity": 9, "unit": "bottles"}])
+    (theirs,) = produced_lots(db, org.id, step.id)
+    # control: the real output lot does carry the batch's cost ($45 over 9 bottles)
+    assert D(lot_cost(db, org.id, theirs.id)["unit_cost"]) == D("5")
+
+    other = new_org(db)
+    try:
+        mine = lot(db, other.id, "Gin", 9, "bottles", inventory_type=FINAL)
+        db.commit()
+
+        def forged_edge():
+            return CostFlow(
+                org_id=other.id,
+                inventory_item_id=mine.id,
+                direction="in",
+                kind="produced",
+                quantity=D("9"),
+                execution_id=execution.id,
+                execution_step_id=step.id,
+                step_number=step.step_number,
+                source_key=f"forged:{uuid4()}",
+                write_reason="test",
+                reconstructed=False,
+            )
+
+        db.add(forged_edge())
+        with pytest.raises(IntegrityError, match="fk_cost_flows_execution"):
+            db.flush()  # enforcement on: refused
+        db.rollback()
+
+        bypass_foreign_keys(db)
+        db.query(CostFlow).filter(CostFlow.org_id == other.id, CostFlow.inventory_item_id == mine.id).delete()
+        db.add(forged_edge())
+        db.commit()
+        assert flows(db, other.id, mine.id)[0].execution_id == execution.id, "the forgery must be in place"
+
+        cost = lot_cost(db, other.id, mine.id, primed=primed)
+        assert cost["unit_cost"] is None and D(cost["known_unit_cost"]) == D("0"), "the batch's $5 must not leak"
+        assert cost["status"] == "partial" and cost["warnings"] == ["unallocated_output"]
+        assert [m["inventory_item_id"] for m in cost["missing"]] == [str(mine.id)]
+        # and the owner's own answers did not move
+        assert D(lot_cost(db, org.id, theirs.id)["unit_cost"]) == D("5")
+        assert D(execution_cost(db, org.id, execution.id)["outputs"][0]["unit_cost"]) == D("5")
     finally:
         purge(db, other)
 

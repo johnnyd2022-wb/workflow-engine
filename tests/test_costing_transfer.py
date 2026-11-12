@@ -2,6 +2,8 @@
 
 from uuid import uuid4
 
+import pytest
+
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.security.tenant_scope import unscoped
 from app.features.site_transfers import service
@@ -53,6 +55,87 @@ def test_ac32_transfer_destination_reports_source_unit_cost(transfers, db):  # n
             True,
         )
         db.rollback()
+
+
+@pytest.mark.parametrize("primed", [False, True], ids=["lazy_walk", "bulk_prime"])
+def test_ac42_a_forged_transfer_receipt_never_carries_another_orgs_cost(transfers, db, primed):  # noqa: F811
+    """`inventory_items.transfer_receipt_id` is a composite key too (`fk_inventory_transfer_receipt`),
+    so the forgery below cannot be stored in a normal session. With FK enforcement switched
+    off for one transaction it can, and the walk's own `org_id` filters must still treat it as
+    a transfer with no source rather than inherit the other org's price, whether the lot is costed
+    by the lazy walk or by the bulk loader (`prime`) that Margins and Readiness use.
+
+    This is an outcome-level guard: the receipt, transfer and source-lot lookups are three
+    independent filters in series, so removing any one of them stays green and only removing all
+    three turns it red. The first two cannot be isolated (a forged receipt is blocked by whichever
+    filter remains); the source-lot filter is also pinned alone by
+    `test_ac42_estimates_never_use_another_orgs_lots`."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.db.models.site_transfer import SiteStockReceipt
+    from app.features.costing.models import CostFlow
+    from tests.costing_helpers import bypass_foreign_keys, lot, new_org, purge
+
+    org, stock_id, actor_id = transfers[0], transfers[6], transfers[7]
+    with unscoped():
+        price(db, org.id, stock_id, 200, 20)  # $10 a bottle, over the source lot's created flow
+    transfer = start(transfers)
+    other = new_org(db)
+    try:
+        with unscoped():
+            service.receive(db, org.id, actor_id, transfer["id"], str(uuid4()), {"quantity": "4"}, permit)
+            db.commit()
+            receipt = db.query(SiteStockReceipt).filter(SiteStockReceipt.org_id == org.id).one()
+            theirs = (
+                db.query(InventoryItem)
+                .filter(InventoryItem.org_id == org.id, InventoryItem.transfer_receipt_id == receipt.id)
+                .one()
+            )
+            theirs_cost = lot_cost(db, org.id, theirs.id)
+            # control: the real destination does inherit the source's price
+            assert (D(theirs_cost["unit_cost"]), theirs_cost["source"]) == (D("10"), "transfer")
+
+            mine = lot(db, other.id, "House Gin", 4, "bottles", inventory_type="final_product")
+            db.commit()
+            forge = text("UPDATE inventory_items SET transfer_receipt_id = :r WHERE org_id = :o AND id = :i")
+            args = {"r": receipt.id, "o": other.id, "i": mine.id}
+
+            # with enforcement on, the database refuses (past the title trigger, which migration mode skips)
+            db.execute(text("SELECT set_config('app.migration_mode','1',true)"))
+            with pytest.raises(IntegrityError, match="fk_inventory_transfer_receipt"):
+                db.execute(forge, args)
+            db.rollback()
+
+            # with it off (this also switches off the immutability trigger, so no migration mode is needed),
+            # make the other org's lot look like a transfer destination pointing at that receipt
+            bypass_foreign_keys(db)
+            db.query(CostFlow).filter(CostFlow.org_id == other.id, CostFlow.inventory_item_id == mine.id).delete()
+            db.add(
+                CostFlow(
+                    org_id=other.id,
+                    inventory_item_id=mine.id,
+                    direction="in",
+                    kind="transfer_in",
+                    quantity=D("4"),
+                    source_key=f"forged:{mine.id}",
+                    write_reason="test",
+                    reconstructed=False,
+                )
+            )
+            db.execute(forge, args)
+            db.commit()
+            db.refresh(mine)
+            assert mine.transfer_receipt_id == receipt.id, "the forgery must actually be in place"
+
+            cost = lot_cost(db, other.id, mine.id, primed=primed)
+            assert cost["status"] == "unknown" and cost["unit_cost"] is None and cost["known_unit_cost"] is None
+            assert cost["source"] != "transfer"
+            assert "transfer_source_missing" in cost["warnings"]
+            # and the owner's own answer did not move
+            assert D(lot_cost(db, org.id, theirs.id)["unit_cost"]) == D("10")
+    finally:
+        purge(db, other)
 
 
 def test_prime_keeps_transfer_source_queries_flat_as_receipt_lots_grow(transfers, db):  # noqa: F811
