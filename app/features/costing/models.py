@@ -162,10 +162,12 @@ class CostingSettings(TenantScoped, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id", name="uq_costing_settings_org_id"),
         UniqueConstraint("org_id", name="uq_costing_settings_org"),
+        CheckConstraint("split_basis IN ('quantity','litres')", name="ck_costing_settings_split_basis"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     use_last_known_price = Column(Boolean, nullable=False, default=True, server_default=sa.true())
+    split_basis = Column(String(10), nullable=False, default="quantity", server_default="quantity")
     # 8.1b: purchases are fetched from start_date on, incrementally from purchases_cursor.
     start_date = Column(Date, nullable=True)
     purchases_cursor = Column(DateTime(timezone=True), nullable=True)
@@ -184,7 +186,7 @@ class PurchaseDocument(TenantScoped, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id", name="uq_purchase_documents_org_id"),
         UniqueConstraint("org_id", "source", "external_id", name="uq_purchase_documents_external"),
-        CheckConstraint("source IN ('xero_bank')", name="ck_purchase_documents_source"),
+        CheckConstraint("source IN ('xero_bank','xero_bill','xero_bill_credit')", name="ck_purchase_documents_source"),
         CheckConstraint("kind IN ('spend','refund')", name="ck_purchase_documents_kind"),
         CheckConstraint("status IN ('active','voided')", name="ck_purchase_documents_status"),
         CheckConstraint("fx_status IN ('ok','needs_rate')", name="ck_purchase_documents_fx"),

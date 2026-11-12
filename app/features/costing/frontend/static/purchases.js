@@ -198,6 +198,9 @@
       wrap.appendChild(top);
       var meta = el('div', 'pu-meta');
       meta.appendChild(el('span', null, fmtDate(card.document.date)));
+      if (card.document.source && card.document.source !== 'xero_bank' && card.document.reference) {
+        meta.appendChild(el('span', null, card.document.reference)); // "Bill INV-0042 · PO 77"
+      }
       if (card.description) meta.appendChild(el('span', null, card.description));
       meta.appendChild(el('span', null, card.account.name || card.account.code || ''));
       wrap.appendChild(meta);
@@ -207,7 +210,9 @@
     function badges(card) {
       var wrap = el('div', 'pu-badges');
       if (card.review_reason) wrap.appendChild(el('span', 'pu-badge pu-badge--warn', REVIEW_TEXT[card.review_reason] || 'Check this'));
-      if (card.document.kind === 'refund') wrap.appendChild(el('span', 'pu-badge', 'Refund'));
+      if (card.document.source === 'xero_bill') wrap.appendChild(el('span', 'pu-badge', 'Bill'));
+      else if (card.document.source === 'xero_bill_credit') wrap.appendChild(el('span', 'pu-badge', 'Supplier credit'));
+      else if (card.document.kind === 'refund') wrap.appendChild(el('span', 'pu-badge', 'Refund'));
       if (card.state === 'partly_recorded') wrap.appendChild(el('span', 'pu-badge', fmt(card.open) + ' still to record'));
       if (card.state === 'recorded') wrap.appendChild(el('span', 'pu-badge pu-badge--ok', 'Recorded'));
       return wrap;
