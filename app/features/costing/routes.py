@@ -326,7 +326,10 @@ def list_rules():
 def create_rule():
     from app.features.costing import rules
 
-    rule = rules.create(db_session, _org(), _body(), user_id=_user_id())
+    data = _body()
+    if data.get("auto_record") is True and not has_permission(g.current_user, "inventory.adjust"):
+        return jsonify({"error": "You don't have permission to do this.", "code": "permission_denied"}), 403
+    rule = rules.create(db_session, _org(), data, user_id=_user_id())
     db_session.commit()
     return jsonify(rules.as_dict(rule)), 201
 
@@ -336,7 +339,12 @@ def create_rule():
 def update_rule(rule_id):
     from app.features.costing import rules
 
-    rule = rules.update(db_session, _org(), rule_id, _body())
+    data = _body()
+    current = rules.get_rule(db_session, _org(), rule_id)
+    resulting_auto_record = data.get("auto_record", current.auto_record)
+    if resulting_auto_record is True and not has_permission(g.current_user, "inventory.adjust"):
+        return jsonify({"error": "You don't have permission to do this.", "code": "permission_denied"}), 403
+    rule = rules.update(db_session, _org(), rule_id, data)
     db_session.commit()
     return jsonify(rules.as_dict(rule))
 

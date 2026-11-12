@@ -106,6 +106,34 @@ def test_auto_record_rule_validation(flask_app, world, db):  # noqa: F811
         assert response.get_json().get("error")
 
 
+def test_auto_record_requires_inventory_adjust_but_disabling_does_not(flask_app, world, db):  # noqa: F811
+    admin = user_client(db, flask_app, world["org"])
+    limited = user_client(db, flask_app, world["org"], permissions=["costs.manage"])
+    template = _auto_template()
+
+    denied_create = _rule(limited, payee_pattern="Limited Auto Supplier", auto_record=True, template=template)
+    assert denied_create.status_code == 403, denied_create.get_json()
+
+    created = _rule(limited, payee_pattern="Limited Manual Supplier", template=template)
+    assert created.status_code == 201, created.get_json()
+    enable = limited.put(f"{API}/rules/{created.get_json()['id']}", json={**created.get_json(), "auto_record": True})
+    assert enable.status_code == 403, enable.get_json()
+
+    automated = _rule(admin, payee_pattern="Disable Auto Supplier", auto_record=True, template=template)
+    assert automated.status_code == 201, automated.get_json()
+    preserve_auto = dict(automated.get_json())
+    preserve_auto.pop("auto_record")
+    preserved = limited.put(f"{API}/rules/{automated.get_json()['id']}", json=preserve_auto)
+    assert preserved.status_code == 403, preserved.get_json()
+
+    disable = limited.put(
+        f"{API}/rules/{automated.get_json()['id']}",
+        json={**automated.get_json(), "auto_record": False},
+    )
+    assert disable.status_code == 200, disable.get_json()
+    assert disable.get_json()["auto_record"] is False
+
+
 def test_new_matching_spend_is_recorded_from_rule_template(flask_app, world, db):  # noqa: F811
     client = user_client(db, flask_app, world["org"])
     response = _rule(
