@@ -209,3 +209,24 @@ def test_migration_widens_the_source_constraint(world, db):  # noqa: F811
         text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_purchase_documents_source'")
     ).scalar()
     assert "xero_bill" in constraint and "xero_bill_credit" in constraint
+
+
+def test_r1_blank_description_falls_back_to_the_item_code(flask_app, world, db):  # noqa: F811
+    org = world["org"]
+    _sync(world, db, bills=[bill([_bill_line("60", qty="5", item_code="COR-5", description="   ")])])
+    (doc,) = _docs(db, org.id, "xero_bill")
+    (row,) = _lines(db, doc)
+    client = user_client(db, flask_app, org)
+    card = next(
+        c for c in client.get(f"{API}/purchases?tab=to_record").get_json()["cards"] if c["line_id"] == str(row.id)
+    )
+    (pre,) = card["prefill"]["rows"]
+    assert pre["name"] == "COR-5" and pre["ask"] == ["unit"]
+    assert card["document"]["reference"].startswith("Bill INV-0042")
+
+
+def test_r1_bill_cards_show_their_reference():
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "app/features/costing/frontend/static/purchases.js").read_text()
+    assert "card.document.reference" in js

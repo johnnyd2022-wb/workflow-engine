@@ -991,7 +991,8 @@ def prefill(
     # Nothing known yet. A line that came with a quantity (bills do, 8.1f-1) says what and how
     # much; the person still picks the unit.
     quantity = _d(line.quantity) if line.quantity is not None and _d(line.quantity) > 0 else None
-    name = ((line.description or line.item_code or "").strip()[:255] or None) if quantity is not None else None
+    label = (line.description or "").strip() or (line.item_code or "").strip()
+    name = (label[:255] or None) if quantity is not None else None
     return {
         "source": "none",
         "rule_id": None,
@@ -1002,7 +1003,9 @@ def prefill(
                 "unit": None,
                 "quantity": None if quantity is None else str(quantity),
                 "amount": str(_q(remaining)),
-                "ask": ["unit"] if quantity is not None else ["name", "unit", "quantity"],
+                "ask": (["unit"] if name else ["name", "unit"])
+                if quantity is not None
+                else ["name", "unit", "quantity"],
             }
         ],
     }
