@@ -50,7 +50,7 @@ def upgrade():
             postgresql_concurrently=True,
             if_not_exists=True,
         )
-    op.execute(f"ALTER TABLE execution_steps ADD CONSTRAINT {name} UNIQUE USING INDEX {name}")
+    op.execute("ALTER TABLE execution_steps ADD CONSTRAINT uq_execution_steps_org_execution_id UNIQUE USING INDEX uq_execution_steps_org_execution_id")
     op.create_table(
         "cost_flows",
         sa.Column("id", UUID, primary_key=True),
@@ -177,6 +177,7 @@ def upgrade():
 def downgrade():
     bind = op.get_bind()
     for table in ("cost_flows", "lot_cost_entries", "costing_settings"):
+        # nosemgrep: sqlalchemy-query-in-for-loop — one emptiness check per fixed table in this migration.
         if bind.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).first():
             raise RuntimeError(f"{table} contains rows; downgrading would lose them")
     op.drop_index("ix_costing_settings_org_id", table_name="costing_settings", if_exists=True)
