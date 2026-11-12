@@ -479,6 +479,8 @@ def test_ac104_margins_never_cross_orgs(world, db, flask_app):  # noqa: F811
         "from=&to=2026-10",
         "from=2026-10&to=2026-01",
         "from=2020-01&to=2026-10",
+        "from=9999-12&to=9999-12",  # the month after it isn't a date: 400, not a 500
+        "from=0001-01&to=0001-01",
     ],
 )
 def test_bad_ranges_are_400(world, query):
@@ -951,9 +953,9 @@ def test_r9_a_sale_line_says_whether_its_unmatched_units_have_an_average(world):
     assert line["unbatched_status"] == "estimated"
 
 
-def test_r11_a_multi_line_inclusive_credit_synced_before_line_tax_still_counts(world, db):
-    """Review r11: credits synced before line tax was kept have only sub_total and total_tax; the
-    note's tax is shared across its lines by amount rather than leaving revenue untracked."""
+def test_r12_a_multi_line_inclusive_credit_without_line_tax_is_untracked_not_guessed(world, db):
+    """Review r12: a split by amount puts GST on the wrong product when lines have different rates,
+    so revenue for such a month is untracked until the sync backfills each line's tax."""
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
     batch = world["lot"]("B1", unit_cost="5")
@@ -973,4 +975,4 @@ def test_r11_a_multi_line_inclusive_credit_synced_before_line_tax_still_counts(w
         )
     )
     db.commit()
-    assert D(_row(world)["revenue"]) == D("300")  # 500 less two $100 ex-GST credits
+    assert _row(world)["revenue"] is None

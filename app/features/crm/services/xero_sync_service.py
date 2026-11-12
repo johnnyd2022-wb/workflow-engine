@@ -23,6 +23,8 @@ from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)
 
+MAX_CREDIT_NOTE_TAX_BACKFILL = 500
+
 # An incremental sync asks Xero for records modified after the previous sync's start, less this
 # margin for clock differences between us and Xero. Pulling a record twice is harmless: contact
 # and invoice upserts and FIFO matching are idempotent. Missing one is not.
@@ -547,8 +549,50 @@ class XeroSyncService:
             deleted = self.credit_note_repo.mark_missing_as_deleted(org_id, tenant_id, seen_ids)
             if deleted:
                 logger.info("xero_sync_credit_notes_marked_deleted", org_id=str(org_id), deleted_count=deleted)
+        self._backfill_credit_note_line_tax(api_client, org_id, tenant_id)
         self.db.flush()
         return result
+
+    def _backfill_credit_note_line_tax(self, api_client: XeroAPIClient, org_id: UUID, tenant_id: str) -> None:
+        """Best-effort backfill for legacy notes, capped so older histories spread across syncs."""
+        candidates = self.credit_note_repo.missing_line_tax_snapshots(
+            org_id, tenant_id, limit=MAX_CREDIT_NOTE_TAX_BACKFILL
+        )
+        if not candidates:
+            return
+
+        note_ids_by_xero_id = {xero_id: note_id for note_id, xero_id in candidates}
+        try:
+            remote_notes = api_client.fetch_credit_notes_by_ids(list(note_ids_by_xero_id))
+        except Exception as exc:
+            logger.warning(
+                "xero_credit_note_tax_backfill_failed",
+                org_id=str(org_id),
+                candidate_count=len(candidates),
+                error=str(exc),
+            )
+            return
+
+        updated = 0
+        returned = set()
+        for remote in remote_notes:
+            remote_id = getattr(remote, "credit_note_id", None)
+            if not remote_id:
+                continue
+            note_id = note_ids_by_xero_id.get(str(remote_id))
+            if note_id is None:
+                continue
+            returned.add(note_id)
+            if self.credit_note_repo.update_missing_line_tax_snapshot(org_id, note_id, _credit_note_raw_fields(remote)):
+                updated += 1
+        gone = [note_id for note_id in note_ids_by_xero_id.values() if note_id not in returned]
+        self.credit_note_repo.mark_line_tax_unavailable(org_id, gone)
+        logger.info(
+            "xero_credit_note_tax_backfill_finished",
+            org_id=str(org_id),
+            candidate_count=len(candidates),
+            updated_count=updated,
+        )
 
     # ------------------------------------------------------------------
     # Finalise job record
