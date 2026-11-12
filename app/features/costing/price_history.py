@@ -123,8 +123,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     unit = _units(lots)
     by_id = {lot.id: lot for lot in lots}
     allocations, entries = _facts(db, org_id, lots)
-    engine = CostEngine(db, org_id)
-    engine.prime(by_id)
+    engine = _primed(db, org_id, by_id)
     entries_by_lot: dict[UUID, list[LotCostEntry]] = defaultdict(list)
     for entry in entries:
         entries_by_lot[entry.inventory_item_id].append(entry)
@@ -179,7 +178,13 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             if purchase_id is not None and quantity > ZERO:
                 row["purchases"].add(purchase_id)
 
-    for fact in _effective_facts(engine, by_id, allocations, entries_by_lot):
+    too_large = False
+    try:
+        facts = _effective_facts(engine, by_id, allocations, entries_by_lot)
+    except TooLargeError:  # more history than the engine's budget: say so rather than fail
+        facts, too_large = [], True
+        engine = CostEngine(db, org_id)
+    for fact in facts:
         add_fact(*fact)
 
     month_rows = []
@@ -231,6 +236,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         "months": month_rows,
         "latest": latest[1] if latest else None,
         "lots": lot_rows,
+        "too_large": too_large,
     }
 
 
@@ -326,6 +332,17 @@ def _effective_facts(engine, by_id, allocations, entries_by_lot):
     return facts
 
 
+def _primed(db: Session, org_id: UUID, ids) -> CostEngine:
+    """An engine with these lots bulk-loaded, or a fresh lazy one if loading them all at once is
+    over the engine's budget (each lot is then costed, or reported unknown, on its own)."""
+    engine = CostEngine(db, org_id)
+    try:
+        engine.prime(ids)
+    except TooLargeError:
+        engine = CostEngine(db, org_id)
+    return engine
+
+
 def material_history(db: Session, org_id: UUID, material: str, date_from: str | None, date_to: str | None) -> dict:
     return _history(db, org_id, material, date_from, date_to)
 
@@ -338,8 +355,7 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
             groups[normalise(item.name)].append(item)
     all_lots = [item for group in groups.values() for item in group]
     allocations, entries = _facts(db, org_id, all_lots)
-    engine = CostEngine(db, org_id)
-    engine.prime(item.id for item in all_lots)
+    engine = _primed(db, org_id, [item.id for item in all_lots])
     allocations_by_item: dict[UUID, list] = defaultdict(list)
     entries_by_item: dict[UUID, list] = defaultdict(list)
     for allocation_row in allocations:
@@ -351,7 +367,16 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
         unit = _units(group)
         group_allocations = [row for item in group for row in allocations_by_item[item.id]]
         group_entries = [entry for item in group for entry in entries_by_item[item.id]]
-        facts = _history_facts_for_list(engine, group, unit, group_allocations, group_entries)
+        try:
+            facts = _history_facts_for_list(engine, group, unit, group_allocations, group_entries)
+        except TooLargeError:  # still listed, so its history page can say why it has no figure
+            engine = CostEngine(db, org_id)
+            facts = {
+                "name": min((item.name for item in group), key=lambda name: (normalise(name), name.casefold())),
+                "unit": unit,
+                "latest_unit_price": None,
+                "latest_date": None,
+            }
         if facts is not None:
             results.append(facts)
     return sorted(results, key=lambda row: (normalise(row["name"]), row["name"].casefold()))

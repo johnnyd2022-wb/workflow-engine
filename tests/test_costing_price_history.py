@@ -485,3 +485,24 @@ def test_r5_a_lot_too_long_to_cost_is_unknown_not_an_error(world, db, monkeypatc
     assert response.status_code == 200, response.get_json()
     (row,) = response.get_json()["lots"]
     assert (row["status"], row["unit_cost"]) == ("unknown", None)
+
+
+def test_r6_over_the_real_engine_budget_both_endpoints_answer(world, db, monkeypatch):
+    """Review r6: with the engine's actual work budget exhausted, history says it's too large and the
+    picker still lists the material, rather than either returning a 500."""
+    from app.features.costing import engine as engine_module
+
+    org = world["org"]
+    item = lot(db, org.id, "Huge History", 2, "kg")
+    price(db, org.id, item.id, 10, 2)
+    db.commit()
+    monkeypatch.setattr(engine_module, "MAX_WORK", 0)
+    response = _history(world["client"], "Huge History", **{"from": "2026-11", "to": "2026-11"})
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["too_large"] is True and body["months"] == []
+    assert [(r["status"], r["unit_cost"]) for r in body["lots"]] == [("unknown", None)]
+    picker = world["client"].get(f"{API}/materials")
+    assert picker.status_code == 200
+    row = next(m for m in picker.get_json()["materials"] if m["name"] == "Huge History")
+    assert row["latest_unit_price"] is None
