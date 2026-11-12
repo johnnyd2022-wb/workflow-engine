@@ -11,9 +11,11 @@ from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
 
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
+from app.core.security.access_policy import has_permission
 from app.core.security.entitlements import org_has_feature
-from app.core.security.permissions import requires_auth
+from app.core.security.permissions import requires_auth, requires_permission
 from app.features.costing import FEATURE_KEY, service
 from app.features.costing.engine import CostEngine
 from app.observability import get_logger
@@ -155,3 +157,125 @@ def put_account(xero_account_id):
     db_session.commit()
     row = next((a for a in list_accounts(db_session, _org()) if a["xero_account_id"] == str(xero_account_id)), None)
     return jsonify(row)
+
+
+# --- 8.1c-1: recording purchases into stock ---------------------------------------------------------
+
+
+def _purchase_card(line_id):
+    from app.features.costing import actions
+
+    line = actions.get_line(db_session, _org(), line_id, for_update=False)
+    return jsonify(actions.card(db_session, line, actions._document(db_session, line)))
+
+
+def _parse_date(raw):
+    from datetime import date
+
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        raise service.CostingError("Dates are YYYY-MM-DD") from None
+
+
+@costing_bp.route(f"{API}/purchases", methods=["GET"])
+@requires_auth
+def list_purchases():
+    from app.features.costing import actions
+
+    return jsonify(
+        actions.list_purchases(
+            db_session,
+            _org(),
+            request.args.get("tab", "to_record"),
+            _parse_date(request.args.get("from")),
+            _parse_date(request.args.get("to")),
+        )
+    )
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/candidates", methods=["GET"])
+@requires_auth
+def purchase_candidates(line_id):
+    from app.features.costing import actions
+
+    return jsonify({"candidates": actions.candidates(db_session, _org(), line_id)})
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/record", methods=["POST"])
+@requires_auth
+@requires_permission("inventory.adjust")  # creates stock: costs.manage (policy) AND inventory.adjust
+@idempotent_write("costing_purchase_record")
+def record_purchase(line_id):
+    from app.features.costing import actions
+
+    data = _body()
+    actions.record(db_session, _org(), line_id, data.get("rows"), data.get("rest"), user_id=_user_id())
+    db_session.commit()
+    return _purchase_card(line_id)
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/link", methods=["POST"])
+@requires_auth
+@requires_permission("inventory.adjust")
+@idempotent_write("costing_purchase_link")
+def link_purchase(line_id):
+    from app.features.costing import actions
+
+    data = _body()
+    actions.link(db_session, _org(), line_id, data.get("lots"), data.get("rest"), user_id=_user_id())
+    db_session.commit()
+    return _purchase_card(line_id)
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/refund", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_purchase_refund")
+def refund_purchase(line_id):
+    from app.features.costing import actions
+
+    actions.refund(db_session, _org(), line_id, _body().get("lots"), user_id=_user_id())
+    db_session.commit()
+    return _purchase_card(line_id)
+
+
+def _simple(action_name):
+    def view(line_id):
+        from app.features.costing import actions
+
+        if action_name == "review":
+            choice = _body().get("action")
+            if choice == "unlink" and not has_permission(g.current_user, "inventory.adjust"):
+                return jsonify({"error": "Unlinking a purchase from stock needs inventory.adjust"}), 403
+            actions.review(db_session, _org(), line_id, choice)
+        else:
+            {"not-stock": actions.not_stock, "skip": actions.skip, "reopen": actions.reopen}[action_name](
+                db_session, _org(), line_id
+            )
+        db_session.commit()
+        return _purchase_card(line_id)
+
+    view.__name__ = f"purchase_{action_name.replace('-', '_')}"
+    return view
+
+
+for _action in ("not-stock", "skip", "reopen", "review"):
+    costing_bp.add_url_rule(
+        f"{API}/purchases/<line_id>/{_action}",
+        endpoint=f"purchase_{_action.replace('-', '_')}",
+        view_func=requires_auth(idempotent_write(f"costing_purchase_{_action}")(_simple(_action))),
+        methods=["POST"],
+    )
+
+
+@costing_bp.route(f"{API}/purchases/<line_id>/allocations", methods=["PUT"])
+@requires_auth
+@requires_permission("inventory.adjust")
+def edit_purchase_allocations(line_id):
+    from app.features.costing import actions
+
+    actions.edit_allocations(db_session, _org(), line_id, _body().get("allocations"))
+    db_session.commit()
+    return _purchase_card(line_id)

@@ -230,6 +230,13 @@ class PurchaseLine(TenantScoped, Base):
             name="fk_purchase_lines_account",
         ),
         CheckConstraint("treatment IN ('stock','not_stock','duty','overhead')", name="ck_purchase_lines_treatment"),
+        CheckConstraint(
+            "state IN ('open','partly_recorded','recorded','skipped','not_stock')", name="ck_purchase_lines_state"
+        ),
+        CheckConstraint(
+            "review_reason IS NULL OR review_reason IN ('amount_changed','recoded','deleted_in_xero')",
+            name="ck_purchase_lines_review",
+        ),
         Index(
             "uq_purchase_lines_live_key",
             "org_id",
@@ -257,5 +264,54 @@ class PurchaseLine(TenantScoped, Base):
     tax_amount = Column(Numeric(18, 4), nullable=True)
     treatment = Column(String(20), nullable=False)
     superseded_at = Column(DateTime(timezone=True), nullable=True)
+    # 8.1c-1: what has been done with the line
+    state = Column(String(20), nullable=False, default="open", server_default="open")
+    not_stock_amount = Column(Numeric(18, 4), nullable=False, default=0, server_default="0")
+    review_reason = Column(String(20), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class PurchaseAllocation(TenantScoped, Base):
+    """A purchase line paying for (part of) a lot's inflow; a negative one is a refund that
+    lowers the lot's cost. Spec "8.1c-1 build contract"."""
+
+    __tablename__ = "purchase_allocations"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_purchase_allocations_org_id"),
+        UniqueConstraint("org_id", "purchase_line_id", "inventory_item_id", name="uq_purchase_allocations_line_lot"),
+        ForeignKeyConstraint(
+            ["org_id", "purchase_line_id"],
+            ["purchase_lines.org_id", "purchase_lines.id"],
+            name="fk_purchase_allocations_line",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "inventory_item_id"],
+            ["inventory_items.org_id", "inventory_items.id"],
+            name="fk_purchase_allocations_item",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "cost_flow_id"],
+            ["cost_flows.org_id", "cost_flows.id"],
+            name="fk_purchase_allocations_flow",
+        ),
+        CheckConstraint("status IN ('active','orphaned')", name="ck_purchase_allocations_status"),
+        CheckConstraint(
+            "(amount < 0 AND cost_flow_id IS NULL AND quantity = 0)"
+            " OR (amount >= 0 AND cost_flow_id IS NOT NULL AND quantity > 0)",
+            name="ck_purchase_allocations_shape",
+        ),
+        Index("ix_purchase_allocations_item", "org_id", "inventory_item_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    purchase_line_id = Column(UUID(as_uuid=True), nullable=False)
+    inventory_item_id = Column(UUID(as_uuid=True), nullable=False)
+    cost_flow_id = Column(UUID(as_uuid=True), nullable=True)
+    amount = Column(Numeric(18, 4), nullable=False)
+    quantity = Column(Numeric(18, 4), nullable=False)
+    status = Column(String(10), nullable=False, default="active", server_default="active")
+    orphaned_by = Column(String(10), nullable=True)  # void | gone | amount: why it was orphaned
+    created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
