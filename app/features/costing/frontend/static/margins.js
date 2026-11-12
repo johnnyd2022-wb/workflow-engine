@@ -122,7 +122,7 @@
       els.note.hidden = true;
       if (!rows.length) return;
       summary(total(rows), rows);
-      var byProduct = {};
+      var byProduct = Object.create(null); // product names are data: "constructor" is a valid one
       rows.forEach(function (r) { (byProduct[r.product] = byProduct[r.product] || []).push(r); });
       Object.keys(byProduct)
         .map(function (name) { return { name: name, rows: byProduct[name], t: total(byProduct[name]) }; })
@@ -143,8 +143,9 @@
       els.summary.replaceChildren(
         figure('Revenue', fmt(t.revenue), of(t.missingRevenue) || 'ex GST'),
         figure('Production cost', fmt(t.cost), of(t.missingCost)),
-        figure('Duty', t.dutyTracked ? (t.missingDuty ? '—' : fmt(t.duty)) : 'Not tracked', t.dutyTracked ? of(t.missingDuty) : null),
-        figure('Margin', t.missingMargin ? '—' : fmt(t.margin), t.missingMargin ? of(t.missingMargin) : (t.percent == null ? null : pct(t.percent)))
+        // Incomplete months are left out and counted: the known months' subtotal stands, qualified.
+        figure('Duty', t.dutyTracked ? fmt(t.duty) : 'Not tracked', t.dutyTracked ? of(t.missingDuty) : null),
+        figure('Margin', fmt(t.margin), t.missingMargin ? of(t.missingMargin) : (t.percent == null ? null : pct(t.percent)))
       );
       var notes = [];
       if (t.status !== 'actual') notes.push(STATUS[t.status] + ' — open a product to see which months.');
@@ -181,7 +182,8 @@
       var nums = el('span', 'mg-product__nums');
       nums.appendChild(el('span', 'mg-num', units(p.t.units) + ' sold'));
       nums.appendChild(el('span', 'mg-num', 'Revenue ' + fmt(p.t.revenue)));
-      nums.appendChild(el('span', 'mg-num mg-num--margin', 'Margin ' + (p.t.missingMargin ? '— Complete for ' + (p.t.months - p.t.missingMargin) + ' of ' + p.t.months + ' months' : fmt(p.t.margin))));
+      nums.appendChild(el('span', 'mg-num mg-num--margin', 'Margin ' + fmt(p.t.margin) + (p.t.missingMargin
+        ? ' · complete for ' + (p.t.months - p.t.missingMargin) + ' of ' + p.t.months + ' months' : '')));
       if (p.t.percent != null && !p.t.missingMargin) {
         nums.appendChild(el('span', 'mg-pill' + (p.t.percent < 0 ? ' mg-pill--bad' : ''), pct(p.t.percent)));
       }

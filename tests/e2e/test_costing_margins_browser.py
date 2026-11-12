@@ -105,9 +105,10 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
 
     expect(page.locator("[data-margins-summary]")).to_contain_text("A$180.00")
     expect(page.locator("[data-margins-summary]")).to_contain_text("Complete for 1 of 2 months")
-    expect(page.locator("[data-margins-summary]")).to_contain_text("—")
-    expect(page.locator("[data-margins-list]")).to_contain_text("Margin —")
-    expect(page.locator("[data-margins-list]")).to_contain_text("Complete for 1 of 2 months")
+    # February's duty and margin are unknown: January's stand, counted as 1 of 2 months.
+    expect(page.locator("[data-margins-summary]")).to_contain_text("A$12.00")
+    expect(page.locator("[data-margins-summary]")).to_contain_text("A$58.00")
+    expect(page.locator("[data-margins-list]")).to_contain_text("Margin A$58.00 · complete for 1 of 2 months")
 
     product = page.get_by_role("button", name="Limoncello")
     product.focus()
@@ -207,3 +208,27 @@ def test_a_slow_report_never_rewrites_the_page_navigated_to(margins_user, page, 
     page.wait_for_url("**/core/inventory/view")
     page.wait_for_timeout(2500)
     assert "from=" not in page.url and page.url.endswith("/core/inventory/view")
+
+
+def test_a_product_named_like_a_built_in_still_reports(margins_user, page, app_url):
+    """Review r5: product names are data; "constructor" must not break grouping."""
+    row = {
+        "product": "constructor",
+        "month": "2026-01",
+        "units": 1,
+        "revenue": 10,
+        "cost": 4,
+        "duty_tracked": False,
+        "duty": None,
+        "margin": 6,
+        "margin_percent": 60,
+        "average_cost_per_unit": 4,
+        "cost_status": "actual",
+        "lines": [],
+    }
+    body = {"from": "2026-01", "to": "2026-01", "currency": "NZD", "rows": [row, dict(row, product="__proto__")]}
+    page.route("**/api/core/costing/margins**", lambda route: route.fulfill(json=body))
+    page.goto(app_url + PAGE)
+    page.locator("[data-margins-root][aria-busy='false']").wait_for()
+    expect(page.get_by_role("button", name="constructor")).to_be_visible()
+    expect(page.get_by_role("button", name="__proto__")).to_be_visible()
