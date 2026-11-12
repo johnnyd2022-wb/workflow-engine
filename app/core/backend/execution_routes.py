@@ -760,6 +760,7 @@ def register_routes(
             # TRANSACTION INTEGRITY: This function must run in a single DB transaction; no commit until the end.
             # get_inventory_item_by_id_for_update holds row locks until commit/rollback.
             inventory_updates = []
+            consumed_for_costing = []  # (inventory_item_id, quantity in the lot's unit) -> cost_flows
             if actual_inputs:
                 consumption_by_item = {}
                 for input_data in actual_inputs:
@@ -860,6 +861,7 @@ def register_routes(
 
                         new_quantity = max(Decimal("0"), current_quantity - total_converted)
                         inventory_updates.append((inventory_item, new_quantity))
+                        consumed_for_costing.append((inventory_item.id, total_converted))
 
                     except Exception as e:
                         logger.exception(f"Unexpected error consuming inventory {item_id_str}")
@@ -1145,6 +1147,14 @@ def register_routes(
 
                     parse_output_batch_number(output, output_name, extra_data, execution_warnings)
 
+                    # Live cost engine (8.1a): which output definition this is, by id, so a
+                    # configured cost share follows the definition, not a name.
+                    from app.features.costing.flows import resolve_output_id
+
+                    resolved_output_id, output_id_error = resolve_output_id(output, step_outputs_def or [])
+                    if output_id_error:
+                        execution_errors.append(output_id_error)
+
                     # Store creation parameters for atomic commit
                     source_step_name = step_def.name if step_def else None
                     output_creations.append(
@@ -1157,6 +1167,7 @@ def register_routes(
                             "source_execution_id": execution_uuid,
                             "source_execution_step_id": execution_step_uuid,
                             "source_step_name": source_step_name,
+                            "source_output_id": resolved_output_id,
                             "extra_data": extra_data if extra_data else None,
                             "untracked_item_id": untracked_item_id_uuid,
                             "quantity_decimal": quantity_decimal,
@@ -1198,10 +1209,23 @@ def register_routes(
                         inventory_item.quantity = new_quantity
                     db_session.flush()
 
+                from app.features.costing.flows import on_consumed, on_reconciled
+
+                for consumed_item_id, consumed_quantity in consumed_for_costing:
+                    on_consumed(
+                        db_session,
+                        org_id=org_id,
+                        item_id=consumed_item_id,
+                        quantity=consumed_quantity,
+                        execution_id=execution_uuid,
+                        execution_step_id=execution_step_uuid,
+                        step_number=execution_step.step_number,
+                    )
+
                 # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
                 from app.features.reconciliation.service import reconcile_output_to_untracked_reduce_only
 
-                for output_params in output_creations:
+                for output_position, output_params in enumerate(output_creations):
                     untracked_item_id = output_params.pop("untracked_item_id", None)
                     quantity_decimal = output_params.pop("quantity_decimal", None)
                     output_name = output_params.get("name", "Unknown")
@@ -1226,6 +1250,17 @@ def register_routes(
                                 f"Reconciliation for output '{output_name}': {rec_result['error']}"
                             )
                             continue
+                        on_reconciled(
+                            db_session,
+                            org_id=org_id,
+                            untracked_item_id=untracked_item_id,
+                            quantity=rec_result.get("reconciled_amount"),
+                            execution_id=execution_uuid,
+                            execution_step_id=execution_step_uuid,
+                            step_number=execution_step.step_number,
+                            source_output_id=output_params.get("source_output_id"),
+                            output_position=output_position,
+                        )
                         surplus = quantity_decimal
                         try:
                             surplus = Decimal(rec_result["surplus"])

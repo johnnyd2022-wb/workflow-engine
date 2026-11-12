@@ -1200,6 +1200,45 @@ Founder decisions for this phase:
     the owner pins the first, drags the second, and the next morning the dashboard shows
     today's priorities, with the order's forecast date updated in the customer's portal.
 
+## Phase 8: Know what it costs
+
+Added 10 Nov 2026 at the founder's request. Spec: `.agents/specs/live-cogs.md`. For any NZ
+alcohol producer, however they buy (card spend with no detail, bills, bought-in goods, no
+Xero record at all): every lot, batch and bottle gets a real cost from purchases already in
+Xero, with no mandatory setup. A cost is complete, or it says exactly which inputs are
+missing; never a silent $0.
+
+- [ ] **8.1 Live batch and bottle cost.** *High · L+, as the MRs below*
+  - Why: producers price and judge margin from a spreadsheet, if at all. Purchases are
+    already in Xero and stock is already traced in Biz-E; joining them gives cost per
+    bottle without new data entry, and recording a purchase doubles as the reminder to
+    load stock with quantity, batch number and expiry.
+  - [x] a. **Cost engine.** `costing` slice; `cost_flows` from Core's stock writes with an
+    idempotent backfill; lot and batch cost computed on read (no caches); manual, free and
+    customer-owned cost; last known price; `costs.view` / `costs.manage`; the `costing`
+    feature. (!689)
+  - [ ] b. **Xero purchases in.** Scopes; chart of accounts with default treatments;
+    spend-money bank transactions into purchase documents and lines; changes and
+    deletions in Xero flagged for review, never deleting stock.
+  - [ ] c. **Purchase rules and actions.** Rules (ignore a seller, seller or description
+    always maps to a material, quantity and split); record, already in stock, not stock,
+    skip; "remember this"; historical runs over any date range.
+  - [ ] d. **Purchases page.** Reconcile-style cards with tabs, bulk actions and the
+    record dialog at phone width; one notification per sync and a Home card.
+  - [ ] e. **Cost where people look.** Lot cost panel, batch cost card (cost so far,
+    cost per unit, Incomplete with the missing inputs), cost readiness per product,
+    "total paid" on Add Inventory.
+  - [ ] f. **Bills and margins** (spec Phase 2). Bills and supplier credits; margin per
+    product over time with duty from the excise module; material price history;
+    auto-record rules.
+  - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
+    the walk from Xero cost of sales to Biz-E's, closing stock export.
+  - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
+    spread into batch cost.
+  - Done when: a producer connects Xero, works through the Purchases page once, and every
+    batch shows a cost per bottle that is either complete or names what's missing, and
+    stays right when a purchase is recorded late or changed in Xero.
+
 ---
 
 ## Order
@@ -1225,6 +1264,9 @@ Founder decisions for this phase:
 11. **Phase 7** after Phase 6's second producer. 7.3 (planner) can start first: it
     needs only Core and gives contract orders (7.2) their dates. Then sites (7.1), then
     contract manufacturing (7.2), since contract goods move between sites and licences.
+12. **Phase 8** (8.1a–e) can start now: it builds on Core lineage and the Xero link without changing
+    what either does. 8.1f follows 3.x sales; 8.1g needs 8.1f.
+
 
 ## Sources
 

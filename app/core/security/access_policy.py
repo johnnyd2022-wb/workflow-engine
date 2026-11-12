@@ -57,6 +57,10 @@ PERMISSIONS: dict[str, str] = {
         "Connect Xero and sync, map products, configure sales traceability "
         "(a sync applies authorised sales to stock; changing the matching mode also needs inventory.adjust)"
     ),
+    # Live cost (roadmap 8.1, spec .agents/specs/live-cogs.md). Entering a price changes no
+    # stock; recording a purchase that creates or links stock (8.1c) also needs inventory.adjust.
+    "costs.view": "See costs, cost per unit, stock value and margins",
+    "costs.manage": "Enter costs, record purchases and change purchase rules and costing settings",
     "compliance.view": "See compliance checks, evidence and reports",
     "compliance.record": "Log checks, attach evidence and sign off compliance records",
     "compliance.manage": "Configure compliance modules and their rules",
@@ -182,6 +186,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("planning.static", None, PUBLIC),
     ("planning.*", _READ, "production.view"),
     ("planning.*", frozenset({"POST"}), "production.record"),
+    ("costing.*", _READ, "costs.view"),
+    ("costing.*", None, "costs.manage"),
     # --- public: landing, static assets, sign-in, telemetry ingest
     ("index", None, PUBLIC),
     ("favicon", None, PUBLIC),

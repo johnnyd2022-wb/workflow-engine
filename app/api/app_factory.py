@@ -217,6 +217,10 @@ def create_app():
 
     app.register_blueprint(site_transfers_bp)
 
+    from app.features.costing.routes import costing_bp
+
+    app.register_blueprint(costing_bp)
+
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).

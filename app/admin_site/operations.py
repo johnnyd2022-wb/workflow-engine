@@ -50,7 +50,7 @@ CLI_ACTOR = "cli"
 PAGE_SIZE = 50
 SIGN_IN_ACTIONS = ("login", "login_google")
 # Features that are switched on per organisation (`feature_subscriptions`).
-KNOWN_FEATURES = ("compliant",)
+KNOWN_FEATURES = ("compliant", "costing")
 
 
 class AdminOperationError(ValueError):

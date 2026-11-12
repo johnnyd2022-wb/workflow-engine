@@ -2,7 +2,7 @@
 
 import click
 
-from . import admin, api, lint, maintenance, migrations, observability, operational_cases
+from . import admin, api, costing, lint, maintenance, migrations, observability, operational_cases
 
 
 @click.group()
@@ -55,6 +55,7 @@ cli.add_command(lint.format_code, name="format")
 cli.add_command(lint.fix_all, name="fix-all")
 cli.add_command(observability.observability)
 cli.add_command(maintenance.warm_system_findings)
+cli.add_command(costing.costing)
 cli.add_command(operational_cases.export_operational_cases, name="operational-cases-export")
 cli.add_command(operational_cases.rehearse_operational_cases, name="operational-cases-rehearse")
 

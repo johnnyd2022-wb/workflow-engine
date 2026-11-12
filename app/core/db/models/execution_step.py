@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -31,6 +31,9 @@ class ExecutionStep(TenantScoped, Base):
     """
 
     __tablename__ = "execution_steps"
+    # Target of cost_flows' (org, execution, step) key: a cost flow names a step of its own
+    # org and its own execution (migration costing_engine_001).
+    __table_args__ = (UniqueConstraint("org_id", "execution_id", "id", name="uq_execution_steps_org_execution_id"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     execution_id = Column(UUID(as_uuid=True), ForeignKey("executions.id"), nullable=False, index=True)
