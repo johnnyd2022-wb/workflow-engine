@@ -675,7 +675,11 @@ def _lot_names(db: Session, line: PurchaseLine) -> dict:
 
 def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
+    allocations = line_allocations(db, line, statuses=("active", "orphaned"))
+    active_allocations = [allocation for allocation in allocations if allocation.status == "active"]
     return {
+        "auto_recorded": bool(active_allocations)
+        and all(allocation.created_by_user_id is None for allocation in active_allocations),
         "prefill": prefill(db, line, doc, remaining, rules, history),
         "line_id": str(line.id),
         "document": {
@@ -701,7 +705,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
                 "quantity": str(_d(a.quantity)),
                 "status": a.status,
             }
-            for a in line_allocations(db, line, statuses=("active", "orphaned"))
+            for a in allocations
         ],
     }
 
