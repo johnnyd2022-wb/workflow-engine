@@ -479,6 +479,8 @@ def test_ac104_margins_never_cross_orgs(world, db, flask_app):  # noqa: F811
         "from=&to=2026-10",
         "from=2026-10&to=2026-01",
         "from=2020-01&to=2026-10",
+        "from=9999-12&to=9999-12",  # the month after it isn't a date: 400, not a 500
+        "from=0001-01&to=0001-01",
     ],
 )
 def test_bad_ranges_are_400(world, query):

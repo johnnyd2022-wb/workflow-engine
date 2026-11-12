@@ -556,6 +556,8 @@ def margins_report():
         if match is None:
             raise service.CostingError("Months are YYYY-MM") from None
         year, mon = (int(part) for part in raw.split("-"))
+        if not 1900 <= year <= 9998:  # the report reads up to the month after: keep that a real date
+            raise service.CostingError("Months are YYYY-MM between 1900 and 9998")
         try:
             return date(year, mon, 1)
         except ValueError:
