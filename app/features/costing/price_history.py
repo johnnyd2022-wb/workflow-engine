@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
@@ -17,6 +18,19 @@ from app.features.costing.purchase_sources import nz_today
 from app.features.costing.service import CostingError, CostingNotFoundError
 
 ZERO = Decimal("0")
+NZ = ZoneInfo("Pacific/Auckland")
+
+
+def _nz_datetime(value: datetime) -> datetime:
+    """Interpret stored naive timestamps as UTC and return the local NZ instant."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(NZ)
+
+
+def _purchase_datetime(value: date) -> datetime:
+    """A date-only purchase is ordered at the end of its NZ document date."""
+    return datetime.combine(value, time.max, NZ)
 
 
 def _month(value: str | None, label: str) -> date | None:
@@ -111,12 +125,16 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     allocations, entries = _facts(db, org_id, lots)
     engine = CostEngine(db, org_id)
     engine.prime(by_id)
+    entries_by_lot: dict[UUID, list[LotCostEntry]] = defaultdict(list)
+    for entry in entries:
+        entries_by_lot[entry.inventory_item_id].append(entry)
     months = {}
     latest = None
 
     def add_fact(lot, when, amount, quantity, source, purchase_id=None):
         nonlocal latest
-        fact_month = _month_key(when)
+        local_when = _nz_datetime(when) if isinstance(when, datetime) else when
+        fact_month = _month_key(local_when)
         in_range = start.strftime("%Y-%m") <= fact_month <= end.strftime("%Y-%m")
         unit_price = amount / quantity if quantity > ZERO else None
         factor = engine._unit_factor(unit, lot.unit)
@@ -130,16 +148,29 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         )
         if factor is None:
             if row is not None:
-                row["unconverted"] += 1
+                if quantity > ZERO:
+                    row["unconverted"] += 1
+                elif amount < ZERO:
+                    row["amount"] += amount
             return
         converted_amount = amount
         converted_quantity = quantity / factor if quantity > ZERO else ZERO
         converted_price = unit_price * factor if unit_price is not None else None
         if unit_price is not None:
-            when_key = when.date() if isinstance(when, datetime) else when
+            if isinstance(local_when, datetime):
+                when_key = local_when
+            else:
+                when_key = _purchase_datetime(local_when)
             key = (when_key, str(purchase_id or ""), source)
             if latest is None or key > latest[0]:
-                latest = (key, {"unit_price": unit_str(converted_price), "date": when.isoformat(), "source": source})
+                latest = (
+                    key,
+                    {
+                        "unit_price": unit_str(converted_price),
+                        "date": local_when.isoformat(),
+                        "source": source,
+                    },
+                )
         if row is not None:
             row["amount"] += converted_amount
             row["quantity"] += converted_quantity
@@ -158,10 +189,41 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             add_fact(item, document.document_date, amount, quantity, "purchase", str(document.id))
         elif amount < ZERO:
             add_fact(item, document.document_date, amount, ZERO, "refund", str(document.id))
-    for entry in entries:
-        item = by_id[entry.inventory_item_id]
-        when = entry.created_at or datetime.combine(date.today(), datetime.min.time(), UTC)
-        add_fact(item, when, Decimal(str(entry.amount)), Decimal(str(entry.quantity)), entry.kind)
+    for item_id, item in by_id.items():
+        item_entries = entries_by_lot[item_id]
+        whole = next((entry for entry in item_entries if entry.cost_flow_id is None), None)
+        flow_entries: dict[UUID, list[LotCostEntry]] = defaultdict(list)
+        for entry in item_entries:
+            if entry.cost_flow_id is not None:
+                flow_entries[entry.cost_flow_id].append(entry)
+
+        unpriced_direct = ZERO
+        for flow in engine._in_flows(item_id):
+            if flow.kind in ("produced", "reconciled_in", "transfer_in"):
+                continue
+            flow_quantity = Decimal(str(flow.quantity))
+            prices = flow_entries.get(flow.id, [])
+            priced_quantity = sum((Decimal(str(entry.quantity)) for entry in prices), ZERO)
+            for allocation in engine._allocations(item_id):
+                if allocation.cost_flow_id == flow.id and allocation.amount > ZERO:
+                    priced_quantity += Decimal(str(allocation.quantity))
+            effective_quantity = min(priced_quantity, flow_quantity)
+            scale = effective_quantity / priced_quantity if priced_quantity > ZERO else ZERO
+            for entry in prices:
+                quantity = Decimal(str(entry.quantity)) * scale
+                amount = Decimal(str(entry.amount)) * scale
+                if quantity > ZERO:
+                    add_fact(item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind)
+            unpriced_direct += flow_quantity - effective_quantity
+
+        if whole is not None:
+            whole_amount = Decimal(str(whole.amount))
+            whole_quantity = Decimal(str(whole.quantity))
+            if unpriced_direct > ZERO:
+                amount = unpriced_direct * whole_amount / whole_quantity
+                add_fact(item, whole.created_at or datetime.now(UTC), amount, unpriced_direct, whole.kind)
+            elif not engine._in_flows(item_id):
+                add_fact(item, whole.created_at or datetime.now(UTC), whole_amount, whole_quantity, whole.kind)
 
     month_rows = []
     cursor = start
@@ -251,7 +313,7 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
         factor = engine._unit_factor(unit, lot.unit)
         if factor is None:
             continue
-        key = (document.document_date, str(document.id), "purchase")
+        key = (_purchase_datetime(document.document_date), str(document.id), "purchase")
         candidate = (key, Decimal(str(allocation.amount)) / Decimal(str(allocation.quantity)) * factor)
         if latest is None or candidate[0] > latest[0]:
             latest = candidate
@@ -262,7 +324,8 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
         factor = engine._unit_factor(unit, lot.unit)
         if factor is None:
             continue
-        key = (entry.created_at.date() if entry.created_at else date.min, str(entry.id), entry.kind)
+        occurred_at = _nz_datetime(entry.created_at) if entry.created_at else datetime.min.replace(tzinfo=NZ)
+        key = (occurred_at, str(entry.id), entry.kind)
         candidate = (key, Decimal(str(entry.amount)) / Decimal(str(entry.quantity)) * factor)
         if latest is None or candidate[0] > latest[0]:
             latest = candidate
@@ -272,5 +335,5 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
         "name": min((item.name for item in lots), key=lambda name: (normalise(name), name.casefold())),
         "unit": unit,
         "latest_unit_price": unit_str(latest[1]),
-        "latest_date": latest[0][0].isoformat(),
+        "latest_date": latest[0][0].date().isoformat(),
     }
