@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 import pytest
 
 from app.core.db.models.user import UserRole
 from app.features.costing.models import PurchaseAllocation, PurchaseDocument, PurchaseLine
-from tests.costing_helpers import lot, new_org, price, purge, user_client
+from tests.costing_helpers import flows, lot, new_org, price, purge, user_client
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 from tests.test_costing_allocations import _record, _row, _sync_purchase, connect
 from tests.test_costing_purchases import FakeXero
@@ -134,6 +135,42 @@ def test_ac106_manual_and_free_entries_are_history_prices(world, db):
     assert D(month["average_unit_cost"]) == D("6")
 
 
+def test_ac55_whole_lot_and_flow_prices_use_engine_precedence(world, db):
+    org = world["org"]
+    item = lot(db, org.id, "Cubeb", 2, "kg")
+    whole = price(db, org.id, item.id, 80, 2)
+    flow = next(flow for flow in flows(db, org.id, item.id, kind="created"))
+    specific = price(db, org.id, item.id, 90, 2, cost_flow_id=flow.id)
+    whole.created_at = datetime(2026, 11, 2, tzinfo=UTC)
+    specific.created_at = datetime(2026, 11, 3, tzinfo=UTC)
+
+    month = _history(world["client"], "Cubeb", **{"from": "2026-11", "to": "2026-11"}).get_json()["months"][0]
+    assert D(month["amount"]) == D("90")
+    assert D(month["priced_quantity"]) == D("2")
+    assert D(month["average_unit_cost"]) == D("45")
+
+
+def test_ac55_whole_lot_price_only_fills_unpriced_direct_quantity(world, db):
+    org = world["org"]
+    item = lot(db, org.id, "Grains of Paradise", 2, "kg")
+    flow = next(flow for flow in flows(db, org.id, item.id, kind="created"))
+    specific = price(db, org.id, item.id, 90, 2, cost_flow_id=flow.id)
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    InventoryRepository(db).add_quantity_to_inventory_item(item.id, org.id, "3")
+    db.flush()
+    whole = price(db, org.id, item.id, 60, 3)
+    specific.created_at = datetime(2026, 11, 3, tzinfo=UTC)
+    whole.created_at = datetime(2026, 11, 4, tzinfo=UTC)
+
+    month = _history(world["client"], "Grains of Paradise", **{"from": "2026-11", "to": "2026-11"}).get_json()[
+        "months"
+    ][0]
+    assert D(month["amount"]) == D("150")
+    assert D(month["priced_quantity"]) == D("5")
+    assert D(month["average_unit_cost"]) == D("30")
+
+
 def test_ac107_converts_compatible_units_and_counts_unconvertible(world, db):
     org, client = world["org"], world["client"]
     kg = lot(db, org.id, "Salt", 1, "kg")
@@ -149,7 +186,108 @@ def test_ac107_converts_compatible_units_and_counts_unconvertible(world, db):
     assert month["unit"] == "kg"
     assert D(month["priced_quantity"]) == D("1.5")
     assert D(month["amount"]) == D("12.5")
+    assert D(month["average_unit_cost"]) == D("8.333333")
+    assert D(month["min_unit_price"]) == D("5")
+    assert D(month["max_unit_price"]) == D("10")
     assert month["unconverted"] == 1
+
+
+def test_ac107_unconverted_counts_prices_not_refunds(world, db):
+    org, client = world["org"], world["client"]
+    lot(db, org.id, "Bottle Refund", 1, "kg")
+    lot(db, org.id, "Bottle Refund", 1, "kg")
+    doc, line, item = _purchase(world["sync"], db, client, 6, 2, name="Bottle Refund", unit="bottles")
+    refund_doc = PurchaseDocument(
+        **{
+            column.name: getattr(doc, column.name)
+            for column in PurchaseDocument.__table__.columns
+            if column.name not in ("id", "external_id", "kind", "created_at", "updated_at")
+        },
+        external_id=f"refund-{line.id}",
+        kind="refund",
+    )
+    db.add(refund_doc)
+    db.flush()
+    refund_line = PurchaseLine(
+        **{
+            column.name: getattr(line, column.name)
+            for column in PurchaseLine.__table__.columns
+            if column.name
+            not in ("id", "document_id", "line_key", "fingerprint", "amount_ex_tax", "created_at", "updated_at")
+        },
+        document_id=refund_doc.id,
+        line_key=f"refund-{line.id}",
+        fingerprint=f"refund-{line.id}",
+        amount_ex_tax=D("-1"),
+    )
+    db.add(refund_line)
+    db.flush()
+    db.add(
+        PurchaseAllocation(
+            org_id=org.id,
+            purchase_line_id=refund_line.id,
+            inventory_item_id=item.id,
+            cost_flow_id=None,
+            amount=D("-1"),
+            quantity=D("0"),
+            status="active",
+        )
+    )
+    db.commit()
+    month = _history(client, "Bottle Refund", **{"from": "2026-11", "to": "2026-11"}).get_json()["months"][0]
+    assert month["unconverted"] == 1
+
+
+@pytest.mark.parametrize(
+    "instant,expected_month,expected_date",
+    [
+        (datetime(2026, 7, 31, 12, 30, tzinfo=UTC), "2026-08", "2026-08-01"),  # NZST
+        (datetime(2026, 11, 30, 11, 30, tzinfo=UTC), "2026-12", "2026-12-01"),  # NZDT
+    ],
+)
+def test_ac106_manual_timestamps_use_new_zealand_calendar(world, db, instant, expected_month, expected_date):
+    org = world["org"]
+    item = lot(db, org.id, "Boundary Herb", 1, "kg")
+    entry = price(db, org.id, item.id, 9, 1)
+    entry.created_at = instant
+    db.commit()
+
+    response = _history(world["client"], "Boundary Herb", **{"from": expected_month, "to": expected_month})
+    assert response.status_code == 200
+    assert response.get_json()["months"][0]["month"] == expected_month
+    assert response.get_json()["latest"]["date"].startswith(expected_date)
+
+
+def test_ac108_latest_manual_fact_uses_timestamp_within_same_day(world, db):
+    org = world["org"]
+    item = lot(db, org.id, "Same Day", 2, "kg")
+    older = price(db, org.id, item.id, 10, 1)
+    created = next(flow for flow in flows(db, org.id, item.id, kind="created"))
+    newer = price(db, org.id, item.id, 30, 1, cost_flow_id=created.id)
+    older.id, newer.id = UUID(int=2), UUID(int=1)  # UUID ordering contradicts timestamp ordering.
+    older.created_at = datetime(2026, 11, 10, 1, tzinfo=UTC)
+    newer.created_at = datetime(2026, 11, 10, 2, tzinfo=UTC)
+    db.commit()
+
+    latest = _history(world["client"], "Same Day", **{"from": "2026-11", "to": "2026-11"}).get_json()["latest"]
+    assert latest["unit_price"] == "30.000000"
+    picker = world["client"].get(f"{API}/materials").get_json()["materials"]
+    assert picker[0]["latest_unit_price"] == "30.000000"
+
+
+def test_ac108_date_only_purchase_sorts_after_timed_fact_on_same_day(world, db):
+    doc, _line, _purchase_item = _purchase(
+        world["sync"], db, world["client"], 20, 2, name="Date Tie", on=date(2026, 11, 10)
+    )
+    manual_item = lot(db, world["org"].id, "Date Tie", 2, "kg")
+    manual = price(db, world["org"].id, manual_item.id, 30, 2)
+    manual.created_at = datetime(2026, 11, 10, 10, tzinfo=UTC)
+    db.commit()
+
+    latest = _history(world["client"], "Date Tie", **{"from": "2026-11", "to": "2026-11"}).get_json()["latest"]
+    assert doc.document_date == date(2026, 11, 10)
+    assert latest["source"] == "purchase"
+    assert latest["unit_price"] == "10.000000"
 
 
 def test_ac108_month_bounds_and_unknown_material(world, db):
@@ -164,6 +302,15 @@ def test_ac108_month_bounds_and_unknown_material(world, db):
     assert outside["latest"]["date"].startswith("2025-01-15")
     assert _history(client, "Missing", **{"from": "2025-01", "to": "2025-01"}).status_code == 404
     assert _history(client, "Dried%20Citrus", **{"from": "2023-01", "to": "2026-01"}).status_code == 400
+    for params in (
+        {"from": "2026-1", "to": "2026-02"},
+        {"from": "2026-01"},
+        {"to": "2026-01"},
+        {"from": "2026-02", "to": "2026-01"},
+        {"from": "2023-01", "to": "2026-01"},
+    ):
+        assert _history(client, "Dried%20Citrus", **params).status_code == 400
+    assert _history(client, "Dried%20Citrus", **{"from": "2024-01", "to": "2026-12"}).status_code == 200
     default = _history(client, "Dried%20Citrus").get_json()
     default_start = date.fromisoformat(f"{default['from']}-01")
     default_end = date.fromisoformat(f"{default['to']}-01")
