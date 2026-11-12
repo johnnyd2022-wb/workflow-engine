@@ -101,6 +101,13 @@
       money = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: body.currency || 'NZD' });
       if (!els.from.value) els.from.value = body.from;
       if (!els.to.value) els.to.value = body.to;
+      // The range shown is the range shared: write the API's defaults into the address too.
+      var url = new URL(window.location.href);
+      if (url.searchParams.get('from') !== body.from || url.searchParams.get('to') !== body.to) {
+        url.searchParams.set('from', body.from);
+        url.searchParams.set('to', body.to);
+        window.history.replaceState(window.history.state, '', url.toString());
+      }
       var rows = body.rows || [];
       els.list.replaceChildren();
       els.empty.hidden = rows.length > 0;
@@ -240,9 +247,14 @@
         top.appendChild(el('span', null, units(l.units) + ' units · ' + fmt(l.revenue)));
         li.appendChild(top);
         var parts = (l.batches || []).map(function (b) {
-          return (b.batch ? 'Batch ' + b.batch : b.name) + ': ' + units(b.units) + ' at ' + (b.unit_cost ? fmt(b.unit_cost) : 'unknown cost');
+          var cost = b.unit_cost == null ? 'cost not known yet'
+            : fmt(b.unit_cost) + (b.status === 'estimated' ? ' (estimated)' : b.status === 'partial' ? ' (partly known)' : '');
+          return (b.batch ? 'Batch ' + b.batch : b.name) + ': ' + units(b.units) + ' at ' + cost;
         });
-        if (Number(l.unbatched_units) > 0) parts.push(units(l.unbatched_units) + ' not matched to a batch (average cost)');
+        if (Number(l.unbatched_units) > 0) {
+          parts.push(units(l.unbatched_units) + ' not matched to a batch' + (l.unbatched_status === 'unknown'
+            ? ' — no cost for this product yet' : ' (estimated from the product\u2019s average cost)'));
+        }
         if (parts.length) li.appendChild(el('p', 'mg-sale__batches', parts.join(' · ')));
         ul.appendChild(li);
       });

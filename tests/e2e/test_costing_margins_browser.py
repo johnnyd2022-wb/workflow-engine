@@ -41,8 +41,33 @@ def _report():
                 "margin": 58,
                 "margin_percent": 58,
                 "average_cost_per_unit": 7.5,
-                "cost_status": "actual",
-                "lines": [],
+                "cost_status": "estimated",
+                "lines": [
+                    {
+                        "reference": "INV-0101",
+                        "sold_on": "2026-01-14",
+                        "units": "4",
+                        "revenue": "100.00",
+                        "unbatched_units": "1",
+                        "unbatched_status": "unknown",
+                        "batches": [
+                            {
+                                "name": "Limoncello",
+                                "batch": "L-07",
+                                "units": "2",
+                                "unit_cost": "7.50",
+                                "status": "actual",
+                            },
+                            {
+                                "name": "Limoncello",
+                                "batch": "L-08",
+                                "units": "1",
+                                "unit_cost": "8.00",
+                                "status": "estimated",
+                            },
+                        ],
+                    }
+                ],
             },
             {
                 "product": "Limoncello",
@@ -76,6 +101,7 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
     page.goto(app_url + PAGE)
     root = page.locator("[data-margins-root][aria-busy='false']")
     root.wait_for()
+    assert "from=2026-01" in page.url and "to=2026-02" in page.url, "the range shown is in the address"
 
     expect(page.locator("[data-margins-summary]")).to_contain_text("A$180.00")
     expect(page.locator("[data-margins-summary]")).to_contain_text("Complete for 1 of 2 months")
@@ -92,6 +118,10 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
     page.keyboard.press("Space")
     expect(month).to_have_attribute("aria-expanded", "true")
     expect(page.locator(".mg-sale-lines")).to_have_count(1)
+    sale = page.locator(".mg-sale__batches")
+    expect(sale).to_contain_text("Batch L-07: 2 at A$7.50 ·")
+    expect(sale).to_contain_text("Batch L-08: 1 at A$8.00 (estimated)")
+    expect(sale).to_contain_text("1 not matched to a batch — no cost for this product yet")
 
     page.evaluate("""() => {
       const link = document.createElement('a');
