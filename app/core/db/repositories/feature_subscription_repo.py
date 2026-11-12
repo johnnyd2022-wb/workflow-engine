@@ -13,6 +13,23 @@ from sqlalchemy.orm import Session
 from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.utils.time import utc_now
 
+_CACHE_KEY = "bize.active_features"
+
+
+def _request_cache() -> dict | None:
+    """Per-request {org_id: active feature keys}; None outside a request."""
+    from flask import has_request_context, request
+
+    if not has_request_context():
+        return None
+    return request.environ.setdefault(_CACHE_KEY, {})
+
+
+def _forget(org_id) -> None:
+    cache = _request_cache()
+    if cache is not None:
+        cache.pop(str(org_id), None)
+
 
 class FeatureSubscriptionRepository:
     def __init__(self, db: Session):
@@ -29,8 +46,21 @@ class FeatureSubscriptionRepository:
         )
 
     def is_active(self, org_id: UUID, feature_key: str) -> bool:
-        row = self.get(org_id, feature_key)
-        return bool(row and row.active)
+        """Within a request, every check reads one cached set of the org's active features (the
+        nav alone asks about several on every page); outside one, a direct lookup."""
+        cache = _request_cache()
+        if cache is None:
+            row = self.get(org_id, feature_key)
+            return bool(row and row.active)
+        key = str(org_id)
+        if key not in cache:
+            cache[key] = {
+                k
+                for (k,) in self.db.query(FeatureSubscription.feature_key).filter(
+                    FeatureSubscription.org_id == org_id, FeatureSubscription.active.is_(True)
+                )
+            }
+        return feature_key in cache[key]
 
     def list_for_org(self, org_id: UUID) -> list[FeatureSubscription]:
         return (
@@ -70,6 +100,7 @@ class FeatureSubscriptionRepository:
             if notes is not None:
                 row.notes = notes
         self.db.commit()
+        _forget(org_id)
         return row
 
     def revoke(self, org_id: UUID, feature_key: str) -> bool:
@@ -80,4 +111,5 @@ class FeatureSubscriptionRepository:
         if row.active:
             row.active = False
             self.db.commit()
+        _forget(org_id)
         return True

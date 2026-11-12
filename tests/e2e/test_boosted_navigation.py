@@ -79,6 +79,8 @@ def _compliant_subscription(e2e_user):
     from app.features.compliant.service import ComplianceService
 
     FeatureSubscriptionRepository(db_session()).grant(e2e_user["org_id"], "compliant")
+    # Production -> Purchases / Costs / Purchase rules are for orgs with live cost.
+    FeatureSubscriptionRepository(db_session()).grant(e2e_user["org_id"], "costing")
     # Sales -> Excise is only for orgs running the NZ Alcohol module.
     ComplianceService(db_session()).upsert_profile(
         e2e_user["org_id"], {"enabled": True, "industry_module": "nz_alcohol"}

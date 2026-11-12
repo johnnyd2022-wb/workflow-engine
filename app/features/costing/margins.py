@@ -14,7 +14,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.features.costing.engine import ACTUAL, ESTIMATED, PARTIAL, UNKNOWN, CostEngine, TooLargeError, normalise, worst
 
 ZERO = Decimal("0")
@@ -64,7 +64,8 @@ class _Costs:
         self._average: dict = {}
         self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
         for item in db.query(InventoryItem).filter(InventoryItem.org_id == org_id).all():
-            self._lots_by_name[normalise(item.name)].append(item)
+            if item.inventory_type == InventoryType.FINAL_PRODUCT.value:
+                self._lots_by_name[normalise(item.name)].append(item)
         self.engine.prime(item.id for items in self._lots_by_name.values() for item in items)
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:

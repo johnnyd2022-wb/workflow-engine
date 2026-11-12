@@ -56,6 +56,8 @@ def _require_costing_feature():
     org_id = getattr(g, "current_org_id", None)
     if not org_id:
         return None
+    if request.endpoint == "costing.costing_me":
+        return None  # answers "is costing on for me?" itself, on or off
     if not org_has_feature(db_session(), org_id, FEATURE_KEY):
         logger.info("access_denied", reason="org_not_subscribed", feature=FEATURE_KEY, path=request.path)
         return jsonify({"error": "Not found"}), 404
@@ -81,6 +83,32 @@ def _body() -> dict:
     return data
 
 
+@costing_bp.route(f"{API}/me", methods=["GET"])
+@requires_auth
+def costing_me():
+    """What the signed-in user may see and do with cost here (spec 8.1e-2). Never 403s: pages
+    call it to decide whether to show any cost element at all."""
+    from app.core.security.access_policy import has_permission
+
+    org = _org()
+    user = getattr(g, "current_user", None)
+    enabled = org_has_feature(db_session(), org, FEATURE_KEY)
+    can_view = bool(enabled and has_permission(user, "costs.view", "costs.manage"))
+    can_manage = bool(enabled and has_permission(user, "costs.manage"))
+    # "enabled" is effective: someone who can't see cost isn't told costing is on (AC93).
+    body = {"enabled": can_view, "can_view": can_view, "can_manage": can_manage}
+    if can_view:
+        from app.features.costing import actions
+        from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+        connected = XeroTenantRepository(db_session).get_connected(org) is not None
+        body["xero_connected"] = connected
+        summary = actions.to_record_summary(db_session, org) if connected else {"count": 0, "newest": None}
+        body["purchases_to_record"] = summary["count"]
+        body["newest_to_record"] = summary["newest"]
+    return jsonify(body)
+
+
 @costing_bp.route(f"{API}/lots/<item_id>/cost", methods=["GET"])
 @requires_auth
 def get_lot_cost(item_id):
@@ -89,9 +117,10 @@ def get_lot_cost(item_id):
 
 @costing_bp.route(f"{API}/lots/<item_id>/cost", methods=["PUT"])
 @requires_auth
+@idempotent_write("costing_lot_cost_put")  # a retried save after a lost reply replays, never repeats
 def put_lot_cost(item_id):
     data = _body()
-    unknown = set(data) - {"kind", "amount", "quantity", "cost_flow_id", "note"}
+    unknown = set(data) - {"kind", "amount", "quantity", "cost_flow_id", "note", "replace"}
     if unknown:
         raise service.CostingError(f"Unknown field(s): {', '.join(sorted(unknown))}")
     service.set_lot_price(
@@ -104,6 +133,7 @@ def put_lot_cost(item_id):
         cost_flow_id=data.get("cost_flow_id"),
         note=data.get("note"),
         user_id=_user_id(),
+        replace_all=data.get("replace") == "all",
     )
     db_session.commit()
     return jsonify(CostEngine(db_session, _org()).lot(item_id))
@@ -111,6 +141,7 @@ def put_lot_cost(item_id):
 
 @costing_bp.route(f"{API}/lots/<item_id>/cost/<entry_id>", methods=["DELETE"])
 @requires_auth
+@idempotent_write("costing_lot_cost_delete")  # a retried save after a lost reply replays, never repeats
 def delete_lot_cost(item_id, entry_id):
     service.deactivate_entry(db_session, _org(), item_id, entry_id)
     db_session.commit()
@@ -324,6 +355,7 @@ def list_rules():
 
 @costing_bp.route(f"{API}/rules", methods=["POST"])
 @requires_auth
+@idempotent_write("costing_rule_create")  # a retried save after a lost reply replays, never repeats
 def create_rule():
     from app.features.costing import rules
 
@@ -334,6 +366,7 @@ def create_rule():
 
 @costing_bp.route(f"{API}/rules/<rule_id>", methods=["PUT"])
 @requires_auth
+@idempotent_write("costing_rule_update")  # a retried save after a lost reply replays, never repeats
 def update_rule(rule_id):
     from app.features.costing import rules
 
@@ -344,6 +377,7 @@ def update_rule(rule_id):
 
 @costing_bp.route(f"{API}/rules/<rule_id>", methods=["DELETE"])
 @requires_auth
+@idempotent_write("costing_rule_delete")  # a retried save after a lost reply replays, never repeats
 def delete_rule(rule_id):
     from app.features.costing import rules
 
@@ -546,3 +580,29 @@ def purchases_page():
 
     connected = XeroTenantRepository(db_session).get_connected(_org()) is not None
     return render_template("costing/purchases.html", active_page="core", xero_connected=connected)
+
+
+@costing_bp.route("/core/costing/rules", methods=["GET"])
+@requires_auth
+def rules_page():
+    from flask import render_template
+
+    return render_template("costing/rules.html", active_page="core")
+
+
+@costing_bp.route("/core/costing/costs", methods=["GET"])
+@requires_auth
+def costs_page():
+    from flask import render_template
+
+    return render_template("costing/costs.html", active_page="core")
+
+
+def _register_attention() -> None:
+    from app.core.attention import register
+    from app.features.costing.attention import purchases_to_record
+
+    register("costing.purchases_to_record", purchases_to_record)
+
+
+_register_attention()

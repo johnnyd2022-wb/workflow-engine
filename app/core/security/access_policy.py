@@ -186,6 +186,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("planning.static", None, PUBLIC),
     ("planning.*", _READ, "production.view"),
     ("planning.*", frozenset({"POST"}), "production.record"),
+    ("costing.costing_me", _READ, SIGNED_IN),  # "may I see cost?" — answered for everyone
     ("costing.*", _READ, "costs.view"),
     ("costing.*", None, "costs.manage"),
     # --- public: landing, static assets, sign-in, telemetry ingest
@@ -254,6 +255,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("org.get_current_org", _READ, SIGNED_IN),
     ("org.list_users", _READ, SIGNED_IN),  # assignee pickers on tasks and cases
     ("core.notifications_page", None, ANY_WORKSPACE),
+    ("attention.attention_items", _READ, SIGNED_IN),  # each provider checks its own permission
     ("core.list_system_findings", None, ANY_WORKSPACE),
     ("core.get_changes", None, ANY_WORKSPACE),  # live-sync feed used across workspaces
     # --- people, organisation and maintenance

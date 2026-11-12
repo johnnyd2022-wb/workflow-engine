@@ -131,6 +131,8 @@
       >Add Inventory Item</button>
     </div>
   </div>
+  <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+  <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script nonce="{{ csp_nonce() }}">
     (function() {
       const form = document.getElementById('add-inventory-form');
@@ -228,6 +230,23 @@
         } catch (ePre) {}
       })();
 
+      // Live cost (8.1e-2): "Total paid" for people who may enter cost; nothing for anyone else.
+      var costField = { value: function () { return null; } };
+      function attachCost() {
+        var unitSel = document.getElementById('add-inventory-unit');
+        var qtyInput = document.getElementById('add-inventory-quantity');
+        if (!unitSel || !window.BizECost || costField.attached) return;
+        costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
+          quantity: function () { return qtyInput.value; },
+          unit: function () { return unitSel.value; },
+          watch: [qtyInput, unitSel],
+          labelClass: 'spa-field-label',
+          inputClass: 'spa-inp',
+        });
+        costField.attached = true;
+      }
+      if (window.BizECost) attachCost(); else document.addEventListener('bizecost:ready', attachCost, { once: true });
+
       var saveKey = null; // GL-U03: kept across retries of one receipt, cleared once it is saved
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -294,6 +313,13 @@
           };
         }
 
+        var paid = costField.value();
+        if (paid === false) {
+          window.showNotification && window.showNotification('error', 'Check total paid', 'Enter what was paid as an amount, like 45.00, or leave it blank.');
+          return false;
+        }
+        if (paid != null) payload.total_paid = paid;
+
         try {
           if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
             console.error('CoreAPI.createInventoryItem is not available in this context.', payload);
@@ -324,7 +350,8 @@
           // The server said no (bad input, permission): the next attempt is a new request.
           if (err && err.status && err.status < 500 && err.status !== 401) saveKey = null;
           console.error('Failed to create inventory item', err);
-          window.showNotification && window.showNotification('error', 'Failed to Add Item', 'There was a problem saving this inventory item.');
+          var why = err && err.status === 400 && err.message ? err.message : 'There was a problem saving this inventory item.';
+          window.showNotification && window.showNotification('error', 'Failed to Add Item', why);
         }
 
         return false;
