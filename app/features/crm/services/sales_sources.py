@@ -207,9 +207,17 @@ def _tax_inclusive(invoice, lines) -> bool | None:
     total_lines = sum(amounts, Decimal("0"))
     cent = Decimal("0.01")
     sub_total, total = _decimal(invoice.sub_total), _decimal(invoice.total)
-    if sub_total is not None and abs(total_lines - sub_total) <= cent:
+    off_sub = abs(total_lines - sub_total) if sub_total is not None else None
+    off_total = abs(total_lines - total) if total is not None else None
+    fits_sub = off_sub is not None and off_sub <= cent
+    fits_total = off_total is not None and off_total <= cent
+    if fits_sub and fits_total:  # a one-cent tax: the closer total decides, exact wins
+        if off_total == off_sub:
+            return None
+        return off_total < off_sub
+    if fits_sub:
         return False
-    if total is not None and abs(total_lines - total) <= cent:
+    if fits_total:
         return True
     return None
 
