@@ -34,6 +34,9 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+from app.features.compliant.modules.nz_alcohol.excise import _base_name
+from app.features.compliant.modules.nz_alcohol.excise import _litres as excise_litres
 from app.features.costing.models import DIRECT_KINDS, CostFlow, LotCostEntry
 from app.features.costing.service import CostingNotFoundError, get_settings
 from app.observability import get_logger
@@ -148,7 +151,17 @@ class CostEngine:
     def __init__(self, db: Session, org_id: UUID):
         self.db = db
         self.org_id = org_id
-        self.use_last_known_price = get_settings(db, org_id)["use_last_known_price"]
+        settings = get_settings(db, org_id)
+        self.use_last_known_price = settings["use_last_known_price"]
+        self.split_basis = settings["split_basis"]
+        self._alcohol_profiles = {}
+        if self.split_basis == "litres":
+            self._alcohol_profiles = {
+                profile.inventory_name.casefold(): profile
+                for profile in db.query(AlcoholProductProfile)
+                .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.is_active.is_(True))
+                .all()
+            }
         self._lots: dict[UUID, InventoryItem | None] = {}
         self._in_flow_cache: dict[UUID, list[CostFlow]] = {}
         self._entry_cache: dict[UUID, list[LotCostEntry]] = {}
@@ -839,7 +852,10 @@ class CostEngine:
             return bool(lot is not None and (lot.extra_data or {}).get("library_stock"))
 
         weights = {f.id: ZERO for f in outs}
-        candidates = [f for f in outs if not is_library(f)] or [f for f in outs if is_library(f)]
+        if self.split_basis == "litres":
+            candidates = outs
+        else:
+            candidates = [f for f in outs if not is_library(f)] or [f for f in outs if is_library(f)]
 
         groups: dict[tuple, list[CostFlow]] = {}
         for f in candidates:
@@ -866,6 +882,37 @@ class CostEngine:
         if not percent and not free:
             free, byproduct, assumed = byproduct, [], True
 
+        litres_by_flow = {}
+        basis = self.split_basis
+        if basis == "litres" and free:
+            for key in free:
+                for flow in groups[key]:
+                    lot = lots[flow.id]
+                    if lot is None:
+                        litres_by_flow[flow.id] = None
+                        continue
+                    profile = self._alcohol_profiles.get(_base_name(lot.name).casefold())
+                    litres_by_flow[flow.id] = excise_litres(_d(flow.quantity), lot.unit, profile)
+            if any(value is None for value in litres_by_flow.values()):
+                # The fallback is the pre-8.1f-3d quantity rule, including A9's library exclusion.
+                basis = "quantity"
+                assumed = True
+                candidates = [f for f in outs if not is_library(f)] or [f for f in outs if is_library(f)]
+                groups = {}
+                for f in candidates:
+                    groups.setdefault(self._logical_output(f, lots[f.id]), []).append(f)
+                percent, byproduct, free = {}, [], []
+                for key in groups:
+                    cfg = _cost_share(defs.get(key[1])) if key[0] == "id" else None
+                    if cfg is None:
+                        free.append(key)
+                    elif cfg == "byproduct":
+                        byproduct.append(key)
+                    else:
+                        percent[key] = cfg
+                if not percent and not free:
+                    free, byproduct, assumed = byproduct, [], True
+
         group_weight = {key: ZERO for key in groups}
         total_percent = sum(percent.values(), ZERO)
         if percent and (total_percent > HUNDRED or not free):
@@ -880,7 +927,11 @@ class CostEngine:
                     group_weight[free[0]] = rest
                 else:
                     base = group_unit(free[0])
-                    sizes = {key: group_quantity(key, base) for key in free}
+                    sizes = (
+                        {key: sum((litres_by_flow[f.id] for f in groups[key]), ZERO) for key in free}
+                        if basis == "litres"
+                        else {key: group_quantity(key, base) for key in free}
+                    )
                     if all(v is not None for v in sizes.values()) and sum(sizes.values(), ZERO) > 0:
                         total = sum(sizes.values(), ZERO)
                         for key, v in sizes.items():
@@ -898,7 +949,11 @@ class CostEngine:
                 weights[flows[0].id] = gw
                 continue
             unit = group_unit(key)
-            sizes = {f.id: self._quantity_in(f, unit) for f in flows}
+            sizes = (
+                {f.id: litres_by_flow[f.id] for f in flows}
+                if basis == "litres" and all(f.id in litres_by_flow for f in flows)
+                else {f.id: self._quantity_in(f, unit) for f in flows}
+            )
             if any(v is None for v in sizes.values()):
                 sizes = {f.id: _d(f.quantity) for f in flows}
             total = sum(sizes.values(), ZERO)

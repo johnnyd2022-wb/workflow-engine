@@ -324,16 +324,20 @@ def deactivate_entry(db: Session, org_id: UUID, item_id: Any, entry_id: Any) -> 
 
 def get_settings(db: Session, org_id: UUID) -> dict:
     row = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
-    return {"use_last_known_price": True if row is None else bool(row.use_last_known_price)}
+    return {
+        "use_last_known_price": True if row is None else bool(row.use_last_known_price),
+        "split_basis": "quantity" if row is None else row.split_basis,
+    }
 
 
 def set_settings(db: Session, org_id: UUID, **changes) -> dict:
-    allowed = {"use_last_known_price"}
+    allowed = {"use_last_known_price", "split_basis"}
     if not changes or set(changes) - allowed:
-        raise CostingError("Only use_last_known_price can be changed")
-    value = changes["use_last_known_price"]
-    if not isinstance(value, bool):
+        raise CostingError("Only use_last_known_price and split_basis can be changed")
+    if "use_last_known_price" in changes and not isinstance(changes["use_last_known_price"], bool):
         raise CostingError("use_last_known_price must be true or false")
+    if "split_basis" in changes and changes["split_basis"] not in ("quantity", "litres"):
+        raise CostingError("split_basis must be quantity or litres")
     from uuid import uuid4
 
     from sqlalchemy.dialects.postgresql import insert
@@ -341,8 +345,8 @@ def set_settings(db: Session, org_id: UUID, **changes) -> dict:
     now = utc_now()
     db.execute(
         insert(CostingSettings.__table__)
-        .values(id=uuid4(), org_id=org_id, use_last_known_price=value, created_at=now, updated_at=now)
-        .on_conflict_do_update(index_elements=["org_id"], set_={"use_last_known_price": value, "updated_at": now})
+        .values(id=uuid4(), org_id=org_id, **changes, created_at=now, updated_at=now)
+        .on_conflict_do_update(index_elements=["org_id"], set_={**changes, "updated_at": now})
     )
     db.expire_all()
     return get_settings(db, org_id)
