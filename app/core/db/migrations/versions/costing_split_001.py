@@ -1,14 +1,14 @@
 """Opt-in litres basis for splitting costing pools across free outputs.
 
 Revision ID: costing_split_001
-Revises: costing_rules_001
+Revises: costing_bills_001
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "costing_split_001"
-down_revision = "costing_rules_001"
+down_revision = "costing_bills_001"
 branch_labels = None
 depends_on = None
 

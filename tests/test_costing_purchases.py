@@ -98,6 +98,8 @@ class FakeXero:
     def __init__(self, accounts=ACCOUNTS):
         self.accounts = list(accounts)
         self.transactions = []
+        self.bills = []  # 8.1f-1
+        self.bill_credits = []
         self.calls = []
         self.fail_with = None
         self.base_currency = "NZD"
@@ -124,6 +126,20 @@ class FakeXero:
                 raise fake.fail_with
             return fake.transactions
 
+        def get_bills(_self, modified_after=None, from_date=None, to_date=None):
+            fake.calls.append(("bills", {"modified_after": modified_after, "from_date": from_date, "to_date": to_date}))
+            if fake.fail_with:
+                raise fake.fail_with
+            return fake.bills
+
+        def get_bill_credit_notes(_self, modified_after=None, from_date=None, to_date=None):
+            fake.calls.append(
+                ("bill_credits", {"modified_after": modified_after, "from_date": from_date, "to_date": to_date})
+            )
+            return fake.bill_credits
+
+        monkeypatch.setattr(module.XeroAPIClient, "get_bills", get_bills, raising=False)
+        monkeypatch.setattr(module.XeroAPIClient, "get_bill_credit_notes", get_bill_credit_notes, raising=False)
         monkeypatch.setattr(module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
         monkeypatch.setattr(module.XeroAPIClient, "fetch_all_credit_notes", lambda self, **kw: [])

@@ -186,7 +186,7 @@ class PurchaseDocument(TenantScoped, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id", name="uq_purchase_documents_org_id"),
         UniqueConstraint("org_id", "source", "external_id", name="uq_purchase_documents_external"),
-        CheckConstraint("source IN ('xero_bank')", name="ck_purchase_documents_source"),
+        CheckConstraint("source IN ('xero_bank','xero_bill','xero_bill_credit')", name="ck_purchase_documents_source"),
         CheckConstraint("kind IN ('spend','refund')", name="ck_purchase_documents_kind"),
         CheckConstraint("status IN ('active','voided')", name="ck_purchase_documents_status"),
         CheckConstraint("fx_status IN ('ok','needs_rate')", name="ck_purchase_documents_fx"),
