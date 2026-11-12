@@ -10,6 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -224,9 +225,13 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             }
         )
 
+    measured_by_date = excise.measure_many(
+        db,
+        org_id,
+        {on: [(item, units) for _, item, units in pairs] for on, pairs in duty_pairs.items()},
+    )
     for on, pairs in duty_pairs.items():
-        measured = excise.measure(db, org_id, [(item, units) for _, item, units in pairs], on)
-        for (row, _, _), result in zip(pairs, measured, strict=True):
+        for (row, _, _), result in zip(pairs, measured_by_date[on], strict=True):
             value = result["duty"]
             row.add_duty(None if value is None else Decimal(value))
 
@@ -336,6 +341,19 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
         )
         .all()
     )
+    lines_by_note: dict[UUID, list[XeroCreditNoteLine]] = defaultdict(list)
+    note_ids = {note.id for _line, note, _mapping, _returned in rows}
+    if note_ids:
+        for credit_line in (
+            db.query(XeroCreditNoteLine)
+            .filter(
+                XeroCreditNoteLine.org_id == org_id,
+                XeroCreditNoteLine.credit_note_id.in_(note_ids),
+                XeroCreditNoteLine.is_current.is_(True),
+            )
+            .all()
+        ):
+            lines_by_note[credit_line.credit_note_id].append(credit_line)
     out = []
     for line, note, mapping, returned_quantity in rows:
         quantity = Decimal(str(line.quantity or 0))
@@ -344,6 +362,23 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
         units_per_line = int(mapping.units_per_line or 1)
         units = quantity * units_per_line
         returned_units = min(Decimal(str(returned_quantity)), units)  # returns are recorded in stock units
+        from app.features.crm.services.sales_sources import _ex_gst, _tax_inclusive
+
+        raw_fields = note.raw_fields or {}
+        note_line_rows = lines_by_note[note.id]
+        line_amounts = raw_fields.get("line_amounts") or {
+            credit_line.line_key: credit_line.line_amount for credit_line in note_line_rows
+        }
+        note_lines = [SimpleNamespace(line_amount=amount) for amount in line_amounts.values()]
+        inclusive = _tax_inclusive(SimpleNamespace(sub_total=raw_fields.get("sub_total"), total=note.total), note_lines)
+        line_taxes = raw_fields.get("line_tax_amounts") or {}
+        line_tax = line_taxes.get(line.line_key)
+        if inclusive and line_tax is None and len(line_amounts) == 1:
+            line_tax = raw_fields.get("total_tax")
+        amount = None if line.line_amount is None else Decimal(str(line.line_amount))
+        has_tax_snapshot = "line_tax_amounts" in raw_fields or "total_tax" in raw_fields
+        if amount is not None and inclusive and has_tax_snapshot:
+            amount = _ex_gst(SimpleNamespace(line_amount=amount, tax_amount=line_tax), inclusive)
         out.append(
             {
                 "product": mapping.biz_e_product_name,
@@ -351,7 +386,7 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
                 "reference": note.number or note.xero_credit_note_id,
                 "units": units,
                 "returned_units": returned_units,
-                "amount": None if line.line_amount is None else Decimal(str(line.line_amount)),
+                "amount": amount,
                 "currency": note.currency,
             }
         )

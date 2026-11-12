@@ -297,7 +297,7 @@ def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, 
         db.commit()
 
 
-def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(2026, 10, 20)):
+def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(2026, 10, 20), raw_fields=None):
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
@@ -312,6 +312,7 @@ def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(20
         status="AUTHORISED",
         total=D(amount),
         currency=currency,
+        raw_fields=raw_fields or {},
     )
     db.add(note)
     db.flush()
@@ -327,6 +328,28 @@ def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(20
     db.add(line)
     db.commit()
     return line
+
+
+def test_inclusive_credit_note_reduces_revenue_ex_gst(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 10, "500", "0")])
+    world["allocate"](invoice, "l1", batch, 10)
+    _credit(
+        world,
+        db,
+        amount="115",
+        quantity="1",
+        raw_fields={
+            "sub_total": "100",
+            "total_tax": "15",
+            "line_amounts": {"c1": "115"},
+            "line_tax_amounts": {"c1": "15"},
+        },
+    )
+
+    row = _row(world)
+
+    assert D(row["revenue"]) == D("400")
 
 
 def _record_credit_return(world, db, line, batch, quantity="2"):
@@ -598,18 +621,53 @@ def test_duty_measurement_batches_all_allocations_on_the_same_date(world, db, mo
         world["allocate"](invoice, "l1", world["lot"](f"duty-{index}", unit_cost="4"), 1)
 
     calls = []
-    original = excise.measure
+    original = excise.measure_many
 
-    def measure(session, org_id, pairs, on):
-        calls.append((pairs, on))
-        return original(session, org_id, pairs, on)
+    def measure_many(session, org_id, groups, step_overrides=None):
+        calls.append(groups)
+        return original(session, org_id, groups, step_overrides)
 
-    monkeypatch.setattr(excise, "measure", measure)
+    monkeypatch.setattr(excise, "measure_many", measure_many)
     assert world["client"].get(f"{API}?from=2026-10&to=2026-10").status_code == 200
 
     assert len(calls) == 1
-    assert len(calls[0][0]) == 3
-    assert calls[0][1] == SOLD
+    assert list(calls[0]) == [SOLD]
+    assert len(calls[0][SOLD]) == 3
+
+
+def test_duty_query_count_stays_flat_as_sale_dates_grow(world, db):
+    from sqlalchemy import event
+
+    _enable_alcohol(world)
+    batch = world["lot"]("many-days", unit_cost="4", qty=100)
+
+    def add_sales(first_day, count):
+        for offset in range(count):
+            day = date.fromordinal(first_day.toordinal() + offset)
+            invoice = world["sell"]([("Wildflower Gin 700ml", 1, "40", "0")], day=day)
+            world["allocate"](invoice, "l1", batch, 1)
+
+    def query_count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+
+        def count(*_args):
+            statements.append(1)
+
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            response = world["client"].get(f"{API}?from=2026-10&to=2026-10")
+            assert response.status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        return len(statements)
+
+    add_sales(date(2026, 10, 1), 2)
+    baseline = query_count()
+    add_sales(date(2026, 10, 3), 8)
+    scaled = query_count()
+
+    assert abs(scaled - baseline) <= 2, f"query count grew from {baseline} to {scaled}"
 
 
 def test_active_alcohol_duty_is_unknown_when_sale_has_no_inventory_lot(world):
@@ -768,9 +826,11 @@ def test_r5_tracked_duty_that_cannot_be_measured_leaves_the_margin_unknown(world
     world["allocate"](inv, "l1", batch, 2)
     monkeypatch.setattr(
         excise,
-        "measure",
-        lambda _db, _org, pairs, _on, **_kw: [{"litres": None, "abv_percent": None, "lal": None, "duty": None}]
-        * len(pairs),
+        "measure_many",
+        lambda _db, _org, groups, **_kw: {
+            on: [{"litres": None, "abv_percent": None, "lal": None, "duty": None}] * len(pairs)
+            for on, pairs in groups.items()
+        },
     )
     row = _row(world)
     assert row["cost"] is not None and row["duty_tracked"] is True and row["duty"] is None
@@ -830,13 +890,15 @@ def test_r6_one_unmeasurable_sale_leaves_a_mixed_months_margin_unknown(world, mo
     inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
     world["allocate"](inv, "l1", first, 1)
     world["allocate"](inv, "l1", second, 1)
-    real = excise.measure
+    real = excise.measure_many
 
-    def half_measured(db, org, pairs, on, **kw):
-        out = real(db, org, pairs, on, **kw)
-        return [dict(out[0], duty="1.00")] + [dict(r, duty=None) for r in out[1:]]
+    def half_measured(db, org, groups, **kw):
+        out = real(db, org, groups, **kw)
+        for on, results in out.items():
+            out[on] = [dict(results[0], duty="1.00")] + [dict(r, duty=None) for r in results[1:]]
+        return out
 
-    monkeypatch.setattr(excise, "measure", half_measured)
+    monkeypatch.setattr(excise, "measure_many", half_measured)
     row = _row(world)
     assert row["duty"] is None and row["margin"] is None
 
