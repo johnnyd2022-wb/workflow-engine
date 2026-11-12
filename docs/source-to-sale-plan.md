@@ -1221,14 +1221,15 @@ missing; never a silent $0.
     spend and receive money into purchase documents and lines; changes and deletions in
     Xero tracked line by line, never deleting a stored line (review of recorded lines is
     8.1c). (!690)
-  - [ ] c. **Purchase rules and actions.** Rules (ignore a seller, seller or description
+  - [x] c. **Purchase rules and actions.** Rules (ignore a seller, seller or description
     always maps to a material, quantity and split); record, already in stock, not stock,
-    skip; "remember this"; historical runs over any date range.
-  - [ ] d. **Purchases page.** Reconcile-style cards with tabs, bulk actions and the
-    record dialog at phone width; one notification per sync and a Home card.
-  - [ ] e. **Cost where people look.** Lot cost panel, batch cost card (cost so far,
+    skip; "remember this"; historical runs over any date range. (!691, !692)
+  - [x] d. **Purchases page.** Reconcile-style cards with tabs, bulk actions and the
+    record dialog at phone width; one notification per sync and a Home card. (!694, !695)
+  - [x] e. **Cost where people look.** Lot cost panel, batch cost card (cost so far,
     cost per unit, Incomplete with the missing inputs), cost readiness per product,
-    "total paid" on Add Inventory.
+    "total paid" on Add Inventory, and costing with no Xero bank feed: total paid on every
+    Add Inventory path (manual, barcode incl. add-quantity, CSV). (!693, !695)
   - [ ] f. **Bills and margins** (spec Phase 2). Bills and supplier credits; margin per
     product over time with duty from the excise module; material price history;
     auto-record rules.

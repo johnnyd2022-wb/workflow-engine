@@ -43,4 +43,4 @@ def test_parents_exist_and_are_not_cyclic():
 
 
 def test_feature_flags_are_known():
-    assert {page.feature for page in PAGES} <= {None, "crm", "compliant"}
+    assert {page.feature for page in PAGES} <= {None, "crm", "compliant", "costing"}
