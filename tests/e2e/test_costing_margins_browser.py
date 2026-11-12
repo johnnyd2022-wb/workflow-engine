@@ -240,3 +240,63 @@ def test_a_product_named_like_a_built_in_still_reports(margins_user, page, app_u
     page.locator("[data-margins-root][aria-busy='false']").wait_for()
     expect(page.get_by_role("button", name="constructor")).to_be_visible()
     expect(page.get_by_role("button", name="__proto__")).to_be_visible()
+
+
+def test_a_products_revenue_says_which_months_it_covers(margins_user, page, app_url):
+    """Review r7: $100 in January and unknown February: the product card says 1 of 2 months."""
+
+    def row(month, revenue):
+        return {
+            "product": "Gin",
+            "month": month,
+            "units": 1,
+            "revenue": revenue,
+            "cost": 10,
+            "duty_tracked": False,
+            "duty": None,
+            "margin": None if revenue is None else 90,
+            "margin_percent": None,
+            "average_cost_per_unit": 10,
+            "cost_status": "actual",
+            "lines": [],
+        }
+
+    body = {"from": "2026-01", "to": "2026-02", "currency": "NZD", "rows": [row("2026-01", 100), row("2026-02", None)]}
+    page.route("**/api/core/costing/margins**", lambda route: route.fulfill(json=body))
+    page.goto(app_url + PAGE)
+    page.locator("[data-margins-root][aria-busy='false']").wait_for()
+    expect(page.locator("[data-margins-list]")).to_contain_text("Revenue $100.00 · complete for 1 of 2 months")
+
+
+def test_staff_without_compliance_get_words_not_a_customs_link(fresh_user, page, app_url, db):
+    """Review r7: the browser honours data-can-fix-duty: no anchor a Staff user would be refused at."""
+    from uuid import UUID, uuid4
+
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import User
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    user = fresh_user(UserRole.MEMBER)
+    org_id = UUID(user["org_id"])
+    FeatureSubscriptionRepository(db).grant(org_id, "costing")
+    FeatureSubscriptionRepository(db).grant(org_id, "crm")
+    role = OrgRole(
+        id=uuid4(), org_id=org_id, name="Margins only", base_role="member", permissions=["costs.view", "sales.view"]
+    )
+    db.add(role)
+    db.flush()
+    db.query(User).filter(User.id == UUID(user["user_id"])).update({"custom_role_id": role.id})
+    db.commit()
+    try:
+        login_through_ui(page, user["email"], user["password"])
+        body = _report()
+        page.route("**/api/core/costing/margins**", lambda route: route.fulfill(json=body))
+        page.goto(app_url + PAGE)
+        page.locator("[data-margins-root][aria-busy='false']").wait_for()
+        note = page.locator("[data-margins-note]")
+        expect(note).to_contain_text("someone who manages compliance can set")
+        expect(note.locator("a")).to_have_count(0)
+    finally:
+        db.rollback()
+        db.query(User).filter(User.id == UUID(user["user_id"])).update({"custom_role_id": None})
+        db.commit()

@@ -186,7 +186,8 @@
       head.appendChild(name);
       var nums = el('span', 'mg-product__nums');
       nums.appendChild(el('span', 'mg-num', units(p.t.units) + ' sold'));
-      nums.appendChild(el('span', 'mg-num', 'Revenue ' + fmt(p.t.revenue)));
+      nums.appendChild(el('span', 'mg-num', 'Revenue ' + fmt(p.t.revenue) + (p.t.missingRevenue
+        ? ' · complete for ' + (p.t.months - p.t.missingRevenue) + ' of ' + p.t.months + ' months' : '')));
       nums.appendChild(el('span', 'mg-num mg-num--margin', 'Margin ' + fmt(p.t.margin) + (p.t.missingMargin
         ? ' · complete for ' + (p.t.months - p.t.missingMargin) + ' of ' + p.t.months + ' months' : '')));
       if (p.t.percent != null && !p.t.missingMargin) {
