@@ -984,6 +984,9 @@ def prefill(
             rows.append([t, amount])
         if rest_index is not None:
             rows[rest_index][1] = max(ZERO, remaining - used)
+            # Shares just under 100% can round up past the line (six 16.5% rows on $0.01); the excess
+            # comes back off the largest rows so the rows still add up to the line.
+            _settle_rounding(rows, remaining - used - rows[rest_index][1])
         elif rows and sum((_d(t["share"]) for t, _ in rows), ZERO) == 100:
             _settle_rounding(rows, remaining - used)  # shares cover the line: rounding must not leave a gap
         out = []

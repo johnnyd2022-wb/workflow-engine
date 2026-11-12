@@ -114,6 +114,11 @@
         edit.addEventListener('click', function () { open(rule, edit); });
         var toggle = el('button', 'workspace-button', rule.is_active ? 'Switch off' : 'Switch on');
         toggle.type = 'button';
+        if (!rule.is_active && rule.auto_record && !canAuto) {
+          // Switching an automatic rule back on records stock again: that needs inventory.adjust.
+          toggle.disabled = true;
+          toggle.title = 'Someone who can adjust stock can switch this on, or edit it to stop recording automatically first.';
+        }
         toggle.addEventListener('click', function () {
           toggle.disabled = true;
           call('PUT', API + '/' + encodeURIComponent(rule.id), body(rule, { is_active: !rule.is_active }), key())

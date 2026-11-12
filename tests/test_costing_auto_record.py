@@ -374,3 +374,33 @@ def test_r4_over_rounding_never_makes_a_row_negative(flask_app, world, db):  # n
     assert purchase_line.state == "recorded"
     assert all(D(a.amount) >= 0 for a in allocations)
     assert sum((D(a.amount) for a in allocations), D("0")) == D("0.0100")
+
+
+def test_r5_over_rounding_with_a_rest_row_still_records_the_whole_line(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    template = [
+        {
+            "name": f"Item {i}",
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": "16.5",
+        }
+        for i in range(6)
+    ] + [
+        {
+            "name": "Rest",
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": "rest",
+        }
+    ]
+    assert _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=template).status_code == 201
+    _doc, purchase_line = _sync_line(world, db, amount="0.01")
+    allocations = _allocations(db, world["org"].id, purchase_line.id)
+    assert purchase_line.state == "recorded"
+    assert all(D(a.amount) >= 0 for a in allocations)
+    assert sum((D(a.amount) for a in allocations), D("0")) == D("0.0100")
