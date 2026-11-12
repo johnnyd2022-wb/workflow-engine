@@ -512,3 +512,102 @@ def test_duty_measurement_batches_all_allocations_on_the_same_date(world, db, mo
     assert len(calls) == 1
     assert len(calls[0][0]) == 3
     assert calls[0][1] == SOLD
+
+
+def test_active_alcohol_duty_is_unknown_when_sale_has_no_inventory_lot(world):
+    _enable_alcohol(world)
+    world["sell"]([("Wildflower Gin 700ml", 3, "120", "0")])
+
+    row = _row(world)
+
+    assert row["duty_tracked"] is True
+    assert row["duty"] is None
+
+
+def test_partial_production_cost_keeps_partial_status_in_margin_row(world, db):
+    from tests.costing_helpers import complete, produced_lots, workflow
+    from tests.costing_helpers import lot as make_lot
+
+    org = world["org"]
+    client = world["client"]
+    known = make_lot(db, org.id, "known input", 1, "bottles")
+    price(db, org.id, known.id, D("5"), D("1"))
+    missing = make_lot(db, org.id, "missing input", 1, "bottles")
+    execution, (step,) = workflow(db, org.id, [[{"name": GIN, "unit": "bottles"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(known, 1, "bottles"), (missing, 1, "bottles")],
+        [{"name": GIN, "quantity": 2, "unit": "bottles"}],
+    )
+    (batch,) = produced_lots(db, org.id, step.id)
+    invoice = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](invoice, "l1", batch, 2)
+
+    row = _row(world)
+
+    assert row["cost_status"] == "partial"
+    assert row["cost"] is None and row["margin"] is None
+
+
+def test_production_execution_query_count_stays_flat_as_sold_lots_grow(world, db):
+    from sqlalchemy import event
+
+    from tests.costing_helpers import complete, produced_lots, workflow
+
+    org, client = world["org"], world["client"]
+    input_lot = world["lot"]("priced input", unit_cost="5")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    line = db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice.id).one()
+
+    def produce_and_allocate(index):
+        execution, (step,) = workflow(db, org.id, [[{"name": GIN, "unit": "bottles"}]])
+        complete(
+            client,
+            execution,
+            step,
+            [(input_lot, 1, "bottles")],
+            [{"name": GIN, "quantity": 1, "unit": "bottles"}],
+        )
+        (batch,) = produced_lots(db, org.id, step.id)
+        db.add(
+            SalesFifoAllocation(
+                org_id=org.id,
+                xero_invoice_id=invoice.xero_invoice_id,
+                xero_line_key="l1",
+                inventory_item_id=batch.id,
+                product_name=GIN,
+                quantity=D(1),
+                unit="bottles",
+            )
+        )
+        line.quantity = D(index + 1)
+        line.line_amount = D((index + 1) * 40)
+        invoice.sub_total = D((index + 1) * 40)
+        invoice.total = D((index + 1) * 40)
+        db.commit()
+
+    for index in range(2):
+        produce_and_allocate(index)
+
+    def capture_count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+
+        def count(*_args):
+            statements.append(1)
+
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            assert world["client"].get(f"{API}?from=2026-10&to=2026-10").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        return len(statements)
+
+    baseline = capture_count()
+    for index in range(2, 6):
+        produce_and_allocate(index)
+    scaled = capture_count()
+
+    assert abs(scaled - baseline) <= 2, f"query count grew from {baseline} to {scaled}"
