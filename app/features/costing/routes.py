@@ -16,7 +16,7 @@ from app.core.db import db_session
 from app.core.security.access_policy import has_permission
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth, requires_permission
-from app.features.costing import FEATURE_KEY, service
+from app.features.costing import FEATURE_KEY, duty_today, service
 from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
 from app.observability import get_logger
@@ -150,7 +150,10 @@ def delete_lot_cost(item_id, entry_id):
 @costing_bp.route(f"{API}/executions/<execution_id>/cost", methods=["GET"])
 @requires_auth
 def get_execution_cost(execution_id):
-    return jsonify(CostEngine(db_session, _org()).execution(execution_id))
+    org_id = _org()
+    result = CostEngine(db_session, org_id).execution(execution_id)
+    result["duty_today"] = duty_today.attach(db_session, org_id, result)
+    return jsonify(result)
 
 
 @costing_bp.route(f"{API}/settings", methods=["GET"])

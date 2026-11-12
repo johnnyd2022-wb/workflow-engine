@@ -69,6 +69,10 @@
     var m = money(value);
     return m ? m + (unit ? ' per ' + unit : '') : null;
   }
+  function dutyUnit(unit) {
+    var words = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack' };
+    return words[String(unit || '').toLowerCase()] || unit || 'unit';
+  }
   function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
   var SOURCE_WORDS = {
@@ -337,7 +341,16 @@
     figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
     outputs.forEach(function (o) {
       var unitText = perUnit(o.unit_cost, o.unit);
-      figures.appendChild(figure(o.name + ' per ' + (o.unit || 'unit'), unitText ? money(o.unit_cost) : '—'));
+      var outputFigure = figure(o.name + ' per ' + dutyUnit(o.unit), unitText ? money(o.unit_cost) : '—');
+      var duty = o.duty_today;
+      if (duty && duty.tracked) {
+        var dutyLine = duty.per_unit == null
+          ? 'Duty not worked out — ' + (duty.missing || 'Not an excise product or no rate set')
+          : 'Duty if sold today ' + (money(duty.per_unit) || '—') + ' · landed ' +
+            (money(duty.landed_per_unit) || '—') + ' per ' + dutyUnit(o.unit);
+        outputFigure.appendChild(el('p', 'cost-muted', dutyLine));
+      }
+      figures.appendChild(outputFigure);
     });
     card.appendChild(figures);
 

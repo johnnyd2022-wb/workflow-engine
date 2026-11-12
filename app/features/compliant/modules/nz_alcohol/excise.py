@@ -532,10 +532,15 @@ def _contract_dispatches(
 # --- litres of alcohol ----------------------------------------------------------------------
 
 
-def _lot_abv(session: Session, item: InventoryItem, profile: AlcoholProductProfile | None) -> Decimal | None:
+def _lot_abv(
+    session: Session,
+    item: InventoryItem,
+    profile: AlcoholProductProfile | None,
+    step: ExecutionStep | None = None,
+) -> Decimal | None:
     raw = (item.extra_data or {}).get("abv_percent")
     if raw in (None, "") and item.source_execution_step_id:
-        step = session.get(ExecutionStep, item.source_execution_step_id)
+        step = step or session.get(ExecutionStep, item.source_execution_step_id)
         raw = (step.execution_data or {}).get(ABV_PROMPT_LABEL) if step is not None else None
     if raw in (None, "") and profile is not None and profile.abv_percent is not None:
         raw = profile.abv_percent
@@ -821,6 +826,17 @@ def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]
         if p.is_active
     }
     rates = session.query(ExciseRate).filter(ExciseRate.org_id == org_id).all()
+    step_ids = {item.source_execution_step_id for item, _ in pairs if item.source_execution_step_id}
+    steps = (
+        {
+            step.id: step
+            for step in session.query(ExecutionStep)
+            .filter(ExecutionStep.org_id == org_id, ExecutionStep.id.in_(step_ids))
+            .all()
+        }
+        if step_ids
+        else {}
+    )
     out = []
     for item, quantity in pairs:
         profile = profiles.get(_base_name(item.name).casefold())
@@ -829,7 +845,7 @@ def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]
             out.append({"litres": None, "abv_percent": None, "lal": None, "duty": None})
             continue
         litres = _litres(abs(qty), item.unit, profile)
-        abv = _lot_abv(session, item, profile)
+        abv = _lot_abv(session, item, profile, steps.get(item.source_execution_step_id))
         lal = (litres * abv / 100).quantize(_Q4, ROUND_HALF_UP) if litres is not None and abv is not None else None
         rate = resolve_rate(rates, tariff_item_for(profile, abv), on) if profile else None
         duty = duty_for(rate, litres.quantize(_Q4, ROUND_HALF_UP), lal) if lal is not None else None
