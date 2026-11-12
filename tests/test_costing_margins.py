@@ -949,3 +949,28 @@ def test_r9_a_sale_line_says_whether_its_unmatched_units_have_an_average(world):
     world["lot"]("B1", unit_cost="4")
     (line,) = _row(world)["lines"]
     assert line["unbatched_status"] == "estimated"
+
+
+def test_r11_a_multi_line_inclusive_credit_synced_before_line_tax_still_counts(world, db):
+    """Review r11: credits synced before line tax was kept have only sub_total and total_tax; the
+    note's tax is shared across its lines by amount rather than leaving revenue untracked."""
+    from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
+
+    batch = world["lot"]("B1", unit_cost="5")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 10, "500", "0")])
+    world["allocate"](invoice, "l1", batch, 10)
+    first = _credit(world, db, amount="230", quantity="1", raw_fields={"sub_total": "200", "total_tax": "30"})
+    first.line_amount = D("115")  # two lines of $115 inc GST on a $230 note
+    db.add(
+        XeroCreditNoteLine(
+            org_id=world["org"].id,
+            credit_note_id=first.credit_note_id,
+            line_key="c2",
+            description="Wildflower Gin 700ml",
+            quantity=D("1"),
+            line_amount=D("115"),
+            product_mapping_id=first.product_mapping_id,
+        )
+    )
+    db.commit()
+    assert D(_row(world)["revenue"]) == D("300")  # 500 less two $100 ex-GST credits

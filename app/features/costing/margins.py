@@ -373,8 +373,12 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
         inclusive = _tax_inclusive(SimpleNamespace(sub_total=raw_fields.get("sub_total"), total=note.total), note_lines)
         line_taxes = raw_fields.get("line_tax_amounts") or {}
         line_tax = line_taxes.get(line.line_key)
-        if inclusive and line_tax is None and len(line_amounts) == 1:
-            line_tax = raw_fields.get("total_tax")
+        if inclusive and line_tax is None and raw_fields.get("total_tax") not in (None, ""):
+            # Synced before line tax was kept: share the note's tax across its lines by amount
+            # (exact for one line; for several, each line's share of what was charged).
+            total_lines = sum((Decimal(str(a)) for a in line_amounts.values() if a not in (None, "")), Decimal("0"))
+            if total_lines and line.line_amount is not None:
+                line_tax = Decimal(str(raw_fields["total_tax"])) * Decimal(str(line.line_amount)) / total_lines
         amount = None if line.line_amount is None else Decimal(str(line.line_amount))
         has_tax_snapshot = "line_tax_amounts" in raw_fields or "total_tax" in raw_fields
         if amount is not None and inclusive and has_tax_snapshot:
