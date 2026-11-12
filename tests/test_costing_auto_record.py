@@ -5,8 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import uuid4
 
+from sqlalchemy import text
+
 from app.core.db.models.inventory_item import InventoryItem
-from app.features.costing.models import PurchaseAllocation, PurchaseDocument, PurchaseLine
+from app.core.db.repositories.inventory_repo import InventoryRepository
+from app.features.costing.models import CostFlow, PurchaseAllocation, PurchaseDocument, PurchaseLine
 from tests.costing_helpers import user_client
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 from tests.test_costing_allocations import EARLY_START, _set_start_date, world  # noqa: F401 -- fixture re-export
@@ -162,6 +165,90 @@ def test_auto_record_failure_isolated_and_sync_succeeds(flask_app, world, db):  
     assert _allocations(db, world["org"].id, purchase_line.id) == []
 
 
+def test_auto_record_rounding_residual_is_assigned_and_line_fully_records(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    template = [
+        {
+            "name": name,
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": share,
+        }
+        for name, share in (("A", "33.3334"), ("B", "33.3333"), ("C", "33.3333"))
+    ]
+    response = _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=template)
+    assert response.status_code == 201, response.get_json()
+
+    _doc, purchase_line = _sync_line(world, db, amount="0.01")
+    allocations = _allocations(db, world["org"].id, purchase_line.id)
+    assert purchase_line.state == "recorded"
+    assert sum((D(a.amount) for a in allocations), D("0")) == D("0.0100")
+    assert len(allocations) == 3
+
+
+def test_auto_record_unexpected_exception_logs_traceback_and_reference(flask_app, world, db, monkeypatch, caplog):  # noqa: F811
+    from app.features.costing import actions
+
+    client = user_client(db, flask_app, world["org"])
+    _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=_auto_template())
+
+    def broken_prefill(*_args, **_kwargs):
+        raise AttributeError("regression marker")
+
+    monkeypatch.setattr(actions, "prefill", broken_prefill)
+    _doc, purchase_line = _sync_line(world, db, amount="15")
+    assert purchase_line.state == "open"
+    assert "Traceback" in caplog.text
+    assert str(purchase_line.id) in caplog.text
+    assert "regression marker" in caplog.text
+
+
+def test_auto_record_savepoint_rolls_back_rows_flushed_before_failure(flask_app, world, db, monkeypatch):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    _rule(
+        client,
+        payee_pattern="Auto Supplier",
+        auto_record=True,
+        template=[
+            {"name": "Valid first row", "unit": "kg", "quantity_mode": "fixed", "quantity": "1", "share": "50"},
+            {
+                "name": "Invalid second row",
+                "unit": "bottles",
+                "quantity_mode": "fixed",
+                "quantity": "1.5",
+                "share": "50",
+            },
+        ],
+    )
+    before_items = db.query(InventoryItem).filter(InventoryItem.org_id == world["org"].id).count()
+    before_flows = db.query(CostFlow).filter(CostFlow.org_id == world["org"].id).count()
+    before_allocations = db.query(PurchaseAllocation).filter(PurchaseAllocation.org_id == world["org"].id).count()
+    create_inventory_item = InventoryRepository.create_inventory_item
+    first_row_flushed = []
+
+    def track_first_row_flush(repository, **kwargs):
+        item = create_inventory_item(repository, **kwargs)
+        if kwargs["name"] == "Valid first row":
+            assert db.query(InventoryItem).filter(InventoryItem.id == item.id).one_or_none() is not None
+            first_row_flushed.append(item.id)
+        return item
+
+    monkeypatch.setattr(InventoryRepository, "create_inventory_item", track_first_row_flush)
+
+    _doc, purchase_line = _sync_line(world, db, amount="15")
+    assert len(first_row_flushed) == 1
+    assert purchase_line.state == "open"
+    assert _allocations(db, world["org"].id, purchase_line.id) == []
+    assert db.query(InventoryItem).filter(InventoryItem.org_id == world["org"].id).count() == before_items
+    assert db.query(CostFlow).filter(CostFlow.org_id == world["org"].id).count() == before_flows
+    assert (
+        db.query(PurchaseAllocation).filter(PurchaseAllocation.org_id == world["org"].id).count() == before_allocations
+    )
+    assert db.execute(text("SELECT 1")).scalar_one() == 1
+
+
 def test_historical_upsert_auto_records_and_reports_count(flask_app, world, db, caplog):  # noqa: F811
     client = user_client(db, flask_app, world["org"])
     _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=_auto_template())
@@ -177,6 +264,7 @@ def test_historical_upsert_auto_records_and_reports_count(flask_app, world, db, 
         json={"from": "2026-11-01", "to": "2026-11-12"},
     )
     assert response.status_code == 200, response.get_json()
+    assert response.get_json()["auto_recorded"] == 1
     assert "'auto_recorded': 1" in caplog.text
     db.expire_all()
     purchase_line = db.query(PurchaseLine).filter(PurchaseLine.org_id == world["org"].id).one()

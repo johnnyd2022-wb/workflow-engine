@@ -630,7 +630,21 @@ def _upsert_documents(
                     )
                     if suggestion is None or suggestion["source"] != "rule":
                         continue
-                    actions.record(
+                    matched_rule = next((r for r in rules if str(r.id) == suggestion["rule_id"]), None)
+                    if matched_rule is None:
+                        raise actions.CostingError("The matching purchase rule is no longer available")
+                    non_rest_rows = [i for i, row in enumerate(matched_rule.template) if row.get("share") != "rest"]
+                    if non_rest_rows:
+                        last_non_rest = non_rest_rows[-1]
+                        assigned = sum(
+                            (actions._q(Decimal(str(row["amount"]))) for row in suggestion["rows"]),
+                            Decimal("0"),
+                        )
+                        residual = actions._q(actions.open_amount(db, new_line)) - assigned
+                        suggestion["rows"][last_non_rest]["amount"] = str(
+                            actions._q(Decimal(str(suggestion["rows"][last_non_rest]["amount"])) + residual)
+                        )
+                    recorded_line = actions.record(
                         db,
                         org_id,
                         new_line.id,
@@ -638,12 +652,25 @@ def _upsert_documents(
                         rest="later",
                         user_id=None,
                     )
+                    if recorded_line.state != "recorded" or actions.open_amount(db, recorded_line) != Decimal("0"):
+                        raise actions.CostingError("Auto-record did not record the full purchase line")
                 stats["auto_recorded"] += 1
-            except Exception as error:
+            except actions.CostingError as error:
                 logger.warning(
                     "purchase_auto_record_failed",
                     org_id=str(org_id),
                     line_id=str(new_line.id),
+                    error_type=type(error).__name__,
+                )
+            except Exception as error:
+                from uuid import uuid4
+
+                ref = uuid4().hex[:12]
+                logger.exception(
+                    "purchase_auto_record_failed_unexpected",
+                    org_id=str(org_id),
+                    line_id=str(new_line.id),
+                    ref=ref,
                     error_type=type(error).__name__,
                 )
     logger.info("purchase_sources_upserted", org_id=str(org_id), **stats)

@@ -221,7 +221,18 @@ def create(db: Session, org_id: UUID, body: dict, user_id=None) -> PurchaseRule:
 
 def update(db: Session, org_id: UUID, rule_id, body: dict) -> PurchaseRule:
     rule = get_rule(db, org_id, rule_id)
-    clean = validate({k: v for k, v in body.items() if k in FIELDS})
+    current = {
+        "account_code": rule.account_code,
+        "payee_pattern": rule.payee_pattern,
+        "description_pattern": rule.description_pattern,
+        "match_type": rule.match_type,
+        "treatment": rule.treatment,
+        "template": rule.template,
+        "auto_record": rule.auto_record,
+        "is_active": rule.is_active,
+    }
+    current.update({k: v for k, v in body.items() if k in FIELDS})
+    clean = validate(current)
     for name, value in clean.items():
         setattr(rule, name, value)
     rule.updated_at = utc_now()

@@ -462,6 +462,7 @@ def historical_run():
         {
             "documents": stats["documents"],
             "lines": stats["lines"],
+            "auto_recorded": stats.get("auto_recorded", 0),
             "from": date_from.isoformat(),
             "to": date_to.isoformat(),
         }
