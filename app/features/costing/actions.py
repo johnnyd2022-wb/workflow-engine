@@ -654,6 +654,25 @@ def list_purchases(
     return {"tab": tab, "counts": counts, "cards": cards}
 
 
+def _lot_names(db: Session, line: PurchaseLine) -> dict:
+    # Names of the lots a line's allocations price, one query per card (cached on the line).
+    cached = getattr(line, "_lot_names_cache", None)
+    if cached is None:
+        ids = [a.inventory_item_id for a in line_allocations(db, line, statuses=("active", "orphaned"))]
+        cached = (
+            {
+                item_id: name
+                for item_id, name in db.query(InventoryItem.id, InventoryItem.name).filter(
+                    InventoryItem.org_id == line.org_id, InventoryItem.id.in_(ids)
+                )
+            }
+            if ids
+            else {}
+        )
+        line._lot_names_cache = cached
+    return cached
+
+
 def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
     return {
@@ -676,6 +695,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
         "allocations": [
             {
                 "id": str(a.id),
+                "name": _lot_names(db, line).get(a.inventory_item_id),
                 "inventory_item_id": str(a.inventory_item_id),
                 "amount": str(_q(_d(a.amount))),
                 "quantity": str(_d(a.quantity)),

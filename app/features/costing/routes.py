@@ -23,7 +23,13 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-costing_bp = Blueprint("costing", __name__)
+costing_bp = Blueprint(
+    "costing",
+    __name__,
+    template_folder="frontend/templates",
+    static_folder="frontend/static",
+    static_url_path="/static/costing",
+)
 API = "/api/core/costing"
 MAX_BODY_BYTES = 16 * 1024
 
@@ -479,3 +485,17 @@ def readiness_detail(key):
     from app.features.costing import readiness
 
     return jsonify(readiness.product_detail(db_session, _org(), key))
+
+
+# --- 8.1d: the Purchases page -----------------------------------------------------------------------
+
+
+@costing_bp.route("/core/costing/purchases", methods=["GET"])
+@requires_auth
+def purchases_page():
+    from flask import render_template
+
+    from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+    connected = XeroTenantRepository(db_session).get_connected(_org()) is not None
+    return render_template("costing/purchases.html", active_page="core", xero_connected=connected)

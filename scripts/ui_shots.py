@@ -55,6 +55,7 @@ STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
 SEED_KINDS = (
     "stock",
+    "purchases",
     "tastings",
     "lineage",
     "compliance",
@@ -2530,9 +2531,24 @@ def _seed_cases(db, org_id, inv) -> None:
     db.flush()
     now = datetime.now(UTC)
     for title, who, due, action in (
-        ("Juniper berries expired with stock left", owner, now + timedelta(days=2), "Count what is left and dispose of it"),
-        ("Batch 14 output short by 12 L", admin, now - timedelta(days=1), "Check the still log and reconcile the remaining quantity"),
-        ("Gift boxes below reorder point", gone, now + timedelta(days=5), "Raise a purchase order with Kerer\u016b Packaging"),
+        (
+            "Juniper berries expired with stock left",
+            owner,
+            now + timedelta(days=2),
+            "Count what is left and dispose of it",
+        ),
+        (
+            "Batch 14 output short by 12 L",
+            admin,
+            now - timedelta(days=1),
+            "Check the still log and reconcile the remaining quantity",
+        ),
+        (
+            "Gift boxes below reorder point",
+            gone,
+            now + timedelta(days=5),
+            "Raise a purchase order with Kerer\u016b Packaging",
+        ),
     ):
         db.add(
             OperationalCase(
@@ -2761,6 +2777,147 @@ def _seed_event_sales(db, org_id, rep, today, products, event) -> None:
     db.commit()
 
 
+def _seed_purchases(db, org_id, inv) -> None:
+    """Live cost (8.1d): a month of card spend as Xero would send it, in every state the
+    Purchases page shows — to record, part recorded, recorded, refund, review, not stock,
+    skipped — plus the costing feature and an account chart."""
+    from uuid import uuid4
+
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.features.costing import actions
+    from app.features.costing.models import CostingSettings, PurchaseDocument, PurchaseLine
+    from app.features.crm.models.xero_account import XeroAccount
+
+    today = date.today()
+    FeatureSubscriptionRepository(db).grant(org_id, "costing")
+    db.add(CostingSettings(org_id=org_id, use_last_known_price=True, start_date=today - timedelta(days=40)))
+    accounts = {}
+    for code, name, kind, treatment in (
+        ("310", "Purchases - Ingredients", "DIRECTCOSTS", "stock"),
+        ("311", "Purchases - Packaging", "DIRECTCOSTS", "stock"),
+        ("320", "Excise Duty", "DIRECTCOSTS", "duty"),
+        ("429", "Office Expense", "EXPENSE", "not_stock"),
+    ):
+        acct = XeroAccount(
+            org_id=org_id,
+            xero_account_id=str(uuid4()),
+            code=code,
+            name=name,
+            type=kind,
+            account_class="EXPENSE",
+            status="ACTIVE",
+            default_treatment=treatment,
+        )
+        db.add(acct)
+        accounts[code] = acct
+    db.flush()
+
+    def buy(days_ago, payee, code, amount, description, kind="spend"):
+        doc = PurchaseDocument(
+            org_id=org_id,
+            source="xero_bank",
+            external_id=str(uuid4()),
+            kind=kind,
+            payee_name=payee,
+            document_date=today - timedelta(days=days_ago),
+            reference="Card",
+            currency_code="NZD",
+            fx_status="ok",
+            status="active",
+            bank_account_name="Business Visa",
+            is_reconciled=True,
+        )
+        db.add(doc)
+        db.flush()
+        acct = accounts[code]
+        value = Decimal(amount) * (-1 if kind == "refund" else 1)
+        line = PurchaseLine(
+            org_id=org_id,
+            document_id=doc.id,
+            account_id=acct.id,
+            line_key="pos:1",
+            position=1,
+            fingerprint=uuid4().hex,
+            description=description,
+            account_code=code,
+            account_name=acct.name,
+            amount_ex_tax=value,
+            tax_amount=(value * Decimal("0.15")).quantize(Decimal("0.0001")),
+            treatment=acct.default_treatment,
+        )
+        db.add(line)
+        db.flush()
+        doc.total_ex_tax, doc.total_tax = line.amount_ex_tax, line.tax_amount
+        return line
+
+    open_lines = [
+        buy(1, "Moore Wilson's Wellington", "310", "86.52", "Moore Wilson's Fresh — card 4412"),
+        buy(2, "Davis Trading Co", "310", "412.17", "Botanicals order DT-55120"),
+        buy(3, "Countdown Johnsonville", "310", "23.48", "COUNTDOWN JVILLE 0091"),
+        buy(5, "Estal Packaging NZ", "311", "1180.00", "500 x 700 mL Flint bottles"),
+        buy(6, "Spirits Supply Ltd", "310", "640.00", "Neutral grain spirit 96.4% 20 L"),
+        buy(9, "Moore Wilson's Wellington", "310", "41.90", "Moore Wilson's Fresh — card 4412"),
+    ]
+    part = buy(12, "Davis Trading Co", "310", "260.00", "Botanicals order DT-54980")
+    actions.record(
+        db,
+        org_id,
+        part.id,
+        [{"name": "Juniper berries", "inventory_type": "raw_material", "quantity": "5", "unit": "kg", "amount": "175"}],
+        "later",
+    )
+    done = buy(15, "Spirits Supply Ltd", "310", "640.00", "Neutral grain spirit 96.4% 20 L")
+    actions.record(
+        db,
+        org_id,
+        done.id,
+        [
+            {
+                "name": "Neutral grain spirit",
+                "inventory_type": "raw_material",
+                "quantity": "20",
+                "unit": "L",
+                "amount": "640",
+            }
+        ],
+        "later",
+    )
+    shop = buy(18, "Moore Wilson's Wellington", "310", "58.30", "Moore Wilson's Fresh — card 4412")
+    actions.record(
+        db,
+        org_id,
+        shop.id,
+        [{"name": "Lemons", "inventory_type": "raw_material", "quantity": "2", "unit": "kg", "amount": "12.40"}],
+        "not_stock",
+    )
+    changed = buy(20, "Estal Packaging NZ", "311", "590.00", "250 x 700 mL Flint bottles")
+    actions.record(
+        db,
+        org_id,
+        changed.id,
+        [
+            {
+                "name": "700 mL Flint bottle",
+                "inventory_type": "raw_material",
+                "quantity": "250",
+                "unit": "units",
+                "amount": "560",
+            }
+        ],
+        "not_stock",
+    )
+    changed.review_reason = "amount_changed"
+    refund = buy(8, "Davis Trading Co", "310", "38.00", "Credit — damaged orris root", kind="refund")
+    skipped = buy(25, "Countdown Johnsonville", "310", "9.80", "COUNTDOWN JVILLE 0091")
+    actions.skip(db, org_id, skipped.id)
+    excluded = buy(27, "Moore Wilson's Wellington", "310", "31.00", "Cafe — team lunch")
+    actions.not_stock(db, org_id, excluded.id)
+    buy(4, "NZ Customs Service", "320", "2480.55", "Excise October")  # duty: never on the page
+    buy(7, "Warehouse Stationery", "429", "44.99", "Printer paper")  # not stock
+    del open_lines, refund
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -2819,6 +2976,7 @@ def cmd_seed(args) -> int:
             "dispatch": _seed_contract_dispatch,
             "customers": _seed_customers,
             "suppliers": _seed_suppliers,
+            "purchases": _seed_purchases,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")

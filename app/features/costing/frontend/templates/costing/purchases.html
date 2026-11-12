@@ -1,0 +1,91 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Purchases{% endblock %}
+{% block body_class %}costing-purchases-page{% endblock %}
+{% block content %}
+{# Inside the content block: a boosted navigation swaps only #page-content. #}
+<link rel="stylesheet" href="{{ url_for('costing.static', filename='purchases.css') }}">
+<div class="pu-shell workspace-overview workspace-page" data-purchases-root
+     data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}"
+     data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"
+     data-xero-connected="{{ 'true' if xero_connected else 'false' }}" aria-busy="true">
+  <header class="workspace-header">
+    <div>
+      <h1>Purchases</h1>
+      <p>What you bought, from Xero. Record each one into stock and its cost follows into every batch.</p>
+    </div>
+    <div class="workspace-header__actions">
+      {% if can('costs.manage') and xero_connected %}<button type="button" class="workspace-button" data-history-open>Load earlier purchases</button>{% endif %}
+    </div>
+  </header>
+
+  <div class="workspace-notice" role="alert" data-purchases-error hidden></div>
+  <div class="pu-toast" role="status" aria-live="polite" data-purchases-toast hidden></div>
+
+  <div class="pu-noxero workspace-card" data-purchases-noxero hidden>
+    <h2>Not using Xero? You can still cost everything.</h2>
+    <p>Biz-E can read what you buy from Xero and ask you to record it into stock. Without it, enter what you paid when you add stock — there's a “Total paid” box on every Add Inventory screen — or on a lot's cost panel.</p>
+    <div class="pu-noxero__actions">
+      <a class="workspace-button workspace-button--primary" href="/core/inventory/add">Add stock</a>
+      {% if can('sales.manage') %}<a class="workspace-button" href="/core/integrations">Connect Xero</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="pu-history" role="status" data-purchases-history hidden>
+    <span data-history-range></span>
+    <button type="button" class="workspace-button" data-history-exit>Back to new purchases</button>
+  </div>
+
+  <nav class="pu-tabs" aria-label="Purchases" data-purchases-tabs>
+    <button type="button" class="pu-tab" data-tab="to_record" aria-current="page">To record <span class="pu-count" data-count="to_record"></span></button>
+    <button type="button" class="pu-tab" data-tab="recorded">Recorded <span class="pu-count" data-count="recorded"></span></button>
+    <button type="button" class="pu-tab" data-tab="skipped">Skipped <span class="pu-count" data-count="skipped"></span></button>
+    <button type="button" class="pu-tab" data-tab="not_stock">Not stock <span class="pu-count" data-count="not_stock"></span></button>
+  </nav>
+
+  {# Bulk: shown once a card is selected. #}
+  <div class="pu-batchbar" role="region" aria-label="Selected purchases" data-purchases-batchbar hidden>
+    <span data-purchases-selected></span>
+    <button type="button" class="workspace-button" data-batch="skip">Skip</button>
+    <button type="button" class="workspace-button" data-batch="not_stock">Not stock</button>
+    <button type="button" class="workspace-button" data-batch="cancel">Cancel</button>
+  </div>
+
+  <p class="workspace-caption" data-purchases-state>Loading…</p>
+  <div class="pu-list" data-purchases-list></div>
+
+  <dialog class="pu-dialog" data-purchases-dialog aria-labelledby="pu-dialog-title">
+    <form method="dialog" hx-boost="false" data-purchases-form>
+      <h2 id="pu-dialog-title" data-dialog-title></h2>
+      <p class="workspace-caption" data-dialog-caption></p>
+      <div class="pu-rows" data-dialog-body></div>
+      <p class="pu-sum" data-dialog-sum></p>
+      <fieldset class="pu-rest" data-dialog-rest hidden>
+        <legend>The rest of this purchase</legend>
+        <label><input type="radio" name="rest" value="not_stock" checked> isn't stock</label>
+        <label><input type="radio" name="rest" value="later"> I'll record it later</label>
+      </fieldset>
+      <p class="pu-dialog__error" role="alert" data-dialog-error hidden></p>
+      <div class="pu-dialog__actions">
+        <button type="button" class="workspace-button" data-dialog-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-dialog-save>Save</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="pu-dialog" data-history-dialog aria-labelledby="pu-history-title">
+    <form method="dialog" hx-boost="false" novalidate>
+      <h2 id="pu-history-title">Load earlier purchases</h2>
+      <p class="workspace-caption">Biz-E reads every purchase in these dates from Xero, so you can record the ones still in stock. Up to 3 years at a time.</p>
+      <div class="pu-history__dates">
+        <label class="pu-field"><span>From</span><input type="date" name="from" required></label>
+        <label class="pu-field"><span>To</span><input type="date" name="to" required></label>
+      </div>
+      <p class="pu-dialog__error" role="alert" data-history-error hidden></p>
+      <div class="pu-dialog__actions">
+        <button type="button" class="workspace-button" data-history-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-history-run>Load purchases</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="{{ url_for('costing.static', filename='purchases.js') }}" defer></script>
+</div>
+{% endblock %}
