@@ -242,3 +242,49 @@ def test_lanes_hold_together_at_every_width_even_with_an_old_preview_link(browse
                 assert apart, f"batch cards overlap at {width}px"
     finally:
         context.close()
+
+
+def test_a_link_opens_a_finished_batch_read_only_and_the_address_follows_the_sheet(browser, app_url, floor, db):
+    """Live-cost polish: the lot panel's "Made in a … batch" link opens that batch, finished or not."""
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+
+    org_id = UUID(floor["user"]["org_id"])
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    process = procs.create_process(org_id, "Batch Test Vodka", category=ProcessCategory.MANUFACTURING, is_draft=False)
+    procs.add_step(
+        process_id=process.id, org_id=org_id, step_number=1, position=1000, name="Bottle", inputs=[], outputs=[]
+    )
+    db.commit()
+    execution = execs.create_execution(org_id, process.id)
+    (step,) = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).all()
+    execs.complete_step(
+        step.id,
+        org_id,
+        actual_inputs=[],
+        actual_outputs=[{"name": "Vodka", "quantity": 6, "unit": "bottles"}],
+        execution_data={"completed_by": "Aroha Ngata"},
+    )
+    db.commit()
+    db.expire_all()
+    assert db.get(Execution, execution.id).status.value == "completed"
+
+    context, page = _open(browser, app_url, floor, query=f"?execution={execution.id}")
+    try:
+        sheet = page.locator("#core2-active-detail-overlay")
+        expect(sheet).to_be_visible()
+        expect(sheet).to_contain_text("Batch Test Vodka · Finished")
+        expect(sheet).to_contain_text("finished")
+        expect(sheet.locator("#core2-active-detail-next-step")).to_be_hidden()
+        page.keyboard.press("Escape")
+        expect(sheet).to_be_hidden()
+        assert "execution=" not in page.url, "closing the sheet takes it out of the address"
+
+        _card(page, floor["waiting"]).click()
+        expect(sheet).to_be_visible()
+        assert f"execution={floor['waiting']}" in page.url, "an opened batch can be shared by its address"
+    finally:
+        context.close()
