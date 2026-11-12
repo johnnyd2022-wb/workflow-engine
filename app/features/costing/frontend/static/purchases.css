@@ -1,7 +1,5 @@
-/* Purchases (live-cogs 8.1d). Style 1 is the base; Styles 2 and 3 are CONCEPT ONLY blocks below. */
+/* Purchases (live-cogs 8.1d). */
 #page-content .pu-shell { max-width: 1100px; }
-#page-content .pu-style-pick { display: flex; gap: 6px; }
-#page-content .pu-style-pick [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent-strong); }
 
 #page-content .pu-tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--ui-border); overflow-x: auto; }
 #page-content .pu-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font: inherit;
@@ -72,43 +70,16 @@ html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 
   #page-content .pu-row-edit .pu-field:first-child { grid-column: 1 / -1; }
   #page-content .pu-pick { grid-template-columns: auto minmax(0, 1fr); }
   #page-content .pu-pick input[type="text"] { grid-column: 2; }
-  #page-content .pu-style-pick { display: none; }
-}
+  }
 
-/* CONCEPT ONLY — Style 2: one purchase at a time, large, keyboard-led. */
-#page-content [data-purchases-style="2"] .pu-list { max-width: 640px; margin: 0 auto; }
-#page-content [data-purchases-style="2"] .pu-card { grid-template-columns: 1fr; padding: 28px; }
-#page-content [data-purchases-style="2"] .pu-card__right { border-left: 0; padding-left: 0; border-top: 1px solid var(--ui-border); padding-top: 16px; }
-#page-content [data-purchases-style="2"] .pu-payee { font-size: 20px; }
-#page-content [data-purchases-style="2"] .pu-amount { font-size: 28px; }
-#page-content .pu-focusbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; max-width: 640px; margin: 0 auto 12px;
-  color: var(--ui-text-muted); font-size: 13px; }
-#page-content .pu-focusbar[hidden] { display: none; }
-#page-content .pu-focusbar kbd { padding: 0 5px; border: 1px solid var(--ui-border); border-radius: 4px; font-size: 12px; }
-@media (max-width: 720px) { #page-content .pu-keys { display: none; } }
-
-/* CONCEPT ONLY — Style 3: a review table with batch actions. */
-#page-content [data-purchases-style="3"] .pu-list { gap: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md);
-  background: var(--ui-surface); overflow: hidden; }
-#page-content .pu-row { display: grid; grid-template-columns: 28px 70px minmax(120px, 1fr) minmax(0, 2fr) 100px auto; gap: 12px;
-  align-items: center; padding: 10px 14px; border-top: 1px solid var(--ui-border); font-size: 14px; }
-#page-content .pu-row--head { border-top: 0; background: var(--ui-surface-subtle); font-size: 12px; color: var(--ui-text-muted);
-  text-transform: uppercase; letter-spacing: .04em; }
-#page-content .pu-row__amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-#page-content .pu-row__details { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--ui-text-muted); min-width: 0; }
-#page-content .pu-row__details .pu-badges { margin: 0; }
-#page-content .pu-row .pu-actions { flex-wrap: nowrap; justify-content: flex-end; min-width: 290px; }
-#page-content .pu-batchbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; margin: 0 0 8px; border-radius: var(--ui-radius-sm);
-  background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+/* Bulk selection */
+#page-content .pu-card--selectable { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
+#page-content .pu-select { width: 20px !important; height: 20px; margin-top: 2px; }
+#page-content .pu-batchbar { position: sticky; top: 8px; z-index: 4; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 8px 14px; margin: 0 0 12px; border-radius: var(--ui-radius-sm); background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
 #page-content .pu-batchbar[hidden] { display: none; }
 #page-content .pu-batchbar span { margin-right: auto; font-weight: 600; }
 @media (max-width: 720px) {
-  #page-content .pu-row { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "check payee amount" ". details details" "actions actions actions"; }
-  #page-content .pu-row > input { grid-area: check; }
-  #page-content .pu-row__payee { grid-area: payee; font-weight: 600; }
-  #page-content .pu-row__amount { grid-area: amount; white-space: nowrap; }
-  #page-content .pu-row__details { grid-area: details; }
-  #page-content .pu-row .pu-actions { grid-area: actions; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
-  #page-content .pu-row__date, #page-content .pu-row--head span { display: none; }
-  #page-content .pu-row--head { grid-template-areas: "check . ."; }
+  #page-content .pu-card--selectable { grid-template-columns: auto minmax(0, 1fr); }
+  #page-content .pu-card--selectable .pu-card__right { grid-column: 1 / -1; }
 }

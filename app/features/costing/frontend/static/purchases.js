@@ -66,14 +66,12 @@
     var errorBox = root.querySelector('[data-purchases-error]');
     var toast = root.querySelector('[data-purchases-toast]');
     var dialog = root.querySelector('[data-purchases-dialog]');
-    var focusbar = root.querySelector('[data-purchases-focusbar]');
     var batchbar = root.querySelector('[data-purchases-batchbar]');
     var tab = 'to_record';
     var history = null; // {from, to} while looking at a historical run
     var loadSeq = 0;
     var xeroConnected = root.dataset.xeroConnected === 'true';
     var cards = [];
-    var focusIndex = 0;
     var selected = {};
 
     async function call(path, init) {
@@ -130,23 +128,6 @@
       showToast.timer = setTimeout(function () { toast.hidden = true; }, 9000);
     }
 
-    // --- style switch (CONCEPT ONLY) -----------------------------------------------------------
-    function applyStyle(value) {
-      root.dataset.purchasesStyle = value;
-      try { localStorage.setItem('purchases-style', value); } catch (e) { /* private mode */ }
-      root.querySelectorAll('[data-purchases-style-pick] button').forEach(function (b) {
-        b.setAttribute('aria-pressed', b.dataset.style === value ? 'true' : 'false');
-      });
-      render();
-    }
-    var initial = new URLSearchParams(location.search).get('style');
-    if (!/^[123]$/.test(initial || '')) {
-      try { initial = localStorage.getItem('purchases-style'); } catch (e) { initial = null; }
-    }
-    root.querySelectorAll('[data-purchases-style-pick] button').forEach(function (b) {
-      b.addEventListener('click', function () { applyStyle(b.dataset.style); });
-    });
-
     // --- loading -----------------------------------------------------------------------------
     function listUrl() {
       var url = API + '?tab=' + encodeURIComponent(tab);
@@ -166,7 +147,6 @@
           var span = root.querySelector('[data-count="' + key + '"]');
           if (span) span.textContent = body.counts[key] ? String(body.counts[key]) : '';
         });
-        focusIndex = Math.min(focusIndex, Math.max(cards.length - 1, 0));
         selected = {};
         render();
       } catch (err) {
@@ -198,9 +178,7 @@
 
     // --- rendering ---------------------------------------------------------------------------
     function render() {
-      var style = root.dataset.purchasesStyle;
       list.replaceChildren();
-      focusbar.hidden = !(style === '2' && tab === 'to_record' && cards.length);
       updateBatchbar();
       if (!cards.length) {
         state.textContent = tab === 'to_record'
@@ -209,16 +187,7 @@
         return;
       }
       state.textContent = '';
-      if (style === '3') list.appendChild(tableHead());
-      cards.forEach(function (card, index) {
-        var node = style === '3' ? row(card) : cardNode(card);
-        if (style === '2') node.hidden = index !== focusIndex;
-        list.appendChild(node);
-      });
-      if (style === '2') {
-        root.querySelector('[data-purchases-progress]').textContent =
-          (focusIndex + 1) + ' of ' + cards.length + ' to record';
-      }
+      cards.forEach(function (card) { list.appendChild(cardNode(card)); });
     }
 
     function what(card) {
@@ -298,6 +267,19 @@
       var node = el('article', 'pu-card workspace-card');
       node.dataset.lineId = card.line_id;
       var left = el('div', 'pu-card__left');
+      if (canManage && tab === 'to_record' && !history) {
+        // Pick several to skip or mark not stock together.
+        var check = el('input', 'pu-select');
+        check.type = 'checkbox';
+        check.setAttribute('aria-label', 'Select ' + (card.document.payee || 'purchase') + ' ' + fmt(card.amount));
+        check.checked = !!selected[card.line_id];
+        check.addEventListener('change', function () {
+          if (check.checked) selected[card.line_id] = true; else delete selected[card.line_id];
+          updateBatchbar();
+        });
+        node.classList.add('pu-card--selectable');
+        node.appendChild(check);
+      }
       left.appendChild(what(card));
       left.appendChild(badges(card));
       var right = el('div', 'pu-card__right');
@@ -311,49 +293,9 @@
       return node;
     }
 
-    function tableHead() {
-      var head = el('div', 'pu-row pu-row--head');
-      var all = el('input');
-      all.type = 'checkbox';
-      all.setAttribute('aria-label', 'Select all');
-      all.addEventListener('change', function () {
-        cards.forEach(function (c) { if (all.checked) selected[c.line_id] = true; else delete selected[c.line_id]; });
-        render();
-      });
-      all.checked = cards.length > 0 && cards.every(function (c) { return selected[c.line_id]; });
-      head.appendChild(all);
-      ['Date', 'Payee', 'Details', 'Amount', ''].forEach(function (t) { head.appendChild(el('span', null, t)); });
-      return head;
-    }
-
-    function row(card) {
-      var node = el('div', 'pu-row');
-      node.dataset.lineId = card.line_id;
-      var check = el('input');
-      check.type = 'checkbox';
-      check.setAttribute('aria-label', 'Select ' + (card.document.payee || 'purchase'));
-      check.checked = !!selected[card.line_id];
-      check.disabled = tab !== 'to_record' || !canManage;
-      check.addEventListener('change', function () {
-        if (check.checked) selected[card.line_id] = true; else delete selected[card.line_id];
-        updateBatchbar();
-      });
-      node.appendChild(check);
-      node.appendChild(el('span', 'pu-row__date', fmtDate(card.document.date)));
-      var who = el('span', 'pu-row__payee', card.document.payee || 'Unknown payee');
-      node.appendChild(who);
-      var details = el('span', 'pu-row__details');
-      details.appendChild(el('span', null, card.description || ''));
-      details.appendChild(badges(card));
-      node.appendChild(details);
-      node.appendChild(el('span', 'pu-row__amount', fmt(card.amount)));
-      node.appendChild(actions(card, true));
-      return node;
-    }
-
     function updateBatchbar() {
       var count = Object.keys(selected).length;
-      batchbar.hidden = !(root.dataset.purchasesStyle === '3' && count > 0);
+      batchbar.hidden = count === 0;
       root.querySelector('[data-purchases-selected]').textContent = count + ' selected';
     }
     batchbar.addEventListener('click', async function (ev) {
@@ -654,28 +596,12 @@
     root.querySelectorAll('[data-purchases-tabs] [data-tab]').forEach(function (button) {
       button.addEventListener('click', function () {
         tab = button.dataset.tab;
-        focusIndex = 0;
         root.querySelectorAll('[data-purchases-tabs] [data-tab]').forEach(function (b) {
           if (b === button) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
         });
         load();
       });
     });
-    function onKey(ev) {
-      if (!document.body.contains(root)) { document.removeEventListener('keydown', onKey); return; }
-      if (root.dataset.purchasesStyle !== '2' || tab !== 'to_record' || dialog.open) return;
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '')) return;
-      var card = cards[focusIndex];
-      if (ev.key === 'ArrowRight') { focusIndex = Math.min(focusIndex + 1, cards.length - 1); render(); }
-      else if (ev.key === 'ArrowLeft') { focusIndex = Math.max(focusIndex - 1, 0); render(); }
-      else if (!card || !canManage) return;
-      else if (ev.key === '1' && canAdjust && !card.review_reason && card.document.kind === 'spend') openRecord(card, null);
-      else if (ev.key === '2' && !card.review_reason) act(card, 'not-stock');
-      else if (ev.key === '3' && !card.review_reason) act(card, 'skip');
-    }
-    document.addEventListener('keydown', onKey);
-
-    applyStyle(/^[123]$/.test(initial || '') ? initial : '1');
     load();
   }
 
