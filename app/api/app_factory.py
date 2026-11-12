@@ -158,6 +158,9 @@ def create_app():
     from app.core.backend.backend import core_bp
 
     app.register_blueprint(core_bp)
+    from app.core.attention import attention_bp  # features' "needs attention" items (Home, Notifications)
+
+    app.register_blueprint(attention_bp)
     # Go-live stocktake (plan 1.3), kept out of core_bp / backend.py.
     from app.core.backend.go_live import go_live_bp
 

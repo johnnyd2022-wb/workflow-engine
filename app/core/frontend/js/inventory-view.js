@@ -824,6 +824,14 @@
     details.appendChild(list);
     els.drawerBody.appendChild(details);
 
+    // Live cost (8.1e-2): renders nothing for someone who can't see cost.
+    if (window.BizECost) {
+      var costMount = el('div', 'inv-drawer__cost');
+      costMount.hidden = true;
+      els.drawerBody.appendChild(costMount);
+      window.BizECost.lotPanel(item.id, costMount);
+    }
+
     var inputs = item.extra_data && Array.isArray(item.extra_data.variable_inputs) ? item.extra_data.variable_inputs : [];
     inputs = inputs.filter(function (input) { return input && input.name; });
     if (inputs.length) {

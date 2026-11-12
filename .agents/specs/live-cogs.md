@@ -1549,6 +1549,88 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Accounting sources other than Xero (the `purchase_sources` seam leaves room).
 - Time tracking (Phase 4 absorbs labour as a configured rate, not tracked hours).
 
+## 8.1e-2 build contract — cost where people look, and cost without Xero
+
+Added 12 Nov 2026 at the founder's request: **costing must work for an org with no Xero bank
+feed** (other accounting software, or none). Xero is one way to price stock, never the only
+one. Every place stock is added can carry what it cost, and every costing screen has a
+designed "no accounting connected" state that points at those places instead of at Xero.
+
+**Who sees cost.** Cost fields and panels show only to users with `costs.view` in an org with
+the `costing` feature; inputs only with `costs.manage`. Without either, every page renders
+exactly as before (no empty cost slots). The server tells the page: `GET /api/core/costing/me`
+→ `{"enabled", "can_view", "can_manage", "xero_connected", "purchases_to_record"}`; it never
+403s (a user without `costs.view` gets `enabled`/`can_*` false and no counts).
+
+**Total paid on every Add Inventory path** (writes the same price facts as the lot cost panel):
+- Manual form: an optional "Total paid (ex GST)" money field under quantity, for raw materials
+  and bought-in finished goods. Shows "= $X.XX per <unit>" live as quantity or total changes.
+- Barcode scan: the same field on the confirm step, for a new barcode **and** for adding
+  quantity to an existing barcode lot. On add-quantity the price is a flow entry on the new
+  `added` flow (amount = total paid, quantity = the quantity added), in the same transaction
+  as the add; the existing lot's earlier prices are untouched. This replaces 8.1e-1's "not
+  applied when the request adds quantity to an existing barcode lot".
+- CSV upload: an optional `Total Paid` column (template gains it after Quantity). csv-validate
+  flags a bad value on its row (negative, not a number, more than 4 dp) like any other
+  problem; csv-commit writes one created-flow entry per row with a value, in the batch's one
+  transaction. Ignored (not an error) for users without `costs.manage` or orgs without the
+  feature; the validate response then carries `"total_paid_ignored": true` so the page says so.
+- All paths: `total_paid` 0 is allowed and means "cost $0" (a manual $0 entry, not "free").
+
+**Lot cost panel** (inventory lot detail, `costs.view`): unit cost and status in words
+("$12.40 per kg", "Estimated from <lot> — $11.90 per kg", "Not costed yet"), the source
+("Recorded from a purchase on 3 Oct", "Entered by hand", "Free", "From batch <name>",
+"Moved from <site>"), quantity priced vs not, and for `costs.manage` on an editable lot:
+"Enter total paid" / "Mark as free" / remove a hand entry. A lot whose cost comes from a batch
+or a transfer explains that and links to it; it offers no input.
+
+**Batch cost card** (batch detail, `costs.view`): cost so far, cost per unit of each output,
+status in words; when Incomplete, the missing inputs by name with a link to each lot's cost
+panel (`costs.manage` can price it there); "split assumed" explained in one line.
+
+**Costs page** (Production › Costs, `/core/costing/costs`, `costs.view`): readiness per product
+(name, "Ready" or "3 of 5 materials costed"), sorted not-ready first; a product opens its
+materials, each linking to its lot. Empty state for an org with no products. When there are
+uncosted materials and no Xero connected, the page says how to cost them (Add Inventory total
+paid, or the lot's cost panel) — never "connect Xero" as the only way.
+
+**Purchases page without Xero:** a designed empty state ("Biz-E can read purchases from Xero.
+Not using Xero? Enter what you paid when you add stock.") with a link to Add Inventory and, for
+admins, to the Xero connection. No error, no empty tabs.
+
+**Home card and notification** (8.1d leftovers): "N purchases to record" with the newest
+document date, linking to Purchases; hidden at zero, hidden without `costs.manage`, absent
+without Xero. Through the generic system-finding provider seam (Gap 12): Core holds no costing
+check id.
+
+**Purchase rules settings** (`/core/costing/rules`, `costs.view` reads, `costs.manage` edits):
+list rules (matcher in words: "Payee is Moore Wilson", "Account 310 and description contains
+juniper"), treatment, template rows; add, edit, switch off, delete; conflicts (409) shown on the
+field. Reached from the Purchases page and from Settings beside the Xero product mappings.
+
+**Historical run UI** (on the Purchases page): "Load earlier purchases" opens a from/to picker
+(max 3 calendar years, not in the future); runs, then shows the range in historical mode with
+a clear "Back to new purchases" exit. 409 needs-reconnect shown as a reconnect prompt.
+
+**ACs (8.1e-2).**
+- AC91: barcode add-quantity with `total_paid` 30 for 3 more kg writes one manual entry on the
+  new `added` flow (amount 30, quantity 3); the lot's earlier entry is unchanged; a pricing
+  failure leaves neither the added quantity nor the entry.
+- AC92: CSV with a `Total Paid` column creates each row's lot priced; a row with "-5" or "abc"
+  is reported by csv-validate on that row; without `costs.manage` the column is ignored, rows
+  commit unpriced and validate says `total_paid_ignored`.
+- AC93: `GET /costing/me` for a user without `costs.view` → 200 with `enabled` false-y
+  permissions and no counts; with no Xero tenant → `xero_connected` false.
+- AC94: in an org with no Xero connection, a lot added with total paid gives a batch made from
+  it an `actual` cost per unit; the Costs page shows the product Ready; nothing on any page
+  asks for Xero as the only way to cost.
+- AC95: Home card shows the to-record count to `costs.manage` only, links to Purchases, is
+  hidden at zero and absent without Xero; Core contains no costing check id.
+- AC96: every new panel, card, page and dialog works at 375px with no sideways scroll, in
+  dark theme, and on arrival by boosted navigation (script bound to the page root).
+- AC97: without `costs.view` (or without the feature) the inventory detail, batch detail,
+  Add Inventory and Home pages render no cost element and make no costing write.
+
 ## 8.1f-3a build contract — material price history
 
 Answers "what am I paying for juniper, and is it going up?". A material is every non-contract lot

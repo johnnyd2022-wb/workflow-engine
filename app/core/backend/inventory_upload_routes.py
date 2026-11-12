@@ -16,6 +16,7 @@ from uuid import UUID
 from flask import Response, g, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
+from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
@@ -114,6 +115,23 @@ def _sanitize(s: str, max_len: int = 500) -> str:
     return s[:max_len] if len(s) > max_len else s
 
 
+def _cost_allowed(org_id) -> bool:
+    from app.features.costing.service import may_enter_cost
+
+    return may_enter_cost(db_session, getattr(g, "current_user", None), org_id)
+
+
+def _check_total_paid(raw: str) -> tuple[str, str | None]:
+    """A row's Total Paid, judged like the Add Inventory field: money, 0 or more, 4 dp."""
+    from app.features.costing.service import CostingError, parse_amount
+
+    try:
+        parse_amount(raw, "Total paid", allow_zero=True)
+    except CostingError as error:
+        return "error", str(error)
+    return "ok", None
+
+
 def _parse_upload(org_id):
     """Read and validate an uploaded CSV (multipart 'file' or raw body).
 
@@ -153,6 +171,7 @@ def _parse_upload(org_id):
     # Normalize headers: strip and case-insensitive match
     required = {"item name": "name", "quantity": "qty", "unit": "unit"}
     optional = {
+        "total paid": "total_paid",
         "supplier name": "supplier",
         "purchase date": "purchase_date",
         "batch number": "batch_number",
@@ -178,6 +197,7 @@ def _parse_upload(org_id):
     # A Site column is judged by its header, not its cells: with multiple sites off, every row
     # of a file that has one is flagged, blank cells included.
     sites_enabled = _sites_on(org_id) if "site" in col_map else None
+    cost_allowed = _cost_allowed(org_id) if "total_paid" in col_map else False
     sites_by_name = {}
     for i, row in enumerate(reader):
         if i >= CSV_MAX_ROWS:
@@ -192,8 +212,11 @@ def _parse_upload(org_id):
         batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
         expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
         site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
+        total_paid = (row.get(col_map.get("total_paid") or "", "") or "").strip() or None
 
         status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
+        if status == "ok" and total_paid is not None and cost_allowed:
+            status, message = _check_total_paid(total_paid)
         unit = canonical_unit if canonical_unit else unit_raw
         if status == "ok" and sites_enabled is False:
             status, message = "error", "Remove the Site column: multiple sites are off"
@@ -220,10 +243,12 @@ def _parse_upload(org_id):
                 "batch_number": batch_number,
                 "expiry_date": expiry_date.isoformat() if expiry_date else None,
                 "site": site,
+                "total_paid": total_paid if cost_allowed else None,
             }
         )
 
     return {
+        "total_paid_ignored": bool("total_paid" in col_map and not cost_allowed),
         "rows": rows,
         "validation": validation,
         "truncated": truncated,
@@ -233,7 +258,16 @@ def _parse_upload(org_id):
 
 
 # Template columns, in order. The validator's own column names, so the template can't drift.
-TEMPLATE_COLUMNS = ["Item Name", "Quantity", "Unit", "Supplier Name", "Purchase Date", "Batch Number", "Expiry Date"]
+TEMPLATE_COLUMNS = [
+    "Item Name",
+    "Quantity",
+    "Total Paid",
+    "Unit",
+    "Supplier Name",
+    "Purchase Date",
+    "Batch Number",
+    "Expiry Date",
+]
 SITE_COLUMN = "Site"
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
@@ -331,6 +365,7 @@ def register_routes(bp):
                     "truncated": truncated,
                     "max_rows_allowed": CSV_MAX_ROWS,
                     "summary": {"rows": len(rows), "ready": len(rows) - problems, "problems": problems},
+                    "total_paid_ignored": parsed["total_paid_ignored"],
                 }
             )
 
@@ -341,8 +376,11 @@ def register_routes(bp):
         org_id = UUID(g.org_id)
         header, example = (
             list(TEMPLATE_COLUMNS),
-            ["Example Item", "10", "kg", "ACME Ltd", "2024-01-15", "BATCH-001", "2025-12-31"],
+            ["Example Item", "10", "45.00", "kg", "ACME Ltd", "2024-01-15", "BATCH-001", "2025-12-31"],
         )
+        if not _cost_allowed(org_id):  # Total Paid only for people who may enter cost
+            at = header.index("Total Paid")
+            del header[at], example[at]
         if _sites_on(org_id):
             from app.core.db.models.site import Site
 
@@ -389,6 +427,7 @@ def register_routes(bp):
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
+    @idempotent_write("inventory_csv_commit")  # a lost reply replays; re-sending can't add the file twice
     def csv_commit():
         """Commit validated CSV rows as inventory items. Re-validates on backend.
 
@@ -411,6 +450,7 @@ def register_routes(bp):
             # One site for the file (checked like any other site hint), or a "site" column per row.
             file_site = getattr(g, "validated_site_id", None)
             sites_by_name = {}
+            cost_allowed = _cost_allowed(org_id)
             for r in rows:
                 name = _sanitize(r.get("name"), 255)
                 qty_str = (r.get("quantity") or "").strip()
@@ -425,6 +465,10 @@ def register_routes(bp):
                     site_id = sites_by_name[key]
                     if site_id is None:
                         status, message = "error", f"No active site called {site_name}"
+                paid_raw = r.get("total_paid")
+                paid_raw = str(paid_raw).strip() if paid_raw not in (None, "") else None
+                if status == "ok" and paid_raw is not None and cost_allowed:
+                    status, message = _check_total_paid(paid_raw)
                 if status != "ok":
                     errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
                     continue
@@ -435,6 +479,7 @@ def register_routes(bp):
                         "quantity_str": quantity_str_for_storage,
                         "canonical_unit": canonical_unit,
                         "site_id": site_id,
+                        "total_paid": paid_raw if cost_allowed else None,
                     }
                 )
 
@@ -450,63 +495,71 @@ def register_routes(bp):
             commit_errors: list[dict] = []
             dup_msg = "Duplicate batch (org + name + batch already exists)"
 
-            for v in validated:
-                r = v["row"]
-                name = v["name"]
-                quantity_str = v["quantity_str"]
-                canonical_unit = v["canonical_unit"]
-                purchase_date = _parse_date(r.get("purchase_date") or "")
-                expiry_date = _parse_date(r.get("expiry_date") or "")
-                supplier = _sanitize(r.get("supplier"), 255) or None
-                batch_number = _sanitize(r.get("batch_number"), 255) or None
+            from decimal import Decimal
 
-                extra_data = {
-                    "inventory_audit_history": [
-                        {
-                            "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
-                            "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                            "source_method": "csv_upload",
-                            "csv_row_index": r.get("row_index"),
-                        }
-                    ]
-                }
+            from app.features.costing.service import price_new_lot
 
-                try:
-                    with db_session.begin_nested():
-                        item = repo.create_inventory_item(
-                            org_id=org_id,
-                            name=name,
-                            quantity=quantity_str,
-                            unit=canonical_unit,
-                            inventory_type=InventoryType.RAW_MATERIAL.value,
-                            supplier=supplier,
-                            purchase_date=purchase_date,
-                            supplier_batch_number=batch_number,
-                            expiry_date=expiry_date,
-                            extra_data=extra_data,
-                            commit=False,
-                            site_id=v["site_id"],
-                        )
-                        created.append(
+            user_uuid = UUID(str(g.user_id)) if getattr(g, "user_id", None) else None
+            try:
+                for v in validated:
+                    r = v["row"]
+                    name = v["name"]
+                    purchase_date = _parse_date(r.get("purchase_date") or "")
+                    expiry_date = _parse_date(r.get("expiry_date") or "")
+                    supplier = _sanitize(r.get("supplier"), 255) or None
+                    batch_number = _sanitize(r.get("batch_number"), 255) or None
+                    extra_data = {
+                        "inventory_audit_history": [
                             {
-                                "id": str(item.id),
-                                "name": item.name,
-                                "quantity": quantity_to_api_str(item.quantity),
-                                "unit": item.unit,
-                                "row_index": r.get("row_index"),
+                                "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+                                "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                "source_method": "csv_upload",
+                                "csv_row_index": r.get("row_index"),
                             }
+                        ]
+                    }
+                    try:
+                        with db_session.begin_nested():
+                            item = repo.create_inventory_item(
+                                org_id=org_id,
+                                name=name,
+                                quantity=v["quantity_str"],
+                                unit=v["canonical_unit"],
+                                inventory_type=InventoryType.RAW_MATERIAL.value,
+                                supplier=supplier,
+                                purchase_date=purchase_date,
+                                supplier_batch_number=batch_number,
+                                expiry_date=expiry_date,
+                                extra_data=extra_data,
+                                commit=False,
+                                site_id=v["site_id"],
+                            )
+                    except IntegrityError:
+                        commit_errors.append({"row_index": r.get("row_index"), "error": dup_msg})
+                        logger.warning(
+                            "CSV commit row skipped (duplicate batch) org_id=%s row_index=%s name=%r batch=%r",
+                            org_id,
+                            r.get("row_index"),
+                            name,
+                            batch_number,
                         )
-                except IntegrityError:
-                    commit_errors.append(
-                        {"row_index": r.get("row_index"), "error": dup_msg},
+                        continue
+                    if v["total_paid"] is not None:
+                        # 8.1e-2: priced in the batch's one transaction; any failure fails the file
+                        price_new_lot(db_session, org_id, item, Decimal(v["total_paid"]), user_id=user_uuid)
+                    created.append(
+                        {
+                            "id": str(item.id),
+                            "name": item.name,
+                            "quantity": quantity_to_api_str(item.quantity),
+                            "unit": item.unit,
+                            "row_index": r.get("row_index"),
+                        }
                     )
-                    logger.warning(
-                        "CSV commit row skipped (duplicate batch) org_id=%s row_index=%s name=%r batch=%r",
-                        org_id,
-                        r.get("row_index"),
-                        name,
-                        batch_number,
-                    )
+            except Exception:
+                db_session.rollback()
+                logger.exception("CSV commit batch rollback (row write) org_id=%s source=csv_upload", org_id)
+                return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
 
             try:
                 db_session.commit()
