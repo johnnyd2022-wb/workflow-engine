@@ -12,7 +12,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
-from app.features.costing.engine import CostEngine, money, normalise, unit_str
+from app.features.costing.engine import UNKNOWN, CostEngine, TooLargeError, money, normalise, unit_str
 from app.features.costing.models import LotCostEntry, PurchaseAllocation, PurchaseDocument, PurchaseLine
 from app.features.costing.purchase_sources import nz_today
 from app.features.costing.service import CostingError, CostingNotFoundError
@@ -207,15 +207,20 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
 
     lot_rows = []
     for item in lots:
-        cost = engine._solve(("lot", item.id))
-        public_cost = cost.unit_known if cost.status in ("actual", "estimated") else None
+        try:
+            cost = engine._solve(("lot", item.id))
+        except TooLargeError:  # a history too long to cost: unknown, as the lot-cost API says
+            status, public_cost = UNKNOWN, None
+        else:
+            status = cost.status
+            public_cost = cost.unit_known if cost.status in ("actual", "estimated") else None
         lot_rows.append(
             {
                 "id": str(item.id),
                 "name": item.name,
                 "unit": item.unit,
                 "unit_cost": unit_str(public_cost),
-                "status": cost.status,
+                "status": status,
             }
         )
     return {
