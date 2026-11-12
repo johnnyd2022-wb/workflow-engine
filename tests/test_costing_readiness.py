@@ -429,8 +429,16 @@ def test_r1_total_paid_on_barcode_add_quantity_adds_no_price(world, db):
     assert first.status_code == 201
     again = _add(client, barcode="9400000000017", total_paid="50")
     assert again.status_code in (200, 201), again.get_json()
-    assert again.get_json()["id"] == first.get_json()["id"]
-    assert db.query(LotCostEntry).filter(LotCostEntry.inventory_item_id == first.get_json()["id"]).count() == 0
+    assert again.get_json()["id"] == first.get_json()["id"] and again.get_json()["quantity_added"] is True
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.costing.models import CostFlow
+
+    db.expire_all()
+    item_id = first.get_json()["id"]
+    assert D(str(db.get(InventoryItem, item_id).quantity)) == D("10"), "the quantity was still added"
+    added = db.query(CostFlow).filter(CostFlow.inventory_item_id == item_id, CostFlow.kind == "added").all()
+    assert len(added) == 1 and D(str(added[0].quantity)) == D("5")
+    assert db.query(LotCostEntry).filter(LotCostEntry.inventory_item_id == item_id).count() == 0
 
 
 def test_r1_total_paid_on_untracked_lot_is_all_or_nothing(world, db):
@@ -445,3 +453,84 @@ def test_r1_total_paid_on_untracked_lot_is_all_or_nothing(world, db):
     item_id = response.get_json()["id"]
     assert db.query(LotCostEntry).filter(LotCostEntry.inventory_item_id == item_id).count() == 1
     assert after == before + 1
+
+
+def test_r2_terminal_step_tie_on_position_matches_execution_creation(world, db):
+    """Equal positions: readiness and execution creation pick the same terminal step."""
+    from uuid import uuid4
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.step import Step
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+
+    org, client = world
+    out_a, out_b = str(uuid4()), str(uuid4())
+    process = _process(
+        db,
+        org,
+        [
+            (1, 1000, [], [{"id": out_a, "name": "A", "unit": "L", "quantity": "1"}]),
+            (2, 1000, [], [{"id": out_b, "name": "B", "unit": "L", "quantity": "1"}]),
+        ],
+    )
+    execution = ExecutionRepository(db).create_execution(process_id=process.id, org_id=org.id)
+    db.commit()
+    terminal = (
+        db.query(Step)
+        .join(ExecutionStep, ExecutionStep.step_id == Step.id)
+        .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.is_terminal_step.is_(True))
+        .one()
+    )
+    terminal_output = terminal.outputs[0]["id"]
+    keys = {p["key"] for p in _products(client)}
+    assert f"output:{terminal_output}" in keys
+    assert f"output:{({out_a, out_b} - {terminal_output}).pop()}" not in keys
+
+
+def test_r2_readiness_query_count_with_a_long_price_history(world, db):
+    """An unpriced material estimated from many earlier same-name lots stays within budget."""
+    from sqlalchemy import event
+
+    org, client = world
+    for n in range(40):
+        old = lot(db, org.id, "Juniper", 1, "kg")
+        price(db, org.id, old.id, 20 + n, 1)
+    juniper = lot(db, org.id, "Juniper", 2, "kg")  # this batch's lot: unpriced, estimated
+    coriander = lot(db, org.id, "Coriander", 2, "kg")
+    price(db, org.id, coriander.id, 10, 2)
+    _gin_batch(db, org, client, juniper, coriander)
+
+    statements = []
+    bind = db.get_bind()
+    engine = getattr(bind, "engine", bind)
+
+    def count(*_args):
+        statements.append(1)
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        products = _products(client)
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert any(p["ready"] for p in products), "juniper is estimated, so costed"
+    assert len(statements) <= 40, f"{len(statements)} queries with 40 earlier juniper lots"
+
+
+def test_r2_total_paid_on_a_second_site(world, db):
+    from app.core.db.models.inventory_item import InventoryItem
+    from tests.factories import grant_multi_site
+
+    org, client = world
+    grant_multi_site(db, org.id)
+    db.commit()
+    assert client.put("/api/core/sites/settings", json={"enabled": True}).status_code == 200
+    site = client.post("/api/core/sites", json={"name": "Bond store", "kind": "storage"})
+    assert site.status_code == 201, site.get_json()
+    site_id = site.get_json()["id"]
+    made = _add(client, total_paid="50", site_id=site_id)
+    assert made.status_code == 201, made.get_json()
+    item_id = made.get_json()["id"]
+    db.expire_all()
+    assert str(db.get(InventoryItem, item_id).site_id) == site_id
+    (entry,) = db.query(LotCostEntry).filter(LotCostEntry.inventory_item_id == item_id).all()
+    assert D(str(entry.amount)) == D("50")

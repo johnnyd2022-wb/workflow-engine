@@ -57,6 +57,7 @@ class _Graph:
             ids = list(frontier)
             for eid in ids:
                 self.flows_by_exec[eid] = []
+            # nosemgrep: sqlalchemy-query-in-for-loop — one query per level of batch history, for every product at once.
             for flow in self.db.query(CostFlow).filter(CostFlow.org_id == self.org_id, CostFlow.execution_id.in_(ids)):
                 self.flows_by_exec[flow.execution_id].append(flow)
             consumed = {
@@ -201,10 +202,14 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
         for key, p in products.items()
         if latest.get(key) is None and p.get("step") is not None
     }
-    engine.prime({lot for lots in lots_by_key.values() for lot in lots})
-    if declared:
-        index = engine._material_index()
-        engine.prime({lot.id for names in declared.values() for norm in names for lot in index.get(norm, [])})
+    material_lots = {lot for lots in lots_by_key.values() for lot in lots}
+    engine.prime(material_lots)
+    # An unpriced material is estimated from same-name lots (last known price): prime those too,
+    # so a material with a long purchase history doesn't cost one round of queries per lot.
+    index = engine._material_index()
+    names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
+    names |= {norm for declared_names in declared.values() for norm in declared_names}
+    engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)

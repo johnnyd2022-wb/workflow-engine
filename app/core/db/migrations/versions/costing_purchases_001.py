@@ -110,9 +110,7 @@ def upgrade():
         sa.ForeignKeyConstraint(
             ["org_id", "account_id"], ["xero_accounts.org_id", "xero_accounts.id"], name="fk_purchase_lines_account"
         ),
-        sa.CheckConstraint(
-            "treatment IN ('stock','not_stock','duty','overhead')", name="ck_purchase_lines_treatment"
-        ),
+        sa.CheckConstraint("treatment IN ('stock','not_stock','duty','overhead')", name="ck_purchase_lines_treatment"),
     )
     op.create_index(
         "uq_purchase_lines_live_key",
@@ -129,9 +127,7 @@ def upgrade():
     op.add_column("costing_settings", sa.Column("purchases_cursor", TS, nullable=True))
     op.add_column("costing_settings", sa.Column("purchases_tenant_id", sa.String(100), nullable=True))
     op.add_column("costing_settings", sa.Column("base_currency", sa.String(3), nullable=True))
-    op.add_column(
-        "xero_sync_jobs", sa.Column("purchases_synced", sa.Integer(), nullable=False, server_default="0")
-    )
+    op.add_column("xero_sync_jobs", sa.Column("purchases_synced", sa.Integer(), nullable=False, server_default="0"))
     op.add_column("xero_sync_jobs", sa.Column("purchases_status", sa.String(20), nullable=True))
 
 
@@ -139,12 +135,16 @@ def downgrade():
     bind = op.get_bind()
     for table, why in (
         ("xero_accounts WHERE treatment_override IS NOT NULL", "account treatments set by people"),
-        ("purchase_documents", "purchases (the original start date would be lost, so they couldn't all be fetched again)"),
+        (
+            "purchase_documents",
+            "purchases (the original start date would be lost, so they couldn't all be fetched again)",
+        ),
         (
             "costing_settings WHERE start_date IS NOT NULL OR purchases_cursor IS NOT NULL",
             "the purchases start date and cursor",
         ),
     ):
+        # nosemgrep: sqlalchemy-query-in-for-loop — one emptiness check per fixed table in this migration.
         if bind.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).first():
             raise RuntimeError(f"Downgrading would lose {why}")
     op.drop_column("xero_sync_jobs", "purchases_status")
