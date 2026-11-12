@@ -27,7 +27,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
@@ -342,52 +342,153 @@ class CostEngine:
 
     # --- loading ---------------------------------------------------------------------------
 
+    def _rows_by_id(self, model, item_ids):
+        """Fetch one bounded batch of tenant-scoped records keyed by their IDs."""
+        return self.db.query(model).filter(model.org_id == self.org_id, model.id.in_(item_ids)).all()
+
     def prime(self, item_ids) -> None:
-        """Bulk-load lots, in-flows, entries and allocations for many lots in four queries, so a
-        caller costing a list of lots (readiness) doesn't pay one round of queries per lot."""
+        """Bulk-load lots and cost inputs, plus execution graphs reachable from those lots."""
+        from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
         from app.features.costing.models import PurchaseAllocation
 
-        ids = [i for i in {*item_ids} if i is not None and i not in self._in_flow_cache]
-        for start in range(0, len(ids), 1000):
-            chunk = ids[start : start + 1000]
-            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
-            for lot in self.db.query(InventoryItem).filter(
-                InventoryItem.org_id == self.org_id, InventoryItem.id.in_(chunk)
-            ):
-                self._lots.setdefault(lot.id, lot)
-            for item_id in chunk:
-                self._lots.setdefault(item_id, None)
-                self._in_flow_cache[item_id] = []
-                self._entry_cache.setdefault(item_id, [])
-                self._allocation_cache.setdefault(item_id, [])
-            flows = (
-                # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
-                self.db.query(CostFlow)
-                .filter(
-                    CostFlow.org_id == self.org_id, CostFlow.inventory_item_id.in_(chunk), CostFlow.direction == "in"
+        frontier = list(item_ids)
+        while frontier:
+            ids = list(dict.fromkeys(i for i in frontier if i is not None and i not in self._in_flow_cache))
+            frontier = []
+            if not ids:
+                continue
+
+            pending: set[UUID] = set()
+            for start in range(0, len(ids), 1000):
+                chunk = ids[start : start + 1000]
+                lots = self._rows_by_id(InventoryItem, chunk)
+                for lot in lots:
+                    self._lots.setdefault(lot.id, lot)
+                for item_id in chunk:
+                    self._lots.setdefault(item_id, None)
+                    self._in_flow_cache[item_id] = []
+                    self._entry_cache.setdefault(item_id, [])
+                    self._allocation_cache.setdefault(item_id, [])
+
+                receipt_ids = {lot.transfer_receipt_id for lot in lots if lot.transfer_receipt_id}
+                receipts = {}
+                for offset in range(0, len(receipt_ids), 1000):
+                    receipt_chunk = list(receipt_ids)[offset : offset + 1000]
+                    receipts.update(
+                        (receipt.id, receipt) for receipt in self._rows_by_id(SiteStockReceipt, receipt_chunk)
+                    )
+                transfer_ids = {receipt.transfer_id for receipt in receipts.values()}
+                transfers = {}
+                for offset in range(0, len(transfer_ids), 1000):
+                    transfer_chunk = list(transfer_ids)[offset : offset + 1000]
+                    transfers.update(
+                        (transfer.id, transfer) for transfer in self._rows_by_id(SiteStockTransfer, transfer_chunk)
+                    )
+                lot_ids = {lot.id for lot in lots}
+                lots_by_id = {lot.id: lot for lot in lots}
+                source_ids = {
+                    transfer.source_item_id for transfer in transfers.values() if transfer.source_item_id not in lot_ids
+                }
+                sources = {}
+                for offset in range(0, len(source_ids), 1000):
+                    source_chunk = list(source_ids)[offset : offset + 1000]
+                    sources.update((source.id, source) for source in self._rows_by_id(InventoryItem, source_chunk))
+                for lot in lots:
+                    receipt = receipts.get(lot.transfer_receipt_id)
+                    transfer = transfers.get(receipt.transfer_id) if receipt is not None else None
+                    source = (
+                        lots_by_id.get(transfer.source_item_id) or sources.get(transfer.source_item_id)
+                        if transfer is not None
+                        else None
+                    )
+                    if transfer is not None and transfer.source_item_id == lot.id:
+                        source = None
+                    self._transfer_cache[lot.id] = source
+                    if source is not None:
+                        self._lots.setdefault(source.id, source)
+                        if source.id not in self._in_flow_cache:
+                            frontier.append(source.id)
+
+                flows = (
+                    # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+                    self.db.query(CostFlow)
+                    .filter(
+                        CostFlow.org_id == self.org_id,
+                        CostFlow.inventory_item_id.in_(chunk),
+                        CostFlow.direction == "in",
+                    )
+                    .order_by(CostFlow.created_at, CostFlow.id)
+                    .all()
                 )
-                .order_by(CostFlow.created_at, CostFlow.id)
-                .all()
-            )
-            self._spend(len(flows))
-            for flow in flows:
-                self._in_flow_cache[flow.inventory_item_id].append(flow)
-            fresh_entries = {i for i in chunk if not self._entry_cache[i]}
-            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
-            for entry in self.db.query(LotCostEntry).filter(
-                LotCostEntry.org_id == self.org_id,
-                LotCostEntry.inventory_item_id.in_(fresh_entries),
-                LotCostEntry.is_active.is_(True),
-            ):
-                self._entry_cache[entry.inventory_item_id].append(entry)
-            fresh_allocs = {i for i in chunk if not self._allocation_cache[i]}
-            # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
-            for alloc in self.db.query(PurchaseAllocation).filter(
-                PurchaseAllocation.org_id == self.org_id,
-                PurchaseAllocation.inventory_item_id.in_(fresh_allocs),
-                PurchaseAllocation.status.in_(("active", "orphaned")),
-            ):
-                self._allocation_cache[alloc.inventory_item_id].append(alloc)
+                self._spend(len(flows))
+                for flow in flows:
+                    self._in_flow_cache[flow.inventory_item_id].append(flow)
+                    if flow.execution_id is not None and flow.kind in ("produced", "reconciled_in"):
+                        pending.add(flow.execution_id)
+                fresh_entries = {i for i in chunk if not self._entry_cache[i]}
+                if fresh_entries:
+                    # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+                    for entry in self.db.query(LotCostEntry).filter(
+                        LotCostEntry.org_id == self.org_id,
+                        LotCostEntry.inventory_item_id.in_(fresh_entries),
+                        LotCostEntry.is_active.is_(True),
+                    ):
+                        self._entry_cache[entry.inventory_item_id].append(entry)
+                fresh_allocs = {i for i in chunk if not self._allocation_cache[i]}
+                if fresh_allocs:
+                    # nosemgrep: sqlalchemy-query-in-for-loop — bulk load, one query per 1,000-lot chunk.
+                    for alloc in self.db.query(PurchaseAllocation).filter(
+                        PurchaseAllocation.org_id == self.org_id,
+                        PurchaseAllocation.inventory_item_id.in_(fresh_allocs),
+                        PurchaseAllocation.status.in_(("active", "orphaned")),
+                    ):
+                        self._allocation_cache[alloc.inventory_item_id].append(alloc)
+
+            execution_ids = [execution_id for execution_id in pending if execution_id not in self._exec_info]
+            consumed_lot_ids = set()
+            for start in range(0, len(execution_ids), 1000):
+                chunk = execution_ids[start : start + 1000]
+                steps = (
+                    self.db.query(  # nosemgrep: sqlalchemy-query-in-for-loop — one bulk query per 1,000 execution IDs.
+                        ExecutionStep
+                    )
+                    .options(joinedload(ExecutionStep.step))
+                    .filter(ExecutionStep.org_id == self.org_id, ExecutionStep.execution_id.in_(chunk))
+                    .order_by(ExecutionStep.execution_id, ExecutionStep.step_number, ExecutionStep.id)
+                    .all()
+                )
+                execution_flows = (
+                    self.db.query(  # nosemgrep: sqlalchemy-query-in-for-loop — one bulk query per 1,000 execution IDs.
+                        CostFlow
+                    )
+                    .filter(CostFlow.org_id == self.org_id, CostFlow.execution_id.in_(chunk))
+                    .order_by(CostFlow.execution_id, CostFlow.created_at, CostFlow.id)
+                    .all()
+                )
+                self._spend(len(steps) + len(execution_flows))
+                steps_by_execution: dict[UUID, list[ExecutionStep]] = defaultdict(list)
+                flows_by_execution: dict[UUID, list[CostFlow]] = defaultdict(list)
+                for step in steps:
+                    steps_by_execution[step.execution_id].append(step)
+                for flow in execution_flows:
+                    flows_by_execution[flow.execution_id].append(flow)
+                for execution_id in chunk:
+                    execution_steps = steps_by_execution[execution_id]
+                    index = {step.id: i for i, step in enumerate(execution_steps)}
+                    consumed, outs = defaultdict(list), defaultdict(list)
+                    internal = set()
+                    for flow in flows_by_execution[execution_id]:
+                        position = index.get(flow.execution_step_id)
+                        if flow.direction == "in":
+                            internal.add(flow.inventory_item_id)
+                        if flow.direction == "out":
+                            consumed_lot_ids.add(flow.inventory_item_id)
+                        if position is None:
+                            continue
+                        (consumed if flow.direction == "out" else outs)[position].append(flow)
+                    self._exec_info[execution_id] = ExecInfo(execution_steps, index, consumed, outs, internal)
+
+            frontier.extend(item_id for item_id in consumed_lot_ids if item_id not in self._in_flow_cache)
 
     def _get_lot(self, item_id: UUID) -> InventoryItem | None:
         if item_id not in self._lots:

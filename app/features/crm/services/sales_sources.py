@@ -29,6 +29,9 @@ class SaleLine:
     # Batches this line was matched to, with the units each gave. Units not covered
     # (sale before go-live, not yet matched) are units - sum(batches).
     batches: list[tuple[InventoryItem, Decimal]] = field(default_factory=list)
+    # Ex GST in the invoice's currency; None when it can't be told (live-cogs 8.1f-2 margins).
+    revenue: Decimal | None = None
+    currency: str | None = None
 
 
 @dataclass
@@ -156,6 +159,7 @@ class XeroSalesSource:
         unmapped: list[UnmappedLine] = []
         for invoice in invoices:
             reference = invoice.invoice_number or invoice.xero_invoice_id
+            inclusive = _tax_inclusive(invoice, by_invoice.get(invoice.id, []))
             for index, line in enumerate(by_invoice.get(invoice.id, [])):
                 quantity = _decimal(line.quantity)
                 if quantity is None or quantity <= 0:
@@ -187,9 +191,45 @@ class XeroSalesSource:
                         product_name=match.biz_e_product_name,
                         units=quantity * int(match.units_per_line or 1),
                         batches=batches,
+                        revenue=_ex_gst(line, inclusive),
+                        currency=invoice.currency_code,
                     )
                 )
         return out, unmapped
+
+
+def _tax_inclusive(invoice, lines) -> bool | None:
+    """Xero doesn't keep an invoice's line-amount type here; its totals tell: line amounts that add
+    up to the total are tax-inclusive, to the sub-total exclusive. None when neither fits."""
+    amounts = [_decimal(li.line_amount) for li in lines]
+    if not amounts or any(a is None for a in amounts):
+        return None
+    total_lines = sum(amounts, Decimal("0"))
+    cent = Decimal("0.01")
+    sub_total, total = _decimal(invoice.sub_total), _decimal(invoice.total)
+    off_sub = abs(total_lines - sub_total) if sub_total is not None else None
+    off_total = abs(total_lines - total) if total is not None else None
+    fits_sub = off_sub is not None and off_sub <= cent
+    fits_total = off_total is not None and off_total <= cent
+    if fits_sub and fits_total:  # a one-cent tax: the closer total decides, exact wins
+        if off_total == off_sub:
+            return None
+        return off_total < off_sub
+    if fits_sub:
+        return False
+    if fits_total:
+        return True
+    return None
+
+
+def _ex_gst(line, inclusive: bool | None) -> Decimal | None:
+    amount = _decimal(line.line_amount)
+    if amount is None:
+        return None
+    if inclusive:
+        tax = _decimal(line.tax_amount)
+        return None if tax is None else amount - tax
+    return amount
 
 
 SALES_SOURCES: dict[str, SalesSource] = {"xero": XeroSalesSource()}
