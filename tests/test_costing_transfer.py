@@ -53,3 +53,58 @@ def test_ac32_transfer_destination_reports_source_unit_cost(transfers, db):  # n
             True,
         )
         db.rollback()
+
+
+def test_prime_keeps_transfer_source_queries_flat_as_receipt_lots_grow(transfers, db):  # noqa: F811
+    from sqlalchemy import event
+
+    from app.core.db.models.site_transfer import SiteStockReceipt
+    from app.features.costing.engine import CostEngine
+
+    org, stock_id, actor_id = transfers[0], transfers[6], transfers[7]
+    destination_ids = []
+
+    def add_receipts(count):
+        for _ in range(count):
+            transfer = start(transfers, quantity="1")
+            with unscoped():
+                service.receive(db, org.id, actor_id, transfer["id"], str(uuid4()), {"quantity": "1"}, permit)
+                db.commit()
+                receipt = (
+                    db.query(SiteStockReceipt)
+                    .filter(SiteStockReceipt.org_id == org.id)
+                    .order_by(SiteStockReceipt.created_at.desc())
+                    .first()
+                )
+                destination = (
+                    db.query(InventoryItem)
+                    .filter(InventoryItem.org_id == org.id, InventoryItem.transfer_receipt_id == receipt.id)
+                    .one()
+                )
+                destination_ids.append(destination.id)
+
+    def count_source_lookups():
+        statements = []
+        bind = db.get_bind()
+        engine = getattr(bind, "engine", bind)
+
+        def listener(*_args):
+            statements.append(1)
+
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            costs = CostEngine(db, org.id)
+            costs.prime([stock_id, *destination_ids])
+            for item_id in destination_ids:
+                costs._transfer_source(db.get(InventoryItem, item_id))
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        return len(statements)
+
+    with unscoped():
+        add_receipts(2)
+        baseline = count_source_lookups()
+        add_receipts(6)
+        scaled = count_source_lookups()
+
+    assert scaled <= baseline + 4, f"query count grew from {baseline} to {scaled}"
