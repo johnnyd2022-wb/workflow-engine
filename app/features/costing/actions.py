@@ -702,7 +702,11 @@ def _lot_names(db: Session, line: PurchaseLine) -> dict:
 
 def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
+    allocations = line_allocations(db, line, statuses=("active", "orphaned"))
+    active_allocations = [allocation for allocation in allocations if allocation.status == "active"]
     return {
+        "auto_recorded": bool(active_allocations)
+        and all(allocation.created_by_user_id is None for allocation in active_allocations),
         "prefill": prefill(db, line, doc, remaining, rules, history),
         "line_id": str(line.id),
         "document": {
@@ -729,7 +733,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
                 "quantity": str(_d(a.quantity)),
                 "status": a.status,
             }
-            for a in line_allocations(db, line, statuses=("active", "orphaned"))
+            for a in allocations
         ],
     }
 
@@ -973,17 +977,18 @@ def prefill(
     rules = active_rules(db, line.org_id) if rules is None else rules
     rule = winner(rules, line.account_code, doc.payee_name, line.description)
     if rule is not None and rule.treatment == "stock" and rule.template:
-        rows, used, rest_index = [], ZERO, None
-        for i, t in enumerate(rule.template):
-            if t.get("share") == "rest":
-                amount = None
-                rest_index = i
-            else:
-                amount = _q(remaining * _d(t["share"]) / 100)
-                used += amount
-            rows.append([t, amount])
-        if rest_index is not None:
-            rows[rest_index][1] = max(ZERO, remaining - used)
+        # Suggestions in cents that add up: each share's exact amount, the rest row taking what's
+        # left, split by largest remainder (see _split_in_cents). When the shares don't cover the
+        # whole line, the uncovered part is a phantom row that stays open for a person.
+        exact = [None if t.get("share") == "rest" else remaining * _d(t["share"]) / 100 for t in rule.template]
+        priced = sum((x for x in exact if x is not None), ZERO)
+        leftover = max(ZERO, remaining - priced)
+        if any(x is None for x in exact):
+            rest_count = sum(1 for x in exact if x is None)
+            exact = [leftover / rest_count if x is None else x for x in exact]
+            leftover = ZERO
+        amounts = _split_in_cents(exact + [leftover], remaining)[: len(exact)]
+        rows = [[t, amount] for t, amount in zip(rule.template, amounts, strict=True)]
         out = []
         for t, amount in rows:
             amount = amount if amount is not None else ZERO
@@ -991,6 +996,8 @@ def prefill(
             if mode == "fixed":
                 quantity = str(_d(t["quantity"]))
             elif mode == "from_price" and _d(t.get("unit_price")) > 0:
+                if amount <= 0 and len(rows) > 1:
+                    continue  # a share that came to $0 in cents buys nothing: no row to fill in
                 quantity = str(_q(amount / _d(t["unit_price"])))
             else:
                 quantity = None

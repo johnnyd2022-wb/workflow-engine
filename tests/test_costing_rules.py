@@ -220,6 +220,42 @@ def test_ac81_most_recently_updated_wins_a_full_tie(flask_app, world, db):  # no
     del a, c
 
 
+def test_rule_update_preserves_auto_record_when_omitted_and_accepts_explicit_values(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    template = [
+        {
+            "name": "Juniper",
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "fixed",
+            "quantity": "1",
+            "share": "100",
+        }
+    ]
+    created = _rule(client, payee_pattern="Auto Update Supplier", auto_record=True, template=template)
+    assert created.status_code == 201, created.get_json()
+    rule = created.get_json()
+
+    legacy_payload = {
+        "payee_pattern": rule["payee_pattern"],
+        "match_type": rule["match_type"],
+        "treatment": rule["treatment"],
+        "template": rule["template"],
+        "is_active": rule["is_active"],
+    }
+    omitted = client.put(f"{API}/rules/{rule['id']}", json=legacy_payload)
+    assert omitted.status_code == 200, omitted.get_json()
+    assert omitted.get_json()["auto_record"] is True
+
+    enabled = client.put(f"{API}/rules/{rule['id']}", json={**legacy_payload, "auto_record": True})
+    assert enabled.status_code == 200, enabled.get_json()
+    assert enabled.get_json()["auto_record"] is True
+
+    disabled = client.put(f"{API}/rules/{rule['id']}", json={**legacy_payload, "auto_record": False})
+    assert disabled.status_code == 200, disabled.get_json()
+    assert disabled.get_json()["auto_record"] is False
+
+
 # --- AC17 / AC84: re-classification -------------------------------------------------------------
 
 

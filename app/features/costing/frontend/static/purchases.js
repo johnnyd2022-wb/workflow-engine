@@ -214,7 +214,9 @@
       else if (card.document.source === 'xero_bill_credit') wrap.appendChild(el('span', 'pu-badge', 'Supplier credit'));
       else if (card.document.kind === 'refund') wrap.appendChild(el('span', 'pu-badge', 'Refund'));
       if (card.state === 'partly_recorded') wrap.appendChild(el('span', 'pu-badge', fmt(card.open) + ' still to record'));
-      if (card.state === 'recorded') wrap.appendChild(el('span', 'pu-badge pu-badge--ok', 'Recorded'));
+      if (card.state === 'recorded') {
+        wrap.appendChild(el('span', 'pu-badge pu-badge--ok', card.auto_recorded ? 'Recorded by a rule' : 'Recorded'));
+      }
       return wrap;
     }
 

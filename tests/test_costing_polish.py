@@ -97,5 +97,5 @@ def test_a_co_product_never_lends_its_cost_and_a_renamed_lot_keeps_its_own(world
     listed = {p["key"]: p for p in _products(client)}
     assert D(listed[f"output:{gin_def['id']}"]["unit_cost"]) == by_name["Gin"]
     vodka = listed[f"output:{vodka_def['id']}"]
-    assert vodka.get("unit_cost") is None or D(vodka["unit_cost"]) == by_name["Vodka"]
+    assert D(vodka["unit_cost"]) == by_name["Vodka"]
     assert by_name["Gin"] != by_name["Vodka"], "the two outputs must cost differently for this test to mean anything"

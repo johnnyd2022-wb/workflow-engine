@@ -224,6 +224,8 @@ class CostEngine:
         execution = self._load_execution_or_404(execution_id)
         try:
             info = self._info(execution.id)
+            if info is not None:
+                self._prefetch_lots(flow.inventory_item_id for rows in info.outs.values() for flow in rows)
             steps = [self._solve(("step", execution.id, i)) for i in range(len(info.steps))]
         except TooLargeError:
             return {
@@ -395,6 +397,21 @@ class CostEngine:
                 .one_or_none()
             )
         return self._lots[item_id]
+
+    def _prefetch_lots(self, item_ids) -> None:
+        """Load execution output lots together so batch cost reads do not scale by output count."""
+        missing = {item_id for item_id in item_ids if item_id not in self._lots}
+        for item_id in missing:
+            self._lots[item_id] = None
+        if not missing:
+            return
+        rows = (
+            self.db.query(InventoryItem)
+            .filter(InventoryItem.org_id == self.org_id, InventoryItem.id.in_(missing))
+            .all()
+        )
+        for row in rows:
+            self._lots[row.id] = row
 
     def _load_lot_or_404(self, item_id) -> InventoryItem:
         try:
@@ -772,6 +789,7 @@ class CostEngine:
                 {
                     "inventory_item_id": str(f.inventory_item_id),
                     "flow_id": str(f.id),
+                    "execution_step_id": str(f.execution_step_id) if f.execution_step_id else None,
                     "kind": f.kind,
                     "name": lot.name if lot is not None else None,
                     "step_number": step.step_number,

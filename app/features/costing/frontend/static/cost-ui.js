@@ -69,6 +69,18 @@
     var m = money(value);
     return m ? m + (unit ? ' per ' + unit : '') : null;
   }
+  function dutyUnit(unit) {
+    var words = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack' };
+    return words[String(unit || '').toLowerCase()] || unit || 'unit';
+  }
+  /* The batch card's duty line (spec Q6): never a guess; "not tracked" when the module is off. */
+  function dutyLine(duty, unit) {
+    if (!duty) return null;
+    if (!duty.tracked) return 'Duty not tracked';
+    if (duty.per_unit == null) return 'Duty not worked out — ' + (duty.missing || 'Not an excise product or no rate set');
+    return 'Duty if sold today ' + (money(duty.per_unit) || '—') + ' · landed ' +
+      (money(duty.landed_per_unit) || '—') + ' per ' + dutyUnit(unit);
+  }
   function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
   var SOURCE_WORDS = {
@@ -338,7 +350,10 @@
     figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
     outputs.forEach(function (o) {
       var unitText = perUnit(o.unit_cost, o.unit);
-      figures.appendChild(figure(o.name + ' per ' + (o.unit || 'unit'), unitText ? money(o.unit_cost) : '—'));
+      var outputFigure = figure(o.name + ' per ' + dutyUnit(o.unit), unitText ? money(o.unit_cost) : '—');
+      var line = dutyLine(o.duty_today, o.unit);
+      if (line) outputFigure.appendChild(el('p', 'cost-muted', line));
+      figures.appendChild(outputFigure);
     });
     card.appendChild(figures);
 
@@ -438,7 +453,7 @@
   function whenReady(fn) { fn(window.BizECost); }
 
   window.BizECost = {
-    me: me, lotPanel: lotPanel, batchCard: batchCard, totalPaidField: totalPaidField,
+    me: me, lotPanel: lotPanel, batchCard: batchCard, dutyLine: dutyLine, totalPaidField: totalPaidField,
     money: money, parseMoney: parseMoney, whenReady: whenReady, request: request,
   };
   document.dispatchEvent(new CustomEvent('bizecost:ready'));

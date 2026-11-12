@@ -210,6 +210,17 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
     names |= {norm for declared_names in declared.values() for norm in declared_names}
     engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
+    # The latest batches' own graphs, loaded together, for the list's cost per unit.
+    batch_ids = [eid for eid in latest.values() if eid is not None]
+    if batch_ids:
+        from app.features.costing.models import CostFlow
+
+        produced = (
+            db.query(CostFlow.inventory_item_id)
+            .filter(CostFlow.org_id == org_id, CostFlow.execution_id.in_(batch_ids), CostFlow.direction == "in")
+            .all()
+        )
+        engine.prime({row[0] for row in produced})
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)
