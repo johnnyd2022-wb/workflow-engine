@@ -260,3 +260,62 @@ def test_one_month_of_manual_prices_never_says_bought(costs_page):
     detail = page.locator("[data-prices-list] .co-row__detail")
     expect(detail).to_contain_text("Priced in Nov 2026")
     expect(detail).not_to_contain_text("ought")
+
+
+def _two_months(page, app_url, first, last, quantity="2"):
+    def month(key, price):
+        return {
+            "month": key,
+            "unit": "kg",
+            "amount": "1",
+            "priced_quantity": quantity,
+            "average_unit_cost": price,
+            "purchases": 1,
+            "min_unit_price": price,
+            "max_unit_price": price,
+            "unconverted": 0,
+        }
+
+    history = {
+        "name": "Mover",
+        "unit": "kg",
+        "from": "2025-12",
+        "to": "2026-11",
+        "months": [month("2026-10", first), month("2026-11", last)],
+        "latest": {"unit_price": last, "date": "2026-11-10", "source": "purchase"},
+        "lots": [],
+        "too_large": False,
+    }
+    page.route("**/api/core/costing/materials/*/history**", lambda route: route.fulfill(json=history))
+    page.route(
+        "**/api/core/costing/materials",
+        lambda route: route.fulfill(
+            json={
+                "materials": [{"name": "Mover", "unit": "kg", "latest_unit_price": last, "latest_date": "2026-11-10"}]
+            }
+        ),
+    )
+    page.goto(app_url + PAGE)
+    page.locator("[data-prices-list] .co-row__head").click()
+    return page.locator("[data-prices-list] .co-row__detail")
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "says"),
+    [
+        ("10.000000", "10.040000", "Up 0.4% from Oct 2026 to Nov 2026"),
+        ("0.000000", "5.000000", "Up from free from Oct 2026 to Nov 2026"),
+        ("10.000000", "9.000000", "Down 10% from Oct 2026 to Nov 2026"),
+        ("10.000000", "10.000000", "Steady at $10.00"),
+    ],
+)
+def test_the_trend_sentence_follows_the_exact_prices(costs_page, first, last, says):
+    page, app_url = costs_page
+    expect(_two_months(page, app_url, first, last)).to_contain_text(says)
+
+
+def test_the_smallest_quantity_is_not_shown_as_zero(costs_page):
+    page, app_url = costs_page
+    detail = _two_months(page, app_url, "1.000000", "2.000000", quantity="0.0001")
+    detail.locator("summary").click()
+    expect(detail.locator(".co-months")).to_contain_text("0.0001 kg")

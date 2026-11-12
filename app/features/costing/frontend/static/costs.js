@@ -269,11 +269,13 @@
         return 'Priced in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + ' on average.';
       }
       var a = Number(first.average_unit_cost), b = Number(last.average_unit_cost);
-      if (!a) return 'Last priced in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + '.';
-      var change = Math.round((b - a) / a * 100);
       var span = ' from ' + monthName(first.month, true) + ' to ' + monthName(last.month, true);
-      if (change === 0) return 'Steady at about ' + price(last.average_unit_cost) + per(unit) + span + '.';
-      return (change > 0 ? 'Up ' : 'Down ') + Math.abs(change) + '%' + span + ' (' + price(first.average_unit_cost) + ' → ' + price(last.average_unit_cost) + per(unit) + ').';
+      var both = ' (' + price(first.average_unit_cost) + ' → ' + price(last.average_unit_cost) + per(unit) + ')';
+      if (b === a) return 'Steady at ' + price(last.average_unit_cost) + per(unit) + span + '.';
+      if (a === 0) return 'Up from free' + span + both + '.'; // no percentage from a $0 start
+      var pct = Math.abs((b - a) / a * 100);
+      var shown = pct < 1 ? (pct < 0.1 ? 'under 0.1' : pct.toFixed(1)) : String(Math.round(pct));
+      return (b > a ? 'Up ' : 'Down ') + shown + '%' + span + both + '.';
     }
 
     /* A dot per month on a scale fitted to the prices (a 2% rise is visible), joined by a line.
@@ -360,7 +362,7 @@
         var tr = el('tr');
         tr.appendChild(el('td', '', monthName(row.month, true)));
         tr.appendChild(el('td', '', price(row.average_unit_cost)));
-        tr.appendChild(el('td', '', Number(row.priced_quantity).toLocaleString('en-NZ', { maximumFractionDigits: 3 }) + (unit ? ' ' + unit : '')));
+        tr.appendChild(el('td', '', Number(row.priced_quantity).toLocaleString('en-NZ', { maximumFractionDigits: 4 }) + (unit ? ' ' + unit : '')));
         if (ranged) {
           tr.appendChild(el('td', 'co-months__range', row.min_unit_price === row.max_unit_price
             ? price(row.min_unit_price) : price(row.min_unit_price) + '–' + price(row.max_unit_price)));
