@@ -62,3 +62,17 @@ def test_the_margins_tab_shows_only_to_people_who_can_open_it(flask_app, db):  #
     finally:
         purge(db, org)
     assert tab.requires_all == ("costs.view", "sales.view")
+
+
+def test_the_duty_setup_link_is_only_offered_to_people_who_can_use_it(flask_app, db):  # noqa: F811
+    """Review r6: Customs settings needs compliance.manage; a Staff user gets words, not a link that 403s."""
+    org = new_org(db)
+    try:
+        FeatureSubscriptionRepository(db).grant(org.id, "crm")
+        db.commit()
+        admin = user_client(db, flask_app, org)
+        assert 'data-can-fix-duty="true"' in admin.get(PAGE).get_data(as_text=True)
+        staff = user_client(db, flask_app, org, permissions=["costs.view", "sales.view"])
+        assert 'data-can-fix-duty="false"' in staff.get(PAGE).get_data(as_text=True)
+    finally:
+        purge(db, org)

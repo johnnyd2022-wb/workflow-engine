@@ -65,6 +65,13 @@ def _report():
                                 "unit_cost": "8.00",
                                 "status": "estimated",
                             },
+                            {
+                                "name": "Limoncello",
+                                "batch": "L-09",
+                                "units": "1",
+                                "unit_cost": None,
+                                "status": "partial",
+                            },
                         ],
                     }
                 ],
@@ -122,6 +129,7 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
     sale = page.locator(".mg-sale__batches")
     expect(sale).to_contain_text("Batch L-07: 2 at A$7.50 ·")
     expect(sale).to_contain_text("Batch L-08: 1 at A$8.00 (estimated)")
+    expect(sale).to_contain_text("Batch L-09: 1 at cost partly known")
     expect(sale).to_contain_text("1 not matched to a batch — no cost for this product yet")
 
     page.evaluate("""() => {

@@ -163,11 +163,16 @@
       if (unmeasured.length) {
         if (notes.length) els.note.appendChild(document.createTextNode(' '));
         els.note.appendChild(document.createTextNode('Duty couldn’t be worked out for ' + unmeasured.join(', ') +
-          ' — give ' + (unmeasured.length === 1 ? 'it' : 'them') + ' a pack size, ABV and tariff in '));
-        var link = el('a', null, 'Customs settings');
-        link.href = '/compliant/nz-alcohol/customs/settings';
-        els.note.appendChild(link);
-        els.note.appendChild(document.createTextNode('.'));
+          ' — ' + (unmeasured.length === 1 ? 'it needs' : 'they need') + ' a pack size, ABV and tariff in '));
+        if (root.getAttribute('data-can-fix-duty') === 'true') {
+          var link = el('a', null, 'Customs settings');
+          link.href = '/compliant/nz-alcohol/customs/settings';
+          els.note.appendChild(link);
+          els.note.appendChild(document.createTextNode('.'));
+        } else {
+          // No link they'd be refused at: say who can fix it.
+          els.note.appendChild(document.createTextNode('Customs settings, which someone who manages compliance can set.'));
+        }
       }
       els.note.hidden = !(notes.length || unmeasured.length);
     }
@@ -256,8 +261,9 @@
         top.appendChild(el('span', null, units(l.units) + ' units · ' + fmt(l.revenue)));
         li.appendChild(top);
         var parts = (l.batches || []).map(function (b) {
-          var cost = b.unit_cost == null ? 'cost not known yet'
-            : fmt(b.unit_cost) + (b.status === 'estimated' ? ' (estimated)' : b.status === 'partial' ? ' (partly known)' : '');
+          var cost = b.status === 'partial' ? 'cost partly known'
+            : b.unit_cost == null ? 'cost not known yet'
+            : fmt(b.unit_cost) + (b.status === 'estimated' ? ' (estimated)' : '');
           return (b.batch ? 'Batch ' + b.batch : b.name) + ': ' + units(b.units) + ' at ' + cost;
         });
         if (Number(l.unbatched_units) > 0) {
