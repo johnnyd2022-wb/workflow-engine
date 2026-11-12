@@ -121,6 +121,7 @@ def _cost_allowed(org_id) -> bool:
     return may_enter_cost(db_session, getattr(g, "current_user", None), org_id)
 
 
+_THOUSANDS_SPACED = re.compile(r"^-?\d{1,3}( \d{3})+(\.\d+)?$")
 _THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
 
 
@@ -134,8 +135,10 @@ def _clean_money(raw: str | None) -> str | None:
         if text.startswith(prefix):
             text = text[len(prefix) :].strip()
             break
-    text = text.replace("\u00a0", "").replace(" ", "")
-    if _THOUSANDS.match(text):
+    grouped = text.replace("\u00a0", " ")
+    if _THOUSANDS_SPACED.match(grouped):  # "1 234.50": spaces only where thousands are grouped
+        text = grouped.replace(" ", "")
+    elif _THOUSANDS.match(text):
         text = text.replace(",", "")
     return text or None
 

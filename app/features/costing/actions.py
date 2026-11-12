@@ -8,7 +8,7 @@ that has been acted on. Callers own the commit; every action locks its line.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -937,6 +937,21 @@ def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
     return index
 
 
+def _split_in_cents(exact: list, total: Decimal) -> list:
+    """Round shares to cents so they add up to ``total`` exactly and none goes negative: each takes
+    its whole cents, the cents left over go to the largest remainders, and any part of a cent in
+    ``total`` itself goes to the largest row."""
+    floors = [(x * 100).to_integral_value(rounding=ROUND_FLOOR) / 100 for x in exact]
+    spare = int(((total - sum(floors, ZERO)) * 100).to_integral_value(rounding=ROUND_FLOOR))
+    order = sorted(range(len(exact)), key=lambda i: (exact[i] - floors[i], -i), reverse=True)
+    for i in order[:spare]:
+        floors[i] += Decimal("0.01")
+    if floors:
+        biggest = max(range(len(floors)), key=lambda i: floors[i])
+        floors[biggest] += total - sum(floors, ZERO)
+    return [_q(x) for x in floors]
+
+
 def _cents(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -1006,9 +1021,11 @@ def prefill(
             }
             # Suggestions read in cents ("277.42", not "277.4221"). When last time covered the
             # whole purchase, the last row takes the exact remainder so this one does too.
-            amounts = [_cents(remaining * _d(a.amount) / _d(prev.amount_ex_tax)) for a in allocs]
+            exact = [remaining * _d(a.amount) / _d(prev.amount_ex_tax) for a in allocs]
             if allocs and sum((_d(a.amount) for a in allocs), ZERO) == _d(prev.amount_ex_tax):
-                amounts[-1] = _q(remaining - sum(amounts[:-1], ZERO))
+                amounts = _split_in_cents(exact, remaining)
+            else:
+                amounts = [_cents(x) for x in exact]
             out = []
             for a, amount in zip(allocs, amounts, strict=True):
                 item = items[a.inventory_item_id]

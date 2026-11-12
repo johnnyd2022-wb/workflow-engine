@@ -227,21 +227,27 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
             "execution_id": str(execution_id) if execution_id else None,
             "ready": ready,
             "materials": materials,
-            **(_latest_unit_cost(engine, execution_id, product["name"]) if ready and execution_id else {}),
+            **(_latest_unit_cost(engine, execution_id, key) if ready and execution_id else {}),
         }
     return out
 
 
-def _latest_unit_cost(engine: CostEngine, execution_id, name: str) -> dict:
-    """What one unit of the product cost in its latest batch (polish: answer it on the list)."""
+def _latest_unit_cost(engine: CostEngine, execution_id, key: str) -> dict:
+    """What one unit of the product cost in its latest batch (polish: answer it on the list).
+    Matched by the output the product is (its stable id), never by name: a renamed output or a
+    co-product must not lend its cost to this one."""
+    if not key.startswith("output:"):
+        return {}
+    output_id = key.split(":", 1)[1]
     try:
         outputs = engine.execution(execution_id).get("outputs", [])
     except TooLargeError:
         return {}
-    match = [o for o in outputs if normalise(o.get("name") or "") == normalise(name)] or outputs
-    if not match or match[0].get("unit_cost") is None:
-        return {}
-    return {"unit_cost": match[0]["unit_cost"], "unit": match[0].get("unit")}
+    for o in outputs:
+        lot = engine._get_lot(UUID(o["inventory_item_id"])) if o.get("inventory_item_id") else None
+        if lot is not None and str(lot.source_output_id) == output_id and o.get("unit_cost") is not None:
+            return {"unit_cost": o["unit_cost"], "unit": o.get("unit")}
+    return {}
 
 
 def product_detail(db: Session, org_id: UUID, key: str) -> dict:

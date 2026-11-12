@@ -36,6 +36,8 @@ def test_a_ready_product_shows_what_one_unit_cost_on_the_list(world, db):  # noq
         ("1 234.50", "1234.50"),
         ("  42 ", "42"),
         ("1,23", "1,23"),  # not a thousands pattern: left for the check to refuse
+        ("1 23.45", "1 23.45"),  # nor is this: never silently read as 123.45
+        ("1\u00a0234.50", "1234.50"),
         ("", None),
     ],
 )
@@ -43,7 +45,7 @@ def test_csv_total_paid_reads_money_as_typed(raw, clean):
     from app.core.backend.inventory_upload_routes import _check_total_paid, _clean_money
 
     assert _clean_money(raw) == clean
-    if clean == "1,23":
+    if clean in ("1,23", "1 23.45"):
         assert _check_total_paid(clean)[0] == "error"
     elif clean is not None:
         assert _check_total_paid(clean) == ("ok", None)
@@ -68,3 +70,32 @@ def test_costs_page_settings_sheet_is_for_managers_only(flask_app, db):  # noqa:
         assert viewer.put("/api/core/costing/settings", json={"split_basis": "litres"}).status_code == 403
     finally:
         purge(db, org)
+
+
+def test_a_co_product_never_lends_its_cost_and_a_renamed_lot_keeps_its_own(world, db):  # noqa: F811
+    """Review: cost per unit is matched by the product's output id, not its name."""
+    from tests.costing_helpers import complete, output_defs, produced_lots, workflow
+
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 10, "L")
+    price(db, org.id, spirit.id, 100, 10)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "bottles"}, {"name": "Vodka", "unit": "L"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 10, "L")],
+        [{"name": "Gin", "quantity": 10, "unit": "bottles"}, {"name": "Vodka", "quantity": 30, "unit": "L"}],
+    )
+    gin_def, vodka_def = output_defs(step)
+    card = client.get(f"/api/core/costing/executions/{execution.id}/cost").get_json()
+    by_name = {o["name"]: D(o["unit_cost"]) for o in card["outputs"]}
+    for lot_ in produced_lots(db, org.id, step.id):
+        if lot_.name == "Vodka":
+            lot_.name = "Vodka 1L"  # the lot's name no longer matches its output's name
+    db.commit()
+    listed = {p["key"]: p for p in _products(client)}
+    assert D(listed[f"output:{gin_def['id']}"]["unit_cost"]) == by_name["Gin"]
+    vodka = listed[f"output:{vodka_def['id']}"]
+    assert vodka.get("unit_cost") is None or D(vodka["unit_cost"]) == by_name["Vodka"]
+    assert by_name["Gin"] != by_name["Vodka"], "the two outputs must cost differently for this test to mean anything"
