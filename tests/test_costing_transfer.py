@@ -53,3 +53,23 @@ def test_ac32_transfer_destination_reports_source_unit_cost(transfers, db):  # n
             True,
         )
         db.rollback()
+
+
+def test_polish_transfer_provenance_names_the_site_it_came_from(transfers, db):  # noqa: F811
+    from app.core.db.models.site import Site
+    from app.features.costing.service import lot_provenance
+
+    org, *_rest = transfers
+    actor_id = transfers[7]
+    transfer = start(transfers)
+    with unscoped():
+        service.receive(db, org.id, actor_id, transfer["id"], str(uuid4()), {"quantity": "4"}, permit)
+        db.commit()
+        fragment = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org.id, InventoryItem.transfer_receipt_id.is_not(None))
+            .one()
+        )
+        source_site = db.query(Site).filter(Site.org_id == org.id, Site.id == transfer["source_site_id"]).one()
+        provenance = lot_provenance(db, org.id, fragment)
+    assert provenance["kind"] == "transfer" and provenance["site"] == source_site.name

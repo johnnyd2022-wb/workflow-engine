@@ -132,3 +132,12 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
   #page-content .ru-rule__head { flex-direction: column; }
 }
 #page-content .ru-dialog [aria-invalid="true"] { border-color: #b42318 !important; }
+
+/* Costs › How costs are worked out (settings sheet) */
+#page-content .co-shell .workspace-header__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#page-content .co-settings__split { display: grid; gap: 8px; }
+#page-content .co-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); cursor: pointer; }
+#page-content .co-opt:has(input:checked) { border-color: var(--ui-accent); }
+#page-content .ru-dialog .co-opt input { width: 18px !important; min-width: 18px !important; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--ui-accent); }
+#page-content .co-opt > span { display: grid; gap: 2px; }
+#page-content .co-opt__label { font-size: 14px; font-weight: 600; }

@@ -937,6 +937,10 @@ def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
     return index
 
 
+def _cents(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def prefill(
     db: Session,
     line: PurchaseLine,
@@ -1000,8 +1004,13 @@ def prefill(
                     InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
                 )
             }
+            # Suggestions read in cents ("277.42", not "277.4221"). When last time covered the
+            # whole purchase, the last row takes the exact remainder so this one does too.
+            amounts = [_cents(remaining * _d(a.amount) / _d(prev.amount_ex_tax)) for a in allocs]
+            if allocs and sum((_d(a.amount) for a in allocs), ZERO) == _d(prev.amount_ex_tax):
+                amounts[-1] = _q(remaining - sum(amounts[:-1], ZERO))
             out = []
-            for a in allocs:
+            for a, amount in zip(allocs, amounts, strict=True):
                 item = items[a.inventory_item_id]
                 out.append(
                     {
@@ -1009,7 +1018,7 @@ def prefill(
                         "inventory_type": item.inventory_type,
                         "unit": item.unit,
                         "quantity": str(_d(a.quantity)),
-                        "amount": str(_q(remaining * _d(a.amount) / _d(prev.amount_ex_tax))),
+                        "amount": str(_q(amount)),
                         "ask": [],
                     }
                 )

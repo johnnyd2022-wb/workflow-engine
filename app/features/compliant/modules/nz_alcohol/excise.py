@@ -596,6 +596,17 @@ def _base_name(name: str) -> str:
     return name
 
 
+# Public names for other modules (costing's litres split reads volumes the same way duty does).
+def litres_of(quantity: Decimal, unit: str, profile: AlcoholProductProfile | None) -> Decimal | None:
+    """Litres in ``quantity`` of ``unit``: L and ml directly, a count unit by the profile's pack size."""
+    return _litres(quantity, unit, profile)
+
+
+def product_base_name(name: str) -> str:
+    """The product a lot is excised as: Library stock of a product counts as that product."""
+    return _base_name(name)
+
+
 def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_date: date) -> dict:
     profiles = {
         p.inventory_name.casefold(): p

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.process import Process
 from app.core.db.models.step import Step
-from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, normalise
+from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, TooLargeError, normalise
 from app.features.costing.models import CostFlow
 from app.features.costing.service import CostingNotFoundError
 
@@ -219,15 +219,29 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
             basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
         else:
             basis, materials = "declared_inputs", []
+        ready = bool(materials) and all(m["costed"] for m in materials)
         out[key] = {
             "key": key,
             "name": product["name"],
             "basis": basis,
             "execution_id": str(execution_id) if execution_id else None,
-            "ready": bool(materials) and all(m["costed"] for m in materials),
+            "ready": ready,
             "materials": materials,
+            **(_latest_unit_cost(engine, execution_id, product["name"]) if ready and execution_id else {}),
         }
     return out
+
+
+def _latest_unit_cost(engine: CostEngine, execution_id, name: str) -> dict:
+    """What one unit of the product cost in its latest batch (polish: answer it on the list)."""
+    try:
+        outputs = engine.execution(execution_id).get("outputs", [])
+    except TooLargeError:
+        return {}
+    match = [o for o in outputs if normalise(o.get("name") or "") == normalise(name)] or outputs
+    if not match or match[0].get("unit_cost") is None:
+        return {}
+    return {"unit_cost": match[0]["unit_cost"], "unit": match[0].get("unit")}
 
 
 def product_detail(db: Session, org_id: UUID, key: str) -> dict:
@@ -245,6 +259,8 @@ def list_products(db: Session, org_id: UUID) -> list[dict]:
             "ready": detail["ready"],
             "materials_total": len(detail["materials"]),
             "materials_costed": sum(1 for m in detail["materials"] if m["costed"]),
+            "unit_cost": detail.get("unit_cost"),
+            "unit": detail.get("unit"),
         }
         for key, detail in _details(db, org_id).items()
     ]

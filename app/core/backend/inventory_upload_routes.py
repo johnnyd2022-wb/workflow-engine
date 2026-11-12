@@ -121,6 +121,25 @@ def _cost_allowed(org_id) -> bool:
     return may_enter_cost(db_session, getattr(g, "current_user", None), org_id)
 
 
+_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
+
+
+def _clean_money(raw: str | None) -> str | None:
+    """A spreadsheet's money as typed: "$1,234.50", "NZ$ 80" or "1 234.50" become plain numbers,
+    the way the Add Inventory field reads them. Anything else is left for the check to judge."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    for prefix in ("NZ$", "nz$", "NZD", "nzd", "$"):
+        if text.startswith(prefix):
+            text = text[len(prefix) :].strip()
+            break
+    text = text.replace("\u00a0", "").replace(" ", "")
+    if _THOUSANDS.match(text):
+        text = text.replace(",", "")
+    return text or None
+
+
 def _check_total_paid(raw: str) -> tuple[str, str | None]:
     """A row's Total Paid, judged like the Add Inventory field: money, 0 or more, 4 dp."""
     from app.features.costing.service import CostingError, parse_amount
@@ -212,7 +231,7 @@ def _parse_upload(org_id):
         batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
         expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
         site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
-        total_paid = (row.get(col_map.get("total_paid") or "", "") or "").strip() or None
+        total_paid = _clean_money(row.get(col_map.get("total_paid") or "", "") or "")
 
         status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
         if status == "ok" and total_paid is not None and cost_allowed:
@@ -466,7 +485,7 @@ def register_routes(bp):
                     if site_id is None:
                         status, message = "error", f"No active site called {site_name}"
                 paid_raw = r.get("total_paid")
-                paid_raw = str(paid_raw).strip() if paid_raw not in (None, "") else None
+                paid_raw = _clean_money(paid_raw) if paid_raw not in (None, "") else None
                 if status == "ok" and paid_raw is not None and cost_allowed:
                     status, message = _check_total_paid(paid_raw)
                 if status != "ok":

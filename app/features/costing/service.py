@@ -143,9 +143,17 @@ def lot_provenance(db: Session, org_id: UUID, item: InventoryItem) -> dict | Non
             else None
         )
         if transfer is not None and transfer.source_item_id and transfer.source_item_id != item.id:
+            from app.core.db.models.site import Site
+
+            site = (
+                db.query(Site).filter(Site.org_id == org_id, Site.id == transfer.source_site_id).one_or_none()
+                if transfer.source_site_id
+                else None
+            )
             return {
                 "kind": "transfer",
                 "name": item.name,
+                "site": site.name if site is not None else None,
                 "date": None,
                 "href": f"/core/inventory/view?item={transfer.source_item_id}",
             }

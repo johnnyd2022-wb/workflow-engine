@@ -842,3 +842,15 @@ def test_r3_purchase_list_reads_last_time_history_once(flask_app, world, db):  #
     body, reads = count_history_reads()
     assert len(body["cards"]) == 4 and all(c["prefill"]["source"] == "last_time" for c in body["cards"])
     assert reads == 1, f"{reads} history reads for 4 cards"
+
+
+def test_polish_last_time_prefill_reads_in_cents_and_still_adds_up(flask_app, world, db):  # noqa: F811
+    """Polish: suggestions read "33.33", not "33.3333", and the last row takes the exact rest."""
+    client = user_client(db, flask_app, world["org"])
+    first = _purchase(world, db, "90", payee="Even Thirds")
+    _assert_success(_record(client, first, [_row("A", 1, 30), _row("B", 1, 30), _row("C", 1, 30)]))
+    card = _card(client, _purchase(world, db, "100", payee="Even Thirds"))
+    assert card["prefill"]["source"] == "last_time"
+    amounts = [D(r["amount"]) for r in card["prefill"]["rows"]]
+    assert amounts[:2] == [D("33.33"), D("33.33")] and amounts[2] == D("33.34")
+    assert sum(amounts) == D("100")
