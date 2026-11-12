@@ -64,6 +64,7 @@
     if (!root || root.getAttribute('data-bound') === '1') return;
     root.setAttribute('data-bound', '1');
     var canManage = root.getAttribute('data-can-manage') === 'true';
+    var canAuto = root.getAttribute('data-can-auto') === 'true'; // automation records stock: inventory.adjust
     var q = function (sel) { return root.querySelector(sel); };
     var els = {
       error: q('[data-rules-error]'), state: q('[data-rules-state]'), list: q('[data-rules-list]'), empty: q('[data-rules-empty]'),
@@ -105,6 +106,7 @@
         templateSummary(rule.template).forEach(function (t) { list.appendChild(el('li', '', t)); });
         li.appendChild(list);
       }
+      if (rule.auto_record) li.appendChild(el('p', 'ru-rule__auto', 'Records new purchases automatically'));
       if (canManage) {
         var actions = el('div', 'ru-rule__actions');
         var edit = el('button', 'workspace-button', 'Edit');
@@ -112,6 +114,11 @@
         edit.addEventListener('click', function () { open(rule, edit); });
         var toggle = el('button', 'workspace-button', rule.is_active ? 'Switch off' : 'Switch on');
         toggle.type = 'button';
+        if (!rule.is_active && rule.auto_record && !canAuto) {
+          // Switching an automatic rule back on records stock again: that needs inventory.adjust.
+          toggle.disabled = true;
+          toggle.title = 'Someone who can adjust stock can switch this on, or edit it to stop recording automatically first.';
+        }
         toggle.addEventListener('click', function () {
           toggle.disabled = true;
           call('PUT', API + '/' + encodeURIComponent(rule.id), body(rule, { is_active: !rule.is_active }), key())
@@ -139,6 +146,7 @@
       var out = {
         account_code: rule.account_code, payee_pattern: rule.payee_pattern, description_pattern: rule.description_pattern,
         match_type: rule.match_type, treatment: rule.treatment, template: rule.template, is_active: rule.is_active,
+        auto_record: !!rule.auto_record,
       };
       Object.keys(changes || {}).forEach(function (k) { out[k] = changes[k]; });
       return out;
@@ -155,6 +163,19 @@
       ['payee_pattern', 'description_pattern', 'account_code'].forEach(function (n) { field(n).value = rule && rule[n] ? rule[n] : ''; });
       field('match_type').value = rule ? rule.match_type : 'exact';
       field('treatment').value = rule ? rule.treatment : 'stock';
+      field('auto_record').checked = !!(rule && rule.auto_record);
+      // Without inventory.adjust the switch shows only to turn an automatic rule off.
+      var autoLabel = field('auto_record').closest('.ru-auto');
+      var autoOn = !!(rule && rule.auto_record);
+      autoLabel.hidden = !canAuto && !autoOn;
+      field('auto_record').disabled = false;
+      var hint = root.querySelector('[data-rules-auto-hint]');
+      if (hint) {
+        hint.dataset.usual = hint.dataset.usual || hint.textContent;
+        hint.textContent = !canAuto && autoOn
+          ? 'Only someone who can adjust stock can change this rule while it records automatically. Untick to switch that off.'
+          : hint.dataset.usual;
+      }
       els.rows.replaceChildren();
       (rule && rule.template ? rule.template : []).forEach(addRow);
       els.dialogError.textContent = '';
@@ -250,6 +271,7 @@
         payee_pattern: text('payee_pattern'), description_pattern: text('description_pattern'), account_code: text('account_code'),
         match_type: field('match_type').value, treatment: field('treatment').value, template: readTemplate(),
         is_active: editing ? editing.is_active : true,
+        auto_record: field('treatment').value === 'stock' && field('auto_record').checked && (canAuto || !!(editing && editing.auto_record)),
       };
       if (!payload.payee_pattern && !payload.description_pattern && !payload.account_code) {
         els.dialogError.textContent = 'Fill in a payee, a description or an account code.';
