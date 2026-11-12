@@ -180,6 +180,31 @@ def test_ac46_units_with_no_lot_use_the_products_average_and_are_estimated(world
     assert D(row["cost"]) == D("50")
 
 
+def test_unallocated_product_average_and_duty_ignore_same_name_raw_material(world, db):
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    _enable_alcohol(world)
+    raw = InventoryRepository(db).create_inventory_item(
+        org_id=world["org"].id,
+        name=GIN,
+        quantity="1000",
+        unit="kg",
+        inventory_type=InventoryType.RAW_MATERIAL.value,
+    )
+    price(db, world["org"].id, raw.id, D("10000"), D("1000"))
+    product = world["lot"]("finished", unit_cost="4")
+    world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+
+    from app.features.costing.margins import _Costs
+
+    assert _Costs(db, world["org"].id).any_lot(GIN) is product
+    row = _row(world)
+
+    assert D(row["cost"]) == D("40")
+    assert D(row["average_cost_per_unit"]) == D("4")
+    assert D(row["duty"]) == D(excise.measure(db, world["org"].id, [(product, D("10"))], SOLD)[0]["duty"])
+
+
 def test_ac46_no_costed_lot_at_all_is_unknown_not_zero(world, db):
     world["sell"]([("Wildflower Gin 700ml", 5, "200", "0")])
     row = _row(world)
@@ -611,6 +636,39 @@ def test_production_execution_query_count_stays_flat_as_sold_lots_grow(world, db
     scaled = capture_count()
 
     assert abs(scaled - baseline) <= 2, f"query count grew from {baseline} to {scaled}"
+
+
+def test_prime_handles_production_lineage_deeper_than_python_recursion_limit(world, db):
+    import sys
+
+    from app.features.costing.engine import CostEngine
+    from tests.costing_helpers import complete, produced_lots, workflow
+
+    org, client = world["org"], world["client"]
+    seed = world["lot"]("lineage seed", unit_cost="1")
+    previous = seed
+    last = None
+    for _ in range(160):
+        execution, (execution_step,) = workflow(db, org.id, [[{"name": GIN, "unit": "bottles"}]])
+        complete(
+            client,
+            execution,
+            execution_step,
+            [(previous, 1, "bottles")],
+            [{"name": GIN, "quantity": 1, "unit": "bottles"}],
+        )
+        (previous,) = produced_lots(db, org.id, execution_step.id)
+        last = previous
+
+    engine = CostEngine(db, org.id)
+    original_limit = sys.getrecursionlimit()
+    try:
+        sys.setrecursionlimit(180)
+        engine.prime([last.id])
+    finally:
+        sys.setrecursionlimit(original_limit)
+
+    assert last.id in engine._in_flow_cache
 
 
 @pytest.mark.parametrize(
