@@ -202,3 +202,18 @@ def test_without_xero_the_page_explains_how_to_cost_stock(manager, page, app_url
     expect(page.locator("[data-purchases-noxero]")).to_be_visible()
     expect(page.locator("[data-purchases-tabs]")).to_be_hidden()
     expect(page.locator("[data-purchases-noxero] a[href='/core/inventory/add']")).to_be_visible()
+
+
+def test_bulk_skip_from_style_one_and_no_style_switch(manager, page, app_url, db):
+    from app.features.costing.models import PurchaseLine
+
+    first, second = _org_with_purchases(db, manager, ["40", "15"])
+    _open(page, app_url)
+    expect(page.locator("[data-purchases-style-pick], [data-style]")).to_have_count(0)
+    page.locator(".pu-select").nth(0).check()
+    page.locator(".pu-select").nth(1).check()
+    expect(page.locator("[data-purchases-selected]")).to_have_text("2 selected")
+    page.locator("[data-batch='skip']").click()
+    expect(page.locator(".pu-card")).to_have_count(0)
+    db.expire_all()
+    assert {db.get(PurchaseLine, i).state for i in (first, second)} == {"skipped"}

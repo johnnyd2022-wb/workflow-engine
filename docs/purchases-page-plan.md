@@ -28,6 +28,14 @@ All three share: the tabs (To record / Recorded / Skipped / Not stock with count
 dialog (pre-filled from a rule or last time, rows, "the rest isn't stock / record later"), the
 link and refund pickers, review keep/unlink, undo toasts, and "Remember for <payee>".
 
+## Chosen: Style 1 (Reconcile pairs) — 12 Nov 2026
+
+The founder picked Style 1. The others lost on:
+- **Style 2 (one at a time):** fast for a long queue, but hides everything else, and the keyboard
+  flow didn't fit the phone-at-the-bench use.
+- **Style 3 (review table):** dense, but cramped the proposal and actions at laptop width. Its
+  one strength, bulk skip / not stock, now lives in Style 1 as a checkbox on each card.
+
 ## Not in this change
 
 No API change. Home card and notifications (8.1d notice), purchase-rules settings UI, historical

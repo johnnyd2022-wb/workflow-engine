@@ -4,7 +4,7 @@
 {% block content %}
 {# Inside the content block: a boosted navigation swaps only #page-content. #}
 <link rel="stylesheet" href="{{ url_for('costing.static', filename='purchases.css') }}">
-<div class="pu-shell workspace-overview workspace-page" data-purchases-root data-purchases-style="1"
+<div class="pu-shell workspace-overview workspace-page" data-purchases-root
      data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}"
      data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"
      data-xero-connected="{{ 'true' if xero_connected else 'false' }}" aria-busy="true">
@@ -15,12 +15,6 @@
     </div>
     <div class="workspace-header__actions">
       {% if can('costs.manage') and xero_connected %}<button type="button" class="workspace-button" data-history-open>Load earlier purchases</button>{% endif %}
-      {# CONCEPT ONLY: style switch, deleted once a style is chosen. #}
-      <div class="pu-style-pick" role="group" aria-label="Page style (concept)" data-purchases-style-pick>
-        <button type="button" class="workspace-button" data-style="1">Style 1</button>
-        <button type="button" class="workspace-button" data-style="2">Style 2</button>
-        <button type="button" class="workspace-button" data-style="3">Style 3</button>
-      </div>
     </div>
   </header>
 
@@ -48,12 +42,7 @@
     <button type="button" class="pu-tab" data-tab="not_stock">Not stock <span class="pu-count" data-count="not_stock"></span></button>
   </nav>
 
-  {# Style 2 (CONCEPT ONLY): one purchase at a time. #}
-  <div class="pu-focusbar" data-purchases-focusbar hidden>
-    <span data-purchases-progress></span>
-    <span class="pu-keys">Keys: <kbd>1</kbd> record · <kbd>2</kbd> not stock · <kbd>3</kbd> skip · <kbd>←</kbd><kbd>→</kbd> move</span>
-  </div>
-  {# Style 3 (CONCEPT ONLY): batch bar for selected rows. #}
+  {# Bulk: shown once a card is selected. #}
   <div class="pu-batchbar" role="region" aria-label="Selected purchases" data-purchases-batchbar hidden>
     <span data-purchases-selected></span>
     <button type="button" class="workspace-button" data-batch="skip">Skip</button>
