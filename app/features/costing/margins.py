@@ -197,8 +197,10 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 }
             )
         loose = sale.units - covered
+        unbatched_status = None
         if loose > 0:
             average = costs.average(sale.product_name)
+            unbatched_status = UNKNOWN if average is None else ESTIMATED
             if average is None:
                 row.statuses.append(UNKNOWN)
             else:
@@ -217,6 +219,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 "units": f"{sale.units:f}",
                 "revenue": _m(revenue),
                 "unbatched_units": f"{max(loose, ZERO):f}",
+                "unbatched_status": unbatched_status,  # estimated from the product's average, or unknown
                 "batches": batches,
             }
         )

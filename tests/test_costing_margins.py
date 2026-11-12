@@ -878,3 +878,12 @@ def test_r9_money_rounds_half_up():
     from app.features.costing.margins import _m
 
     assert (_m(D("1.005")), _m(D("2.675")), _m(D("-1.005"))) == ("1.01", "2.68", "-1.01")
+
+
+def test_r9_a_sale_line_says_whether_its_unmatched_units_have_an_average(world):
+    world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])  # no lots at all: no average
+    (line,) = _row(world)["lines"]
+    assert (D(line["unbatched_units"]), line["unbatched_status"]) == (D("2"), "unknown")
+    world["lot"]("B1", unit_cost="4")
+    (line,) = _row(world)["lines"]
+    assert line["unbatched_status"] == "estimated"
