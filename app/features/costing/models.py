@@ -162,10 +162,12 @@ class CostingSettings(TenantScoped, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id", name="uq_costing_settings_org_id"),
         UniqueConstraint("org_id", name="uq_costing_settings_org"),
+        CheckConstraint("split_basis IN ('quantity','litres')", name="ck_costing_settings_split_basis"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     use_last_known_price = Column(Boolean, nullable=False, default=True, server_default=sa.true())
+    split_basis = Column(String(10), nullable=False, default="quantity", server_default="quantity")
     # 8.1b: purchases are fetched from start_date on, incrementally from purchases_cursor.
     start_date = Column(Date, nullable=True)
     purchases_cursor = Column(DateTime(timezone=True), nullable=True)
