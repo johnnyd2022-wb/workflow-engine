@@ -24,14 +24,16 @@
      known months still add up and the page says how many are missing; nothing is shown as $0. */
   function total(rows) {
     var t = { units: 0, revenue: null, cost: null, duty: null, margin: null, statuses: [], dutyTracked: true,
-      months: 0, missingRevenue: 0, missingCost: 0, marginRevenue: 0 };
-    var all = {}, noRevenue = {}, noCost = {};
+      months: 0, missingRevenue: 0, missingCost: 0, missingDuty: 0, missingMargin: 0, marginRevenue: 0 };
+    var all = {}, noRevenue = {}, noCost = {}, noDuty = {}, noMargin = {};
     function plus(a, b) { return b == null ? a : (a || 0) + b; }
     rows.forEach(function (r) {
       t.units += Number(r.units);
       all[r.month] = true;
       if (r.revenue == null) noRevenue[r.month] = true;
       if (r.cost == null) noCost[r.month] = true;
+      if (r.duty_tracked && r.duty == null) noDuty[r.month] = true;
+      if (r.margin == null) noMargin[r.month] = true;
       t.revenue = plus(t.revenue, num(r.revenue));
       t.cost = plus(t.cost, num(r.cost));
       if (r.duty_tracked) t.duty = plus(t.duty, num(r.duty)); else t.dutyTracked = false;
@@ -42,6 +44,8 @@
     t.months = Object.keys(all).length;
     t.missingRevenue = Object.keys(noRevenue).length;
     t.missingCost = Object.keys(noCost).length;
+    t.missingDuty = Object.keys(noDuty).length;
+    t.missingMargin = Object.keys(noMargin).length;
     // The margin % is over the months that have a margin, so a missing month can't skew it.
     t.percent = t.margin != null && t.marginRevenue ? (t.margin / t.marginRevenue) * 100 : null;
     t.status = ['unknown', 'partial', 'estimated'].filter(function (s) { return t.statuses.indexOf(s) >= 0; })[0] || 'actual';
@@ -55,7 +59,7 @@
     var q = function (s) { return root.querySelector(s); };
     var els = {
       form: q('[data-margins-range]'), from: q('#mg-from'), to: q('#mg-to'), error: q('[data-margins-error]'),
-      summary: q('[data-margins-summary]'), note: q('[data-margins-note]'), list: q('[data-margins-list]'),
+      loading: q('[data-margins-loading]'), summary: q('[data-margins-summary]'), note: q('[data-margins-note]'), list: q('[data-margins-list]'),
       empty: q('[data-margins-empty]'),
     };
     var seq = 0;
@@ -76,6 +80,13 @@
       var mine = ++seq;
       root.setAttribute('aria-busy', 'true');
       els.error.hidden = true;
+      els.loading.hidden = false;
+      els.summary.hidden = true;
+      els.summary.replaceChildren();
+      els.note.hidden = true;
+      els.note.replaceChildren();
+      els.list.replaceChildren();
+      els.empty.hidden = true;
       var qs = [];
       if (els.from.value) qs.push('from=' + encodeURIComponent(els.from.value));
       if (els.to.value) qs.push('to=' + encodeURIComponent(els.to.value));
@@ -83,10 +94,11 @@
         .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Margins couldn’t load'); return d; }); })
         .then(function (body) { if (mine === seq) render(body); })
         .catch(function (err) { if (mine !== seq) return; els.error.textContent = err.message; els.error.hidden = false; })
-        .finally(function () { if (mine === seq) root.setAttribute('aria-busy', 'false'); });
+        .finally(function () { if (mine === seq) { els.loading.hidden = true; root.setAttribute('aria-busy', 'false'); } });
     }
 
     function render(body) {
+      money = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: body.currency || 'NZD' });
       if (!els.from.value) els.from.value = body.from;
       if (!els.to.value) els.to.value = body.to;
       var rows = body.rows || [];
@@ -117,8 +129,8 @@
       els.summary.replaceChildren(
         figure('Revenue', fmt(t.revenue), of(t.missingRevenue) || 'ex GST'),
         figure('Production cost', fmt(t.cost), of(t.missingCost)),
-        figure('Duty', t.dutyTracked ? fmt(t.duty) : 'Not tracked'),
-        figure('Margin', fmt(t.margin), t.percent == null ? null : pct(t.percent))
+        figure('Duty', t.dutyTracked ? (t.missingDuty ? '—' : fmt(t.duty)) : 'Not tracked', t.dutyTracked ? of(t.missingDuty) : null),
+        figure('Margin', t.missingMargin ? '—' : fmt(t.margin), t.missingMargin ? of(t.missingMargin) : (t.percent == null ? null : pct(t.percent)))
       );
       var notes = [];
       if (t.status !== 'actual') notes.push(STATUS[t.status] + ' — open a product to see which months.');
@@ -155,8 +167,8 @@
       var nums = el('span', 'mg-product__nums');
       nums.appendChild(el('span', 'mg-num', units(p.t.units) + ' sold'));
       nums.appendChild(el('span', 'mg-num', 'Revenue ' + fmt(p.t.revenue)));
-      nums.appendChild(el('span', 'mg-num mg-num--margin', 'Margin ' + fmt(p.t.margin)));
-      if (p.t.percent != null) {
+      nums.appendChild(el('span', 'mg-num mg-num--margin', 'Margin ' + (p.t.missingMargin ? '— Complete for ' + (p.t.months - p.t.missingMargin) + ' of ' + p.t.months + ' months' : fmt(p.t.margin))));
+      if (p.t.percent != null && !p.t.missingMargin) {
         nums.appendChild(el('span', 'mg-pill' + (p.t.percent < 0 ? ' mg-pill--bad' : ''), pct(p.t.percent)));
       }
       head.appendChild(nums);

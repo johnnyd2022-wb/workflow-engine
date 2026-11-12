@@ -12,6 +12,8 @@
 #page-content .mg-figure__value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #page-content .mg-figure__extra { font-size: 13px; color: var(--ui-text-muted); }
 #page-content .mg-note { margin: 0 0 12px; font-size: 14px; color: var(--ui-text-muted); }
+#page-content .mg-loading { margin: 0 0 12px; color: var(--ui-text-muted); }
+#page-content .mg-loading[hidden] { display: none; }
 #page-content .mg-note a { color: var(--ui-accent); font-weight: 600; text-underline-offset: 2px; }
 #page-content .mg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 #page-content .mg-product { padding: 0; margin: 0; overflow: hidden; }
