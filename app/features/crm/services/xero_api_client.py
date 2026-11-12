@@ -352,6 +352,25 @@ class XeroAPIClient:
 
         return credit_notes
 
+    def fetch_credit_notes_by_ids(self, credit_note_ids: list[str]) -> list:
+        """Fetch selected sales credit notes in bounded ID-filtered requests."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        credit_notes = []
+        for start in range(0, len(credit_note_ids), 40):
+            batch = credit_note_ids[start : start + 40]
+            if not batch:
+                continue
+            # Same filter grammar as the other where clauses here: == comparisons, upper-case AND/OR,
+            # Guid("...") for an ID (Xero's documented form).
+            ids_filter = " OR ".join(f'CreditNoteID==Guid("{credit_note_id}")' for credit_note_id in batch)
+            where = f'Type=="ACCRECCREDIT" AND ({ids_filter})'
+            result = self._call_with_retry(api.get_credit_notes, tenant_id, where=where, page=1)
+            credit_notes.extend(getattr(result, "credit_notes", None) or [])
+        return credit_notes
+
     def create_invoice(
         self,
         *,
