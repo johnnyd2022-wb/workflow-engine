@@ -31,8 +31,17 @@ html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 
   box-shadow: var(--ui-shadow-card); }
 #page-content .pu-toast[hidden] { display: none; }
 
-#page-content .pu-dialog { position: fixed; inset: 0; margin: auto; height: fit-content; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-text); padding: 20px; }
+/* Dialogs open as bottom sheets: anchored to the bottom edge, centred on wide screens, full
+   width on a phone, with the actions kept in reach at the bottom. */
+#page-content .pu-dialog { position: fixed; top: auto; bottom: 0; left: 0; right: 0; margin: 0 auto; height: auto;
+  width: min(760px, 100vw); max-width: 100vw; max-height: min(88vh, calc(100dvh - 24px)); overflow: auto;
+  border: 1px solid var(--ui-border); border-bottom: 0; border-radius: 16px 16px 0 0; background: var(--ui-surface);
+  color: var(--ui-text); padding: 24px 24px 0; box-shadow: 0 -8px 32px rgb(15 23 42 / 18%); }
+#page-content .pu-dialog::before { content: ""; display: block; width: 40px; height: 4px; margin: -12px auto 14px;
+  border-radius: 999px; background: var(--ui-border); }
+#page-content .pu-dialog[open] { animation: pu-sheet-up .22s ease-out; }
+@keyframes pu-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { #page-content .pu-dialog[open] { animation: none; } }
 #page-content .pu-dialog::backdrop { background: rgb(15 23 42 / 45%); }
 #page-content .pu-dialog h2 { margin: 0 0 4px; font-size: 18px; }
 #page-content .pu-rows__list { display: grid; gap: 12px; margin: 12px 0; }
@@ -46,8 +55,16 @@ html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 
 #page-content .pu-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 120px; gap: 10px; align-items: center; padding: 8px 0;
   border-bottom: 1px solid var(--ui-border); }
 #page-content .pu-dialog__error { color: #b42318; }
-#page-content .pu-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-#page-content .pu-pick__qty { display: flex; align-items: center; gap: 6px; }
+#page-content .pu-dialog__actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 8px;
+  margin: 16px -24px 0; padding: 12px 24px calc(12px + env(safe-area-inset-bottom)); background: var(--ui-surface);
+  border-top: 1px solid var(--ui-border); }
+@media (max-width: 720px) {
+  #page-content .pu-dialog { width: 100vw; padding: 20px 16px 0; }
+  #page-content .pu-dialog__actions { margin: 16px -16px 0; padding-left: 16px; padding-right: 16px; }
+  #page-content .pu-dialog__actions .workspace-button { flex: 1; }
+}
+#page-content .pu-pick__qty { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#page-content .pu-pick__qty span { white-space: nowrap; }
 #page-content .pu-pick--edit { grid-template-columns: minmax(0, 1fr) 100px 120px; }
 #page-content .pu-pick__qty input { width: 90px !important; }
 #page-content .pu-noxero { padding: 22px 24px; max-width: 760px; }
@@ -68,8 +85,17 @@ html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 
   #page-content .pu-card__right { border-left: 0; padding-left: 0; border-top: 1px solid var(--ui-border); padding-top: 12px; }
   #page-content .pu-row-edit { grid-template-columns: 1fr 1fr; }
   #page-content .pu-row-edit .pu-field:first-child { grid-column: 1 / -1; }
-  #page-content .pu-pick { grid-template-columns: auto minmax(0, 1fr); }
-  #page-content .pu-pick input[type="text"] { grid-column: 2; }
+  /* Phone: tick and name on one line, then how much and the amount side by side. */
+  #page-content .pu-pick { grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr); align-items: start; row-gap: 8px; }
+  #page-content .pu-pick > input[type="checkbox"] { margin-top: 3px; }
+  #page-content .pu-pick > span { grid-column: 2 / -1; }
+  #page-content .pu-pick__qty { grid-column: 2; }
+  #page-content .pu-pick__qty input { width: 100% !important; min-width: 0 !important; }
+  #page-content .pu-pick > input[type="text"] { grid-column: 3; }
+  #page-content .pu-pick:not(:has(.pu-pick__qty)) > input[type="text"] { grid-column: 2 / -1; }
+  #page-content .pu-pick--edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #page-content .pu-pick--edit > span:first-child { grid-column: 1 / -1; }
+  #page-content .pu-pick--edit > input[type="text"] { grid-column: auto; }
   }
 
 /* Bulk selection */
