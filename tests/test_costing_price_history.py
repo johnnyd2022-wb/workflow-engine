@@ -451,6 +451,7 @@ def test_r4_an_unconvertible_purchase_still_counts_and_lists(world, db):
     assert (month["unconverted"], month["purchases"]) == (1, 1)
     row = next(m for m in client.get(f"{API}/materials").get_json()["materials"] if m["name"] == "Odd Unit")
     assert row["latest_unit_price"] is None
+    assert row["latest_reason"] == "other_units"
 
 
 def test_r4_picker_ignores_a_whole_lot_price_the_engine_displaces(world, db):
@@ -506,3 +507,4 @@ def test_r6_over_the_real_engine_budget_both_endpoints_answer(world, db, monkeyp
     assert picker.status_code == 200
     row = next(m for m in picker.get_json()["materials"] if m["name"] == "Huge History")
     assert row["latest_unit_price"] is None
+    assert row["latest_reason"] == "too_large"

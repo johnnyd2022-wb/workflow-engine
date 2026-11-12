@@ -31,6 +31,8 @@
       empty: root.querySelector('[data-costs-empty]'),
       prices: root.querySelector('[data-prices]'),
       pricesList: root.querySelector('[data-prices-list]'),
+      pricesEmpty: root.querySelector('[data-prices-empty]'),
+      pricesError: root.querySelector('[data-prices-error]'),
     };
     var canManage = root.getAttribute('data-can-manage') === 'true';
 
@@ -171,6 +173,8 @@
       var n = Number(raw);
       if (!isFinite(n)) return '—';
       var digits = Math.abs(n) >= 1 || n === 0 ? 2 : 4;
+      if (n > 0 && n < 0.00005) return '<$0.0001';
+      if (n < 0 && Math.abs(n) < 0.0001) digits = 6;
       return '$' + n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: digits });
     }
     function per(unit) { return unit ? ' / ' + unit : ''; }
@@ -178,24 +182,35 @@
     function loadPrices() {
       get(API + '/materials').then(function (d) {
         var materials = d.materials || [];
-        if (!materials.length) return;
-        els.pricesList.replaceChildren();
-        materials.forEach(function (m) { els.pricesList.appendChild(priceRow(m)); });
         els.prices.hidden = false;
-      }).catch(function () { /* the readiness list is the page; prices are extra */ });
+        els.pricesError.hidden = true;
+        els.pricesError.textContent = '';
+        els.pricesList.replaceChildren();
+        els.pricesEmpty.hidden = materials.length > 0;
+        materials.forEach(function (m, index) { els.pricesList.appendChild(priceRow(m, index)); });
+      }).catch(function (err) {
+        els.prices.hidden = false;
+        els.pricesList.replaceChildren();
+        els.pricesEmpty.hidden = true;
+        els.pricesError.textContent = 'Prices couldn’t load: ' + err.message;
+        els.pricesError.hidden = false;
+      });
     }
 
-    function priceRow(m) {
+    function priceRow(m, index) {
       var li = el('li', 'co-row');
       var button = el('button', 'co-row__head');
       button.type = 'button';
       button.setAttribute('aria-expanded', 'false');
-      var detailId = 'co-price-' + m.name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      var detailId = 'co-price-' + index;
       button.setAttribute('aria-controls', detailId);
       button.appendChild(el('span', 'co-row__name', m.name));
       var figure = el('span', 'co-price');
       if (m.latest_unit_price == null) {
-        figure.appendChild(el('span', 'co-price__when', 'Priced in other units'));
+        var reason = m.latest_reason === 'too_large'
+          ? 'History too large to calculate'
+          : m.latest_reason === 'other_units' ? 'Price is in other units' : 'Latest price unavailable';
+        figure.appendChild(el('span', 'co-price__when', reason));
       } else {
         figure.appendChild(el('span', 'co-price__value', price(m.latest_unit_price) + per(m.unit)));
         figure.appendChild(el('span', 'co-price__when', 'last paid ' + shortDate(m.latest_date)));
@@ -332,7 +347,7 @@
       var table = el('table', 'co-months');
       var head = el('tr');
       var ranged = priced.some(function (row) { return row.min_unit_price !== row.max_unit_price; });
-      var heads = ['Month', 'Average' + per(unit), 'Bought'];
+      var heads = ['Month', 'Average' + per(unit), 'Quantity priced'];
       if (ranged) heads.push('Range');
       heads.forEach(function (t, i) {
         var th = el('th', i === 3 ? 'co-months__range' : '', t);

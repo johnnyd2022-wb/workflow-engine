@@ -136,6 +136,8 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 /* Costs › What you pay for materials (live-cogs 8.1f-3a) */
 #page-content .co-prices { margin-top: 32px; }
 #page-content .co-prices[hidden] { display: none; }
+#page-content .co-prices [hidden] { display: none; }
+#page-content .co-prices [data-prices-empty], #page-content .co-prices [data-prices-error] { margin: 8px 0 12px; }
 #page-content .co-section-title { margin: 0 0 4px; font-size: 17px; }
 #page-content .co-section-lead { margin: 0 0 12px; font-size: 14px; color: var(--ui-text-muted); }
 #page-content .co-price { display: grid; justify-items: end; gap: 2px; text-align: right; }
