@@ -90,7 +90,9 @@ class ExecutionRepository:
                     span.set_attribute("execution_id", str(execution.id))
 
                 # Create execution steps for each step in the process
-                steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.position).all()
+                # Position, then id: equal positions are allowed, and readiness (live-cogs) must
+                # pick the same terminal step this marks.
+                steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.position, Step.id).all()
                 execution_steps = []
                 total_steps = len(steps)
                 if span is not None:

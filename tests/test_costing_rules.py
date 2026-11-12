@@ -810,3 +810,35 @@ def test_r2_non_string_dates_are_400(flask_app, world, db, bad):  # noqa: F811
     client = user_client(db, flask_app, world["org"])
     response = client.post(f"{API}/purchases/historical-run", json={"from": bad, "to": "2026-10-31"})
     assert response.status_code == 400
+
+
+def test_r3_purchase_list_reads_last_time_history_once(flask_app, world, db):  # noqa: F811
+    """Round 3: last-time history is built once per list, not once per card."""
+    from sqlalchemy import event
+
+    client = user_client(db, flask_app, world["org"])
+    for n in range(4):
+        old = _purchase(world, db, "10", payee=f"Hist {n}", on=PURCHASE_DATE - timedelta(days=9))
+        _assert_success(_record(client, old, [_row(f"Old {n}", 1, 10)]))
+    for n in range(4):
+        _purchase(world, db, "20", payee=f"Hist {n}")
+
+    def count_history_reads():
+        seen = []
+        bind = db.get_bind()
+        engine = getattr(bind, "engine", bind)
+
+        def hook(_conn, _cursor, statement, *_a):
+            if "purchase_allocations" in statement and "EXISTS" in statement.upper():
+                seen.append(statement)
+
+        event.listen(engine, "before_cursor_execute", hook)
+        try:
+            body = client.get(f"{API}/purchases?tab=to_record").get_json()
+        finally:
+            event.remove(engine, "before_cursor_execute", hook)
+        return body, len(seen)
+
+    body, reads = count_history_reads()
+    assert len(body["cards"]) == 4 and all(c["prefill"]["source"] == "last_time" for c in body["cards"])
+    assert reads == 1, f"{reads} history reads for 4 cards"

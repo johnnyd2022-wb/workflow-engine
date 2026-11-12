@@ -509,6 +509,7 @@ def edit_allocations(db: Session, org_id: UUID, line_id, changes: list) -> Purch
             alloc.amount = parse_amount(change.get("amount"), "Amount", allow_zero=True)
             if change.get("quantity") not in (None, ""):
                 quantity = parse_amount(change.get("quantity"), "Quantity", allow_zero=False)
+                # nosemgrep: sqlalchemy-query-in-for-loop — one line's own allocations (a handful), each checked against its flow.
                 flow = db.query(CostFlow).filter(CostFlow.org_id == org_id, CostFlow.id == alloc.cost_flow_id).one()
                 others = _flow_priced_quantity(db, org_id, flow.id) - _d(alloc.quantity)
                 if quantity + others > _d(flow.quantity):
@@ -633,6 +634,7 @@ def list_purchases(
     rules = active_rules(db, org_id)
     counts = {t: 0 for t in TABS}
     cards = []
+    history = None  # built once, on the first card that needs it
     for line, doc in rows:
         if date_from and (doc.document_date is None or doc.document_date < date_from):
             continue
@@ -643,7 +645,9 @@ def list_purchases(
             continue
         counts[which] += 1
         if which == tab:
-            entry = card(db, line, doc, rules=rules)
+            if history is None and tab == "to_record":
+                history = last_time_index(db, org_id)
+            entry = card(db, line, doc, rules=rules, history=history)
             if historical and which == "not_stock":
                 entry["undo"] = True
             cards.append(entry)
@@ -696,10 +700,10 @@ def _lot_names(db: Session, line: PurchaseLine) -> dict:
     return cached
 
 
-def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None) -> dict:
+def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, history=None) -> dict:
     remaining = open_amount(db, line)
     return {
-        "prefill": prefill(db, line, doc, remaining, rules),
+        "prefill": prefill(db, line, doc, remaining, rules, history),
         "line_id": str(line.id),
         "document": {
             "payee": doc.payee_name,
@@ -760,10 +764,10 @@ def lock_lines(db: Session, org_id: UUID, line_ids) -> list[PurchaseLine]:
         },
         key=str,
     )
-    for doc_id in doc_ids:
-        db.query(PurchaseDocument).filter(
-            PurchaseDocument.org_id == org_id, PurchaseDocument.id == doc_id
-        ).with_for_update().one()
+    # One statement, rows locked in id order: the same document -> line order every writer uses.
+    db.query(PurchaseDocument).filter(PurchaseDocument.org_id == org_id, PurchaseDocument.id.in_(doc_ids)).order_by(
+        PurchaseDocument.id
+    ).with_for_update().all()
     return (
         db.query(PurchaseLine)
         .filter(PurchaseLine.org_id == org_id, PurchaseLine.id.in_(ids))
@@ -887,7 +891,59 @@ def _ask_flags(row: dict) -> list[str]:
     return ask
 
 
-def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: Decimal | None, rules=None):
+def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
+    """Normalised payee -> the two newest live recorded spend lines that still price something
+    (two, so a card can skip itself). One query per request: a list builds it once for every
+    card. Payees are compared with the rules' own normalisation (casefold, not SQL lower)."""
+    from app.features.costing.rules import normalise
+
+    has_active = (
+        db.query(PurchaseAllocation.id)
+        .filter(
+            PurchaseAllocation.org_id == PurchaseLine.org_id,
+            PurchaseAllocation.purchase_line_id == PurchaseLine.id,
+            PurchaseAllocation.status == "active",
+            PurchaseAllocation.amount > 0,
+        )
+        .exists()
+    )
+    rows = (
+        db.query(PurchaseLine.id, PurchaseDocument.payee_name)
+        .join(
+            PurchaseDocument,
+            (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
+        )
+        .filter(
+            PurchaseLine.org_id == org_id,
+            PurchaseLine.superseded_at.is_(None),
+            PurchaseLine.state.in_(("recorded", "partly_recorded")),
+            PurchaseLine.amount_ex_tax.isnot(None),
+            PurchaseLine.amount_ex_tax != 0,
+            PurchaseDocument.kind == "spend",
+            PurchaseDocument.status == "active",
+            has_active,
+        )
+        .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
+        .all()
+    )
+    index: dict[str, list] = {}
+    for line_id, payee in rows:
+        key = normalise(payee)
+        if key:
+            bucket = index.setdefault(key, [])
+            if len(bucket) < 2:
+                bucket.append(line_id)
+    return index
+
+
+def prefill(
+    db: Session,
+    line: PurchaseLine,
+    doc: PurchaseDocument,
+    remaining: Decimal | None,
+    rules=None,
+    history: dict | None = None,
+):
     """Spec "Pre-fill": the winning stock rule's template, else last time for this payee, else
     one empty row for the whole open amount."""
     if doc.kind != "spend" or remaining is None:
@@ -932,50 +988,20 @@ def prefill(db: Session, line: PurchaseLine, doc: PurchaseDocument, remaining: D
 
     payee = normalise(doc.payee_name)
     if payee:
-        # Newest first, only live recorded spend lines that still price something; the payee is
-        # compared with the same Python normalisation rules use (casefold, not SQL lower), and
-        # only two narrow columns are read, with no limit that could hide an older match.
-        has_active = (
-            db.query(PurchaseAllocation.id)
-            .filter(
-                PurchaseAllocation.org_id == PurchaseLine.org_id,
-                PurchaseAllocation.purchase_line_id == PurchaseLine.id,
-                PurchaseAllocation.status == "active",
-                PurchaseAllocation.amount > 0,
-            )
-            .exists()
-        )
-        candidates = (
-            db.query(PurchaseLine.id, PurchaseDocument.payee_name)
-            .join(
-                PurchaseDocument,
-                (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
-            )
-            .filter(
-                PurchaseLine.org_id == line.org_id,
-                PurchaseLine.id != line.id,
-                PurchaseLine.superseded_at.is_(None),
-                PurchaseLine.state.in_(("recorded", "partly_recorded")),
-                PurchaseLine.amount_ex_tax.isnot(None),
-                PurchaseLine.amount_ex_tax != 0,
-                PurchaseDocument.kind == "spend",
-                PurchaseDocument.status == "active",
-                has_active,
-            )
-            .order_by(PurchaseDocument.document_date.desc(), PurchaseLine.updated_at.desc(), PurchaseLine.id)
-            .all()
-        )
-        match = next((lid for lid, name in candidates if normalise(name) == payee), None)
+        history = last_time_index(db, line.org_id) if history is None else history
+        match = next((lid for lid in history.get(payee, ()) if lid != line.id), None)
         if match is not None:
             prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
+            items = {
+                i.id: i
+                for i in db.query(InventoryItem).filter(
+                    InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
+                )
+            }
             out = []
             for a in allocs:
-                item = (
-                    db.query(InventoryItem)
-                    .filter(InventoryItem.org_id == line.org_id, InventoryItem.id == a.inventory_item_id)
-                    .one()
-                )
+                item = items[a.inventory_item_id]
                 out.append(
                     {
                         "name": item.name,

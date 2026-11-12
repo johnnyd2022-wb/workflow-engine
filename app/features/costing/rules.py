@@ -81,7 +81,7 @@ def validate_template(template) -> list[dict] | None:
             row["share"] = "rest"
         else:
             value = Decimal(_positive(share, "share"))
-            if value > 100:
+            if not value.is_finite() or value > 100:
                 raise CostingError("A share is at most 100")
             total += value
             row["share"] = str(value)
@@ -90,7 +90,7 @@ def validate_template(template) -> list[dict] | None:
         rows.append(row)
     if rests > 1:
         raise CostingError("Only one row can take the rest")
-    if total > 100:
+    if not total.is_finite() or total > 100:
         raise CostingError("Shares add up to more than 100%")
     return rows
 
@@ -335,14 +335,15 @@ def remember(db: Session, org_id: UUID, line_id, user_id=None) -> PurchaseRule:
     from decimal import ROUND_DOWN
 
     picked = []
-    for alloc in actions.line_allocations(db, line):
-        if Decimal(str(alloc.amount)) <= 0:
-            continue  # refunds and $0 rows can't be a share of a later purchase
-        item = (
-            db.query(InventoryItem)
-            .filter(InventoryItem.org_id == org_id, InventoryItem.id == alloc.inventory_item_id)
-            .one()
+    positive = [a for a in actions.line_allocations(db, line) if Decimal(str(a.amount)) > 0]
+    items = {
+        i.id: i
+        for i in db.query(InventoryItem).filter(
+            InventoryItem.org_id == org_id, InventoryItem.id.in_([a.inventory_item_id for a in positive])
         )
+    }
+    for alloc in positive:  # refunds and $0 rows can't be a share of a later purchase
+        item = items[alloc.inventory_item_id]
         picked.append((alloc, item))
     # Shares rounded down to 4 dp, and the rounding residual given to the largest row, so they
     # add up to exactly the recorded share of the purchase (never past 100%).
