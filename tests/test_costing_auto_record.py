@@ -183,3 +183,10 @@ def test_historical_upsert_auto_records_and_reports_count(flask_app, world, db, 
     allocations = _allocations(db, world["org"].id, purchase_line.id)
     assert len(allocations) == 1
     assert purchase_line.state == "recorded"
+
+
+def test_purchases_page_says_when_a_rule_recorded_the_line():
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "app/features/costing/frontend/static/purchases.js").read_text()
+    assert "card.auto_recorded ? 'Recorded by a rule'" in js
