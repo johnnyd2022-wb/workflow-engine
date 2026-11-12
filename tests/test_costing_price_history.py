@@ -506,3 +506,39 @@ def test_r6_over_the_real_engine_budget_both_endpoints_answer(world, db, monkeyp
     assert picker.status_code == 200
     row = next(m for m in picker.get_json()["materials"] if m["name"] == "Huge History")
     assert row["latest_unit_price"] is None
+
+
+def test_r8_history_queries_stay_flat_as_produced_lots_grow(world, db):
+    """Review: each produced lot comes from its own batch; with the engine's bulk priming (!698) the
+    history's query count doesn't grow with the number of batches."""
+    from sqlalchemy import event
+
+    from tests.costing_helpers import complete, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+
+    def batches(n):
+        for _ in range(n):
+            execution, (step,) = workflow(db, org.id, [[{"name": "Batch Gin", "unit": "bottles"}]])
+            complete(
+                client, execution, step, [(spirit, 1, "L")], [{"name": "Batch Gin", "quantity": 1, "unit": "bottles"}]
+            )
+
+    def count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+        listener = lambda *_a: statements.append(1)  # noqa: E731
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            assert _history(client, "Batch Gin").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        return len(statements)
+
+    batches(2)
+    few = count()
+    batches(6)
+    many = count()
+    assert many <= few + 3, (few, many)
