@@ -654,6 +654,33 @@ def list_purchases(
     return {"tab": tab, "counts": counts, "cards": cards}
 
 
+def to_record_summary(db: Session, org_id: UUID) -> dict:
+    """How many purchases wait in To record, and the newest one's date (Home card, notice).
+    Same placement as the page (``tab_of``), without building any card."""
+    settings = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
+    start_date = settings.start_date if settings else None
+    rows = (
+        db.query(PurchaseLine, PurchaseDocument)
+        .join(
+            PurchaseDocument,
+            (PurchaseDocument.org_id == PurchaseLine.org_id) & (PurchaseDocument.id == PurchaseLine.document_id),
+        )
+        .filter(
+            PurchaseLine.org_id == org_id,
+            PurchaseLine.superseded_at.is_(None),
+            PurchaseLine.state.in_(("open", "partly_recorded")),
+        )
+        .all()
+    )
+    count, newest = 0, None
+    for line, doc in rows:
+        if tab_of(line, doc, start_date) == "to_record":
+            count += 1
+            if doc.document_date and (newest is None or doc.document_date > newest):
+                newest = doc.document_date
+    return {"count": count, "newest": newest.isoformat() if newest else None}
+
+
 def _lot_names(db: Session, line: PurchaseLine) -> dict:
     # Names of the lots a line's allocations price, one query per card (cached on the line).
     cached = getattr(line, "_lot_names_cache", None)

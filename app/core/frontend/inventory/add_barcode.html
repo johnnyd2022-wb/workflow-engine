@@ -150,6 +150,8 @@
       </div>
     {% endcall %}
   </div>
+  <link rel="stylesheet" href="{{ url_for('costing.static', filename='cost-ui.css') }}">
+  <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-barcode-spa.js') }}"></script>
 {% endblock %}
 
