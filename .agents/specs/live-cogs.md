@@ -1678,6 +1678,50 @@ a clear "Back to new purchases" exit. 409 needs-reconnect shown as a reconnect p
 - AC97: without `costs.view` (or without the feature) the inventory detail, batch detail,
   Add Inventory and Home pages render no cost element and make no costing write.
 
+## 8.1f-3b build contract — duty if sold today
+
+**What it answers:** What duty would apply if each produced lot were sold today, and what its landed unit cost would be when production cost is known. Duty rates remain in the NZ Alcohol excise module.
+
+**Response shape:**
+
+```json
+{
+  "duty_today": {
+    "tracked": true,
+    "on": "YYYY-MM-DD",
+    "per_unit": "money|null",
+    "total": "money|null",
+    "landed_per_unit": "money|null"
+  },
+  "outputs": [
+    {
+      "...": "existing output fields",
+      "duty_today": {
+        "tracked": true,
+        "on": "YYYY-MM-DD",
+        "per_unit": "money|null",
+        "total": "money|null",
+        "landed_per_unit": "money|null",
+        "missing": "optional reason"
+      }
+    }
+  ]
+}
+```
+
+For multiple outputs, the top-level `total` summarizes duty across them; per-unit and landed values are lot-specific and remain null there. Each output carries its own values.
+
+**Acceptance criteria and tests:**
+
+- AC115 — Gin duty and landed cost match `excise.measure`: `test_ac115_gin_duty_per_unit_and_landed_cost_match_excise_measure`
+- AC116 — NZ Alcohol disabled returns untracked duty: `test_ac116_nz_alcohol_off_is_not_tracked`
+- AC117 — Missing profile returns tracked duty with a reason: `test_ac117_missing_alcohol_profile_is_tracked_with_reason`
+- AC118 — Duty uses produced quantity after stock is consumed: `test_ac118_duty_uses_produced_quantity_not_remaining_stock`
+- AC119 — Query count stays flat for two versus five outputs: `test_ac119_measure_query_count_is_constant_for_two_and_five_outputs`
+- AC126 — Excise measurement runs once for all output lots: `test_ac126_excise_measure_runs_once_for_all_output_lots`
+- AC127 — Execution duty remains org-isolated: `test_ac127_execution_duty_remains_org_isolated`
+- AC128 — Batch card reads `duty_today`: `test_ac128_batch_card_reads_duty_today`
+
 ## 8.1f-3d build contract — litres split
 
 Opt-in per org: `costing_settings.split_basis` is `quantity` (default; every existing result unchanged) or `litres`. Under litres, a step's outputs without a configured `cost_share` are weighted by litres — from an L/ml unit, or a count unit × the matching alcohol profile's pack volume — and Library stock takes its litres share (A9 revisited). If any free output's litres can't be worked out, that step falls back to the quantity rule with `split_assumed`. Percent and byproduct shares behave as before. `GET/PUT /settings` carry `split_basis` (`costs.manage` to change).
