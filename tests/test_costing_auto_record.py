@@ -278,3 +278,25 @@ def test_purchases_page_says_when_a_rule_recorded_the_line():
 
     js = (Path(__file__).resolve().parents[1] / "app/features/costing/frontend/static/purchases.js").read_text()
     assert "card.auto_recorded ? 'Recorded by a rule'" in js
+
+
+def test_rounding_cent_moves_the_from_price_quantity_with_it(flask_app, world, db):  # noqa: F811
+    """Review r2: the row that takes the rounding cent derives its quantity from the final amount."""
+    client = user_client(db, flask_app, world["org"])
+    template = [
+        {
+            "name": name,
+            "inventory_type": "raw_material",
+            "unit": "kg",
+            "quantity_mode": "from_price",
+            "unit_price": "0.01",
+            "share": share,
+        }
+        for name, share in (("A", "33.3334"), ("B", "33.3333"), ("C", "33.3333"))
+    ]
+    assert _rule(client, payee_pattern="Auto Supplier", auto_record=True, template=template).status_code == 201
+    _doc, purchase_line = _sync_line(world, db, amount="0.01")
+    assert purchase_line.state == "recorded"
+    allocations = _allocations(db, world["org"].id, purchase_line.id)
+    pairs = sorted((D(a.amount), D(a.quantity)) for a in allocations)
+    assert pairs == [(D("0.0033"), D("0.3300")), (D("0.0033"), D("0.3300")), (D("0.0034"), D("0.3400"))]

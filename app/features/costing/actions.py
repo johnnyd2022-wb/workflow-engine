@@ -942,6 +942,8 @@ def prefill(
             rows.append([t, amount])
         if rest_index is not None:
             rows[rest_index][1] = max(ZERO, remaining - used)
+        elif rows and sum((_d(t["share"]) for t, _ in rows), ZERO) == 100:
+            rows[-1][1] += remaining - used  # shares cover the line: the last row takes the rounding cent
         out = []
         for t, amount in rows:
             amount = amount if amount is not None else ZERO

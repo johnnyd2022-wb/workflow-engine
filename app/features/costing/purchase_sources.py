@@ -633,17 +633,6 @@ def _upsert_documents(
                     matched_rule = next((r for r in rules if str(r.id) == suggestion["rule_id"]), None)
                     if matched_rule is None:
                         raise actions.CostingError("The matching purchase rule is no longer available")
-                    non_rest_rows = [i for i, row in enumerate(matched_rule.template) if row.get("share") != "rest"]
-                    if non_rest_rows:
-                        last_non_rest = non_rest_rows[-1]
-                        assigned = sum(
-                            (actions._q(Decimal(str(row["amount"]))) for row in suggestion["rows"]),
-                            Decimal("0"),
-                        )
-                        residual = actions._q(actions.open_amount(db, new_line)) - assigned
-                        suggestion["rows"][last_non_rest]["amount"] = str(
-                            actions._q(Decimal(str(suggestion["rows"][last_non_rest]["amount"])) + residual)
-                        )
                     recorded_line = actions.record(
                         db,
                         org_id,
