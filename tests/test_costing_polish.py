@@ -99,3 +99,44 @@ def test_a_co_product_never_lends_its_cost_and_a_renamed_lot_keeps_its_own(world
     vodka = listed[f"output:{vodka_def['id']}"]
     assert D(vodka["unit_cost"]) == by_name["Vodka"]
     assert by_name["Gin"] != by_name["Vodka"], "the two outputs must cost differently for this test to mean anything"
+
+
+def test_the_costs_list_queries_stay_flat_as_ready_products_with_batches_grow(world, db):  # noqa: F811
+    """Review: each ready product's latest batch is its own; the list's query count must not grow
+    per product (bulk priming of produced lots and their batches)."""
+    from sqlalchemy import event
+
+    from tests.costing_helpers import complete, workflow
+
+    org, client = world
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+
+    def products(start, n):
+        for i in range(start, start + n):
+            execution, (step,) = workflow(db, org.id, [[{"name": f"Product {i}", "unit": "bottles"}]])
+            complete(
+                client,
+                execution,
+                step,
+                [(spirit, 1, "L")],
+                [{"name": f"Product {i}", "quantity": 1, "unit": "bottles"}],
+            )
+
+    def count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+        listener = lambda *_a: statements.append(1)  # noqa: E731
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            listed = _products(client)
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        assert all(p["unit_cost"] is not None for p in listed if p["name"].startswith("Product "))
+        return len(statements)
+
+    products(0, 2)
+    few = count()
+    products(2, 6)
+    many = count()
+    assert many <= few + 3, (few, many)

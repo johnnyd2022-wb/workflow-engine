@@ -8,7 +8,7 @@ Read-only.
 
 from __future__ import annotations
 
-from collections import deque
+from collections import defaultdict, deque
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.process import Process
 from app.core.db.models.step import Step
-from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, TooLargeError, normalise
+from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, TooLargeError, normalise, unit_str
 from app.features.costing.models import CostFlow
 from app.features.costing.service import CostingNotFoundError
 
@@ -150,18 +150,20 @@ def _material_lots(graph: _Graph, execution_id) -> list:
     return list(lots)
 
 
-def _lot_rows(lot_ids, engine: CostEngine) -> list[dict]:
+def _lot_rows(lot_ids, engine: CostEngine, cache: dict | None = None) -> list[dict]:
+    """``cache``: one lot's cost, worked out once for every product that used it."""
+    cache = {} if cache is None else cache
     rows = []
     for item_id in lot_ids:
-        cost = engine.lot(item_id)
-        rows.append(
-            {
+        if item_id not in cache:
+            cost = engine.lot(item_id)
+            cache[item_id] = {
                 "name": cost["name"],
                 "inventory_item_id": str(item_id),
                 "costed": cost["status"] in (ACTUAL, ESTIMATED),
                 "status": cost["status"],
             }
-        )
+        rows.append(dict(cache[item_id]))
     return sorted(rows, key=lambda r: (r["name"] or "", r["inventory_item_id"]))
 
 
@@ -210,22 +212,32 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
     names |= {norm for declared_names in declared.values() for norm in declared_names}
     engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
-    # The latest batches' own graphs, loaded together, for the list's cost per unit.
+    # The latest batches' produced lots, loaded together (with their graphs) for the list's cost
+    # per unit: each product reads its own output lot's cost, so no batch is loaded on its own.
     batch_ids = [eid for eid in latest.values() if eid is not None]
+    produced_by_batch: dict = defaultdict(list)
     if batch_ids:
         from app.features.costing.models import CostFlow
 
         produced = (
-            db.query(CostFlow.inventory_item_id)
-            .filter(CostFlow.org_id == org_id, CostFlow.execution_id.in_(batch_ids), CostFlow.direction == "in")
+            db.query(CostFlow.execution_id, CostFlow.inventory_item_id)
+            .filter(
+                CostFlow.org_id == org_id,
+                CostFlow.execution_id.in_(batch_ids),
+                CostFlow.direction == "in",
+                CostFlow.kind.in_(("produced", "reconciled_in")),
+            )
             .all()
         )
-        engine.prime({row[0] for row in produced})
+        for execution_id, item_id in produced:
+            produced_by_batch[execution_id].append(item_id)
+        engine.prime({item_id for _eid, item_id in produced})
+    lot_rows_cache: dict = {}
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)
         if execution_id is not None:
-            basis, materials = "latest_batch", _lot_rows(lots_by_key[key], engine)
+            basis, materials = "latest_batch", _lot_rows(lots_by_key[key], engine, lot_rows_cache)
         elif key in declared:
             basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
         else:
@@ -238,26 +250,33 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
             "execution_id": str(execution_id) if execution_id else None,
             "ready": ready,
             "materials": materials,
-            **(_latest_unit_cost(engine, execution_id, key) if ready and execution_id else {}),
+            **(
+                _latest_unit_cost(engine, produced_by_batch.get(execution_id, []), key)
+                if ready and execution_id
+                else {}
+            ),
         }
     return out
 
 
-def _latest_unit_cost(engine: CostEngine, execution_id, key: str) -> dict:
+def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
     """What one unit of the product cost in its latest batch (polish: answer it on the list).
     Matched by the output the product is (its stable id), never by name: a renamed output or a
     co-product must not lend its cost to this one."""
     if not key.startswith("output:"):
         return {}
     output_id = key.split(":", 1)[1]
-    try:
-        outputs = engine.execution(execution_id).get("outputs", [])
-    except TooLargeError:
+    for item_id in produced_lot_ids:
+        lot = engine._get_lot(item_id)
+        if lot is None or str(lot.source_output_id) != output_id:
+            continue
+        try:
+            cost = engine._solve(("lot", item_id))
+        except TooLargeError:
+            return {}
+        if cost.status in (ACTUAL, ESTIMATED) and cost.unit_known is not None:
+            return {"unit_cost": unit_str(cost.unit_known), "unit": lot.unit}
         return {}
-    for o in outputs:
-        lot = engine._get_lot(UUID(o["inventory_item_id"])) if o.get("inventory_item_id") else None
-        if lot is not None and str(lot.source_output_id) == output_id and o.get("unit_cost") is not None:
-            return {"unit_cost": o["unit_cost"], "unit": o.get("unit")}
     return {}
 
 
