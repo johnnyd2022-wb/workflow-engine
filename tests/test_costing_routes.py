@@ -332,12 +332,12 @@ def test_delete_entry(world):
 
 def test_ac62_settings(world):
     admin = world["admin"]
-    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": True}
+    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": True, "split_basis": "quantity"}
     assert admin.put(f"{API}/settings", json={"use_last_known_price": False}).status_code == 200
-    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": False}
+    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": False, "split_basis": "quantity"}
     for bad in ({"use_last_known_price": "no"}, {"use_last_known_price": 0}, {}, {"other": True}):
         assert admin.put(f"{API}/settings", json=bad).status_code == 400, bad
-    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": False}
+    assert admin.get(f"{API}/settings").get_json() == {"use_last_known_price": False, "split_basis": "quantity"}
 
 
 def test_settings_are_per_org(world, db, flask_app):  # noqa: F811
@@ -345,6 +345,6 @@ def test_settings_are_per_org(world, db, flask_app):  # noqa: F811
     other = new_org(db)
     try:
         client = user_client(db, flask_app, other)
-        assert client.get(f"{API}/settings").get_json() == {"use_last_known_price": True}
+        assert client.get(f"{API}/settings").get_json() == {"use_last_known_price": True, "split_basis": "quantity"}
     finally:
         purge(db, other)
