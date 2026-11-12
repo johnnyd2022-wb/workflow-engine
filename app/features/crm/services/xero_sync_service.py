@@ -828,10 +828,21 @@ def _credit_note_raw_fields(credit_note) -> dict:
     type_value = getattr(credit_note, "type", None)
     status_value = getattr(credit_note, "status", None)
     updated = getattr(credit_note, "updated_date_utc", None)
+    line_amounts = {}
+    line_tax_amounts = {}
+    for index, line in enumerate(getattr(credit_note, "line_items", None) or [], start=1):
+        line_id = getattr(line, "line_item_id", None)
+        key = str(line_id) if line_id else f"line-{index:04d}"
+        amount = getattr(line, "line_amount", None)
+        tax = getattr(line, "tax_amount", None)
+        line_amounts[key] = str(amount) if amount is not None else None
+        line_tax_amounts[key] = str(tax) if tax is not None else None
     return {
         "type": str(getattr(type_value, "value", type_value)) if type_value is not None else None,
         "status": str(getattr(status_value, "value", status_value)) if status_value is not None else None,
         "sub_total": str(getattr(credit_note, "sub_total", "")) or None,
         "total_tax": str(getattr(credit_note, "total_tax", "")) or None,
+        "line_amounts": line_amounts,
+        "line_tax_amounts": line_tax_amounts,
         "updated_date_utc": updated.isoformat() if hasattr(updated, "isoformat") else None,
     }
