@@ -197,7 +197,7 @@ def test_unallocated_product_average_and_duty_ignore_same_name_raw_material(worl
 
     from app.features.costing.margins import _Costs
 
-    assert _Costs(db, world["org"].id).any_lot(GIN) is product
+    assert _Costs(db, world["org"].id, products={GIN}).any_lot(GIN) is product
     row = _row(world)
 
     assert D(row["cost"]) == D("40")
@@ -683,3 +683,39 @@ def test_one_cent_tax_picks_the_total_the_lines_match_exactly(sub_total, total, 
 
     invoice = SimpleNamespace(sub_total=Decimal(sub_total), total=Decimal(total))
     assert _tax_inclusive(invoice, [SimpleNamespace(line_amount=Decimal("1.15"))]) is expected
+
+
+def test_r5_tracked_duty_that_cannot_be_measured_leaves_the_margin_unknown(world, monkeypatch):
+    """Review r5: NZ Alcohol is on but the lot can't be measured: the margin is not revenue - cost."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    _enable_alcohol(world)
+    batch = world["lot"]("B1", unit_cost="4")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](inv, "l1", batch, 2)
+    monkeypatch.setattr(
+        excise,
+        "measure",
+        lambda _db, _org, pairs, _on, **_kw: [{"litres": None, "abv_percent": None, "lal": None, "duty": None}]
+        * len(pairs),
+    )
+    row = _row(world)
+    assert row["cost"] is not None and row["duty_tracked"] is True and row["duty"] is None
+    assert row["margin"] is None and row["margin_percent"] is None
+
+
+def test_r5_unrelated_products_are_never_primed(world, db):
+    """Review r5: a tenant's other products' history costs this report nothing."""
+    from app.features.costing.margins import _Costs
+    from tests.costing_helpers import lot as make_lot
+
+    sold = world["lot"]("B1", unit_cost="4")
+    unrelated = [
+        make_lot(db, world["org"].id, f"Other product {i}", 1, "bottles", inventory_type="final_product")
+        for i in range(5)
+    ]
+    db.commit()
+    costs = _Costs(db, world["org"].id, products={GIN}, sold_lot_ids={sold.id})
+    primed = set(costs.engine._in_flow_cache)
+    assert sold.id in primed
+    assert not primed & {item.id for item in unrelated}

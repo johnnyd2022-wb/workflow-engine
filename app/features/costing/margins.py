@@ -57,16 +57,26 @@ class _Row:
 class _Costs:
     """Unit costs for lots and per-product averages, one engine per report."""
 
-    def __init__(self, db: Session, org_id: UUID):
+    def __init__(self, db: Session, org_id: UUID, products=(), sold_lot_ids=()):
+        """Only the reported products' lots (and the lots their sales name) are primed, so a
+        tenant's unrelated production history never costs this report anything."""
         self.engine = CostEngine(db, org_id)
         self.db, self.org_id = db, org_id
         self._unit: dict = {}
         self._average: dict = {}
+        wanted = {normalise(p) for p in products}
         self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
-        for item in db.query(InventoryItem).filter(InventoryItem.org_id == org_id).all():
-            if item.inventory_type == InventoryType.FINAL_PRODUCT.value:
+        finished = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
+            .all()
+            if wanted
+            else []
+        )
+        for item in finished:
+            if normalise(item.name) in wanted:
                 self._lots_by_name[normalise(item.name)].append(item)
-        self.engine.prime(item.id for items in self._lots_by_name.values() for item in items)
+        self.engine.prime({*sold_lot_ids, *(item.id for items in self._lots_by_name.values() for item in items)})
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:
         if item.id not in self._unit:
@@ -113,7 +123,14 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
     duty_on = nz_alcohol_active(db, org_id)
     settings = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
     base_currency = (settings.base_currency if settings and settings.base_currency else "NZD").upper()
-    costs = _Costs(db, org_id)
+    lines, _unmapped = sale_lines(db, org_id, start, next_month(end))
+    credits = _credits(db, org_id, start, next_month(end))
+    costs = _Costs(
+        db,
+        org_id,
+        products={sale.product_name for sale in lines} | {credit["product"] for credit in credits},
+        sold_lot_ids={item.id for sale in lines for item, _units in sale.batches},
+    )
     rows: dict[tuple[str, date], _Row] = {}
 
     def row_for(product: str, day: date) -> _Row:
@@ -122,7 +139,6 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             rows[key] = _Row(product=product, month=month_start(day), duty_tracked=duty_on)
         return rows[key]
 
-    lines, _unmapped = sale_lines(db, org_id, start, next_month(end))
     duty_pairs: dict[date, list[tuple[_Row, InventoryItem, Decimal]]] = defaultdict(list)
     for sale in lines:
         row = row_for(sale.product_name, sale.sold_on)
@@ -182,7 +198,6 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             value = result["duty"]
             row.add_duty(None if value is None else Decimal(value))
 
-    credits = _credits(db, org_id, start, next_month(end))
     sales_costs: dict[tuple[str, date], tuple[Decimal, Decimal]] = {}
     for (product, month), row in rows.items():
         sales_costs[(normalise(product), month)] = (row.cost, row.cost_units)
@@ -223,7 +238,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         cost = row.cost if known_cost else None
         tracked_duty = row.duty if row.duty_tracked else None
         margin = None
-        if row.revenue is not None and cost is not None:
+        duty_known = not row.duty_tracked or row.duty is not None  # tracked but unmeasured: no margin
+        if row.revenue is not None and cost is not None and duty_known:
             margin = row.revenue - cost - (tracked_duty or ZERO)
         out.append(
             {
