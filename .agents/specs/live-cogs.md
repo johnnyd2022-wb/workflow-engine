@@ -1548,3 +1548,48 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Purchase orders, supplier price lists, reorder suggestions.
 - Accounting sources other than Xero (the `purchase_sources` seam leaves room).
 - Time tracking (Phase 4 absorbs labour as a configured rate, not tracked hours).
+
+## 8.1f-1 build contract — bills and supplier credits in
+
+Phase 2 starts with what the founder asked for at the outset: purchases that arrive as **bills**
+(and supplier credits) come in beside card spend, through the same pipeline, page and rules.
+
+**Fetch.** `XeroAPIClient.get_bills(modified_after, from_date, to_date)`: invoices with
+`Type=="ACCPAY"`, every status, all pages. `get_bill_credit_notes(modified_after, from_date,
+to_date)`: credit notes with `Type=="ACCPAYCREDIT"`. Same scopes as sales (`accounting.invoices`
+covers both); same cursor, bootstrap from `start_date`, and historical ranges as bank
+transactions. A failure in either rolls back the whole purchases phase, like today.
+
+**Store.** One upsert path for every source (refactor of `upsert_bank_transactions`): a source
+adapter turns a Xero object into a header (external id, payee, date, reference, currency, rate,
+line-amount types, lines, status) and the shared code does lines, keys, fingerprints, tax,
+currency, voids, restores, amount changes and rules exactly as for bank transactions.
+- Bills: `source = xero_bill`, `kind = spend`; reference = "Bill <number>" plus Xero's reference.
+- Supplier credits: `source = xero_bill_credit`, `kind = refund` (negative amounts, recorded
+  with the existing refund action against lots).
+- Status: `AUTHORISED`, `PAID` → active; `VOIDED`, `DELETED` → voided. `DRAFT`, `SUBMITTED` are
+  not stored; a stored bill that goes back to draft is treated as voided (it isn't a bill now).
+- Decision (deviates from the data-model table): `kind` stays `spend` / `refund` for bills and
+  credits, and `source` says where it came from. Every money rule already keys off `kind`, so
+  bills behave identically by construction; the page labels them from `source`.
+
+**Migration** `costing_bills_001`: widen `ck_purchase_documents_source` to
+`xero_bank | xero_bill | xero_bill_credit`. Downgrade refuses while any bill or credit is stored.
+
+**Pre-fill.** With no rule and no last time, a line that came with a quantity (bills do)
+pre-fills one row: name = the line's description (else item code), quantity = the bill's
+quantity, amount = the open amount. A rule or last time still wins.
+
+**Page.** Cards say "Bill" or "Supplier credit" (from `document.source`), and the reference.
+
+**ACs (8.1f-1).**
+- AC44 (as written): an `AUTHORISED` bill line with quantity 10 and an item code pre-fills a row
+  with quantity 10; `DRAFT` and `SUBMITTED` bills are not synced.
+- AC98: a `PAID` bill and an `AUTHORISED` supplier credit sync as `xero_bill` / `xero_bill_credit`
+  documents, the credit's lines negative; a bank transaction and a bill with the same Xero id
+  never collide.
+- AC99: a bill voided in Xero after it was recorded sends its allocations to review
+  (`deleted_in_xero`), as for bank transactions; a bill moved back to draft does the same.
+- AC100: the purchases phase fetches bills and credits with the bank-transaction cursor rules
+  (bootstrap from `start_date`, then modified-since) and historical runs fetch them for the range.
+- AC101: a bill line's quantity and item code are stored on the line; the card says "Bill".

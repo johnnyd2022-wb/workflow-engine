@@ -688,6 +688,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
             "reference": doc.reference,
             "kind": doc.kind,
             "status": doc.status,
+            "source": doc.source,
         },
         "description": line.description,
         "account": {"code": line.account_code, "name": line.account_name},
@@ -991,17 +992,24 @@ def prefill(
                 )
             return {"source": "last_time", "rule_id": None, "rows": out}
 
+    # Nothing known yet. A line that came with a quantity (bills do, 8.1f-1) says what and how
+    # much; the person still picks the unit.
+    quantity = _d(line.quantity) if line.quantity is not None and _d(line.quantity) > 0 else None
+    label = (line.description or "").strip() or (line.item_code or "").strip()
+    name = (label[:255] or None) if quantity is not None else None
     return {
         "source": "none",
         "rule_id": None,
         "rows": [
             {
-                "name": None,
+                "name": name,
                 "inventory_type": InventoryType.RAW_MATERIAL.value,
                 "unit": None,
-                "quantity": None,
+                "quantity": None if quantity is None else str(quantity),
                 "amount": str(_q(remaining)),
-                "ask": ["name", "unit", "quantity"],
+                "ask": (["unit"] if name else ["name", "unit"])
+                if quantity is not None
+                else ["name", "unit", "quantity"],
             }
         ],
     }

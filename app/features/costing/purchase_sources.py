@@ -30,6 +30,8 @@ logger = get_logger(__name__)
 NZ = ZoneInfo("Pacific/Auckland")
 MONEY = Decimal("0.0001")
 SOURCE = "xero_bank"
+SOURCE_BILL = "xero_bill"  # 8.1f-1
+SOURCE_BILL_CREDIT = "xero_bill_credit"
 STORED_TYPES = {"SPEND": "spend", "RECEIVE": "refund"}
 _DUTY = ("excise", "duty")
 _OVERHEAD = ("rent", "wage", "salar", "power", "light", "heating", "fuel", "vehicle", "freight", "courier", "postage")
@@ -281,18 +283,116 @@ def _resolve_account(li, by_id: dict[str, XeroAccount], by_code: dict[str, list[
     return matches[0] if len(matches) == 1 else None
 
 
-def upsert_bank_transactions(
+# --- source adapters: a Xero object -> one header the shared upsert understands ----------------
+
+BILL_ACTIVE = ("AUTHORISED", "PAID")
+BILL_GONE = ("VOIDED", "DELETED")
+
+
+def _header(obj, *, source, kind, external_id, status, reference, bank_account_name=None, is_reconciled=None):
+    """``status``: active | voided | draft (draft: not stored; a stored one is treated as voided)."""
+    return {
+        "source": source,
+        "kind": kind,
+        "external_id": str(external_id) if external_id else None,
+        "status": status,
+        "date": getattr(obj, "date", None),
+        "contact": getattr(obj, "contact", None),
+        "reference": reference,
+        "currency": _text(getattr(obj, "currency_code", None)),
+        "rate": getattr(obj, "currency_rate", None),
+        "amount_types": _text(getattr(obj, "line_amount_types", None)) or "Exclusive",
+        "lines": getattr(obj, "line_items", None) or [],
+        "bank_account_name": bank_account_name,
+        "is_reconciled": is_reconciled,
+        "updated": getattr(obj, "updated_date_utc", None),
+    }
+
+
+def _bank_header(t) -> dict | None:
+    kind = STORED_TYPES.get((_text(getattr(t, "type", None)) or "").upper())
+    if kind is None:
+        return None
+    bank = getattr(t, "bank_account", None)
+    gone = (_text(getattr(t, "status", None)) or "").upper() in ("DELETED", "VOIDED")
+    return _header(
+        t,
+        source=SOURCE,
+        kind=kind,
+        external_id=getattr(t, "bank_transaction_id", None),
+        status="voided" if gone else "active",
+        reference=getattr(t, "reference", None),
+        bank_account_name=getattr(bank, "name", None) if bank is not None else None,
+        is_reconciled=getattr(t, "is_reconciled", None),
+    )
+
+
+def _bill_status(raw) -> str:
+    status = (_text(raw) or "").upper()
+    if status in BILL_ACTIVE:
+        return "active"
+    if status in BILL_GONE:
+        return "voided"
+    return "draft"  # DRAFT, SUBMITTED: not a bill yet
+
+
+def _bill_reference(label: str, number, reference) -> str | None:
+    parts = [f"{label} {number}" if number else None, reference or None]
+    text = " · ".join(p for p in parts if p)
+    return text[:255] or None
+
+
+def _bill_header(inv) -> dict | None:
+    if (_text(getattr(inv, "type", None)) or "").upper() != "ACCPAY":
+        return None
+    return _header(
+        inv,
+        source=SOURCE_BILL,
+        kind="spend",
+        external_id=getattr(inv, "invoice_id", None),
+        status=_bill_status(getattr(inv, "status", None)),
+        reference=_bill_reference("Bill", getattr(inv, "invoice_number", None), getattr(inv, "reference", None)),
+    )
+
+
+def _credit_header(note) -> dict | None:
+    if (_text(getattr(note, "type", None)) or "").upper() != "ACCPAYCREDIT":
+        return None
+    return _header(
+        note,
+        source=SOURCE_BILL_CREDIT,
+        kind="refund",
+        external_id=getattr(note, "credit_note_id", None),
+        status=_bill_status(getattr(note, "status", None)),
+        reference=_bill_reference(
+            "Credit", getattr(note, "credit_note_number", None), getattr(note, "reference", None)
+        ),
+    )
+
+
+def upsert_bank_transactions(db: Session, org_id: UUID, transactions: Iterable, **kwargs) -> dict:
+    """Upsert SPEND / RECEIVE bank transactions. ``start_date`` filters only transactions not
+    already stored (a stored one edited to an earlier date is still updated)."""
+    return _upsert_documents(db, org_id, [_bank_header(t) for t in transactions or []], **kwargs)
+
+
+def upsert_bills(db: Session, org_id: UUID, bills: Iterable, credit_notes: Iterable, **kwargs) -> dict:
+    """Upsert supplier bills (ACCPAY) and supplier credits (ACCPAYCREDIT), 8.1f-1: the same
+    path as bank transactions, with ``source`` saying where each came from."""
+    headers = [_bill_header(b) for b in bills or []] + [_credit_header(c) for c in credit_notes or []]
+    return _upsert_documents(db, org_id, headers, **kwargs)
+
+
+def _upsert_documents(
     db: Session,
     org_id: UUID,
-    transactions: Iterable,
+    headers: list,
     *,
     accounts: dict[str, XeroAccount],
     base_currency: str,
     start_date: date | None,
     xero_tenant_id: str | None,
 ) -> dict:
-    """Upsert SPEND / RECEIVE bank transactions. ``start_date`` filters only transactions not
-    already stored (a stored one edited to an earlier date is still updated)."""
     by_code: dict[str, list[XeroAccount]] = {}
     for acct in accounts.values():
         if acct.code:
@@ -304,25 +404,23 @@ def upsert_bank_transactions(
 
     rules = active_rules(db, org_id)
 
-    for t in transactions or []:
-        kind = STORED_TYPES.get((_text(getattr(t, "type", None)) or "").upper())
-        external_id = getattr(t, "bank_transaction_id", None)
-        if kind is None or not external_id:
+    for h in headers:
+        if h is None or not h["external_id"]:
             stats["skipped_documents"] += 1
             continue
-        external_id = str(external_id)
+        kind, external_id, source = h["kind"], h["external_id"], h["source"]
         doc = (
             # nosemgrep: sqlalchemy-query-in-for-loop — per-document upsert under that document's row lock; a Xero page is at most 100 transactions.
             db.query(PurchaseDocument)
             .filter(
                 PurchaseDocument.org_id == org_id,
-                PurchaseDocument.source == SOURCE,
+                PurchaseDocument.source == source,
                 PurchaseDocument.external_id == external_id,
             )
             .with_for_update()
             .one_or_none()
         )
-        when = getattr(t, "date", None)
+        when = h["date"]
         if isinstance(when, datetime):
             when = when.date()
         if doc is None and start_date is not None and (when is None or when < start_date):
@@ -330,12 +428,12 @@ def upsert_bank_transactions(
             continue
 
         sign = Decimal("-1") if kind == "refund" else Decimal("1")
-        currency = (_text(getattr(t, "currency_code", None)) or base_currency or "")[:3]
+        currency = (h["currency"] or base_currency or "")[:3]
         fx_status = "ok" if currency == base_currency else "needs_rate"
-        amount_types = _text(getattr(t, "line_amount_types", None)) or "Exclusive"
+        amount_types = h["amount_types"]
 
         incoming = []
-        for position, li in enumerate(getattr(t, "line_items", None) or [], start=1):
+        for position, li in enumerate(h["lines"], start=1):
             acct = _resolve_account(li, accounts, by_code)
             if acct is None or acct.account_class != "EXPENSE" or acct.treatment is None:
                 stats["skipped_lines"] += 1
@@ -372,30 +470,30 @@ def upsert_bank_transactions(
             row["_account"] = acct
             incoming.append(row)
 
-        voided = (_text(getattr(t, "status", None)) or "").upper() in ("DELETED", "VOIDED")
+        # A draft is not stored; a stored document that went back to draft is no longer real.
+        voided = h["status"] in ("voided", "draft")
         if doc is None and (not incoming or voided):
             stats["skipped_documents"] += 1  # never stored, and nothing to keep
             continue
         if doc is None:
-            doc = PurchaseDocument(org_id=org_id, source=SOURCE, external_id=external_id)
+            doc = PurchaseDocument(org_id=org_id, source=source, external_id=external_id)
             db.add(doc)
-        contact = getattr(t, "contact", None)
-        bank = getattr(t, "bank_account", None)
+        contact = h["contact"]
         doc.xero_tenant_id = xero_tenant_id
         doc.kind = kind
         doc.payee_name = getattr(contact, "name", None) if contact is not None else None
         contact_id = getattr(contact, "contact_id", None) if contact is not None else None
         doc.xero_contact_id = str(contact_id) if contact_id else None
         doc.document_date = when
-        doc.reference = getattr(t, "reference", None)
+        doc.reference = h["reference"]
         doc.currency_code = currency or None
-        doc.currency_rate = _dec(getattr(t, "currency_rate", None))
+        doc.currency_rate = _dec(h["rate"])
         doc.fx_status = fx_status
         was_active = doc.status in (None, "active")  # a new document has nothing to restore
         doc.status = "voided" if voided else "active"
-        doc.bank_account_name = getattr(bank, "name", None) if bank is not None else None
-        doc.is_reconciled = getattr(t, "is_reconciled", None)
-        updated = getattr(t, "updated_date_utc", None)
+        doc.bank_account_name = h["bank_account_name"]
+        doc.is_reconciled = h["is_reconciled"]
+        updated = h["updated"]
         if isinstance(updated, datetime) and updated.tzinfo is None:
             updated = updated.replace(tzinfo=UTC)
         doc.external_updated_at = updated if isinstance(updated, datetime) else None
