@@ -131,7 +131,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     months = {}
     latest = None
 
-    def add_fact(lot, when, amount, quantity, source, purchase_id=None):
+    def add_fact(lot, when, amount, quantity, source, purchase_id=None, fact_id=None):
         nonlocal latest
         local_when = _nz_datetime(when) if isinstance(when, datetime) else when
         fact_month = _month_key(local_when)
@@ -150,9 +150,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             if row is not None:
                 if quantity > ZERO:
                     row["unconverted"] += 1
-                elif amount < ZERO:
-                    row["amount"] += amount
-            return
+            return  # a refund on a lot priced in another unit belongs to a price left out above
         converted_amount = amount
         converted_quantity = quantity / factor if quantity > ZERO else ZERO
         converted_price = unit_price * factor if unit_price is not None else None
@@ -161,7 +159,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
                 when_key = local_when
             else:
                 when_key = _purchase_datetime(local_when)
-            key = (when_key, str(purchase_id or ""), source)
+            key = (when_key, str(purchase_id or ""), source, str(fact_id or ""))
             if latest is None or key > latest[0]:
                 latest = (
                     key,
@@ -185,10 +183,10 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         if not amount.is_finite() or not quantity.is_finite():
             continue
         # Refunds carry no quantity and reduce the amount in their purchase document month.
-        if amount > ZERO and quantity > ZERO:
-            add_fact(item, document.document_date, amount, quantity, "purchase", str(document.id))
+        if amount >= ZERO and quantity > ZERO:  # $0 is a price (the engine costs it at $0)
+            add_fact(item, document.document_date, amount, quantity, "purchase", str(document.id), allocation.id)
         elif amount < ZERO:
-            add_fact(item, document.document_date, amount, ZERO, "refund", str(document.id))
+            add_fact(item, document.document_date, amount, ZERO, "refund", str(document.id), allocation.id)
     for item_id, item in by_id.items():
         item_entries = entries_by_lot[item_id]
         whole = next((entry for entry in item_entries if entry.cost_flow_id is None), None)
@@ -205,7 +203,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             prices = flow_entries.get(flow.id, [])
             priced_quantity = sum((Decimal(str(entry.quantity)) for entry in prices), ZERO)
             for allocation in engine._allocations(item_id):
-                if allocation.cost_flow_id == flow.id and allocation.amount > ZERO:
+                if allocation.cost_flow_id == flow.id and allocation.amount >= ZERO and allocation.quantity > ZERO:
                     priced_quantity += Decimal(str(allocation.quantity))
             effective_quantity = min(priced_quantity, flow_quantity)
             scale = effective_quantity / priced_quantity if priced_quantity > ZERO else ZERO
@@ -213,7 +211,9 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
                 quantity = Decimal(str(entry.quantity)) * scale
                 amount = Decimal(str(entry.amount)) * scale
                 if quantity > ZERO:
-                    add_fact(item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind)
+                    add_fact(
+                        item, entry.created_at or datetime.now(UTC), amount, quantity, entry.kind, fact_id=entry.id
+                    )
             unpriced_direct += flow_quantity - effective_quantity
 
         if whole is not None:
@@ -221,9 +221,18 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
             whole_quantity = Decimal(str(whole.quantity))
             if unpriced_direct > ZERO:
                 amount = unpriced_direct * whole_amount / whole_quantity
-                add_fact(item, whole.created_at or datetime.now(UTC), amount, unpriced_direct, whole.kind)
+                add_fact(
+                    item, whole.created_at or datetime.now(UTC), amount, unpriced_direct, whole.kind, fact_id=whole.id
+                )
             elif not engine._in_flows(item_id):
-                add_fact(item, whole.created_at or datetime.now(UTC), whole_amount, whole_quantity, whole.kind)
+                add_fact(
+                    item,
+                    whole.created_at or datetime.now(UTC),
+                    whole_amount,
+                    whole_quantity,
+                    whole.kind,
+                    fact_id=whole.id,
+                )
 
     month_rows = []
     cursor = start
@@ -307,13 +316,13 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
     by_id = {item.id: item for item in lots}
     latest = None
     for allocation, _line, document in allocations:
-        if allocation.amount <= ZERO or allocation.quantity <= ZERO or document.document_date is None:
+        if allocation.amount < ZERO or allocation.quantity <= ZERO or document.document_date is None:
             continue
         lot = by_id[allocation.inventory_item_id]
         factor = engine._unit_factor(unit, lot.unit)
         if factor is None:
             continue
-        key = (_purchase_datetime(document.document_date), str(document.id), "purchase")
+        key = (_purchase_datetime(document.document_date), str(document.id), "purchase", str(allocation.id))
         candidate = (key, Decimal(str(allocation.amount)) / Decimal(str(allocation.quantity)) * factor)
         if latest is None or candidate[0] > latest[0]:
             latest = candidate
@@ -325,7 +334,7 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
         if factor is None:
             continue
         occurred_at = _nz_datetime(entry.created_at) if entry.created_at else datetime.min.replace(tzinfo=NZ)
-        key = (occurred_at, str(entry.id), entry.kind)
+        key = (occurred_at, "", entry.kind, str(entry.id))
         candidate = (key, Decimal(str(entry.amount)) / Decimal(str(entry.quantity)) * factor)
         if latest is None or candidate[0] > latest[0]:
             latest = candidate

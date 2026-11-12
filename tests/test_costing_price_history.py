@@ -236,6 +236,8 @@ def test_ac107_unconverted_counts_prices_not_refunds(world, db):
     db.commit()
     month = _history(client, "Bottle Refund", **{"from": "2026-11", "to": "2026-11"}).get_json()["months"][0]
     assert month["unconverted"] == 1
+    # r2: the bottle refund belongs to the bottle price left out, so it can't lower the kg figures
+    assert D(month["amount"]) == D("0") and month["average_unit_cost"] is None
 
 
 @pytest.mark.parametrize(
@@ -343,3 +345,27 @@ def test_ac109_org_isolation_production_role_and_material_picker(world, db, flas
         }
     ]
     assert unpriced.name == "Unpriced"
+
+
+def test_r2_a_zero_dollar_purchase_is_a_price(world, db):
+    _purchase(world["sync"], db, world["client"], 0, 5, name="Gifted Juniper")
+    body = _history(world["client"], "Gifted Juniper", **{"from": "2026-11", "to": "2026-11"}).get_json()
+    (month,) = body["months"]
+    assert D(month["average_unit_cost"]) == D("0") and D(month["priced_quantity"]) == D("5")
+    assert D(body["latest"]["unit_price"]) == D("0")
+    names = [m["name"] for m in world["client"].get(f"{API}/materials").get_json()["materials"]]
+    assert "Gifted Juniper" in names
+
+
+def test_r2_identical_timestamps_pick_the_same_latest_in_history_and_picker(world, db):
+    org = world["org"]
+    item = lot(db, org.id, "Tie Break", 2, "kg")
+    first = price(db, org.id, item.id, 10, 1)
+    created = next(flow for flow in flows(db, org.id, item.id, kind="created"))
+    second = price(db, org.id, item.id, 30, 1, cost_flow_id=created.id)
+    first.id, second.id = UUID(int=9), UUID(int=1)
+    first.created_at = second.created_at = datetime(2026, 11, 10, 1, tzinfo=UTC)
+    db.commit()
+    history = _history(world["client"], "Tie Break", **{"from": "2026-11", "to": "2026-11"}).get_json()["latest"]
+    picker = world["client"].get(f"{API}/materials").get_json()["materials"][0]
+    assert history["unit_price"] == picker["latest_unit_price"]
