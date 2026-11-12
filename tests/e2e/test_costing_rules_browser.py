@@ -100,6 +100,12 @@ def test_without_stock_permission_the_switch_only_turns_automation_off(fresh_use
         expect(dialog.locator(".ru-auto")).to_be_hidden()
         dialog.get_by_role("button", name="Cancel").click()
 
+        # Switching the automatic rule off is allowed; switching it back on is not offered.
+        page.locator(".ru-rule").get_by_role("button", name="Switch off").click()
+        expect(page.locator(".ru-rule").get_by_role("button", name="Switch on")).to_be_disabled()
+        (off,) = _rules(db, org_id)
+        assert (off.is_active, off.auto_record) == (False, True)
+
         page.locator(".ru-rule").get_by_role("button", name="Edit").click()
         expect(dialog.locator(".ru-auto")).to_be_visible()
         dialog.locator("[data-rules-auto]").uncheck()
