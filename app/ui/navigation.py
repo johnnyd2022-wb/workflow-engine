@@ -186,6 +186,8 @@ def _costing_on(org_id) -> bool:
 
 
 def _permitted(tab: Tab, user) -> bool:
+    if tab.requires_all and not all(has_permission(user, perm) for perm in tab.requires_all):
+        return False
     return not tab.requires or has_permission(user, *tab.requires)
 
 
