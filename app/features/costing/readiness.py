@@ -57,6 +57,7 @@ class _Graph:
             ids = list(frontier)
             for eid in ids:
                 self.flows_by_exec[eid] = []
+            # nosemgrep: sqlalchemy-query-in-for-loop — one query per level of batch history, for every product at once.
             for flow in self.db.query(CostFlow).filter(CostFlow.org_id == self.org_id, CostFlow.execution_id.in_(ids)):
                 self.flows_by_exec[flow.execution_id].append(flow)
             consumed = {
