@@ -509,6 +509,7 @@ def edit_allocations(db: Session, org_id: UUID, line_id, changes: list) -> Purch
             alloc.amount = parse_amount(change.get("amount"), "Amount", allow_zero=True)
             if change.get("quantity") not in (None, ""):
                 quantity = parse_amount(change.get("quantity"), "Quantity", allow_zero=False)
+                # nosemgrep: sqlalchemy-query-in-for-loop — one line's own allocations (a handful), each checked against its flow.
                 flow = db.query(CostFlow).filter(CostFlow.org_id == org_id, CostFlow.id == alloc.cost_flow_id).one()
                 others = _flow_priced_quantity(db, org_id, flow.id) - _d(alloc.quantity)
                 if quantity + others > _d(flow.quantity):
@@ -716,10 +717,10 @@ def lock_lines(db: Session, org_id: UUID, line_ids) -> list[PurchaseLine]:
         },
         key=str,
     )
-    for doc_id in doc_ids:
-        db.query(PurchaseDocument).filter(
-            PurchaseDocument.org_id == org_id, PurchaseDocument.id == doc_id
-        ).with_for_update().one()
+    # One statement, rows locked in id order: the same document -> line order every writer uses.
+    db.query(PurchaseDocument).filter(PurchaseDocument.org_id == org_id, PurchaseDocument.id.in_(doc_ids)).order_by(
+        PurchaseDocument.id
+    ).with_for_update().all()
     return (
         db.query(PurchaseLine)
         .filter(PurchaseLine.org_id == org_id, PurchaseLine.id.in_(ids))
@@ -945,13 +946,15 @@ def prefill(
         if match is not None:
             prev = db.query(PurchaseLine).filter(PurchaseLine.org_id == line.org_id, PurchaseLine.id == match).one()
             allocs = [a for a in line_allocations(db, prev) if _d(a.amount) > 0]
+            items = {
+                i.id: i
+                for i in db.query(InventoryItem).filter(
+                    InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
+                )
+            }
             out = []
             for a in allocs:
-                item = (
-                    db.query(InventoryItem)
-                    .filter(InventoryItem.org_id == line.org_id, InventoryItem.id == a.inventory_item_id)
-                    .one()
-                )
+                item = items[a.inventory_item_id]
                 out.append(
                     {
                         "name": item.name,
