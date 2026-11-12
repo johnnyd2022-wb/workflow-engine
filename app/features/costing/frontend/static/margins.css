@@ -1,0 +1,52 @@
+/* Sales › Margins (8.1f-2). House tokens only. */
+#page-content .mg-shell { max-width: 1100px; }
+#page-content .mg-range { display: flex; flex-wrap: nowrap; gap: 8px; align-items: end; flex: 0 0 auto; }
+#page-content .mg-range .workspace-button { min-height: 44px; }
+#page-content .mg-range label { display: grid; gap: 4px; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .mg-range input { width: 170px !important; min-width: 0 !important; }
+#page-content .mg-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 12px; }
+#page-content .mg-summary[hidden], #page-content .mg-note[hidden], #page-content .mg-empty[hidden] { display: none; }
+#page-content .mg-figure { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md);
+  background: var(--ui-surface); }
+#page-content .mg-figure__label { font-size: 13px; color: var(--ui-text-muted); }
+#page-content .mg-figure__value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#page-content .mg-figure__extra { font-size: 13px; color: var(--ui-text-muted); }
+#page-content .mg-note { margin: 0 0 12px; font-size: 14px; color: var(--ui-text-muted); }
+#page-content .mg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+#page-content .mg-product { padding: 0; margin: 0; overflow: hidden; }
+#page-content .mg-product__head { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 18px;
+  background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-height: 56px; }
+#page-content .mg-product__head:hover { background: var(--ui-surface-subtle); }
+#page-content .mg-product__head:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
+#page-content .mg-product__name { flex: 1 1 200px; font-weight: 600; overflow-wrap: anywhere; }
+#page-content .mg-product__nums { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-variant-numeric: tabular-nums; }
+#page-content .mg-num { color: var(--ui-text-muted); }
+#page-content .mg-num--margin { color: var(--ui-text); font-weight: 600; }
+#page-content .mg-pill { padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; background: var(--ui-accent-soft);
+  color: var(--ui-accent-strong); }
+#page-content .mg-pill--bad { background: #fef3f2; color: #b42318; }
+html[data-spa-theme="dark"] #page-content .mg-pill--bad { background: rgb(240 68 56 / 15%); color: #f97066; }
+#page-content .mg-flag { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #e7b04a; color: #8a5a00; background: #fff7e6; }
+html[data-spa-theme="dark"] #page-content .mg-flag { background: rgb(231 176 74 / 14%); color: #f4c97a; }
+#page-content .mg-flag--inline { margin-left: 6px; }
+#page-content .mg-product__detail { padding: 0 18px 16px; }
+#page-content .mg-product__detail[hidden] { display: none; }
+#page-content .mg-months-wrap { overflow-x: auto; }
+#page-content .mg-months { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+#page-content .mg-months th { text-align: left; font-size: 12px; font-weight: 600; color: var(--ui-text-muted); padding: 8px; border-bottom: 1px solid var(--ui-border); }
+#page-content .mg-months td { padding: 8px; border-bottom: 1px solid var(--ui-border); vertical-align: top; }
+#page-content .mg-month { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ui-accent-strong); cursor: pointer; }
+#page-content .mg-lines[hidden] { display: none; }
+#page-content .mg-sale-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+#page-content .mg-sale__top { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+#page-content .mg-sale__batches { margin: 2px 0 0; color: var(--ui-text-muted); font-size: 13px; }
+#page-content .mg-empty { padding: 24px; }
+#page-content .mg-empty h2 { margin: 0 0 6px; font-size: 17px; }
+@media (max-width: 720px) {
+  #page-content .mg-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #page-content .mg-figure__value { font-size: 18px; }
+  #page-content .mg-range { width: 100%; display: grid; grid-template-columns: 1fr; }
+  #page-content .mg-range .workspace-button { width: 100%; }
+  #page-content .mg-range input { width: 100% !important; }
+  #page-content .mg-months { font-size: 13px; }
+}

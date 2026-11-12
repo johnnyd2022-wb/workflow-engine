@@ -471,6 +471,16 @@ def historical_run():
 # --- 8.1e-1: readiness --------------------------------------------------------------------------------
 
 
+@costing_bp.route("/core/costing/margins", methods=["GET"])
+@requires_auth
+def margins_page():
+    from flask import render_template
+
+    if not has_permission(getattr(g, "current_user", None), "sales.view"):
+        return jsonify({"error": "Forbidden"}), 403
+    return render_template("costing/margins.html", active_page="crm")
+
+
 @costing_bp.route(f"{API}/margins", methods=["GET"])
 @requires_auth
 def margins_report():
