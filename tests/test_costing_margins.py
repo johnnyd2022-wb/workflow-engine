@@ -768,3 +768,23 @@ def test_r6_one_unmeasurable_sale_leaves_a_mixed_months_margin_unknown(world, mo
     monkeypatch.setattr(excise, "measure", half_measured)
     row = _row(world)
     assert row["duty"] is None and row["margin"] is None
+
+
+def test_r7_a_lot_over_the_engine_budget_voids_the_product_average(world, monkeypatch):
+    """Review r7: an unallocated sale is costed at the product's average; if one of its lots can't be
+    costed (engine budget), that lot may be the dear one, so the average is unknown, not the rest's."""
+    from app.features.costing import engine as engine_module
+
+    world["lot"]("Cheap", unit_cost="4")
+    dear = world["lot"]("Dear", unit_cost="100")
+    world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])  # no allocation: loose units use the average
+    real = engine_module.CostEngine._solve
+
+    def over_budget_for_dear(self, key):
+        if key == ("lot", dear.id):
+            raise engine_module.TooLargeError()
+        return real(self, key)
+
+    monkeypatch.setattr(engine_module.CostEngine, "_solve", over_budget_for_dear)
+    row = _row(world)
+    assert row["cost"] is None and row["cost_status"] == "unknown" and row["margin"] is None

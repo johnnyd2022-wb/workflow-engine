@@ -75,6 +75,7 @@ class _Costs:
         self.db, self.org_id = db, org_id
         self._unit: dict = {}
         self._average: dict = {}
+        self._oversized: set = set()  # lots the engine ran out of budget on: never "uncosted"
         wanted = {normalise(p) for p in products}
         self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
         finished = []
@@ -107,6 +108,7 @@ class _Costs:
                 cost = self.engine._solve(("lot", item.id))
             except TooLargeError:
                 self._unit[item.id] = (None, UNKNOWN)
+                self._oversized.add(item.id)
             else:
                 unit = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
                 self._unit[item.id] = (unit, cost.status if cost.status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN)
@@ -120,6 +122,10 @@ class _Costs:
             total, units = ZERO, ZERO
             for item in lots:
                 unit, status = self.lot(item)
+                if item.id in self._oversized:
+                    # A lot we couldn't cost might be the dear one: no average beats a wrong one.
+                    total, units = ZERO, ZERO
+                    break
                 if unit is None or status not in (ACTUAL, ESTIMATED):
                     continue
                 qty = Decimal(str(item.quantity or 0))
