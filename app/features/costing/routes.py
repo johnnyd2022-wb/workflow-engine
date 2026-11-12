@@ -128,6 +128,22 @@ def get_settings():
     return jsonify(service.get_settings(db_session, _org()))
 
 
+@costing_bp.route(f"{API}/materials", methods=["GET"])
+@requires_auth
+def list_materials():
+    from app.features.costing.price_history import list_materials as fetch_materials
+
+    return jsonify({"materials": fetch_materials(db_session, _org())})
+
+
+@costing_bp.route(f"{API}/materials/<path:material>/history", methods=["GET"])
+@requires_auth
+def get_material_history(material):
+    from app.features.costing.price_history import material_history
+
+    return jsonify(material_history(db_session, _org(), material, request.args.get("from"), request.args.get("to")))
+
+
 @costing_bp.route(f"{API}/settings", methods=["PUT"])
 @requires_auth
 def put_settings():
