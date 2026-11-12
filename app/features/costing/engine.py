@@ -170,7 +170,7 @@ class CostEngine:
             cost = self._solve(("lot", item.id))
         except TooLargeError:
             return self._too_large_lot(item)
-        from app.features.costing.service import active_entries, editable_reason
+        from app.features.costing.service import active_entries, editable_reason, lot_provenance
 
         entries = active_entries(self.db, self.org_id, item.id)
         public = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
@@ -204,6 +204,7 @@ class CostEngine:
                 for e in entries
             ],
             "editable": editable_reason(self.db, self.org_id, item) is None,
+            "provenance": lot_provenance(self.db, self.org_id, item),
         }
 
     def execution(self, execution_id) -> dict:

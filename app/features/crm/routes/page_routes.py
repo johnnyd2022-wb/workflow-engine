@@ -48,7 +48,21 @@ def crm_analytics():
 @page_bp.route("/crm/configuration", methods=["GET"])
 @requires_auth
 def crm_configuration():
-    return render_template("crm/configuration.html", active_page="crm")
+    # Live cost: purchase rules sit beside the product mappings for people who can see cost.
+    from uuid import UUID
+
+    from flask import g
+
+    from app.core.db import db_session
+    from app.core.security.access_policy import has_permission
+    from app.core.security.entitlements import org_has_feature
+
+    show_rules = bool(
+        getattr(g, "org_id", None)
+        and has_permission(getattr(g, "current_user", None), "costs.view", "costs.manage")
+        and org_has_feature(db_session, UUID(str(g.org_id)), "costing")
+    )
+    return render_template("crm/configuration.html", active_page="crm", show_purchase_rules=show_rules)
 
 
 @page_bp.route("/crm/matching", methods=["GET"])
