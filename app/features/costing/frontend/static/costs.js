@@ -245,8 +245,8 @@
         var priced = h.months.filter(function (row) { return row.average_unit_cost != null; });
         if (!priced.length) {
           detail.appendChild(el('p', 'cost-muted', m.latest_date
-            ? 'Nothing bought in the last year. The latest price is from ' + shortDate(m.latest_date) + '.'
-            : 'Nothing bought in the last year in a unit that compares with ' + (h.unit || 'its main unit') + '.'));
+            ? 'No prices in the last year. The latest is from ' + shortDate(m.latest_date) + '.'
+            : 'No prices in the last year in a unit that compares with ' + (h.unit || 'its main unit') + '.'));
           return;
         }
         detail.appendChild(el('p', 'co-trend', trend(priced, h.unit)));
@@ -266,10 +266,10 @@
     function trend(priced, unit) {
       var first = priced[0], last = priced[priced.length - 1];
       if (priced.length === 1) {
-        return 'Bought in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + ' on average.';
+        return 'Priced in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + ' on average.';
       }
       var a = Number(first.average_unit_cost), b = Number(last.average_unit_cost);
-      if (!a) return 'Last bought in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + '.';
+      if (!a) return 'Last priced in ' + monthName(last.month, true) + ' at ' + price(last.average_unit_cost) + per(unit) + '.';
       var change = Math.round((b - a) / a * 100);
       var span = ' from ' + monthName(first.month, true) + ' to ' + monthName(last.month, true);
       if (change === 0) return 'Steady at about ' + price(last.average_unit_cost) + per(unit) + span + '.';

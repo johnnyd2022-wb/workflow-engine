@@ -140,7 +140,8 @@ def test_price_history_labels_priced_quantity_not_purchases(costs_page):
     page.locator("[data-prices-list] .co-row__head").click()
     table = page.locator(".co-months")
     expect(table).to_contain_text("Quantity priced")
-    expect(table).not_to_contain_text("Bought")
+    detail = page.locator("[data-prices-list] .co-row__detail")
+    expect(detail).not_to_contain_text("ought")  # neither "Bought" nor "bought" anywhere in it
 
 
 def test_unavailable_latest_price_explains_each_reason(costs_page):
@@ -216,3 +217,46 @@ def test_prices_rebind_after_boosted_navigation_away_and_back(costs_page):
     expect(page.locator("[data-prices-list] .co-row")).to_have_count(1)
     assert page.locator("[data-costs-root]").get_attribute("data-bound") == "1"
     assert len(materials_calls) >= 2, "the prices endpoint should be requested on both boosted arrivals"
+
+
+def test_one_month_of_manual_prices_never_says_bought(costs_page):
+    """Review r2: manual and free entries are prices, not purchases, in the sentence too."""
+    page, app_url = costs_page
+    history = {
+        "name": "Hand priced",
+        "unit": "kg",
+        "from": "2025-12",
+        "to": "2026-11",
+        "months": [
+            {
+                "month": "2026-11",
+                "unit": "kg",
+                "amount": "12.00",
+                "priced_quantity": "2",
+                "average_unit_cost": "6.000000",
+                "purchases": 0,
+                "min_unit_price": "6.000000",
+                "max_unit_price": "6.000000",
+                "unconverted": 0,
+            }
+        ],
+        "latest": {"unit_price": "6.000000", "date": "2026-11-10T09:00:00+13:00", "source": "manual"},
+        "lots": [],
+        "too_large": False,
+    }
+    page.route("**/api/core/costing/materials/*/history**", lambda route: route.fulfill(json=history))
+    page.route(
+        "**/api/core/costing/materials",
+        lambda route: route.fulfill(
+            json={
+                "materials": [
+                    {"name": "Hand priced", "unit": "kg", "latest_unit_price": "6", "latest_date": "2026-11-10"}
+                ]
+            }
+        ),
+    )
+    page.goto(app_url + PAGE)
+    page.locator("[data-prices-list] .co-row__head").click()
+    detail = page.locator("[data-prices-list] .co-row__detail")
+    expect(detail).to_contain_text("Priced in Nov 2026")
+    expect(detail).not_to_contain_text("ought")
