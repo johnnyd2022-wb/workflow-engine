@@ -859,3 +859,22 @@ def test_r7_a_lot_over_the_engine_budget_voids_the_product_average(world, monkey
     monkeypatch.setattr(engine_module.CostEngine, "_solve", over_budget_for_dear)
     row = _row(world)
     assert row["cost"] is None and row["cost_status"] == "unknown" and row["margin"] is None
+
+
+def test_r9_a_bottle_returned_against_a_case_credit_reverses_one_bottle(world, db):
+    """Review r9: returns are recorded in stock units; only the credited quantity is a pack count."""
+    mapping = db.query(ProductMapping).filter(ProductMapping.org_id == world["org"].id).one()
+    mapping.units_per_line = 6
+    db.commit()
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "400", "0")])  # 2 cases = 12 bottles
+    world["allocate"](inv, "l1", batch, 12)
+    line = _credit(world, db, amount="200", quantity="1")  # one case credited
+    _record_credit_return(world, db, line, batch, quantity="1")  # one bottle came back
+    assert D(_row(world)["cost"]) == D("55")  # 12 bottles at $5, less the one returned
+
+
+def test_r9_money_rounds_half_up():
+    from app.features.costing.margins import _m
+
+    assert (_m(D("1.005")), _m(D("2.675")), _m(D("-1.005"))) == ("1.01", "2.68", "-1.01")
