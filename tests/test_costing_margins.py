@@ -611,3 +611,17 @@ def test_production_execution_query_count_stays_flat_as_sold_lots_grow(world, db
     scaled = capture_count()
 
     assert abs(scaled - baseline) <= 2, f"query count grew from {baseline} to {scaled}"
+
+
+@pytest.mark.parametrize(
+    ("sub_total", "total", "expected"),
+    [("1.14", "1.15", True), ("1.15", "1.16", False), ("1.14", "1.16", None)],
+)
+def test_one_cent_tax_picks_the_total_the_lines_match_exactly(sub_total, total, expected):
+    """Review r3: with $0.01 GST both totals sit within a cent; the exact match decides."""
+    from types import SimpleNamespace
+
+    from app.features.crm.services.sales_sources import _tax_inclusive
+
+    invoice = SimpleNamespace(sub_total=Decimal(sub_total), total=Decimal(total))
+    assert _tax_inclusive(invoice, [SimpleNamespace(line_amount=Decimal("1.15"))]) is expected
