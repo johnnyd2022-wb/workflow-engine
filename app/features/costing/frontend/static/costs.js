@@ -223,6 +223,10 @@
       detail.appendChild(el('p', 'cost-muted', 'Loading…'));
       get(API + '/materials/' + encodeURIComponent(m.name) + '/history').then(function (h) {
         detail.replaceChildren();
+        if (h.too_large) {
+          detail.appendChild(el('p', 'cost-muted', 'This material has more history than Biz-E can add up in one go, so there’s no month-by-month view for it.'));
+          return;
+        }
         var priced = h.months.filter(function (row) { return row.average_unit_cost != null; });
         if (!priced.length) {
           detail.appendChild(el('p', 'cost-muted', m.latest_date
