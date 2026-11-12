@@ -237,7 +237,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         foreign = credit["currency"] and credit["currency"].upper() != base_currency
         amount = None if foreign else credit["amount"]
         row.add_revenue(None if amount is None else -amount)
-        if credit["returned"]:
+        if credit["returned_units"] > 0:
             month_cost, month_units = sales_costs.get(
                 (normalise(credit["product"]), month_start(credit["date"])), (ZERO, ZERO)
             )
@@ -245,8 +245,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             if average is None:
                 row.statuses.append(UNKNOWN)
             else:
-                row.cost -= credit["units"] * average
-                row.cost_units -= credit["units"]
+                row.cost -= credit["returned_units"] * average
+                row.cost_units -= credit["returned_units"]
                 row.statuses.append(ESTIMATED)
         row.lines.append(
             {
@@ -288,17 +288,28 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 "lines": row.lines,
             }
         )
-    return {"from": start.strftime("%Y-%m"), "to": end.strftime("%Y-%m"), "rows": out}
+    return {"from": start.strftime("%Y-%m"), "to": end.strftime("%Y-%m"), "currency": base_currency, "rows": out}
 
 
 def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
     """Authorised/paid sales credit notes on mapped lines, dated in [start, end)."""
     from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
+    returned = (
+        db.query(
+            SalesReturn.org_id.label("org_id"),
+            SalesReturn.credit_note_line_id.label("line_id"),
+            func.sum(SalesReturn.quantity).label("quantity"),
+        )
+        .filter(SalesReturn.org_id == org_id, SalesReturn.credit_note_line_id.isnot(None))
+        .group_by(SalesReturn.org_id, SalesReturn.credit_note_line_id)
+        .subquery()
+    )
     rows = (
-        db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping)
+        db.query(XeroCreditNoteLine, XeroCreditNote, ProductMapping, func.coalesce(returned.c.quantity, 0))
         .join(
             XeroCreditNote,
             (XeroCreditNote.org_id == XeroCreditNoteLine.org_id)
@@ -308,6 +319,10 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
             ProductMapping,
             (ProductMapping.org_id == XeroCreditNoteLine.org_id)
             & (ProductMapping.id == XeroCreditNoteLine.product_mapping_id),
+        )
+        .outerjoin(
+            returned,
+            (returned.c.org_id == XeroCreditNoteLine.org_id) & (returned.c.line_id == XeroCreditNoteLine.id),
         )
         .filter(
             XeroCreditNoteLine.org_id == org_id,
@@ -319,18 +334,21 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
         .all()
     )
     out = []
-    for line, note, mapping in rows:
+    for line, note, mapping, returned_quantity in rows:
         quantity = Decimal(str(line.quantity or 0))
         if not quantity.is_finite() or quantity <= 0:
             continue
+        units_per_line = int(mapping.units_per_line or 1)
+        units = quantity * units_per_line
+        returned_units = min(Decimal(str(returned_quantity)) * units_per_line, units)
         out.append(
             {
                 "product": mapping.biz_e_product_name,
                 "date": note.date,
                 "reference": note.number or note.xero_credit_note_id,
-                "units": quantity * int(mapping.units_per_line or 1),
+                "units": units,
+                "returned_units": returned_units,
                 "amount": None if line.line_amount is None else Decimal(str(line.line_amount)),
-                "returned": not line.no_return_note,
                 "currency": note.currency,
             }
         )

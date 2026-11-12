@@ -115,10 +115,12 @@ def world(db, flask_app):  # noqa: F811
     yield {"org": org, "client": client, "db": db, "sell": sell, "lot": lot, "allocate": allocate}
 
     db.rollback()
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
     for model in (
+        SalesReturn,
         XeroCreditNoteLine,
         XeroCreditNote,
         SalesFifoAllocation,
@@ -250,6 +252,7 @@ def test_foreign_currency_revenue_is_not_tracked(world, db):
 
 
 def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, db):
+    from app.features.crm.models.sales_return import SalesReturn
     from app.features.crm.models.xero_credit_note import XeroCreditNote
     from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
 
@@ -271,23 +274,24 @@ def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, 
     )
     db.add(note)
     db.flush()
-    db.add(
-        XeroCreditNoteLine(
-            org_id=org.id,
-            credit_note_id=note.id,
-            line_key="c1",
-            description="Wildflower Gin 700ml",
-            quantity=D("2"),
-            line_amount=D("80"),
-            product_mapping_id=mapping.id,
-        )
+    credit_line = XeroCreditNoteLine(
+        org_id=org.id,
+        credit_note_id=note.id,
+        line_key="c1",
+        description="Wildflower Gin 700ml",
+        quantity=D("2"),
+        line_amount=D("80"),
+        product_mapping_id=mapping.id,
     )
+    db.add(credit_line)
     db.commit()
+    _record_credit_return(world, db, credit_line, batch, quantity="2")
     try:
         row = _row(world)
         assert (D(row["units"]), D(row["revenue"])) == (D("8"), D("320"))
         assert D(row["cost"]) == D("40") and row["cost_status"] == "estimated"
     finally:
+        db.query(SalesReturn).filter(SalesReturn.org_id == org.id).delete()
         db.query(XeroCreditNoteLine).filter(XeroCreditNoteLine.org_id == org.id).delete()
         db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id).delete()
         db.commit()
@@ -311,19 +315,84 @@ def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(20
     )
     db.add(note)
     db.flush()
+    line = XeroCreditNoteLine(
+        org_id=org.id,
+        credit_note_id=note.id,
+        line_key="c1",
+        description="Wildflower Gin 700ml",
+        quantity=D(quantity),
+        line_amount=D(amount),
+        product_mapping_id=mapping.id,
+    )
+    db.add(line)
+    db.commit()
+    return line
+
+
+def _record_credit_return(world, db, line, batch, quantity="2"):
+    from app.features.crm.models.sales_return import SalesReturn
+
     db.add(
-        XeroCreditNoteLine(
-            org_id=org.id,
-            credit_note_id=note.id,
-            line_key="c1",
-            description="Wildflower Gin 700ml",
+        SalesReturn(
+            org_id=world["org"].id,
+            credit_note_line_id=line.id,
+            product_name=GIN,
             quantity=D(quantity),
-            line_amount=D(amount),
-            product_mapping_id=mapping.id,
+            unit="bottles",
+            condition="resaleable",
+            received_on=date(2026, 10, 21),
+            original_lot_id=batch.id,
+            resulting_lot_id=batch.id,
         )
     )
     db.commit()
-    return note
+
+
+def test_credit_without_return_keeps_all_production_cost(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    _credit(world, db, amount="120", quantity="3")
+
+    row = _row(world)
+    assert D(row["cost"]) == D("50")
+
+
+def test_partial_credit_return_reverses_only_returned_units_cost(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    line = _credit(world, db, amount="120", quantity="3")
+    _record_credit_return(world, db, line, batch, quantity="2")
+
+    row = _row(world)
+    assert D(row["cost"]) == D("40")
+
+
+def test_partial_return_still_reverses_cost_after_no_return_decision(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    line = _credit(world, db, amount="120", quantity="3")
+    _record_credit_return(world, db, line, batch, quantity="2")
+    line.no_return_note = "Customer retained the remaining unit"
+    db.commit()
+
+    row = _row(world)
+    assert D(row["cost"]) == D("40")
+
+
+def test_margins_report_includes_org_base_currency_and_defaults_to_nzd(world, db):
+    from app.features.costing.models import CostingSettings
+
+    body = world["client"].get(f"{API}?from=2026-10&to=2026-10").get_json()
+    assert body["currency"] == "NZD"
+
+    settings = CostingSettings(org_id=world["org"].id, base_currency="AUD")
+    db.add(settings)
+    db.commit()
+    body = world["client"].get(f"{API}?from=2026-10&to=2026-10").get_json()
+    assert body["currency"] == "AUD"
 
 
 def test_credit_reverses_cost_at_its_month_sales_average(world, db):
@@ -331,7 +400,8 @@ def test_credit_reverses_cost_at_its_month_sales_average(world, db):
     world["lot"]("Other product stock $4", unit_cost="4")
     invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
     world["allocate"](invoice, "l1", high, 10)
-    _credit(world, db)
+    line = _credit(world, db)
+    _record_credit_return(world, db, line, high)
 
     row = _row(world)
     assert D(row["cost"]) == D("80")
@@ -343,7 +413,8 @@ def test_credit_without_month_sales_falls_back_to_all_time_average(world, db):
     world["lot"]("Other stock $4", unit_cost="4")
     invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
     world["allocate"](invoice, "l1", high, 10)
-    _credit(world, db, day=date(2026, 11, 20))
+    line = _credit(world, db, day=date(2026, 11, 20))
+    _record_credit_return(world, db, line, high)
 
     row = _row(world, month="2026-11")
     assert D(row["cost"]) == D("-14")
