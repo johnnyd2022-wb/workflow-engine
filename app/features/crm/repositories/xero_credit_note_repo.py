@@ -81,6 +81,54 @@ class XeroCreditNoteRepository:
                 line.is_current = False
                 line.updated_at = utc_now()
 
+    def missing_line_tax_snapshots(
+        self, org_id: UUID, xero_tenant_id: str, *, limit: int = 500
+    ) -> list[tuple[UUID, str]]:
+        """This org's oldest notes from this Xero tenant that predate the per-line tax snapshot."""
+        rows = (
+            self.db.query(XeroCreditNote.id, XeroCreditNote.xero_credit_note_id)
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.xero_tenant_id == xero_tenant_id,
+                ~XeroCreditNote.raw_fields.has_key("line_tax_amounts"),
+            )
+            .order_by(XeroCreditNote.created_at.asc(), XeroCreditNote.id.asc())
+            .limit(limit)
+            .all()
+        )
+        return [(note_id, xero_id) for note_id, xero_id in rows]
+
+    def update_missing_line_tax_snapshot(self, org_id: UUID, note_id: UUID, raw_fields: dict) -> bool:
+        """Write a backfilled snapshot only while this tenant's note still lacks it."""
+        updated = (
+            self.db.query(XeroCreditNote)
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.id == note_id,
+                ~XeroCreditNote.raw_fields.has_key("line_tax_amounts"),
+            )
+            .update({XeroCreditNote.raw_fields: raw_fields}, synchronize_session=False)
+        )
+        return bool(updated)
+
+    def mark_line_tax_unavailable(self, org_id: UUID, note_ids: list[UUID]) -> int:
+        """Xero didn't return these: record an empty per-line snapshot so they aren't fetched again.
+        Margins then treats a multi-line inclusive credit as untracked, as before, never guessed."""
+        notes = (
+            self.db.query(XeroCreditNote)
+            .filter(
+                XeroCreditNote.org_id == org_id,
+                XeroCreditNote.id.in_(note_ids),
+                ~XeroCreditNote.raw_fields.has_key("line_tax_amounts"),
+            )
+            .all()
+            if note_ids
+            else []
+        )
+        for note in notes:
+            note.raw_fields = {**(note.raw_fields or {}), "line_tax_amounts": {}}
+        return len(notes)
+
     def mark_missing_as_deleted(self, org_id: UUID, xero_tenant_id: str, seen_ids: set[str]) -> int:
         query = self.db.query(XeroCreditNote).filter(
             XeroCreditNote.org_id == org_id,
