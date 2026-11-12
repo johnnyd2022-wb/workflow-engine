@@ -6,6 +6,7 @@ module (costing never computes rates). Computed on read, like every cost here.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -14,7 +15,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
-from app.features.costing.engine import ACTUAL, ESTIMATED, UNKNOWN, CostEngine, normalise, worst
+from app.features.costing.engine import ACTUAL, ESTIMATED, UNKNOWN, CostEngine, TooLargeError, normalise, worst
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -61,23 +62,27 @@ class _Costs:
         self.db, self.org_id = db, org_id
         self._unit: dict = {}
         self._average: dict = {}
+        self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
+        for item in db.query(InventoryItem).filter(InventoryItem.org_id == org_id).all():
+            self._lots_by_name[normalise(item.name)].append(item)
+        self.engine.prime(item.id for items in self._lots_by_name.values() for item in items)
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:
         if item.id not in self._unit:
-            cost = self.engine.lot(item.id)
-            unit = Decimal(cost["unit_cost"]) if cost.get("unit_cost") is not None else None
-            self._unit[item.id] = (unit, cost["status"] if unit is not None else UNKNOWN)
+            try:
+                cost = self.engine._solve(("lot", item.id))
+            except TooLargeError:
+                self._unit[item.id] = (None, UNKNOWN)
+            else:
+                unit = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
+                self._unit[item.id] = (unit, cost.status if unit is not None else UNKNOWN)
         return self._unit[item.id]
 
     def average(self, product: str) -> Decimal | None:
         """The product's average unit cost over its costed lots, weighted by their quantity."""
         key = normalise(product)
         if key not in self._average:
-            lots = [
-                i
-                for i in self.db.query(InventoryItem).filter(InventoryItem.org_id == self.org_id)
-                if normalise(i.name) == key
-            ]
+            lots = self._lots_by_name.get(key, [])
             total, units = ZERO, ZERO
             for item in lots:
                 unit, status = self.lot(item)
@@ -85,7 +90,7 @@ class _Costs:
                     continue
                 qty = Decimal(str(item.quantity or 0))
                 if not qty.is_finite() or qty <= 0:
-                    qty = Decimal("1")  # an emptied lot still counts once
+                    continue
                 weight = qty
                 total += unit * weight
                 units += weight
@@ -94,14 +99,7 @@ class _Costs:
 
     def any_lot(self, product: str) -> InventoryItem | None:
         key = normalise(product)
-        return next(
-            (
-                i
-                for i in self.db.query(InventoryItem).filter(InventoryItem.org_id == self.org_id)
-                if normalise(i.name) == key
-            ),
-            None,
-        )
+        return next(iter(self._lots_by_name.get(key, [])), None)
 
 
 def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
@@ -123,13 +121,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             rows[key] = _Row(product=product, month=month_start(day), duty_tracked=duty_on)
         return rows[key]
 
-    def duty(item: InventoryItem | None, units: Decimal, on: date) -> Decimal | None:
-        if not duty_on or item is None:
-            return None
-        measured = excise.measure(db, org_id, [(item, units)], on)[0]["duty"]
-        return None if measured is None else Decimal(measured)
-
     lines, _unmapped = sale_lines(db, org_id, start, next_month(end))
+    duty_pairs: dict[date, list[tuple[_Row, InventoryItem, Decimal]]] = defaultdict(list)
     for sale in lines:
         row = row_for(sale.product_name, sale.sold_on)
         foreign = sale.currency and sale.currency.upper() != base_currency
@@ -145,7 +138,8 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             if unit is not None:
                 row.cost += units * unit
                 row.cost_units += units
-            row.add_duty(duty(item, units, sale.sold_on))
+            if duty_on:
+                duty_pairs[sale.sold_on].append((row, item, units))
             batches.append(
                 {
                     "inventory_item_id": str(item.id),
@@ -165,7 +159,9 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 row.cost += loose * average
                 row.cost_units += loose
                 row.statuses.append(ESTIMATED)
-            row.add_duty(duty(costs.any_lot(sale.product_name), loose, sale.sold_on))
+            any_lot = costs.any_lot(sale.product_name)
+            if duty_on and any_lot is not None:
+                duty_pairs[sale.sold_on].append((row, any_lot, loose))
         row.lines.append(
             {
                 "reference": sale.reference,
@@ -177,12 +173,28 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             }
         )
 
-    for credit in _credits(db, org_id, start, next_month(end)):
+    for on, pairs in duty_pairs.items():
+        measured = excise.measure(db, org_id, [(item, units) for _, item, units in pairs], on)
+        for (row, _, _), result in zip(pairs, measured, strict=True):
+            value = result["duty"]
+            row.add_duty(None if value is None else Decimal(value))
+
+    credits = _credits(db, org_id, start, next_month(end))
+    sales_costs: dict[tuple[str, date], tuple[Decimal, Decimal]] = {}
+    for (product, month), row in rows.items():
+        sales_costs[(normalise(product), month)] = (row.cost, row.cost_units)
+
+    for credit in credits:
         row = row_for(credit["product"], credit["date"])
         row.units -= credit["units"]
-        row.add_revenue(None if credit["amount"] is None else -credit["amount"])
+        foreign = credit["currency"] and credit["currency"].upper() != base_currency
+        amount = None if foreign else credit["amount"]
+        row.add_revenue(None if amount is None else -amount)
         if credit["returned"]:
-            average = costs.average(credit["product"])
+            month_cost, month_units = sales_costs.get(
+                (normalise(credit["product"]), month_start(credit["date"])), (ZERO, ZERO)
+            )
+            average = month_cost / month_units if month_units > 0 else costs.average(credit["product"])
             if average is None:
                 row.statuses.append(UNKNOWN)
             else:
@@ -194,7 +206,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 "reference": credit["reference"],
                 "sold_on": credit["date"].isoformat(),
                 "units": f"{-credit['units']:f}",
-                "revenue": _m(None if credit["amount"] is None else -credit["amount"]),
+                "revenue": _m(None if amount is None else -amount),
                 "unbatched_units": "0",
                 "batches": [],
                 "credit_note": True,
@@ -271,6 +283,7 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
                 "units": quantity * int(mapping.units_per_line or 1),
                 "amount": None if line.line_amount is None else Decimal(str(line.line_amount)),
                 "returned": not line.no_return_note,
+                "currency": note.currency,
             }
         )
     return out

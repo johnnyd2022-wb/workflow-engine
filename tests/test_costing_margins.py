@@ -113,7 +113,18 @@ def world(db, flask_app):  # noqa: F811
     yield {"org": org, "client": client, "db": db, "sell": sell, "lot": lot, "allocate": allocate}
 
     db.rollback()
-    for model in (SalesFifoAllocation, XeroInvoiceLineItem, XeroInvoice, ProductMapping, AlcoholProductProfile):
+    from app.features.crm.models.xero_credit_note import XeroCreditNote
+    from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
+
+    for model in (
+        XeroCreditNoteLine,
+        XeroCreditNote,
+        SalesFifoAllocation,
+        XeroInvoiceLineItem,
+        XeroInvoice,
+        ProductMapping,
+        AlcoholProductProfile,
+    ):
         db.query(model).filter(model.org_id == org.id).delete(synchronize_session=False)
     db.commit()
     purge(db, org)
@@ -255,6 +266,74 @@ def test_ac103_credit_note_reduces_revenue_and_units_with_estimated_cost(world, 
         db.commit()
 
 
+def _credit(world, db, *, amount="80", quantity="2", currency="NZD", day=date(2026, 10, 20)):
+    from app.features.crm.models.xero_credit_note import XeroCreditNote
+    from app.features.crm.models.xero_credit_note_line import XeroCreditNoteLine
+
+    org = world["org"]
+    mapping = db.query(ProductMapping).filter(ProductMapping.org_id == org.id).one()
+    note = XeroCreditNote(
+        org_id=org.id,
+        xero_credit_note_id=f"cn-{uuid4()}",
+        xero_tenant_id="t",
+        number="CN-TEST",
+        date=day,
+        status="AUTHORISED",
+        total=D(amount),
+        currency=currency,
+    )
+    db.add(note)
+    db.flush()
+    db.add(
+        XeroCreditNoteLine(
+            org_id=org.id,
+            credit_note_id=note.id,
+            line_key="c1",
+            description="Wildflower Gin 700ml",
+            quantity=D(quantity),
+            line_amount=D(amount),
+            product_mapping_id=mapping.id,
+        )
+    )
+    db.commit()
+    return note
+
+
+def test_credit_reverses_cost_at_its_month_sales_average(world, db):
+    high = world["lot"]("October $10", unit_cost="10")
+    world["lot"]("Other product stock $4", unit_cost="4")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](invoice, "l1", high, 10)
+    _credit(world, db)
+
+    row = _row(world)
+    assert D(row["cost"]) == D("80")
+    assert row["cost_status"] == "estimated"
+
+
+def test_credit_without_month_sales_falls_back_to_all_time_average(world, db):
+    high = world["lot"]("October $10", unit_cost="10")
+    world["lot"]("Other stock $4", unit_cost="4")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](invoice, "l1", high, 10)
+    _credit(world, db, day=date(2026, 11, 20))
+
+    row = _row(world, month="2026-11")
+    assert D(row["cost"]) == D("-14")
+    assert row["cost_status"] == "estimated"
+
+
+def test_foreign_currency_credit_revenue_is_not_tracked(world, db):
+    batch = world["lot"]("B1", unit_cost="5")
+    inv = world["sell"]([("Wildflower Gin 700ml", 10, "400", "0")])
+    world["allocate"](inv, "l1", batch, 10)
+    _credit(world, db, amount="80", currency="AUD")
+
+    row = _row(world)
+    assert row["revenue"] is None
+    assert row["margin"] is None
+
+
 def test_ac104_margins_never_cross_orgs(world, db, flask_app):  # noqa: F811
     batch = world["lot"]("B1", unit_cost="4.75")
     inv = world["sell"]([("Wildflower Gin 700ml", 12, "480", "0")])
@@ -269,7 +348,167 @@ def test_ac104_margins_never_cross_orgs(world, db, flask_app):  # noqa: F811
 
 
 @pytest.mark.parametrize(
-    "query", ["from=2026-13&to=2026-10", "from=nope", "from=2026-10&to=2026-01", "from=2020-01&to=2026-10"]
+    "query",
+    [
+        "from=2026-13&to=2026-10",
+        "from=nope",
+        "from=2026-1&to=2026-10",
+        "from=%202026-10&to=2026-10",
+        "from=2026-10%20&to=2026-10",
+        "from=&to=2026-10",
+        "from=2026-10&to=2026-01",
+        "from=2020-01&to=2026-10",
+    ],
 )
 def test_bad_ranges_are_400(world, query):
     assert world["client"].get(f"{API}?{query}").status_code == 400
+
+
+def test_default_range_is_exactly_six_inclusive_months(world, monkeypatch):
+    from app.features.costing import purchase_sources
+
+    monkeypatch.setattr(purchase_sources, "nz_today", lambda: date(2026, 11, 12))
+    response = world["client"].get(API)
+
+    assert response.status_code == 200
+    assert response.get_json()["from"] == "2026-06"
+    assert response.get_json()["to"] == "2026-11"
+
+
+@pytest.mark.parametrize(
+    ("quantities", "expected"),
+    [([0, 100], "8"), ([0, 0], None)],
+)
+def test_product_average_excludes_empty_and_nonpositive_lots(world, quantities, expected):
+    empty = world["lot"]("empty", qty=quantities[0])
+    price(world["db"], world["org"].id, empty.id, D("400"), D("100"))
+    positive = world["lot"]("positive", qty=quantities[1])
+    price(world["db"], world["org"].id, positive.id, D("800"), D("100"))
+    world["sell"]([("Wildflower Gin 700ml", 1, "40", "0")])
+
+    row = _row(world)
+    if expected is None:
+        assert row["cost"] is None and row["cost_status"] == "unknown"
+    else:
+        assert D(row["cost"]) == D(expected)
+
+
+def test_margins_query_count_stays_bounded_with_more_allocations_and_products(world, db):
+    from sqlalchemy import event
+
+    def capture_count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+
+        def count(*_args):
+            statements.append(1)
+
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            assert world["client"].get(f"{API}?from=2026-10&to=2026-10").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        return len(statements)
+
+    first = world["lot"]("baseline-1", unit_cost="4")
+    baseline_invoice = world["sell"]([("Wildflower Gin 700ml", 3, "120", "0")])
+    world["allocate"](baseline_invoice, "l1", world["lot"]("baseline-2", unit_cost="4"), 1)
+    world["allocate"](baseline_invoice, "l1", world["lot"]("baseline-3", unit_cost="4"), 1)
+    world["allocate"](baseline_invoice, "l1", first, 1)
+    baseline = capture_count()
+
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    def extra_product(name, allocations):
+        description = f"Margin product {name}"
+        mapping = ProductMapping(
+            org_id=world["org"].id,
+            biz_e_product_name=name,
+            xero_description_pattern=description,
+        )
+        db.add(mapping)
+        db.flush()
+        invoice = XeroInvoice(
+            org_id=world["org"].id,
+            xero_invoice_id=f"inv-{uuid4()}",
+            xero_tenant_id="t",
+            invoice_type="ACCREC",
+            status="AUTHORISED",
+            invoice_number=f"INV-{uuid4().hex[:4]}",
+            date=SOLD,
+            currency_code="NZD",
+            sub_total=D(allocations * 10),
+            total_tax=D(0),
+            total=D(allocations * 10),
+        )
+        db.add(invoice)
+        db.flush()
+        line = XeroInvoiceLineItem(
+            org_id=world["org"].id,
+            invoice_id=invoice.id,
+            xero_line_item_id="l1",
+            description=description,
+            quantity=D(allocations),
+            line_amount=D(allocations * 10),
+            tax_amount=D(0),
+        )
+        db.add(line)
+        db.flush()
+        for index in range(allocations):
+            item = InventoryRepository(db).create_inventory_item(
+                org_id=world["org"].id,
+                name=name,
+                quantity="100",
+                unit="bottles",
+                inventory_type=InventoryType.FINAL_PRODUCT.value,
+                supplier_batch_number=f"{name}-{index}",
+            )
+            price(db, world["org"].id, item.id, D("400"), D("100"))
+            db.add(
+                SalesFifoAllocation(
+                    org_id=world["org"].id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    xero_line_key="l1",
+                    inventory_item_id=item.id,
+                    product_name=name,
+                    quantity=D(1),
+                    unit="bottles",
+                )
+            )
+        db.commit()
+
+    # Grow the first product from 3 to 6 allocations, then add four products with 6 each.
+    line = db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == baseline_invoice.id).one()
+    line.quantity = D(6)
+    line.line_amount = D(240)
+    baseline_invoice.sub_total = D(240)
+    baseline_invoice.total = D(240)
+    for index in range(3):
+        item = world["lot"](f"baseline-extra-{index}", unit_cost="4")
+        world["allocate"](baseline_invoice, "l1", item, 1)
+    for index in range(2, 6):
+        extra_product(f"Margin product {index}", 6)
+
+    scaled = capture_count()
+    assert scaled <= baseline + 10, f"query count grew from {baseline} to {scaled}"
+
+
+def test_duty_measurement_batches_all_allocations_on_the_same_date(world, db, monkeypatch):
+    _enable_alcohol(world)
+    invoice = world["sell"]([("Wildflower Gin 700ml", 3, "120", "0")])
+    for index in range(3):
+        world["allocate"](invoice, "l1", world["lot"](f"duty-{index}", unit_cost="4"), 1)
+
+    calls = []
+    original = excise.measure
+
+    def measure(session, org_id, pairs, on):
+        calls.append((pairs, on))
+        return original(session, org_id, pairs, on)
+
+    monkeypatch.setattr(excise, "measure", measure)
+    assert world["client"].get(f"{API}?from=2026-10&to=2026-10").status_code == 200
+
+    assert len(calls) == 1
+    assert len(calls[0][0]) == 3
+    assert calls[0][1] == SOLD
