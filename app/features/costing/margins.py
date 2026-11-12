@@ -12,10 +12,21 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
-from app.features.costing.engine import ACTUAL, ESTIMATED, PARTIAL, UNKNOWN, CostEngine, TooLargeError, normalise, worst
+from app.features.costing.engine import (
+    _LIBRARY_SUFFIX,
+    ACTUAL,
+    ESTIMATED,
+    PARTIAL,
+    UNKNOWN,
+    CostEngine,
+    TooLargeError,
+    normalise,
+    worst,
+)
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -66,17 +77,29 @@ class _Costs:
         self._average: dict = {}
         wanted = {normalise(p) for p in products}
         self._lots_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
-        finished = (
-            db.query(InventoryItem)
-            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
-            .all()
-            if wanted
-            else []
-        )
+        finished = []
+        if wanted:
+            # Match in SQL the way normalise() does (trimmed, lower case, single spaces, Library stock
+            # counted as its product), so unrelated finished lots never leave the database.
+            name = func.lower(func.regexp_replace(func.trim(InventoryItem.name), r"\s+", " ", "g"))
+            finished = (
+                db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                    or_(name.in_(wanted), name.in_([w + _LIBRARY_SUFFIX for w in wanted])),
+                )
+                .all()
+            )
         for item in finished:
             if normalise(item.name) in wanted:
                 self._lots_by_name[normalise(item.name)].append(item)
-        self.engine.prime({*sold_lot_ids, *(item.id for items in self._lots_by_name.values() for item in items)})
+        try:
+            self.engine.prime({*sold_lot_ids, *(item.id for items in self._lots_by_name.values() for item in items)})
+        except TooLargeError:
+            # Lineage too big to load up front: cost lot by lot instead, and any lot over budget reads
+            # unknown (lot() catches it) rather than the report failing.
+            self.engine = CostEngine(db, org_id)
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:
         if item.id not in self._unit:

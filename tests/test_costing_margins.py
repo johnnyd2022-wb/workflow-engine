@@ -26,6 +26,8 @@ from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-ex
 
 API = "/api/core/costing/margins"
 GIN = "Wildflower"
+from app.features.costing.engine import normalise  # noqa: E402
+
 D = Decimal
 SOLD = date(2026, 10, 7)
 
@@ -719,3 +721,50 @@ def test_r5_unrelated_products_are_never_primed(world, db):
     primed = set(costs.engine._in_flow_cache)
     assert sold.id in primed
     assert not primed & {item.id for item in unrelated}
+    fetched = {item.id for items in costs._lots_by_name.values() for item in items}
+    assert not fetched & {item.id for item in unrelated}, "unrelated lots never leave the database"
+
+
+def test_r6_library_stock_and_spacing_still_match_the_product_in_sql(world, db):
+    from app.features.costing.margins import _Costs
+    from tests.costing_helpers import lot as make_lot
+
+    library = make_lot(
+        db, world["org"].id, f"  {GIN.upper()}  - Library stock", 1, "bottles", inventory_type="final_product"
+    )
+    db.commit()
+    costs = _Costs(db, world["org"].id, products={GIN})
+    assert library.id in {item.id for item in costs._lots_by_name[normalise(GIN)]}
+
+
+def test_r6_a_lineage_too_big_to_prime_reads_unknown_not_a_500(world, monkeypatch):
+    from app.features.costing import engine as engine_module
+
+    batch = world["lot"]("B1", unit_cost="4")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](inv, "l1", batch, 2)
+    monkeypatch.setattr(engine_module, "MAX_WORK", 0)
+    response = world["client"].get(f"{API}?from=2026-10&to=2026-10")
+    assert response.status_code == 200, response.get_json()
+    (row,) = [r for r in response.get_json()["rows"] if r["product"] == GIN]
+    assert row["cost"] is None and row["cost_status"] == "unknown"
+
+
+def test_r6_one_unmeasurable_sale_leaves_a_mixed_months_margin_unknown(world, monkeypatch):
+    """A month with one measured and one unmeasured sale has no margin: half the duty isn't the duty."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    _enable_alcohol(world)
+    first, second = world["lot"]("B1", unit_cost="4"), world["lot"]("B2", unit_cost="4")
+    inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
+    world["allocate"](inv, "l1", first, 1)
+    world["allocate"](inv, "l1", second, 1)
+    real = excise.measure
+
+    def half_measured(db, org, pairs, on, **kw):
+        out = real(db, org, pairs, on, **kw)
+        return [dict(out[0], duty="1.00")] + [dict(r, duty=None) for r in out[1:]]
+
+    monkeypatch.setattr(excise, "measure", half_measured)
+    row = _row(world)
+    assert row["duty"] is None and row["margin"] is None
