@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -42,7 +42,7 @@ def next_month(day: date) -> date:
 
 
 def _m(value: Decimal | None) -> str | None:
-    return None if value is None else f"{value.quantize(CENT):f}"
+    return None if value is None else f"{value.quantize(CENT, rounding=ROUND_HALF_UP):f}"
 
 
 @dataclass
@@ -340,7 +340,7 @@ def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:
             continue
         units_per_line = int(mapping.units_per_line or 1)
         units = quantity * units_per_line
-        returned_units = min(Decimal(str(returned_quantity)) * units_per_line, units)
+        returned_units = min(Decimal(str(returned_quantity)), units)  # returns are recorded in stock units
         out.append(
             {
                 "product": mapping.biz_e_product_name,
