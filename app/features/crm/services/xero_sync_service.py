@@ -58,6 +58,14 @@ class SyncResult:
         )
 
 
+def _add_stats(*parts: dict) -> dict:
+    out: dict = {}
+    for part in parts:
+        for key, value in part.items():
+            out[key] = out.get(key, 0) + value
+    return out
+
+
 class PurchasesNeedReconnectError(Exception):
     """The connected Xero token can't read purchases (live-cogs 8.1c-2 historical runs)."""
 
@@ -561,7 +569,7 @@ class XeroSyncService:
         from app.core.security.entitlements import org_has_feature
         from app.features.costing import FEATURE_KEY
         from app.features.costing.models import CostingSettings
-        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions
+        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions, upsert_bills
         from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
         from app.features.crm.services import xero_api_client as client_module
 
@@ -580,18 +588,22 @@ class XeroSyncService:
                     bootstrap = settings.purchases_cursor is None or settings.purchases_tenant_id != tenant_id
                     base_currency = api_client.get_base_currency()
                     accounts = sync_accounts(self.db, org_id, api_client.get_accounts())
-                    transactions = api_client.get_bank_transactions(
-                        modified_after=None if bootstrap else settings.purchases_cursor,
-                        from_date=settings.start_date if bootstrap else None,
-                    )
-                    stats = upsert_bank_transactions(
-                        self.db,
-                        org_id,
-                        transactions,
-                        accounts=accounts,
-                        base_currency=base_currency,
-                        start_date=settings.start_date,
-                        xero_tenant_id=tenant_id,
+                    window = {
+                        "modified_after": None if bootstrap else settings.purchases_cursor,
+                        "from_date": settings.start_date if bootstrap else None,
+                    }
+                    transactions = api_client.get_bank_transactions(**window)
+                    bills = api_client.get_bills(**window)  # 8.1f-1: same cursor rules
+                    credits = api_client.get_bill_credit_notes(**window)
+                    common = {
+                        "accounts": accounts,
+                        "base_currency": base_currency,
+                        "start_date": settings.start_date,
+                        "xero_tenant_id": tenant_id,
+                    }
+                    stats = _add_stats(
+                        upsert_bank_transactions(self.db, org_id, transactions, **common),
+                        upsert_bills(self.db, org_id, bills, credits, **common),
                     )
                     settings.base_currency = base_currency
                     settings.purchases_tenant_id = tenant_id
@@ -622,7 +634,7 @@ class XeroSyncService:
         always (no modified-since), with the start-date filter lifted. Idempotent by upsert key.
         Raises ``PurchasesNeedReconnectError`` without the purchases scopes."""
         from app.features.costing.models import CostingSettings
-        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions
+        from app.features.costing.purchase_sources import sync_accounts, upsert_bank_transactions, upsert_bills
         from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
         from app.features.crm.services import xero_api_client as client_module
 
@@ -642,17 +654,19 @@ class XeroSyncService:
                     settings = self._costing_settings_for_update(org_id, CostingSettings)
                     base_currency = api_client.get_base_currency()
                     accounts = sync_accounts(self.db, org_id, api_client.get_accounts())
-                    transactions = api_client.get_bank_transactions(
-                        modified_after=None, from_date=date_from, to_date=date_to
-                    )
-                    stats = upsert_bank_transactions(
-                        self.db,
-                        org_id,
-                        transactions,
-                        accounts=accounts,
-                        base_currency=base_currency,
-                        start_date=None,
-                        xero_tenant_id=tenant.xero_tenant_id,
+                    window = {"modified_after": None, "from_date": date_from, "to_date": date_to}
+                    transactions = api_client.get_bank_transactions(**window)
+                    bills = api_client.get_bills(**window)  # 8.1f-1
+                    credits = api_client.get_bill_credit_notes(**window)
+                    common = {
+                        "accounts": accounts,
+                        "base_currency": base_currency,
+                        "start_date": None,
+                        "xero_tenant_id": tenant.xero_tenant_id,
+                    }
+                    stats = _add_stats(
+                        upsert_bank_transactions(self.db, org_id, transactions, **common),
+                        upsert_bills(self.db, org_id, bills, credits, **common),
                     )
                     settings.base_currency = base_currency
                     settings.last_history_from = date_from

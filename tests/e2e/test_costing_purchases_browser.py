@@ -217,3 +217,27 @@ def test_bulk_skip_from_style_one_and_no_style_switch(manager, page, app_url, db
     expect(page.locator(".pu-card")).to_have_count(0)
     db.expire_all()
     assert {db.get(PurchaseLine, i).state for i in (first, second)} == {"skipped"}
+
+
+def test_a_synced_bill_card_shows_its_number_and_reference(manager, page, app_url, db):
+    """8.1f-1 review: a bill's card carries "Bill INV-0042 · PO 77", not just the date and account."""
+    from app.features.costing.purchase_sources import nz_today, sync_accounts, upsert_bills
+    from tests.test_costing_bills import _bill_line, bill
+    from tests.test_costing_purchases import ACCOUNTS
+
+    _org_with_purchases(db, manager, ["40"])
+    accounts = sync_accounts(db, manager, ACCOUNTS)
+    upsert_bills(
+        db,
+        manager,
+        [bill([_bill_line("120")], on=nz_today())],
+        [],
+        accounts=accounts,
+        base_currency="NZD",
+        start_date=None,
+        xero_tenant_id=f"e2e-{manager}",
+    )
+    db.commit()
+    _open(page, app_url)
+    card = page.locator(".pu-card", has=page.locator(".pu-badge", has_text="Bill"))
+    expect(card.locator(".pu-meta")).to_contain_text("Bill INV-0042 · PO 77")

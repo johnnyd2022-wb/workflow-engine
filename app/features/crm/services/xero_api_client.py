@@ -286,6 +286,47 @@ class XeroAPIClient:
             page += 1
         return transactions
 
+    def _purchase_where(self, base: str, from_date=None, to_date=None) -> str:
+        where = base
+        if from_date is not None:
+            where += f" AND Date >= DateTime({from_date.year}, {from_date.month:02d}, {from_date.day:02d})"
+        if to_date is not None:
+            where += f" AND Date <= DateTime({to_date.year}, {to_date.month:02d}, {to_date.day:02d})"
+        return where
+
+    def _all_pages(self, method, attr: str, where: str, modified_after: datetime | None) -> list:
+        kwargs: dict = {"where": where}
+        if modified_after:
+            if modified_after.tzinfo is None:
+                modified_after = modified_after.replace(tzinfo=UTC)
+            kwargs["if_modified_since"] = modified_after
+        rows: list = []
+        page = 1
+        while True:
+            result = self._call_with_retry(method, self._xero_tenant_id, page=page, **kwargs)
+            batch = getattr(result, attr, None) or []
+            rows.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return rows
+
+    def get_bills(self, modified_after: datetime | None = None, from_date=None, to_date=None) -> list:
+        """ACCPAY invoices (bills) dated in the range, every status, all pages (live-cogs 8.1f-1)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        where = self._purchase_where('Type=="ACCPAY"', from_date, to_date)
+        return self._all_pages(api.get_invoices, "invoices", where, modified_after)
+
+    def get_bill_credit_notes(self, modified_after: datetime | None = None, from_date=None, to_date=None) -> list:
+        """ACCPAYCREDIT credit notes (supplier credits) dated in the range, all pages (8.1f-1)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        where = self._purchase_where('Type=="ACCPAYCREDIT"', from_date, to_date)
+        return self._all_pages(api.get_credit_notes, "credit_notes", where, modified_after)
+
     def fetch_all_credit_notes(self, modified_after: datetime | None = None) -> list:
         """Return all ACCRECCREDIT notes, with each page using the normal Xero retry policy."""
         from xero_python.accounting import AccountingApi
