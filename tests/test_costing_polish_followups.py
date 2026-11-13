@@ -211,7 +211,9 @@ def test_ac4_the_materials_picker_reads_costing_settings_once_when_nothing_fits(
     assert len(reads) == 1, f"settings read {len(reads)} times: {reads}"
 
 
-def test_ac4_a_margins_report_reads_costing_settings_once_when_its_lineage_is_too_big(margins_world, db, monkeypatch):  # noqa: F811
+def test_ac4_a_margins_report_adds_no_settings_read_when_its_lineage_is_too_big(margins_world, db, monkeypatch):  # noqa: F811
+    """The report reads the costing settings for its base currency, and its engine reads them once;
+    running out of budget must add nothing to that."""
     from tests.test_costing_margins import API as MARGINS_API
     from tests.test_costing_margins import GIN
 
@@ -219,12 +221,16 @@ def test_ac4_a_margins_report_reads_costing_settings_once_when_its_lineage_is_to
     batch = world["lot"]("B1", unit_cost="4")
     inv = world["sell"]([("Wildflower Gin 700ml", 2, "80", "0")])
     world["allocate"](inv, "l1", batch, 2)
+    url = f"{MARGINS_API}?from=2026-10&to=2026-10"
+    with _statements_touching(db, "costing_settings") as normal:
+        assert world["client"].get(url).status_code == 200
     monkeypatch.setattr(engine_module, "MAX_WORK", 0)
-    with _statements_touching(db, "costing_settings") as reads:
-        response = world["client"].get(f"{MARGINS_API}?from=2026-10&to=2026-10")
+    with _statements_touching(db, "costing_settings") as overflowed:
+        response = world["client"].get(url)
     assert response.status_code == 200, response.get_json()
     assert [r for r in response.get_json()["rows"] if r["product"] == GIN]
-    assert len(reads) == 1, f"settings read {len(reads)} times: {reads}"
+    assert len(normal) == 2, "the base currency, and the engine's settings"
+    assert len(overflowed) == len(normal), f"settings read {len(overflowed)} times: {overflowed}"
 
 
 def test_ac4_an_engine_on_its_own_budget_copies_what_the_first_one_read(readiness_world, db):  # noqa: F811

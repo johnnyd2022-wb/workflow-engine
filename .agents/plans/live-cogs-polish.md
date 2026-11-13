@@ -79,6 +79,13 @@ Behaviour is fixed; these would pin it:
 - **Multipack reading in the pack-size hint.** "Tonic 24 x 200ml" treats one unit as the whole
   pack of 24. Someone counting single bottles gets a per-litre figure 24× too low. The forms only
   offer units/pieces, so pack-as-unit was the likelier reading; revisit if it misleads.
+- **Readiness has no answer for a catalogue too big to load at all.** If one tenant's batch
+  history tops the engine's work budget (`MAX_WORK`, 200,000 rows) while `prime` is loading it,
+  `GET /api/core/costing/readiness` raises `TooLargeError` and the Costs page gets a 500. Price
+  history and margins already fall back to costing item by item (`price_history._primed`,
+  `margins._Costs`); readiness would need the same: prime per product, and read a product that
+  still doesn't fit as "not ready". Found 14 Nov 2026 while fixing the shared budget; Whistlebird
+  is nowhere near it, so not built.
 - **Credit-note tax backfill** runs on each Xero sync, up to 500 older notes a time. Until a
   note is backfilled, a multi-line tax-inclusive credit's revenue is untracked rather than
   guessed. Looked at again on 14 Nov 2026 and left as is, on purpose: the cap is 13 Xero
