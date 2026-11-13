@@ -570,3 +570,24 @@ def test_r9_when_priming_overflows_each_lot_is_costed_on_its_own_budget(world, d
     monkeypatch.setattr(engine_module, "MAX_WORK", 12)
     body = _history(client, "Budget Gin").get_json()
     assert {row["id"]: row["status"] for row in body["lots"]} == expected
+
+
+def test_r10_a_spent_node_budget_never_turns_later_lots_unknown(world, db, monkeypatch):
+    """Review r9: priming fits, but the lots together pass MAX_NODES: each lot still reads as its own
+    cost page does."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, lot_cost, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    for _ in range(4):
+        execution, (step,) = workflow(db, org.id, [[{"name": "Node Gin", "unit": "bottles"}]])
+        complete(client, execution, step, [(spirit, 1, "L")], [{"name": "Node Gin", "quantity": 1, "unit": "bottles"}])
+    db.expire_all()
+    rows = _history(client, "Node Gin").get_json()["lots"]
+    expected = {row["id"]: lot_cost(db, org.id, row["id"])["status"] for row in rows}
+    assert set(expected.values()) == {"actual"}
+    monkeypatch.setattr(engine_module, "MAX_NODES", 4)  # one lot fits; four together don't
+    body = _history(client, "Node Gin").get_json()
+    assert {row["id"]: row["status"] for row in body["lots"]} == expected

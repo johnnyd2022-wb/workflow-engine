@@ -213,7 +213,14 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     lot_rows = []
     for item in lots:
         try:
-            cost = (engine if primed else CostEngine(db, org_id))._solve(("lot", item.id))
+            try:
+                cost = (engine if primed else CostEngine(db, org_id))._solve(("lot", item.id))
+            except TooLargeError:
+                if not primed:
+                    raise
+                # The shared engine's node budget is spent across earlier lots: cost this one on its
+                # own budget, reusing what was loaded, so it reads as its own cost page does.
+                cost = _own_budget(engine, db, org_id)._solve(("lot", item.id))
         except TooLargeError:  # a history too long to cost: unknown, as the lot-cost API says
             status, public_cost = UNKNOWN, None
         else:
@@ -330,6 +337,19 @@ def _effective_facts(engine, by_id, allocations, entries_by_lot):
                     fact_id=whole.id,
                 )
     return facts
+
+
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
+def _own_budget(loaded: CostEngine, db: Session, org_id: UUID) -> CostEngine:
+    """A fresh engine (its own work and node budgets) that reuses a successfully primed engine's
+    loaded rows, so retrying one item queries nothing twice."""
+    engine = CostEngine(db, org_id)
+    for cache in _LOADED_CACHES:
+        setattr(engine, cache, getattr(loaded, cache))
+    engine._materials = loaded._materials
+    return engine
 
 
 def _primed(db: Session, org_id: UUID, ids) -> tuple[CostEngine, bool]:
