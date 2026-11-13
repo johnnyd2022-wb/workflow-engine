@@ -125,7 +125,8 @@ def lot_provenance(db: Session, org_id: UUID, item: InventoryItem) -> dict | Non
                 "kind": "batch",
                 "name": row[1],
                 "date": row[0].date().isoformat() if row[0] else None,
-                "href": "/core/executions/live",
+                # The batch itself, running or finished (the Batches page opens it from the link).
+                "href": f"/core/executions/live?execution={item.source_execution_id}",
             }
     if item.transfer_receipt_id:
         from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer

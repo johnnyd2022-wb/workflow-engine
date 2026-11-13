@@ -1,0 +1,33 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Margins{% endblock %}
+{% block body_class %}costing-margins-page{% endblock %}
+{% block content %}
+{# Inside the content block: a boosted navigation swaps only #page-content. #}
+<link rel="stylesheet" href="{{ url_for('costing.static', filename='margins.css') }}">
+<div class="mg-shell workspace-overview workspace-page" data-margins-root aria-busy="true"
+     data-can-fix-duty="{{ 'true' if can('compliance.manage') else 'false' }}">
+  <header class="workspace-header">
+    <div>
+      <h1>Margins</h1>
+      <p>What each product made after what went into it and the duty on it, month by month.</p>
+    </div>
+    <form class="mg-range" data-margins-range aria-label="Months">
+      <label><span>From</span><input type="month" name="from" id="mg-from" required></label>
+      <label><span>To</span><input type="month" name="to" id="mg-to" required></label>
+      <button type="submit" class="workspace-button">Show</button>
+    </form>
+  </header>
+
+  <div class="workspace-notice" role="alert" data-margins-error hidden></div>
+  <p class="mg-loading" role="status" data-margins-loading>Loading margins…</p>
+  <section class="mg-summary" aria-label="Totals" data-margins-summary hidden></section>
+  <p class="mg-note" data-margins-note hidden></p>
+  <ul class="mg-list" data-margins-list aria-label="Products"></ul>
+  <div class="mg-empty workspace-card" data-margins-empty hidden>
+    <h2>No sales in these months</h2>
+    <p>Margins come from Xero sales matched to batches. Check Batch matching if sales are missing.</p>
+    <a class="workspace-button" href="/crm/matching">Batch matching</a>
+  </div>
+  <script src="{{ url_for('costing.static', filename='margins.js') }}" defer></script>
+</div>
+{% endblock %}

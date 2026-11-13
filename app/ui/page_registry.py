@@ -161,6 +161,7 @@ PAGES: tuple[Page, ...] = (
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
+    Page("/core/costing/margins", "sales", "margins", "Margins", None, "costing"),
     Page("/crm/excise", "sales", "excise", "Excise estimate", None, "crm"),
     Page("/core/settings", "settings", "account", "My account", None, None),
     Page("/core/people", "settings", "people", "People and roles", None, None),
@@ -194,6 +195,7 @@ class Tab:
     path: str
     requires: tuple[str, ...] = ()
     when: str | None = None
+    requires_all: tuple[str, ...] = ()  # and every one of these (a page that needs two kinds of access)
 
 
 SECTION_LABELS = {
@@ -242,6 +244,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("tasks", "Sales tasks", "/crm/tasks", ("sales.view",)),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
+        # Live cost (8.1f-2): profit per product per month; costing orgs, needs cost and sales access.
+        Tab("margins", "Margins", "/core/costing/margins", when="costing", requires_all=("costs.view", "sales.view")),
         # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales. GL-U02b: one name
         # per place: the estimate lives in Sales, the filing draft in Compliance → Customs.
         Tab("excise", "Excise estimate", "/crm/excise", ("sales.view",), when="nz_alcohol"),
@@ -280,6 +284,6 @@ WORKSPACE_TAB_GROUPS = {
         ("overview", "configuration", "excise"),
         ("customers",),
         ("tasks",),
-        ("analytics", "matching"),
+        ("analytics", "matching", "margins"),
     ),
 }
