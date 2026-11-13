@@ -542,3 +542,31 @@ def test_r8_history_queries_stay_flat_as_produced_lots_grow(world, db):
     batches(6)
     many = count()
     assert many <= few + 3, (few, many)
+
+
+def test_r9_when_priming_overflows_each_lot_is_costed_on_its_own_budget(world, db, monkeypatch):
+    """Review r8: with priming over budget, lots must not share one exhausted engine: each lot reads
+    the same status its own lot-cost page gives."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, lot_cost, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    lot_ids = []
+    for _ in range(4):
+        execution, (step,) = workflow(db, org.id, [[{"name": "Budget Gin", "unit": "bottles"}]])
+        complete(
+            client, execution, step, [(spirit, 1, "L")], [{"name": "Budget Gin", "quantity": 1, "unit": "bottles"}]
+        )
+    db.expire_all()
+    expected = {}
+    for row in _history(client, "Budget Gin").get_json()["lots"]:
+        expected[row["id"]] = lot_cost(db, org.id, row["id"])["status"]
+        lot_ids.append(row["id"])
+    assert set(expected.values()) == {"actual"}
+
+    # A budget that one lot fits but all four together don't.
+    monkeypatch.setattr(engine_module, "MAX_WORK", 12)
+    body = _history(client, "Budget Gin").get_json()
+    assert {row["id"]: row["status"] for row in body["lots"]} == expected
