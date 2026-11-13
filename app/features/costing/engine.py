@@ -147,21 +147,37 @@ def _cycle_lot(item: InventoryItem) -> LotCost:
     return LotCost(None, UNKNOWN, "none", missing={str(item.id): item.name}, warnings={"cycle"})
 
 
+# What an engine loads from the database and can hand to another: see ``CostEngine.own_budget``.
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
 class CostEngine:
-    def __init__(self, db: Session, org_id: UUID):
+    def __init__(
+        self,
+        db: Session,
+        org_id: UUID,
+        *,
+        settings: dict | None = None,
+        alcohol_profiles: dict | None = None,
+    ):
+        """``settings`` and ``alcohol_profiles`` are for ``own_budget``, which passes on what this
+        request already read; with neither, the engine reads them (once, here)."""
         self.db = db
         self.org_id = org_id
-        settings = get_settings(db, org_id)
+        if settings is None:
+            settings = get_settings(db, org_id)
         self.use_last_known_price = settings["use_last_known_price"]
         self.split_basis = settings["split_basis"]
-        self._alcohol_profiles = {}
-        if self.split_basis == "litres":
-            self._alcohol_profiles = {
-                profile.inventory_name.casefold(): profile
-                for profile in db.query(AlcoholProductProfile)
-                .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.is_active.is_(True))
-                .all()
-            }
+        if alcohol_profiles is None:
+            alcohol_profiles = {}
+            if self.split_basis == "litres":
+                alcohol_profiles = {
+                    profile.inventory_name.casefold(): profile
+                    for profile in db.query(AlcoholProductProfile)
+                    .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.is_active.is_(True))
+                    .all()
+                }
+        self._alcohol_profiles = alcohol_profiles
         self._lots: dict[UUID, InventoryItem | None] = {}
         self._in_flow_cache: dict[UUID, list[CostFlow]] = {}
         self._entry_cache: dict[UUID, list[LotCostEntry]] = {}
@@ -174,6 +190,29 @@ class CostEngine:
         self._materials: dict[str, list[InventoryItem]] | None = None
         self._charged: set[tuple] = set()
         self._work = 0
+
+    def own_budget(self, *, reuse_loaded: bool = True) -> CostEngine:
+        """A new engine with a work budget, node budget and memo of its own, for when this one's
+        budget is spent (``TooLargeError``) and the next product, lot or group must not pay for it.
+
+        Reads nothing: the costing settings and alcohol profiles this engine already read are
+        passed on, so an overflowed request reads them once however many engines it goes through.
+        With ``reuse_loaded`` (the default) it also shares the rows this engine loaded, so retrying
+        one item queries nothing twice. That is only right after a ``prime`` that finished (or none
+        at all): a prime that ran out of budget part-way leaves rows half loaded, so pass False
+        and let the new engine load for itself.
+        """
+        engine = CostEngine(
+            self.db,
+            self.org_id,
+            settings={"use_last_known_price": self.use_last_known_price, "split_basis": self.split_basis},
+            alcohol_profiles=self._alcohol_profiles,
+        )
+        if reuse_loaded:
+            for cache in _LOADED_CACHES:
+                setattr(engine, cache, getattr(self, cache))
+            engine._materials = self._materials
+        return engine
 
     # --- public payloads -----------------------------------------------------------------
 

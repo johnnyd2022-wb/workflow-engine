@@ -44,7 +44,7 @@ Behaviour is fixed; these would pin it:
 
 ---
 
-## Status after 8.1f (13 Nov 2026)
+## Status after polish batch 2 (14 Nov 2026)
 
 **Done** (everything above except what's listed under "Still open"):
 - Purchases: cents suggestions that add up (!705); a segmented "rest of this purchase" choice
@@ -60,6 +60,15 @@ Behaviour is fixed; these would pin it:
   concurrent barcode deliveries lost stock (5 + 2 + 3 left 7); fixed in !706.
 - Engine: an over-budget walk leaves nothing marked in-progress, so later solves never read
   it as a cycle (!700/!705).
+- Readiness: once its shared engine budget is spent, each later product's material rows are
+  costed on a budget of its own, and a row that ran out of budget is never kept for the next
+  product, so a list row reads as its own page does (!MR).
+- "Remember this" on an existing rule keeps the payee and description as typed; a rule saved
+  before the typed form existed takes the purchase's casing (!MR).
+- Costing settings (and the litres-split alcohol profiles) are read once per request:
+  `CostEngine.own_budget()` is the one way to get an engine with budgets of its own, and it
+  passes on what the first engine read. Readiness, price history, the materials picker and
+  margins use it instead of building engines that re-read them (!MR).
 
 ## Still open
 
@@ -67,17 +76,14 @@ Behaviour is fixed; these would pin it:
   (a) link the stock to the Xero purchase that paid for it, or (b) who paid (the business, or
   the owner personally). Founder (12 Nov 2026): leave it open; hunch is it should be optional,
   with options the org selects. Not built until settled.
-- **Readiness shares one engine budget across products** (on main before 8.1f). In a very
-  large catalogue, once readiness's own budget is spent, later products can read "not ready"
-  although their own page says ready. The cost-per-unit figures already use a separate budget
-  per product after an overflow (!705); readiness's material rows could do the same.
 - **Multipack reading in the pack-size hint.** "Tonic 24 x 200ml" treats one unit as the whole
   pack of 24. Someone counting single bottles gets a per-litre figure 24× too low. The forms only
   offer units/pieces, so pack-as-unit was the likelier reading; revisit if it misleads.
-- **"Remember this" on an existing rule** overwrites the typed payee with the purchase's casing
-  (latest wins). Matching is unaffected.
 - **Credit-note tax backfill** runs on each Xero sync, up to 500 older notes a time. Until a
   note is backfilled, a multi-line tax-inclusive credit's revenue is untracked rather than
-  guessed.
-- **After an engine overflow** each later item builds a fresh engine, re-reading costing
-  settings (one or two extra queries per item). Fine at Whistlebird's size.
+  guessed. Looked at again on 14 Nov 2026 and left as is, on purpose: the cap is 13 Xero
+  requests a sync (batches of 40), so raising it only spends more of the Xero allowance on
+  every sync, and the other way to close the gap, splitting a note's GST across its lines,
+  is the guess this was written to avoid. It converges on its own (oldest first, and notes
+  Xero no longer returns are marked unavailable and not retried). Revisit only if a tenant
+  has thousands of old multi-line credits.

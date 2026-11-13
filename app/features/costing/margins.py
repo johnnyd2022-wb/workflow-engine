@@ -101,7 +101,7 @@ class _Costs:
         except TooLargeError:
             # Lineage too big to load up front: cost lot by lot instead, and any lot over budget reads
             # unknown (lot() catches it) rather than the report failing.
-            self.engine = CostEngine(db, org_id)
+            self.engine = self.engine.own_budget(reuse_loaded=False)  # the failed prime left rows half loaded
 
     def lot(self, item: InventoryItem) -> tuple[Decimal | None, str]:
         if item.id not in self._unit:

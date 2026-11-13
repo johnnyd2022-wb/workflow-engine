@@ -283,6 +283,11 @@ def upsert_by_matchers(db: Session, org_id: UUID, body: dict, user_id=None) -> P
     )
     if existing is None:
         return create(db, org_id, body, user_id=user_id)  # the raw body: keeps the typed payee
+    # Same matchers means the same payee and description to the engine, whatever their case; the
+    # rule keeps how the person typed them (the purchase's own casing only fills a rule saved
+    # before the typed form existed, which has none).
+    for field in ("payee_display", "description_display"):
+        clean[field] = getattr(existing, field) or clean[field]
     for name, value in clean.items():
         setattr(existing, name, value)
     existing.updated_at = utc_now()
