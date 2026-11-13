@@ -10,6 +10,11 @@
     if (text != null) node.textContent = text;
     return node;
   }
+  function unitWord(unit) {
+    var one = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack', pieces: 'piece' };
+    var u = String(unit || '').trim();
+    return one[u.toLowerCase()] || u || 'unit';
+  }
   function get(url) {
     return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
@@ -44,6 +49,48 @@
         els.error.hidden = false;
       })
       .finally(function () { root.setAttribute('aria-busy', 'false'); });
+    bindSettings();
+
+    /* ------------------------------------------------ how costs are worked out (settings) */
+    function bindSettings() {
+      var openBtn = root.querySelector('[data-costs-settings-open]');
+      var dialog = root.querySelector('[data-costs-settings]');
+      if (!openBtn || !dialog) return;
+      var form = dialog.querySelector('[data-costs-settings-form]');
+      var error = dialog.querySelector('[data-costs-settings-error]');
+      var save = dialog.querySelector('[data-costs-settings-save]');
+      function close() { dialog.close(); openBtn.focus(); }
+      openBtn.addEventListener('click', function () {
+        error.textContent = '';
+        openBtn.disabled = true;
+        get(API + '/settings').then(function (s) {
+          form.elements.use_last_known_price.checked = !!s.use_last_known_price;
+          form.querySelectorAll('[name=split_basis]').forEach(function (r) { r.checked = r.value === (s.split_basis || 'quantity'); });
+          dialog.showModal();
+          form.elements.use_last_known_price.focus();
+        }).catch(function (err) {
+          els.error.textContent = 'Settings couldn’t load: ' + err.message;
+          els.error.hidden = false;
+        }).finally(function () { openBtn.disabled = false; });
+      });
+      dialog.querySelector('[data-costs-settings-cancel]').addEventListener('click', close);
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var basis = form.querySelector('[name=split_basis]:checked');
+        save.disabled = true;
+        error.textContent = '';
+        window.BizECost.request('PUT', API + '/settings', {
+          use_last_known_price: form.elements.use_last_known_price.checked,
+          split_basis: basis ? basis.value : 'quantity',
+        }).then(function () {
+          close();
+          window.location.reload(); // every figure on the page depends on these
+        }).catch(function (err) {
+          error.textContent = 'Couldn’t save: ' + err.message;
+        }).finally(function () { save.disabled = false; });
+      });
+    }
+
     loadPrices();
 
     function render(products, who) {
@@ -92,8 +139,14 @@
       var detailId = 'co-detail-' + p.key.replace(/[^a-z0-9]/gi, '-');
       button.setAttribute('aria-controls', detailId);
       button.appendChild(el('span', 'co-row__name', p.name || 'Unnamed product'));
+      var perUnit = p.ready && p.unit_cost != null && window.BizECost
+        ? window.BizECost.money(p.unit_cost) + ' per ' + unitWord(p.unit)
+        : null;
       var status = p.ready
-        ? el('span', 'cost-pill cost-pill--ok', 'Full cost')
+        ? (perUnit && p.unit_cost_status === 'estimated'
+          // Built on an estimated price: say so, as the batch card and lot panel do.
+          ? el('span', 'cost-pill cost-pill--warn', '\u2248 ' + perUnit + ' \u00b7 Estimated')
+          : el('span', 'cost-pill cost-pill--ok', perUnit || 'Full cost'))
         : el('span', 'cost-pill cost-pill--warn', p.materials_total
           ? p.materials_costed + ' of ' + p.materials_total + ' materials costed'
           : 'No materials recorded');
@@ -141,6 +194,13 @@
           if (m.inventory_item_id) {
             name = el('a', 'co-material__name', m.name || 'Unnamed lot');
             name.href = '/core/inventory/view?item=' + encodeURIComponent(m.inventory_item_id);
+          } else if (canManage && !m.costed) {
+            // Declared input with no stock yet: one click to add it, name filled in.
+            name = el('a', 'co-material__name', m.name);
+            name.href = '/core/inventory/add/manual?' + new URLSearchParams({
+              name: m.name, inventory_type: 'raw_material', return_to: '/core/costing/costs',
+            }).toString();
+            name.title = 'Add ' + m.name + ' to inventory with what you paid';
           } else {
             name = el('span', 'co-material__name', m.name);
           }

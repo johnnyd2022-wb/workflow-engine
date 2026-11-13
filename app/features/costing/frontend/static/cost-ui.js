@@ -332,7 +332,8 @@
   function provenanceNode(p) {
     if (!p || typeof p.href !== 'string' || p.href.charAt(0) !== '/' || p.href.charAt(1) === '/') return null;
     var when = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    var lead = { purchase: 'Recorded from ', batch: 'Made in a ', transfer: 'Moved from another site — ' }[p.kind];
+    var lead = { purchase: 'Recorded from ', batch: 'Made in a ',
+      transfer: p.site ? 'Moved from ' + p.site + ' — ' : 'Moved from another site — ' }[p.kind];
     if (!lead) return null;
     var span = el('span');
     span.appendChild(document.createTextNode(lead));
@@ -489,7 +490,7 @@
 
   window.BizECost = {
     me: me, lotPanel: lotPanel, batchCard: batchCard, dutyLine: dutyLine, packHint: packHint, totalPaidField: totalPaidField,
-    money: money, parseMoney: parseMoney, whenReady: whenReady,
+    money: money, parseMoney: parseMoney, whenReady: whenReady, request: request,
   };
   document.dispatchEvent(new CustomEvent('bizecost:ready'));
 })();

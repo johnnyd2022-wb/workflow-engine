@@ -8,7 +8,7 @@ Read-only.
 
 from __future__ import annotations
 
-from collections import deque
+from collections import defaultdict, deque
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.process import Process
 from app.core.db.models.step import Step
-from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, normalise
+from app.features.costing.engine import ACTUAL, ESTIMATED, CostEngine, TooLargeError, normalise, unit_str
 from app.features.costing.models import CostFlow
 from app.features.costing.service import CostingNotFoundError
 
@@ -150,18 +150,20 @@ def _material_lots(graph: _Graph, execution_id) -> list:
     return list(lots)
 
 
-def _lot_rows(lot_ids, engine: CostEngine) -> list[dict]:
+def _lot_rows(lot_ids, engine: CostEngine, cache: dict | None = None) -> list[dict]:
+    """``cache``: one lot's cost, worked out once for every product that used it."""
+    cache = {} if cache is None else cache
     rows = []
     for item_id in lot_ids:
-        cost = engine.lot(item_id)
-        rows.append(
-            {
+        if item_id not in cache:
+            cost = engine.lot(item_id)
+            cache[item_id] = {
                 "name": cost["name"],
                 "inventory_item_id": str(item_id),
                 "costed": cost["status"] in (ACTUAL, ESTIMATED),
                 "status": cost["status"],
             }
-        )
+        rows.append(dict(cache[item_id]))
     return sorted(rows, key=lambda r: (r["name"] or "", r["inventory_item_id"]))
 
 
@@ -210,11 +212,12 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
     names |= {norm for declared_names in declared.values() for norm in declared_names}
     engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
+    lot_rows_cache: dict = {}
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)
         if execution_id is not None:
-            basis, materials = "latest_batch", _lot_rows(lots_by_key[key], engine)
+            basis, materials = "latest_batch", _lot_rows(lots_by_key[key], engine, lot_rows_cache)
         elif key in declared:
             basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
         else:
@@ -227,7 +230,84 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
             "ready": bool(materials) and all(m["costed"] for m in materials),
             "materials": materials,
         }
+    _add_unit_costs(db, org_id, out, latest, engine)
     return out
+
+
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
+def _own_budget(loaded: CostEngine, db: Session, org_id: UUID) -> CostEngine:
+    """A fresh engine (its own work and node budgets) over another engine's loaded rows."""
+    engine = CostEngine(db, org_id)
+    for cache in _LOADED_CACHES:
+        setattr(engine, cache, getattr(loaded, cache))
+    engine._materials = loaded._materials
+    return engine
+
+
+def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: CostEngine) -> None:
+    """Each ready product's cost per unit from its latest batch, worked out after readiness and on
+    an engine of its own: running out of budget here can only leave a figure out, never change
+    whether a product is ready. Produced lots and their batches are loaded together."""
+    from app.features.costing.models import CostFlow
+
+    wanted = {key: latest[key] for key, row in out.items() if row["ready"] and latest.get(key) is not None}
+    if not wanted:
+        return
+    produced_by_batch: dict = defaultdict(list)
+    for execution_id, item_id in (
+        db.query(CostFlow.execution_id, CostFlow.inventory_item_id)
+        .filter(
+            CostFlow.org_id == org_id,
+            CostFlow.execution_id.in_(set(wanted.values())),
+            CostFlow.direction == "in",
+            CostFlow.kind.in_(("produced", "reconciled_in")),
+        )
+        .all()
+    ):
+        produced_by_batch[execution_id].append(item_id)
+    # What readiness already loaded is reused (no query twice); the work and node budgets are this
+    # engine's own, so these figures can't eat into readiness's.
+    engine = _own_budget(loaded, db, org_id)
+    try:
+        engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
+    except TooLargeError:
+        return  # too much history to cost them together: the list shows readiness without figures
+    shared = True  # until the shared engine's node budget runs out
+    for key, execution_id in wanted.items():
+        lots = produced_by_batch.get(execution_id, [])
+        try:
+            try:
+                figure = _latest_unit_cost(engine if shared else _own_budget(engine, db, org_id), lots, key)
+            except TooLargeError:
+                if not shared:
+                    raise
+                # The shared budget is spent: this product and every later one gets an engine of
+                # its own (reusing what's loaded), so each shows what its own page shows.
+                shared = False
+                figure = _latest_unit_cost(_own_budget(engine, db, org_id), lots, key)
+        except TooLargeError:
+            figure = {}
+        out[key].update(figure)
+
+
+def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
+    """What one unit of the product cost in its latest batch, with that cost's status (a figure
+    built on an estimated price is shown as estimated). Matched by the output the product is (its
+    stable id), never by name: a renamed output or a co-product must not lend its cost."""
+    if not key.startswith("output:"):
+        return {}
+    output_id = key.split(":", 1)[1]
+    for item_id in produced_lot_ids:
+        lot = engine._get_lot(item_id)
+        if lot is None or str(lot.source_output_id) != output_id:
+            continue
+        cost = engine._solve(("lot", item_id))  # TooLargeError: the caller retries on its own budget
+        if cost.status in (ACTUAL, ESTIMATED) and cost.unit_known is not None:
+            return {"unit_cost": unit_str(cost.unit_known), "unit": lot.unit, "unit_cost_status": cost.status}
+        return {}
+    return {}
 
 
 def product_detail(db: Session, org_id: UUID, key: str) -> dict:
@@ -245,6 +325,9 @@ def list_products(db: Session, org_id: UUID) -> list[dict]:
             "ready": detail["ready"],
             "materials_total": len(detail["materials"]),
             "materials_costed": sum(1 for m in detail["materials"] if m["costed"]),
+            "unit_cost": detail.get("unit_cost"),
+            "unit": detail.get("unit"),
+            "unit_cost_status": detail.get("unit_cost_status"),
         }
         for key, detail in _details(db, org_id).items()
     ]

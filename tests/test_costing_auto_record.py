@@ -326,8 +326,10 @@ def test_rounding_cent_moves_the_from_price_quantity_with_it(flask_app, world, d
     _doc, purchase_line = _sync_line(world, db, amount="0.01")
     assert purchase_line.state == "recorded"
     allocations = _allocations(db, world["org"].id, purchase_line.id)
+    # Suggestions are whole cents (polish): $0.01 is one cent on one row, and its from-price
+    # quantity follows that row's final amount; shares that came to $0 buy nothing and are dropped.
     pairs = sorted((D(a.amount), D(a.quantity)) for a in allocations)
-    assert pairs == [(D("0.0033"), D("0.3300")), (D("0.0033"), D("0.3300")), (D("0.0034"), D("0.3400"))]
+    assert pairs == [(D("0.0100"), D("1.0000"))]
 
 
 def test_r4_switching_an_automatic_rule_off_needs_no_stock_permission(flask_app, world, db):  # noqa: F811

@@ -35,8 +35,8 @@ from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
-from app.features.compliant.modules.nz_alcohol.excise import _base_name
-from app.features.compliant.modules.nz_alcohol.excise import _litres as excise_litres
+from app.features.compliant.modules.nz_alcohol.excise import litres_of as excise_litres
+from app.features.compliant.modules.nz_alcohol.excise import product_base_name as _base_name
 from app.features.costing.models import DIRECT_KINDS, CostFlow, LotCostEntry
 from app.features.costing.service import CostingNotFoundError, get_settings
 from app.observability import get_logger

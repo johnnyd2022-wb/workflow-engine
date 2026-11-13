@@ -880,6 +880,33 @@ def test_r3_purchase_list_reads_last_time_history_once(flask_app, world, db):  #
     assert reads == 1, f"{reads} history reads for 4 cards"
 
 
+def test_polish_last_time_prefill_reads_in_cents_and_still_adds_up(flask_app, world, db):  # noqa: F811
+    """Polish: suggestions read "33.33", not "33.3333", and the last row takes the exact rest."""
+    client = user_client(db, flask_app, world["org"])
+    first = _purchase(world, db, "90", payee="Even Thirds")
+    _assert_success(_record(client, first, [_row("A", 1, 30), _row("B", 1, 30), _row("C", 1, 30)]))
+    card = _card(client, _purchase(world, db, "100", payee="Even Thirds"))
+    assert card["prefill"]["source"] == "last_time"
+    amounts = [D(r["amount"]) for r in card["prefill"]["rows"]]
+    assert sorted(amounts) == [D("33.33"), D("33.33"), D("33.34")]
+    assert sum(amounts) == D("100")
+
+
+@pytest.mark.parametrize(
+    ("shares", "remaining"),
+    [(["1"] * 5, "0.03"), (["30", "30", "30"], "100"), (["1", "2", "3"], "10.005"), (["7"], "12.34")],
+)
+def test_polish_cent_split_adds_up_and_never_goes_negative(shares, remaining):
+    from app.features.costing.actions import _split_in_cents
+
+    total = D(remaining)
+    whole = sum(D(x) for x in shares)
+    exact = [total * D(x) / whole for x in shares]
+    amounts = _split_in_cents(exact, total)
+    assert sum(amounts) == total and all(a >= 0 for a in amounts)
+    assert all(abs(a - e) < D("0.02") for a, e in zip(amounts, exact, strict=True))
+
+
 # --- Polish: rules show payees and descriptions as typed ------------------------------------------
 
 

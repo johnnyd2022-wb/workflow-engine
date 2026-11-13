@@ -11,6 +11,11 @@
       <h1>Costs</h1>
       <p>Which products have a full cost per unit, and what each one is still waiting on.</p>
     </div>
+    {% if can('costs.manage') %}
+    <div class="workspace-header__actions">
+      <button type="button" class="workspace-button" data-costs-settings-open>How costs are worked out</button>
+    </div>
+    {% endif %}
   </header>
 
   <div class="workspace-notice" role="alert" data-costs-error hidden></div>
@@ -22,6 +27,34 @@
     <p>A product appears here once a workflow makes it, or once you add finished stock.</p>
     <a class="workspace-button" href="/core/processes">Go to Workflows</a>
   </div>
+  {% if can('costs.manage') %}
+  <dialog class="ru-dialog" data-costs-settings aria-labelledby="co-settings-title">
+    <form method="dialog" hx-boost="false" data-costs-settings-form novalidate>
+      <h2 id="co-settings-title">How costs are worked out</h2>
+      <label class="co-opt">
+        <input type="checkbox" name="use_last_known_price">
+        <span><span class="co-opt__label">Estimate unpriced stock from the last price paid</span>
+          <span class="cost-hint">A material with no price of its own takes the most recent price paid for the same material, marked “Estimated”. Off means it stays “Not costed”.</span></span>
+      </label>
+      <fieldset class="ru-fieldset co-settings__split">
+        <legend>When a batch makes more than one thing, share its cost by</legend>
+        <label class="co-opt"><input type="radio" name="split_basis" value="quantity">
+          <span><span class="co-opt__label">Quantity</span>
+            <span class="cost-hint">Outputs share by how many came out. Library stock left over takes no share, so the bottles carry the whole batch.</span></span></label>
+        <label class="co-opt"><input type="radio" name="split_basis" value="litres">
+          <span><span class="co-opt__label">Litres</span>
+            <span class="cost-hint">Outputs share by volume — bottles by their size, Library stock by its litres. Needs each bottled product's pack size; a step without it falls back to quantity.</span></span></label>
+      </fieldset>
+      <p class="cost-hint">Changes apply to every cost straight away, including past batches — nothing is stored, so nothing needs recalculating.</p>
+      <p class="cost-error" role="alert" data-costs-settings-error></p>
+      <div class="ru-dialog__actions">
+        <button type="button" class="workspace-button" data-costs-settings-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-costs-settings-save>Save</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
+
   <section class="co-prices" data-prices hidden aria-labelledby="co-prices-title">
     <h2 class="co-section-title" id="co-prices-title">What you pay for materials</h2>
     <p class="co-section-lead">The latest price for each material. Open one to see what you paid each month over the last year.</p>
