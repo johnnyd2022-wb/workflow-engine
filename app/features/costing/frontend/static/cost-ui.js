@@ -74,12 +74,20 @@
      bottle can be compared. Anything else reads "= $X per <unit>" as before. */
   var COUNT_UNITS = /^(bottles?|units?|each|ea|cases?|cans?|jars?|packs?|bags?|boxes|box|pcs|pieces?|sacks?|tubs?|pallets?|containers?|kegs?)$/i;
   function packSize(name) {
-    var matches = String(name || '').match(/(\d+(?:[.,]\d+)?)\s*(ml|millilitres?|l|litres?|liters?|g|grams?|kg|kilos?|kilograms?)(?![a-z])/gi);
-    if (!matches) return null;
-    var last = /(\d+(?:[.,]\d+)?)\s*([a-z]+)/i.exec(matches[matches.length - 1]);
-    var n = Number(last[1].replace(',', '.'));
-    var u = last[2].toLowerCase();
-    if (!(n > 0)) return null;
+    // A size in the name: "700 mL", "1,000 mL" (thousands comma), "1,5 L" (decimal comma), ".5L",
+    // "25kg". A multipack ("24 x 200ml", "6x700ml", "700ml x 6") counts every container. A ratio
+    // ("650 g/L") is a strength, not a size, and is skipped. The last size in the name wins.
+    var text = String(name || '').replace(/ /g, ' ');
+    var re = /(?:(\d+)\s*[x×]\s*)?(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*[.,]?\d+)\s*(ml|millilitres?|l|litres?|liters?|g|grams?|kg|kilos?|kilograms?)(?![a-z])(?!\s*\/)(?:\s*[x×]\s*(\d+)(?!\s*(?:ml|l|g|kg)))?/gi;
+    var match, last = null;
+    while ((match = re.exec(text)) !== null) last = match;
+    if (!last) return null;
+    var raw = last[2];
+    var n = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw) ? Number(raw.replace(/,/g, '')) : Number(raw.replace(',', '.'));
+    var count = Number(last[1] || last[4] || 1);
+    var u = last[3].toLowerCase();
+    if (!(n > 0) || !(count > 0)) return null;
+    n *= count;
     if (/^(ml|millilitre)/.test(u)) return { amount: n / 1000, per: 'litre' };
     if (/^(l$|litre|liter)/.test(u)) return { amount: n, per: 'litre' };
     if (/^(g$|gram)/.test(u)) return { amount: n / 1000, per: 'kg' };
@@ -87,14 +95,17 @@
   }
   function packHint(amount, quantity, unit, name) {
     var each = amount / quantity;
-    var text = '= ' + perUnit(each, COUNT_UNITS.test(String(unit || '').trim()) ? dutyUnit(unit) : unit);
-    var pack = COUNT_UNITS.test(String(unit || '').trim()) ? packSize(name) : null;
-    if (pack) text += ' · ' + perUnit(each / pack.amount, pack.per);
-    return text;
+    var counted = COUNT_UNITS.test(String(unit || '').trim());
+    var first = counted && /^(each|ea)$/i.test(String(unit).trim())
+      ? '= ' + money(each) + ' each'
+      : '= ' + perUnit(each, counted ? dutyUnit(unit) : unit);
+    var pack = counted ? packSize(name) : null;
+    return pack ? first + ' · ' + perUnit(each / pack.amount, pack.per) : first;
   }
   function dutyUnit(unit) {
     var words = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack',
-      bags: 'bag', boxes: 'box', pieces: 'piece', sacks: 'sack', tubs: 'tub', ea: 'each', pcs: 'piece' };
+      bags: 'bag', boxes: 'box', pieces: 'piece', sacks: 'sack', tubs: 'tub', pcs: 'piece',
+      kegs: 'keg', containers: 'container', pallets: 'pallet' };
     return words[String(unit || '').toLowerCase()] || unit || 'unit';
   }
   /* The batch card's duty line (spec Q6): never a guess; "not tracked" when the module is off. */
@@ -467,6 +478,7 @@
         return amount;
       };
       handle.clear = function () { input.value = ''; update(); };
+      handle.refresh = update; // a form that fills name/quantity/unit in code calls this after
       handle.input = input;
     });
     return handle;

@@ -183,6 +183,8 @@
     btn.disabled = !getCodeForContinue();
   }
 
+  var refreshCostHint = null; // set once the Total paid field is attached
+
   function applyLookupToForm(code, res) {
     var bi = document.getElementById('barcode-inv-barcode-input');
     var bdw = document.getElementById('barcode-inv-barcode-display-wrap');
@@ -225,6 +227,7 @@
     if (scan) scan.style.display = 'none';
     if (formWrap) formWrap.style.display = 'block';
     applyLookupToForm(code, res);
+    if (refreshCostHint) refreshCostHint(); // the Total paid hint follows the filled-in lot
     var q = document.getElementById('barcode-inv-quantity');
     if (q) q.focus();
   }
@@ -307,6 +310,7 @@
         hint: 'What this delivery cost. Lets Biz-E cost every batch made from it.',
       });
       costField.attached = true;
+      refreshCostHint = function () { if (costField.refresh) costField.refresh(); };
     }
     if (window.BizECost) attachCost(); else document.addEventListener('bizecost:ready', attachCost, { once: true });
     var saveKey = null; // one key per delivery, kept across retries so a lost reply can't add it twice
