@@ -926,7 +926,7 @@ def test_polish_a_rule_made_before_the_typed_form_shows_its_matcher(flask_app, w
     assert listed["payee_pattern"] == "old supplier"
 
 
-def test_polish_typed_columns_migration_is_reversible(db):
+def test_polish_typed_columns_exist_after_the_migration(db):
     from sqlalchemy import inspect as sa_inspect
 
     columns = {c["name"] for c in sa_inspect(db.get_bind()).get_columns("purchase_rules")}
