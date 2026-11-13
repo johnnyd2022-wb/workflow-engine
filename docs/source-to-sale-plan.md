@@ -1230,9 +1230,15 @@ missing; never a silent $0.
     cost per unit, Incomplete with the missing inputs), cost readiness per product,
     "total paid" on Add Inventory, and costing with no Xero bank feed: total paid on every
     Add Inventory path (manual, barcode incl. add-quantity, CSV). (!693, !695)
-  - [ ] f. **Bills and margins** (spec Phase 2). Bills and supplier credits; margin per
-    product over time with duty from the excise module; material price history;
-    auto-record rules.
+  - [x] f. **Bills and margins** (spec Phase 2). Bills and supplier credits (!697); margin per
+    product over time with duty from the excise module, on Sales › Margins (!698, !699);
+    material price history on the Costs page (!700, !702); auto-record rules (!701); duty if
+    sold today on the batch card (!704); split a batch's cost by litres, opt-in (!703); the
+    switch-on command `workflow costing enable` (!696). Polish: costing settings sheet, cost per
+    unit on the Costs list, cents suggestions, CSV money formats (!705); rules keep payees as
+    typed (!707); batches open by link, finished ones read-only (!708); pack-size price hint
+    (!710). Open question, not built: "paid for by" on Add Inventory (see
+    `.agents/plans/live-cogs-polish.md`).
   - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
     the walk from Xero cost of sales to Biz-E's, closing stock export.
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
