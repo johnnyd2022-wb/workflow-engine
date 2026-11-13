@@ -140,3 +140,50 @@ def test_the_costs_list_queries_stay_flat_as_ready_products_with_batches_grow(wo
     products(2, 6)
     many = count()
     assert many <= few + 3, (few, many)
+
+
+def test_a_cost_per_unit_built_on_an_estimated_price_says_so(world, db):  # noqa: F811
+    """Review r4: every cost carries a status; the list's figure is no exception."""
+    org, client = world
+    juniper, coriander = lot(db, org.id, "Juniper", 2, "kg"), lot(db, org.id, "Coriander", 2, "kg")
+    price(db, org.id, juniper.id, 90, 2)
+    earlier = lot(db, org.id, "Coriander", 1, "kg")
+    price(db, org.id, earlier.id, 10, 1)  # coriander itself unpriced: estimated from the last price paid
+    _gin_batch(db, org, client, juniper, coriander)
+    (gin,) = [p for p in _products(client) if p["name"] == "Gin"]
+    assert gin["ready"] is True and gin["unit_cost"] is not None
+    assert gin["unit_cost_status"] == "estimated"
+
+
+def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, db, monkeypatch):  # noqa: F811
+    """Review r4: the cost-per-unit pass runs on its own engine; if loading it is over budget the
+    list still answers (200) with the same readiness, just without figures."""
+    from app.features.costing import readiness
+    from app.features.costing.engine import CostEngine, TooLargeError
+
+    org, client = world
+    juniper, coriander = lot(db, org.id, "Juniper", 2, "kg"), lot(db, org.id, "Coriander", 2, "kg")
+    price(db, org.id, juniper.id, 90, 2)
+    price(db, org.id, coriander.id, 20, 2)
+    _gin_batch(db, org, client, juniper, coriander)
+    before = {p["key"]: p["ready"] for p in _products(client)}
+
+    class OverBudgetForFigures(CostEngine):
+        made = 0
+
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            OverBudgetForFigures.made += 1
+            self.second = OverBudgetForFigures.made >= 2
+
+        def prime(self, ids):
+            if self.second:
+                raise TooLargeError()
+            return super().prime(ids)
+
+    monkeypatch.setattr(readiness, "CostEngine", OverBudgetForFigures)
+    response = client.get("/api/core/costing/readiness")
+    assert response.status_code == 200
+    products = response.get_json()["products"]
+    assert {p["key"]: p["ready"] for p in products} == before
+    assert all(p["unit_cost"] is None for p in products)

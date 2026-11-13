@@ -137,7 +137,10 @@
         ? window.BizECost.money(p.unit_cost) + ' per ' + unitWord(p.unit)
         : null;
       var status = p.ready
-        ? el('span', 'cost-pill cost-pill--ok', perUnit || 'Full cost')
+        ? (perUnit && p.unit_cost_status === 'estimated'
+          // Built on an estimated price: say so, as the batch card and lot panel do.
+          ? el('span', 'cost-pill cost-pill--warn', '\u2248 ' + perUnit + ' \u00b7 Estimated')
+          : el('span', 'cost-pill cost-pill--ok', perUnit || 'Full cost'))
         : el('span', 'cost-pill cost-pill--warn', p.materials_total
           ? p.materials_costed + ' of ' + p.materials_total + ' materials costed'
           : 'No materials recorded');

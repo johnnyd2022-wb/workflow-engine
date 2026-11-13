@@ -212,26 +212,6 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
     names |= {norm for declared_names in declared.values() for norm in declared_names}
     engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
-    # The latest batches' produced lots, loaded together (with their graphs) for the list's cost
-    # per unit: each product reads its own output lot's cost, so no batch is loaded on its own.
-    batch_ids = [eid for eid in latest.values() if eid is not None]
-    produced_by_batch: dict = defaultdict(list)
-    if batch_ids:
-        from app.features.costing.models import CostFlow
-
-        produced = (
-            db.query(CostFlow.execution_id, CostFlow.inventory_item_id)
-            .filter(
-                CostFlow.org_id == org_id,
-                CostFlow.execution_id.in_(batch_ids),
-                CostFlow.direction == "in",
-                CostFlow.kind.in_(("produced", "reconciled_in")),
-            )
-            .all()
-        )
-        for execution_id, item_id in produced:
-            produced_by_batch[execution_id].append(item_id)
-        engine.prime({item_id for _eid, item_id in produced})
     lot_rows_cache: dict = {}
     out = {}
     for key, product in products.items():
@@ -242,27 +222,57 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
             basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
         else:
             basis, materials = "declared_inputs", []
-        ready = bool(materials) and all(m["costed"] for m in materials)
         out[key] = {
             "key": key,
             "name": product["name"],
             "basis": basis,
             "execution_id": str(execution_id) if execution_id else None,
-            "ready": ready,
+            "ready": bool(materials) and all(m["costed"] for m in materials),
             "materials": materials,
-            **(
-                _latest_unit_cost(engine, produced_by_batch.get(execution_id, []), key)
-                if ready and execution_id
-                else {}
-            ),
         }
+    _add_unit_costs(db, org_id, out, latest, engine)
     return out
 
 
+def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: CostEngine) -> None:
+    """Each ready product's cost per unit from its latest batch, worked out after readiness and on
+    an engine of its own: running out of budget here can only leave a figure out, never change
+    whether a product is ready. Produced lots and their batches are loaded together."""
+    from app.features.costing.models import CostFlow
+
+    wanted = {key: latest[key] for key, row in out.items() if row["ready"] and latest.get(key) is not None}
+    if not wanted:
+        return
+    produced_by_batch: dict = defaultdict(list)
+    for execution_id, item_id in (
+        db.query(CostFlow.execution_id, CostFlow.inventory_item_id)
+        .filter(
+            CostFlow.org_id == org_id,
+            CostFlow.execution_id.in_(set(wanted.values())),
+            CostFlow.direction == "in",
+            CostFlow.kind.in_(("produced", "reconciled_in")),
+        )
+        .all()
+    ):
+        produced_by_batch[execution_id].append(item_id)
+    engine = CostEngine(db, org_id)
+    # What readiness already loaded is reused (no query twice); the work and node budgets are this
+    # engine's own, so these figures can't eat into readiness's.
+    for cache in ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info"):
+        setattr(engine, cache, getattr(loaded, cache))
+    engine._materials = loaded._materials
+    try:
+        engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
+    except TooLargeError:
+        return  # too much history to cost them together: the list shows readiness without figures
+    for key, execution_id in wanted.items():
+        out[key].update(_latest_unit_cost(engine, produced_by_batch.get(execution_id, []), key))
+
+
 def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
-    """What one unit of the product cost in its latest batch (polish: answer it on the list).
-    Matched by the output the product is (its stable id), never by name: a renamed output or a
-    co-product must not lend its cost to this one."""
+    """What one unit of the product cost in its latest batch, with that cost's status (a figure
+    built on an estimated price is shown as estimated). Matched by the output the product is (its
+    stable id), never by name: a renamed output or a co-product must not lend its cost."""
     if not key.startswith("output:"):
         return {}
     output_id = key.split(":", 1)[1]
@@ -275,7 +285,7 @@ def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
         except TooLargeError:
             return {}
         if cost.status in (ACTUAL, ESTIMATED) and cost.unit_known is not None:
-            return {"unit_cost": unit_str(cost.unit_known), "unit": lot.unit}
+            return {"unit_cost": unit_str(cost.unit_known), "unit": lot.unit, "unit_cost_status": cost.status}
         return {}
     return {}
 
@@ -297,6 +307,7 @@ def list_products(db: Session, org_id: UUID) -> list[dict]:
             "materials_costed": sum(1 for m in detail["materials"] if m["costed"]),
             "unit_cost": detail.get("unit_cost"),
             "unit": detail.get("unit"),
+            "unit_cost_status": detail.get("unit_cost_status"),
         }
         for key, detail in _details(db, org_id).items()
     ]
