@@ -274,17 +274,21 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
         engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
     except TooLargeError:
         return  # too much history to cost them together: the list shows readiness without figures
+    shared = True  # until the shared engine's node budget runs out
     for key, execution_id in wanted.items():
         lots = produced_by_batch.get(execution_id, [])
         try:
-            figure = _latest_unit_cost(engine, lots, key)
-        except TooLargeError:
-            # This engine's node budget is spent across earlier products: cost this one on its own,
-            # reusing what's loaded, so it shows what its own page shows.
             try:
-                figure = _latest_unit_cost(_own_budget(engine, db, org_id), lots, key)
+                figure = _latest_unit_cost(engine if shared else _own_budget(engine, db, org_id), lots, key)
             except TooLargeError:
-                figure = {}
+                if not shared:
+                    raise
+                # The shared budget is spent: this product and every later one gets an engine of
+                # its own (reusing what's loaded), so each shows what its own page shows.
+                shared = False
+                figure = _latest_unit_cost(_own_budget(engine, db, org_id), lots, key)
+        except TooLargeError:
+            figure = {}
         out[key].update(figure)
 
 

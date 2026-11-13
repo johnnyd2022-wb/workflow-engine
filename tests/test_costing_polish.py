@@ -213,3 +213,29 @@ def test_a_spent_node_budget_never_drops_later_products_figures(world, db, monke
     for key, row in listed.items():
         own = client.get(f"/api/core/costing/readiness/{key}").get_json()
         assert row["unit_cost"] is not None and row["unit_cost"] == own.get("unit_cost"), (key, row, own)
+
+
+@pytest.mark.parametrize("max_nodes", [3, 4, 5, 6, 7])
+def test_a_product_used_by_another_still_shows_its_own_figure(world, db, monkeypatch, max_nodes):  # noqa: F811
+    """Review r6: Gin's latest batch is consumed by an RTD's batch. Whatever order products are
+    costed in, and wherever the shared budget runs out, every product shows its own page's figure."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, produced_lots, workflow
+
+    org, client = world
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Probe Gin", "unit": "bottles"}]])
+    complete(client, execution, step, [(spirit, 1, "L")], [{"name": "Probe Gin", "quantity": 4, "unit": "bottles"}])
+    (gin,) = produced_lots(db, org.id, step.id)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Probe RTD", "unit": "cans"}]])
+    complete(client, execution, step, [(gin, 1, "bottles")], [{"name": "Probe RTD", "quantity": 4, "unit": "cans"}])
+    execution, (step,) = workflow(db, org.id, [[{"name": "Other Product", "unit": "bottles"}]])
+    complete(client, execution, step, [(spirit, 1, "L")], [{"name": "Other Product", "quantity": 1, "unit": "bottles"}])
+
+    monkeypatch.setattr(engine_module, "MAX_NODES", max_nodes)
+    for row in _products(client):
+        if not row["name"].startswith(("Probe", "Other")) or not row["ready"]:
+            continue
+        own = client.get(f"/api/core/costing/readiness/{row['key']}").get_json()
+        assert row["unit_cost"] == own.get("unit_cost"), (max_nodes, row, own)
