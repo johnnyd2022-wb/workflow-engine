@@ -300,7 +300,8 @@
       costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
         quantity: function () { return qtyInput.value; },
         unit: function () { return unitSel.value; },
-        watch: [qtyInput, unitSel],
+        name: function () { var n = document.getElementById('barcode-inv-name'); return n ? n.value : ''; },
+        watch: [qtyInput, unitSel, document.getElementById('barcode-inv-name')],
         labelClass: 'spa-field-label',
         inputClass: 'spa-inp',
         hint: 'What this delivery cost. Lets Biz-E cost every batch made from it.',
