@@ -233,6 +233,16 @@ def test_a_product_used_by_another_still_shows_its_own_figure(world, db, monkeyp
     execution, (step,) = workflow(db, org.id, [[{"name": "Other Product", "unit": "bottles"}]])
     complete(client, execution, step, [(spirit, 1, "L")], [{"name": "Other Product", "quantity": 1, "unit": "bottles"}])
 
+    from app.features.costing import readiness
+
+    real_products = readiness._products
+
+    def rtd_before_gin(*args, **kwargs):  # the order the review reproduced: Other, RTD, then Gin
+        found = real_products(*args, **kwargs)
+        rank = {"Other Product": 0, "Probe RTD": 1, "Probe Gin": 2}
+        return dict(sorted(found.items(), key=lambda kv: rank.get(kv[1]["name"], 3)))
+
+    monkeypatch.setattr(readiness, "_products", rtd_before_gin)
     monkeypatch.setattr(engine_module, "MAX_NODES", max_nodes)
     for row in _products(client):
         if not row["name"].startswith(("Probe", "Other")) or not row["ready"]:
