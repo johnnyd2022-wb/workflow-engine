@@ -123,8 +123,8 @@ def validate(body: dict) -> dict:
 
     raw_account = text_field("account_code", 50)
     account = (raw_account.strip() or None) if raw_account is not None else None  # whitespace is no matcher
-    payee = normalise(text_field("payee_pattern", 255))
-    description = normalise(text_field("description_pattern", 500))
+    raw_payee, raw_description = text_field("payee_pattern", 255), text_field("description_pattern", 500)
+    payee, description = normalise(raw_payee), normalise(raw_description)
     # casefold can lengthen text ("ß" -> "ss"): the stored, normalised value must fit too
     if payee and len(payee) > 255:
         raise CostingError("payee_pattern is at most 255 characters")
@@ -163,7 +163,9 @@ def validate(body: dict) -> dict:
     return {
         "account_code": account,
         "payee_pattern": payee,
+        "payee_display": _display(raw_payee) if payee else None,
         "description_pattern": description,
+        "description_display": _display(raw_description) if description else None,
         "match_type": match_type,
         "treatment": treatment,
         "template": template,
@@ -172,12 +174,20 @@ def validate(body: dict) -> dict:
     }
 
 
+def _display(raw: str | None) -> str | None:
+    """What the person typed, tidied only of outer and repeated spaces (matching ignores case)."""
+    if raw is None:
+        return None
+    return " ".join(raw.split()) or None
+
+
 def as_dict(rule: PurchaseRule) -> dict:
+    # The patterns read back as typed ("Moore Wilson's", not "moore wilson's"); matching is unchanged.
     return {
         "id": str(rule.id),
         "account_code": rule.account_code,
-        "payee_pattern": rule.payee_pattern,
-        "description_pattern": rule.description_pattern,
+        "payee_pattern": rule.payee_display or rule.payee_pattern,
+        "description_pattern": rule.description_display or rule.description_pattern,
         "match_type": rule.match_type,
         "treatment": rule.treatment,
         "template": rule.template,
@@ -223,8 +233,8 @@ def update(db: Session, org_id: UUID, rule_id, body: dict) -> PurchaseRule:
     rule = get_rule(db, org_id, rule_id)
     current = {
         "account_code": rule.account_code,
-        "payee_pattern": rule.payee_pattern,
-        "description_pattern": rule.description_pattern,
+        "payee_pattern": rule.payee_display or rule.payee_pattern,
+        "description_pattern": rule.description_display or rule.description_pattern,
         "match_type": rule.match_type,
         "treatment": rule.treatment,
         "template": rule.template,
@@ -272,7 +282,7 @@ def upsert_by_matchers(db: Session, org_id: UUID, body: dict, user_id=None) -> P
         .one_or_none()
     )
     if existing is None:
-        return create(db, org_id, clean, user_id=user_id)
+        return create(db, org_id, body, user_id=user_id)  # the raw body: keeps the typed payee
     for name, value in clean.items():
         setattr(existing, name, value)
     existing.updated_at = utc_now()
