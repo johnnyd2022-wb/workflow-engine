@@ -1549,7 +1549,43 @@ Each must be resolved in this spec, with ACs, before its MR is built:
 - Accounting sources other than Xero (the `purchase_sources` seam leaves room).
 - Time tracking (Phase 4 absorbs labour as a configured rate, not tracked hours).
 
+## 8.1f-2 build contract — margins with duty (API)
 
+Spec "Margins (Phase 2)", built as an API in this MR (`GET /api/core/costing/margins`); the page
+in Sales follows in its own MR.
+
+**Revenue.** `SaleLine` gains `revenue` (ex GST, base currency): the Xero line amount, less its
+tax when the invoice's lines are tax-inclusive (inferred: Σ line amounts = invoice total →
+inclusive; = sub-total → exclusive; otherwise the line amount as is). A foreign-currency invoice
+has `revenue = None` (shown as not tracked, never converted here). Shared across the line's batch
+allocations by units.
+
+**Cost.** Per allocation: units × the lot's unit cost (`CostEngine.lot`), carrying its status.
+Units with no lot are costed at the product's average unit cost (the mean of its costed lots'
+unit costs, weighted by units) and flagged `estimated`; with no costed lot at all they are
+`unknown` and their cost is left out (and the row says so).
+
+**Duty.** From the excise module's `measure(session, org, [(lot, units)], sold_on)` per
+allocation: costing never computes rates. Unallocated units use any lot of that product as the
+measure. Duty is `null` ("not tracked") when the org's NZ Alcohol module is off (AC48) or a lot
+can't be measured.
+
+**Returns.** Credit notes (ACCRECCREDIT, `AUTHORISED`/`PAID`) on mapped lines reduce revenue in
+their month by the line amount; returned units reduce cost at that month's average unit cost
+(`estimated`) unless the line was marked "not returned to stock".
+
+**Report.** `GET /margins?from=YYYY-MM&to=YYYY-MM` (default: the last 6 months). Per product
+per month: units, revenue, production cost, cost status, duty (or null), gross margin $ (revenue
+− cost − duty when tracked, else revenue − cost) and %, average cost per unit; `lines` drill-down:
+invoice reference, date, units, revenue, batches (lot id, name, units, unit cost, status).
+Needs `costs.view` **and** `sales.view` (AC47).
+
+**ACs (8.1f-2).** AC45 (as written: 12 units at $480 ex GST on a lot at 4.75/unit → cost $57,
+duty from the module, margin = 480 − 57 − duty), AC46, AC47, AC48, plus:
+- AC102: a tax-inclusive invoice's revenue is its line amounts less tax.
+- AC103: a credit note line reduces that month's revenue and units; the cost it reverses is
+  `estimated`.
+- AC104: margins never cross orgs.
 
 ## 8.1f-1 build contract — bills and supplier credits in
 

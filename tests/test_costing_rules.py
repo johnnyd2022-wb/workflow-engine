@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -878,3 +878,56 @@ def test_r3_purchase_list_reads_last_time_history_once(flask_app, world, db):  #
     body, reads = count_history_reads()
     assert len(body["cards"]) == 4 and all(c["prefill"]["source"] == "last_time" for c in body["cards"])
     assert reads == 1, f"{reads} history reads for 4 cards"
+
+
+# --- Polish: rules show payees and descriptions as typed ------------------------------------------
+
+
+def test_polish_a_rule_reads_back_as_typed_and_still_matches_any_case(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    created = _rule(
+        client,
+        payee_pattern="  Moore Wilson's   Wellington ",
+        description_pattern="Juniper BERRIES",
+        treatment="not_stock",
+    )
+    assert created.status_code == 201, created.get_json()
+    body = created.get_json()
+    assert (body["payee_pattern"], body["description_pattern"]) == ("Moore Wilson's Wellington", "Juniper BERRIES")
+    line_id = _purchase(world, db, "40", payee="MOORE WILSON'S WELLINGTON", description="juniper berries")
+    assert _treatment(db, line_id) == "not_stock", "matching ignores case and spacing"
+
+    edited = client.put(f"{API}/rules/{body['id']}", json={**body, "treatment": "overhead"})
+    assert edited.status_code == 200 and edited.get_json()["payee_pattern"] == "Moore Wilson's Wellington"
+    duplicate = _rule(
+        client, payee_pattern="moore wilson's wellington", description_pattern="juniper berries", treatment="duty"
+    )
+    assert duplicate.status_code == 409, "the same matcher in another case is the same rule"
+
+
+def test_polish_remember_this_keeps_the_payees_own_casing(flask_app, world, db):  # noqa: F811
+    client = user_client(db, flask_app, world["org"])
+    line_id = _purchase(world, db, "60", payee="Davis Trading Ltd")
+    _assert_success(_record(client, line_id, [_row("Orris root", 1, 60)]))
+    remembered = client.post(f"{API}/purchases/{line_id}/remember", headers={"Idempotency-Key": str(uuid4())})
+    assert remembered.status_code == 201, remembered.get_json()
+    assert remembered.get_json()["payee_pattern"] == "Davis Trading Ltd"
+
+
+def test_polish_a_rule_made_before_the_typed_form_shows_its_matcher(flask_app, world, db):  # noqa: F811
+    from app.features.costing.models import PurchaseRule
+
+    client = user_client(db, flask_app, world["org"])
+    created = _rule(client, payee_pattern="Old Supplier").get_json()
+    rule = db.get(PurchaseRule, UUID(created["id"]))
+    rule.payee_display = None  # as every rule saved before the migration
+    db.commit()
+    (listed,) = [r for r in client.get(f"{API}/rules").get_json()["rules"] if r["id"] == created["id"]]
+    assert listed["payee_pattern"] == "old supplier"
+
+
+def test_polish_typed_columns_exist_after_the_migration(db):
+    from sqlalchemy import inspect as sa_inspect
+
+    columns = {c["name"] for c in sa_inspect(db.get_bind()).get_columns("purchase_rules")}
+    assert {"payee_display", "description_display"} <= columns

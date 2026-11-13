@@ -508,3 +508,88 @@ def test_r6_over_the_real_engine_budget_both_endpoints_answer(world, db, monkeyp
     row = next(m for m in picker.get_json()["materials"] if m["name"] == "Huge History")
     assert row["latest_unit_price"] is None
     assert row["latest_reason"] == "too_large"
+
+
+def test_r8_history_queries_stay_flat_as_produced_lots_grow(world, db):
+    """Review: each produced lot comes from its own batch; with the engine's bulk priming (!698) the
+    history's query count doesn't grow with the number of batches."""
+    from sqlalchemy import event
+
+    from tests.costing_helpers import complete, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+
+    def batches(n):
+        for _ in range(n):
+            execution, (step,) = workflow(db, org.id, [[{"name": "Batch Gin", "unit": "bottles"}]])
+            complete(
+                client, execution, step, [(spirit, 1, "L")], [{"name": "Batch Gin", "quantity": 1, "unit": "bottles"}]
+            )
+
+    def count():
+        statements = []
+        engine = getattr(db.get_bind(), "engine", db.get_bind())
+        listener = lambda *_a: statements.append(1)  # noqa: E731
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            assert _history(client, "Batch Gin").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        return len(statements)
+
+    batches(2)
+    few = count()
+    batches(6)
+    many = count()
+    assert many <= few + 3, (few, many)
+
+
+def test_r9_when_priming_overflows_each_lot_is_costed_on_its_own_budget(world, db, monkeypatch):
+    """Review r8: with priming over budget, lots must not share one exhausted engine: each lot reads
+    the same status its own lot-cost page gives."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, lot_cost, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    lot_ids = []
+    for _ in range(4):
+        execution, (step,) = workflow(db, org.id, [[{"name": "Budget Gin", "unit": "bottles"}]])
+        complete(
+            client, execution, step, [(spirit, 1, "L")], [{"name": "Budget Gin", "quantity": 1, "unit": "bottles"}]
+        )
+    db.expire_all()
+    expected = {}
+    for row in _history(client, "Budget Gin").get_json()["lots"]:
+        expected[row["id"]] = lot_cost(db, org.id, row["id"])["status"]
+        lot_ids.append(row["id"])
+    assert set(expected.values()) == {"actual"}
+
+    # A budget that one lot fits but all four together don't.
+    monkeypatch.setattr(engine_module, "MAX_WORK", 12)
+    body = _history(client, "Budget Gin").get_json()
+    assert {row["id"]: row["status"] for row in body["lots"]} == expected
+
+
+def test_r10_a_spent_node_budget_never_turns_later_lots_unknown(world, db, monkeypatch):
+    """Review r9: priming fits, but the lots together pass MAX_NODES: each lot still reads as its own
+    cost page does."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, lot_cost, workflow
+
+    org, client = world["org"], world["client"]
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    for _ in range(4):
+        execution, (step,) = workflow(db, org.id, [[{"name": "Node Gin", "unit": "bottles"}]])
+        complete(client, execution, step, [(spirit, 1, "L")], [{"name": "Node Gin", "quantity": 1, "unit": "bottles"}])
+    db.expire_all()
+    rows = _history(client, "Node Gin").get_json()["lots"]
+    expected = {row["id"]: lot_cost(db, org.id, row["id"])["status"] for row in rows}
+    assert set(expected.values()) == {"actual"}
+    monkeypatch.setattr(engine_module, "MAX_NODES", 4)  # one lot fits; four together don't
+    body = _history(client, "Node Gin").get_json()
+    assert {row["id"]: row["status"] for row in body["lots"]} == expected

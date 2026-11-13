@@ -357,7 +357,9 @@ class PurchaseRule(TenantScoped, Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     account_code = Column(String(50), nullable=True)
     payee_pattern = Column(String(255), nullable=True)
+    payee_display = Column(String(255), nullable=True)  # as typed, for showing back
     description_pattern = Column(String(500), nullable=True)
+    description_display = Column(String(500), nullable=True)
     match_type = Column(String(10), nullable=False, default="exact")
     treatment = Column(String(20), nullable=False)
     template = Column(JSONB(none_as_null=True), nullable=True)  # Python None is SQL NULL, not JSON null

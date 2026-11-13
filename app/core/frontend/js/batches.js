@@ -112,6 +112,8 @@
       waiting: age >= WAITING_MS,
       started: started,
       lastBy: (lastDone && operatorOf(lastDone)) || (summary && typeof summary === 'object' ? scalarText(summary.created_by) : ''),
+      finished: String(execution.status || '').toLowerCase() === 'completed',
+      finishedAt: toDate(execution.completed_at),
     };
   }
 
@@ -330,13 +332,19 @@
     }
 
     // ── Detail sheet ─────────────────────────────────────────────────────────────────
-    function openDetail(id) {
-      var batch = allBatches().find(function (b) { return b.id === id; });
+    // ``given``: a batch that isn't in the running list (a finished one, opened by link).
+    function openDetail(id, given) {
+      var batch = given || allBatches().find(function (b) { return b.id === id; });
       if (!batch || !overlay) return;
+      sheetMoves += 1;
+      linkError = '';
       var set = function (sel, text) { var node = document.getElementById(sel); if (node) node.textContent = text; };
       set('core2-active-detail-id', batch.title);
-      set('core2-active-detail-process', batch.workflow + ' · ' + stepText(batch));
-      set('core2-active-detail-started', ['Started ' + formatDateTime(batch.started), batch.done + ' of ' + batch.total + ' steps done', ageText(batch)].join(' · '));
+      set('core2-active-detail-process', batch.workflow + ' · ' + (batch.finished ? 'Finished' : stepText(batch)));
+      set('core2-active-detail-started', (batch.finished
+        ? ['Started ' + formatDateTime(batch.started), batch.finishedAt ? 'finished ' + formatDateTime(batch.finishedAt) : 'finished',
+          batch.total + (batch.total === 1 ? ' step' : ' steps')]
+        : ['Started ' + formatDateTime(batch.started), batch.done + ' of ' + batch.total + ' steps done', ageText(batch)]).join(' · '));
       var costMount = document.getElementById('core2-active-detail-cost');
       if (costMount && window.BizECost) window.BizECost.batchCard(batch.id, costMount);
       var host = document.getElementById('core2-active-detail-steps');
@@ -368,9 +376,11 @@
       });
       var action = document.getElementById('core2-active-detail-next-step');
       if (action) {
+        action.hidden = batch.finished; // nothing left to record on a finished batch
         action.href = recordHref(batch);
         action.textContent = 'Record ' + batch.stepName;
       }
+      setLinked(batch.id);
       overlay.hidden = false;
       document.body.classList.add('core2-active-detail-open');
       var close = overlay.querySelector('.core2-active-detail-close');
@@ -379,8 +389,43 @@
 
     function closeDetail() {
       if (!overlay || overlay.hidden) return;
+      sheetMoves += 1;
       overlay.hidden = true;
       document.body.classList.remove('core2-active-detail-open');
+      setLinked(null);
+    }
+
+    // The open batch is in the address (?execution=), so it can be shared and survives a reload.
+    function setLinked(id) {
+      if (!root.isConnected || window.location.pathname !== '/core/executions/live') return;
+      var url = new URL(window.location.href);
+      if ((url.searchParams.get('execution') || null) === id) return;
+      if (id) url.searchParams.set('execution', id); else url.searchParams.delete('execution');
+      window.history.replaceState(window.history.state, '', url.toString());
+    }
+
+    var linkedOpened = false;
+    var linkError = '';   // a link that found no batch: kept on screen until the user moves on
+    var sheetMoves = 0;   // bumped on every open/close, so a slow fetch can't undo the user
+    var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    async function openLinked() {
+      if (linkedOpened) return;
+      var id = new URLSearchParams(window.location.search).get('execution');
+      if (!id) return;
+      linkedOpened = true;
+      if (allBatches().some(function (b) { return b.id === id; })) { openDetail(id); return; }
+      var notFound = 'That batch couldn\u2019t be found. It may belong to another organisation or have been removed.';
+      if (!UUID_RE.test(id)) { linkError = notFound; render(); return; }
+      var before = sheetMoves;
+      try {
+        var execution = await window.CoreAPI.getExecution(id);
+        if (!root.isConnected || sheetMoves !== before) return; // the user opened or closed something meanwhile
+        openDetail(id, describe(execution, processName(String(execution.process_id)), new Date()));
+      } catch (err) {
+        if (!root.isConnected || sheetMoves !== before) return;
+        linkError = notFound;
+        render();
+      }
     }
 
     // ── Render ───────────────────────────────────────────────────────────────────────
@@ -445,7 +490,7 @@
         timeline.textContent = '';
         return;
       }
-      message('');
+      message(linkError || '');
       board.appendChild(renderLanes(shown));
       renderTimeline(shown);
     }
@@ -478,6 +523,7 @@
         state.loaded = true;
         loadedAt = Date.now();
         render();
+        openLinked();
       } catch (err) {
         if (id !== request) return;
         if (window.console) console.warn('Batches could not load', err);

@@ -239,7 +239,8 @@
         costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
           quantity: function () { return qtyInput.value; },
           unit: function () { return unitSel.value; },
-          watch: [qtyInput, unitSel],
+          name: function () { var n = document.getElementById('add-inventory-name'); return n ? n.value : ''; },
+          watch: [qtyInput, unitSel, document.getElementById('add-inventory-name')],
           labelClass: 'spa-field-label',
           inputClass: 'spa-inp',
         });

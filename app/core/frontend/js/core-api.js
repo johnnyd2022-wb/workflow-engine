@@ -212,7 +212,7 @@ window.CoreAPI = window.CoreAPI || {
     },
     
     async getExecution(executionId) {
-        return this.request(`/executions/${executionId}`);
+        return this.request(`/executions/${encodeURIComponent(executionId)}`);
     },
 
     /** Single round-trip: execution + process (execute-step SPA). */

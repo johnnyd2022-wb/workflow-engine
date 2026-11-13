@@ -123,7 +123,7 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
     unit = _units(lots)
     by_id = {lot.id: lot for lot in lots}
     allocations, entries = _facts(db, org_id, lots)
-    engine = _primed(db, org_id, by_id)
+    engine, primed = _primed(db, org_id, by_id)
     entries_by_lot: dict[UUID, list[LotCostEntry]] = defaultdict(list)
     for entry in entries:
         entries_by_lot[entry.inventory_item_id].append(entry)
@@ -180,10 +180,10 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
 
     too_large = False
     try:
-        facts = _effective_facts(engine, by_id, allocations, entries_by_lot)
+        facts = _effective_facts(engine if primed else CostEngine(db, org_id), by_id, allocations, entries_by_lot)
     except TooLargeError:  # more history than the engine's budget: say so rather than fail
         facts, too_large = [], True
-        engine = CostEngine(db, org_id)
+        engine, primed = CostEngine(db, org_id), False  # each lot below gets its own engine
     for fact in facts:
         add_fact(*fact)
 
@@ -211,9 +211,19 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         cursor = _next_month(cursor)
 
     lot_rows = []
+    loaded = engine if primed else CostEngine(db, org_id)  # what fresh per-lot engines reuse
     for item in lots:
         try:
-            cost = engine._solve(("lot", item.id))
+            try:
+                cost = (engine if primed else _own_budget(loaded, db, org_id))._solve(("lot", item.id))
+            except TooLargeError:
+                if not primed:
+                    raise
+                # The shared engine's node budget is spent across earlier lots: from here on each
+                # lot gets an engine of its own (reusing what was loaded), so it reads as its own
+                # cost page does.
+                loaded, primed = engine, False
+                cost = _own_budget(loaded, db, org_id)._solve(("lot", item.id))
         except TooLargeError:  # a history too long to cost: unknown, as the lot-cost API says
             status, public_cost = UNKNOWN, None
         else:
@@ -332,15 +342,29 @@ def _effective_facts(engine, by_id, allocations, entries_by_lot):
     return facts
 
 
-def _primed(db: Session, org_id: UUID, ids) -> CostEngine:
-    """An engine with these lots bulk-loaded, or a fresh lazy one if loading them all at once is
-    over the engine's budget (each lot is then costed, or reported unknown, on its own)."""
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
+def _own_budget(loaded: CostEngine, db: Session, org_id: UUID) -> CostEngine:
+    """A fresh engine (its own work and node budgets) that reuses a successfully primed engine's
+    loaded rows, so retrying one item queries nothing twice."""
+    engine = CostEngine(db, org_id)
+    for cache in _LOADED_CACHES:
+        setattr(engine, cache, getattr(loaded, cache))
+    engine._materials = loaded._materials
+    return engine
+
+
+def _primed(db: Session, org_id: UUID, ids) -> tuple[CostEngine, bool]:
+    """An engine with these lots bulk-loaded, and whether that fitted the engine's budget. When it
+    didn't, callers cost each lot (or group) on a fresh engine of its own, so one oversized lot
+    can't use up the budget for the rest."""
     engine = CostEngine(db, org_id)
     try:
         engine.prime(ids)
     except TooLargeError:
-        engine = CostEngine(db, org_id)
-    return engine
+        return CostEngine(db, org_id), False
+    return engine, True
 
 
 def material_history(db: Session, org_id: UUID, material: str, date_from: str | None, date_to: str | None) -> dict:
@@ -355,7 +379,7 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
             groups[normalise(item.name)].append(item)
     all_lots = [item for group in groups.values() for item in group]
     allocations, entries = _facts(db, org_id, all_lots)
-    engine = _primed(db, org_id, [item.id for item in all_lots])
+    engine, primed = _primed(db, org_id, [item.id for item in all_lots])
     allocations_by_item: dict[UUID, list] = defaultdict(list)
     entries_by_item: dict[UUID, list] = defaultdict(list)
     for allocation_row in allocations:
@@ -368,9 +392,10 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
         group_allocations = [row for item in group for row in allocations_by_item[item.id]]
         group_entries = [entry for item in group for entry in entries_by_item[item.id]]
         try:
-            facts = _history_facts_for_list(engine, group, unit, group_allocations, group_entries)
+            group_engine = engine if primed else CostEngine(db, org_id)
+            facts = _history_facts_for_list(group_engine, group, unit, group_allocations, group_entries)
         except TooLargeError:  # still listed, so its history page can say why it has no figure
-            engine = CostEngine(db, org_id)
+            engine, primed = CostEngine(db, org_id), False
             facts = {
                 "name": min((item.name for item in group), key=lambda name: (normalise(name), name.casefold())),
                 "unit": unit,
