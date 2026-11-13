@@ -349,6 +349,8 @@ ENDPOINT_COVERAGE = {
     ("costing.get_execution_cost", "GET"): "blocked",
     ("costing.put_account", "PUT"): "blocked",
     ("costing.get_lot_cost", "GET"): "blocked",
+    ("costing.get_material_history", "GET"): "blocked",
+    ("costing.list_materials", "GET"): "blocked",
     ("costing.get_settings", "GET"): "blocked",
     ("costing.purchases_page", "GET"): "blocked",
     ("costing.costs_page", "GET"): "blocked",

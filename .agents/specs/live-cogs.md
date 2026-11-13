@@ -1736,6 +1736,27 @@ a clear "Back to new purchases" exit. 409 needs-reconnect shown as a reconnect p
 - AC97: without `costs.view` (or without the feature) the inventory detail, batch detail,
   Add Inventory and Home pages render no cost element and make no costing write.
 
+## 8.1f-3a build contract — material price history
+
+Answers "what am I paying for juniper, and is it going up?". A material is every non-contract lot
+sharing a normalised name. Read-only; computed on read.
+
+- `GET /api/core/costing/materials/<name>/history?from=YYYY-MM&to=YYYY-MM` — default the twelve NZ
+  months ending this one, at most 36. Per month: weighted average unit cost paid (Σ priced amount ÷
+  Σ priced quantity), quantity priced, purchase count, min and max unit price, and `unconverted` (prices
+  in a unit the engine cannot convert to the material's most common unit). Plus `latest` (unit price,
+  date, source) and `lots` (each lot's engine cost and status).
+- `GET /api/core/costing/materials` — materials with at least one price, sorted by name, for a picker.
+- Needs `costs.view`; 404 for another org's material or an unknown name.
+
+| AC | Behaviour | Test |
+|---|---|---|
+| AC105 | Two purchases in a month average by quantity | `test_ac105_weighted_average_across_two_purchases` |
+| AC106 | A refund lowers the month's amount, not its quantity; manual and free entries are prices | `test_ac106_*` |
+| AC107 | g and kg convert; an unconvertible unit is counted, not averaged | `test_ac107_converts_compatible_units_and_counts_unconvertible` |
+| AC108 | Malformed, reversed or over-36-month ranges are 400; unknown material 404 | `test_ac108_month_bounds_and_unknown_material` |
+| AC109 | Org isolation, production role refused, picker lists priced materials | `test_ac109_org_isolation_production_role_and_material_picker` |
+
 ## 8.1f-3b build contract — duty if sold today
 
 **What it answers:** What duty would apply if each produced lot were sold today, and what its landed unit cost would be when production cost is known. Duty rates remain in the NZ Alcohol excise module.
