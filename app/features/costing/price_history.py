@@ -401,6 +401,7 @@ def list_materials(db: Session, org_id: UUID) -> list[dict]:
                 "unit": unit,
                 "latest_unit_price": None,
                 "latest_date": None,
+                "latest_reason": "too_large",
             }
         if facts is not None:
             results.append(facts)
@@ -430,9 +431,12 @@ def _history_facts_for_list(engine, lots, unit, allocations, entries) -> dict | 
             latest = (key, amount / quantity * factor)
     if not priced:
         return None
-    return {
+    result = {
         "name": min((item.name for item in lots), key=lambda name: (normalise(name), name.casefold())),
         "unit": unit,
         "latest_unit_price": unit_str(latest[1]) if latest else None,
         "latest_date": latest[0][0].date().isoformat() if latest else None,
     }
+    if latest is None:
+        result["latest_reason"] = "other_units"
+    return result
