@@ -187,3 +187,21 @@ def test_feature_cache_is_per_request_and_forgets_on_grant(flask_app, db):  # no
             assert repo.is_active(org.id, "costing") is True
     finally:
         purge(db, org)
+
+
+# --- 8.1f-3a: what you pay for materials -------------------------------------------------------------------
+
+
+def test_costs_page_carries_the_material_prices_section(flask_app, db):  # noqa: F811
+    from pathlib import Path
+
+    org = new_org(db)
+    try:
+        viewer = user_client(db, flask_app, org, permissions=["costs.view", "production.view", "inventory.view"])
+        html = viewer.get("/core/costing/costs").get_data(as_text=True)
+        assert "data-prices" in html and "data-prices-list" in html
+        assert "What you pay for materials" in html
+    finally:
+        purge(db, org)
+    js = (Path(__file__).resolve().parents[1] / "app/features/costing/frontend/static/costs.js").read_text()
+    assert "API + '/materials'" in js and "/history'" in js

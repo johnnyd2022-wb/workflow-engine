@@ -147,3 +147,43 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 #page-content .ru-dialog .co-opt input { width: 18px !important; min-width: 18px !important; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--ui-accent); }
 #page-content .co-opt > span { display: grid; gap: 2px; }
 #page-content .co-opt__label { font-size: 14px; font-weight: 600; }
+
+/* Costs › What you pay for materials (live-cogs 8.1f-3a) */
+#page-content .co-prices { margin-top: 32px; }
+#page-content .co-prices[hidden] { display: none; }
+#page-content .co-prices [hidden] { display: none; }
+#page-content .co-prices [data-prices-empty], #page-content .co-prices [data-prices-error] { margin: 8px 0 12px; }
+#page-content .co-section-title { margin: 0 0 4px; font-size: 17px; }
+#page-content .co-section-lead { margin: 0 0 12px; font-size: 14px; color: var(--ui-text-muted); }
+#page-content .co-price { display: grid; justify-items: end; gap: 2px; text-align: right; }
+#page-content .co-price__value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .co-price__when { font-size: 12px; color: var(--ui-text-muted); white-space: nowrap; }
+#page-content .co-trend { margin: 4px 0 10px; font-size: 14px; }
+#page-content .co-bars { position: relative; display: grid; grid-template-columns: repeat(var(--co-months, 12), minmax(0, 1fr)); gap: 0; margin: 4px 0 6px; }
+#page-content .co-bars__line { position: absolute; top: 0; left: 0; width: 100%; height: 112px; pointer-events: none; overflow: visible; }
+#page-content .co-bars__line polyline { fill: none; stroke: var(--ui-accent); stroke-width: 2; stroke-linejoin: round; opacity: .55; }
+#page-content .co-bars__dot { position: absolute; left: 50%; width: 10px; height: 10px; margin: 0 0 -5px -5px; border-radius: 50%;
+  background: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-surface); cursor: default; }
+#page-content .co-bars__dot:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+#page-content .co-bars__dot .co-bars__value { bottom: 14px; }
+#page-content .co-bars__col { display: grid; grid-template-rows: 112px auto; min-width: 0; }
+#page-content .co-bars__plot { position: relative; display: block;
+  border-bottom: 1px solid var(--ui-border); padding-top: 20px; }
+#page-content .co-bars__bar { position: relative; display: block; width: 100%; max-width: 28px; background: var(--ui-accent); border-radius: 4px 4px 0 0; }
+#page-content .co-bars__bar:hover { opacity: .75; }
+#page-content .co-bars__value { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: var(--ui-text); white-space: nowrap; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+#page-content .co-bars__label { padding-top: 4px; text-align: center; font-size: 11px; color: var(--ui-text-muted); overflow: hidden; }
+#page-content .co-bars__label--skip { visibility: hidden; }
+#page-content .co-months { width: 100%; max-width: 520px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+#page-content .co-months th { text-align: left; font-weight: 600; font-size: 12px; color: var(--ui-text-muted); padding: 6px 8px 6px 0; }
+#page-content .co-months td { padding: 6px 8px 6px 0; border-top: 1px solid var(--ui-border); }
+#page-content .co-months td:not(:first-child), #page-content .co-months th:not(:first-child) { text-align: right; }
+#page-content .co-months details { margin-top: 6px; }
+#page-content .co-months-toggle { margin-top: 8px; font-size: 14px; }
+#page-content .co-months-toggle summary { cursor: pointer; color: var(--ui-accent); }
+@media (max-width: 560px) {
+  #page-content .co-months .co-months__range { display: none; }
+  #page-content .co-row__head .co-price { grid-row: 2; grid-column: 1; justify-items: start; text-align: left; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  #page-content .co-bars__value { font-size: 10px; }
+  #page-content .co-bars__label { font-size: 10px; }
+}
