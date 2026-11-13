@@ -336,6 +336,8 @@
     function openDetail(id, given) {
       var batch = given || allBatches().find(function (b) { return b.id === id; });
       if (!batch || !overlay) return;
+      sheetMoves += 1;
+      linkError = '';
       var set = function (sel, text) { var node = document.getElementById(sel); if (node) node.textContent = text; };
       set('core2-active-detail-id', batch.title);
       set('core2-active-detail-process', batch.workflow + ' · ' + (batch.finished ? 'Finished' : stepText(batch)));
@@ -387,6 +389,7 @@
 
     function closeDetail() {
       if (!overlay || overlay.hidden) return;
+      sheetMoves += 1;
       overlay.hidden = true;
       document.body.classList.remove('core2-active-detail-open');
       setLinked(null);
@@ -402,18 +405,26 @@
     }
 
     var linkedOpened = false;
+    var linkError = '';   // a link that found no batch: kept on screen until the user moves on
+    var sheetMoves = 0;   // bumped on every open/close, so a slow fetch can't undo the user
+    var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     async function openLinked() {
       if (linkedOpened) return;
       var id = new URLSearchParams(window.location.search).get('execution');
       if (!id) return;
       linkedOpened = true;
       if (allBatches().some(function (b) { return b.id === id; })) { openDetail(id); return; }
+      var notFound = 'That batch couldn\u2019t be found. It may belong to another organisation or have been removed.';
+      if (!UUID_RE.test(id)) { linkError = notFound; render(); return; }
+      var before = sheetMoves;
       try {
         var execution = await window.CoreAPI.getExecution(id);
-        if (!root.isConnected) return;
+        if (!root.isConnected || sheetMoves !== before) return; // the user opened or closed something meanwhile
         openDetail(id, describe(execution, processName(String(execution.process_id)), new Date()));
       } catch (err) {
-        message('That batch couldn\u2019t be found. It may belong to another organisation or have been removed.', []);
+        if (!root.isConnected || sheetMoves !== before) return;
+        linkError = notFound;
+        render();
       }
     }
 
@@ -479,7 +490,7 @@
         timeline.textContent = '';
         return;
       }
-      message('');
+      message(linkError || '');
       board.appendChild(renderLanes(shown));
       renderTimeline(shown);
     }
