@@ -211,16 +211,19 @@ def _history(db: Session, org_id: UUID, material: str, date_from: str | None, da
         cursor = _next_month(cursor)
 
     lot_rows = []
+    loaded = engine if primed else CostEngine(db, org_id)  # what fresh per-lot engines reuse
     for item in lots:
         try:
             try:
-                cost = (engine if primed else CostEngine(db, org_id))._solve(("lot", item.id))
+                cost = (engine if primed else _own_budget(loaded, db, org_id))._solve(("lot", item.id))
             except TooLargeError:
                 if not primed:
                     raise
-                # The shared engine's node budget is spent across earlier lots: cost this one on its
-                # own budget, reusing what was loaded, so it reads as its own cost page does.
-                cost = _own_budget(engine, db, org_id)._solve(("lot", item.id))
+                # The shared engine's node budget is spent across earlier lots: from here on each
+                # lot gets an engine of its own (reusing what was loaded), so it reads as its own
+                # cost page does.
+                loaded, primed = engine, False
+                cost = _own_budget(loaded, db, org_id)._solve(("lot", item.id))
         except TooLargeError:  # a history too long to cost: unknown, as the lot-cost API says
             status, public_cost = UNKNOWN, None
         else:

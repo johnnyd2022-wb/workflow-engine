@@ -269,22 +269,28 @@ class CostEngine:
     def _solve(self, root: tuple):
         """Evaluate ``root`` after everything it depends on, without recursion."""
         stack = [root]
-        while stack:
-            node = stack[-1]
-            if node in self._memo:
-                stack.pop()
-                continue
-            if node not in self._active:
-                self._charge(node)
-                self._active.add(node)
-                pending = [d for d in self._deps(node) if d not in self._memo and d not in self._active]
-                if pending:
-                    stack.extend(reversed(pending))
+        try:
+            while stack:
+                node = stack[-1]
+                if node in self._memo:
+                    stack.pop()
                     continue
-            # every dependency is now settled, or is an ancestor still being worked on (a cycle)
-            self._memo[node] = self._evaluate(node)
-            self._active.discard(node)
-            stack.pop()
+                if node not in self._active:
+                    self._charge(node)
+                    self._active.add(node)
+                    pending = [d for d in self._deps(node) if d not in self._memo and d not in self._active]
+                    if pending:
+                        stack.extend(reversed(pending))
+                        continue
+                # every dependency is now settled, or is an ancestor still being worked on (a cycle)
+                self._memo[node] = self._evaluate(node)
+                self._active.discard(node)
+                stack.pop()
+        except TooLargeError:
+            # Out of budget part-way: nothing half-walked may stay "being worked on", or a later
+            # solve on this engine would read it as a cycle and cost it as partial.
+            self._active.clear()
+            raise
         return self._memo[root]
 
     def _charge(self, node: tuple) -> None:
