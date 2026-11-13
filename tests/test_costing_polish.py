@@ -187,3 +187,29 @@ def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, 
     products = response.get_json()["products"]
     assert {p["key"]: p["ready"] for p in products} == before
     assert all(p["unit_cost"] is None for p in products)
+
+
+def test_a_spent_node_budget_never_drops_later_products_figures(world, db, monkeypatch):  # noqa: F811
+    """Review r5: once one product uses up the figures engine's node budget, the next products are
+    costed on their own budget: the list shows what each product's own page shows."""
+    from app.features.costing import engine as engine_module
+    from tests.costing_helpers import complete, workflow
+
+    org, client = world
+    spirit = lot(db, org.id, "Base spirit", 100, "L")
+    price(db, org.id, spirit.id, 1000, 100)
+    for i in range(4):
+        execution, (step,) = workflow(db, org.id, [[{"name": f"Node Product {i}", "unit": "bottles"}]])
+        complete(
+            client,
+            execution,
+            step,
+            [(spirit, 1, "L")],
+            [{"name": f"Node Product {i}", "quantity": 1, "unit": "bottles"}],
+        )
+    monkeypatch.setattr(engine_module, "MAX_NODES", 4)
+    listed = {p["key"]: p for p in _products(client) if p["name"].startswith("Node Product")}
+    assert len(listed) == 4
+    for key, row in listed.items():
+        own = client.get(f"/api/core/costing/readiness/{key}").get_json()
+        assert row["unit_cost"] is not None and row["unit_cost"] == own.get("unit_cost"), (key, row, own)

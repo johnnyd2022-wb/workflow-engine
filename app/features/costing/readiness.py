@@ -234,6 +234,18 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     return out
 
 
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
+def _own_budget(loaded: CostEngine, db: Session, org_id: UUID) -> CostEngine:
+    """A fresh engine (its own work and node budgets) over another engine's loaded rows."""
+    engine = CostEngine(db, org_id)
+    for cache in _LOADED_CACHES:
+        setattr(engine, cache, getattr(loaded, cache))
+    engine._materials = loaded._materials
+    return engine
+
+
 def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: CostEngine) -> None:
     """Each ready product's cost per unit from its latest batch, worked out after readiness and on
     an engine of its own: running out of budget here can only leave a figure out, never change
@@ -255,18 +267,25 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
         .all()
     ):
         produced_by_batch[execution_id].append(item_id)
-    engine = CostEngine(db, org_id)
     # What readiness already loaded is reused (no query twice); the work and node budgets are this
     # engine's own, so these figures can't eat into readiness's.
-    for cache in ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info"):
-        setattr(engine, cache, getattr(loaded, cache))
-    engine._materials = loaded._materials
+    engine = _own_budget(loaded, db, org_id)
     try:
         engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
     except TooLargeError:
         return  # too much history to cost them together: the list shows readiness without figures
     for key, execution_id in wanted.items():
-        out[key].update(_latest_unit_cost(engine, produced_by_batch.get(execution_id, []), key))
+        lots = produced_by_batch.get(execution_id, [])
+        try:
+            figure = _latest_unit_cost(engine, lots, key)
+        except TooLargeError:
+            # This engine's node budget is spent across earlier products: cost this one on its own,
+            # reusing what's loaded, so it shows what its own page shows.
+            try:
+                figure = _latest_unit_cost(_own_budget(engine, db, org_id), lots, key)
+            except TooLargeError:
+                figure = {}
+        out[key].update(figure)
 
 
 def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
@@ -280,10 +299,7 @@ def _latest_unit_cost(engine: CostEngine, produced_lot_ids, key: str) -> dict:
         lot = engine._get_lot(item_id)
         if lot is None or str(lot.source_output_id) != output_id:
             continue
-        try:
-            cost = engine._solve(("lot", item_id))
-        except TooLargeError:
-            return {}
+        cost = engine._solve(("lot", item_id))  # TooLargeError: the caller retries on its own budget
         if cost.status in (ACTUAL, ESTIMATED) and cost.unit_known is not None:
             return {"unit_cost": unit_str(cost.unit_known), "unit": lot.unit, "unit_cost_status": cost.status}
         return {}
