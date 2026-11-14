@@ -211,6 +211,8 @@ def convert_for_lot(quantity: Decimal, unit: str | None, item, *, exact: bool = 
         raise ValueError(f"Cannot convert between incompatible units: {unit} and {lot_unit}")
     q, used, held = Decimal(str(quantity)), normalize_unit(unit), normalize_unit(lot_unit)
     count = Decimal(pack["count"])
+    if not count.is_finite():
+        raise ValueError(f"Cannot convert {unit} to {lot_unit} with pack {describe_pack(pack)}")
     size, size_unit = (Decimal(pack["size"]), pack["size_unit"]) if has_size(pack) else (None, None)
     if held in COUNTED_UNITS:
         if used in COUNTED_UNITS and _same_word(used, held):  # "bag" of a lot in "bags"
@@ -244,6 +246,8 @@ def breakdown(unit_cost: Decimal, item) -> dict | None:
         return None
     held = normalize_unit(item.unit or "")
     count = Decimal(pack["count"])
+    if not count.is_finite():
+        return None
     out = {"pack": describe_pack(pack), "containers": None, "per_container": None, "per_litre": None, "per_kg": None}
     if held in COUNTED_UNITS:
         if count > 1:
