@@ -465,3 +465,12 @@ def test_ac146_downgrade_refuses_while_a_snapshot_exists(world, db):
                     migration.downgrade()
         finally:
             transaction.rollback()
+
+
+def test_ac147_costs_page_offers_the_snapshot_button_only_to_managers(world, db, flask_app):
+    org, client = world
+    page = client.get("/core/costing/costs").get_data(as_text=True)
+    assert "data-stock-snapshot" in page and "data-stock-now" in page
+    viewer = user_client(db, flask_app, org, permissions=["costs.view", "inventory.view"])
+    page = viewer.get("/core/costing/costs").get_data(as_text=True)
+    assert "data-stock-now" in page and "data-stock-snapshot" not in page
