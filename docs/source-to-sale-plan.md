@@ -1249,7 +1249,7 @@ missing; never a silent $0.
     and power as rates per litre of finished product or per batch from a date, taken by each
     finished batch; freight on a purchase spread by value over the same purchase's stock; materials
     and overheads shown apart on the batch card, lot panel and margins; readiness untouched. Spec
-    `.agents/specs/live-cogs-overheads.md`. (!TBD)
+    `.agents/specs/live-cogs-overheads.md`. (!717)
   - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on
     manual, barcode, CSV and the Purchases record dialog. Steps use the lot in their own units
     (bottles, mL, g, pieces) and take the right share; cost breaks down per case, bottle and litre
