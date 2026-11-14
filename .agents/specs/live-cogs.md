@@ -1,5 +1,5 @@
 # SPEC: live-cogs
-status: v4 (round 2 engine gaps resolved; 8.1a is the first build)
+status: v4 (round 2 engine gaps resolved; 8.1a is the first build; Phase 4 / 8.1h contract appended)
 name: Live batch & bottle cost
 slug: live-cogs
 blueprint: new slice `app/features/costing/`, attached through `register_routes(core_bp)`;
@@ -1812,3 +1812,25 @@ Opt-in per org: `costing_settings.split_basis` is `quantity` (default; every exi
 - **AC124:** Settings GET/PUT, invalid value rejection, and org isolation — `test_ac124_settings_get_put_validation_and_tenant_isolation`.
 - **AC125:** Migration column default and constraint — `test_ac125_split_basis_migration_has_default_and_check_constraint`; upgrade/downgrade round-trip also passed on the private `cogsl` DB.
 
+
+## 8.1h build contract — overheads into cost (Phase 4, opt-in)
+
+Full contract, worked examples and ACs: `.agents/specs/live-cogs-overheads.md` (ACs are `OV1`–`OV18`
+so they can't collide with other 8.1 builds). In short:
+
+- **Opt-in per org** (`costing_settings.include_overheads`, default false). Off: every figure, test
+  and response is byte-for-byte what it was; the new payload keys exist only when on.
+- **Data model.** `overhead_rates` (name, `per_litre` | `per_batch` basis, amount, effective-from,
+  active) and `purchase_lines.freight`; one reversible migration `costing_overheads_001`.
+- **Algorithm.** The batch's overhead is added to its **pool at the last step that makes finished
+  product**, when the batch completes, then split between that step's outputs by the existing
+  weights. Per litre = rate × litres of the finished-product (non-Library) outputs (bottles by
+  pack size); per batch = the rate once. The engine carries the overhead part beside every cost
+  (`Alloc.overhead`, `LotCost.unit_overhead`) so the split survives into later batches.
+  Freight lines spread over the same document's recorded stock by value (Σ allocations), landing
+  in the lot's price. An unmeasurable litre figure makes the batch `partial`, never $0.
+- **Numbers.** A 200 L batch on $1,000 of materials with Rent $0.50/L and Labour $40/batch costs
+  $1,140 → $5.70/L ($5.00 materials + $0.70 overheads). A $300 purchase of $250 stock + $50 freight
+  prices the $150 lot at $180 and the $100 lot at $120.
+- **Not here.** Time tracking, LAL as a basis, freight across documents. The P&L bridge (8.1g)
+  should treat absorbed overhead consistently — a follow-up.
