@@ -213,3 +213,42 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 #page-content .cost-card__figures { align-items: flex-start; }
 #page-content .cost-card__overheads { display: grid; gap: 8px; justify-items: start; }
 #page-content .cost-card__overheads .cost-overheads { justify-self: stretch; }
+
+/* Production › Costs: stock value, snapshots and the Xero bridge (8.1g) */
+#page-content .co-stock { margin-top: 32px; }
+#page-content .co-stock[hidden], #page-content .co-stock [hidden] { display: none; }
+#page-content .co-stock__card { padding: 18px 20px; display: grid; gap: 14px; margin-bottom: 20px; }
+#page-content .co-stock__total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+#page-content .co-stock__amount { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#page-content .co-stock__cats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 20px; }
+#page-content .co-stock__cat { display: grid; gap: 2px; min-width: 0; }
+#page-content .co-stock__cat-label { font-size: 13px; color: var(--ui-text-muted); }
+#page-content .co-stock__cat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+#page-content .co-stock__split { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .co-stock__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0 0 10px; }
+#page-content .co-stock__sub { margin: 0; font-size: 15px; }
+#page-content .co-snap__head { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 12px; align-items: center;
+  padding: 14px 16px; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-height: 52px; }
+#page-content .co-snap__head:hover { background: var(--ui-surface-subtle); }
+#page-content .co-snap__title { font-weight: 600; overflow-wrap: anywhere; }
+#page-content .co-snap__sub { display: block; font-size: 13px; font-weight: 400; color: var(--ui-text-muted); }
+#page-content .co-snap__value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .co-snap__detail { padding: 4px 16px 16px; display: grid; gap: 12px; }
+#page-content .co-snap__detail[hidden] { display: none; }
+#page-content .co-snap__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#page-content .co-kv { margin: 0; display: grid; gap: 6px; }
+#page-content .co-kv__row { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+#page-content .co-kv__row dt { color: var(--ui-text); min-width: 0; overflow-wrap: anywhere; }
+#page-content .co-kv__row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .co-kv__row--total { border-top: 1px solid var(--ui-border); padding-top: 6px; }
+#page-content .co-bridge { display: grid; gap: 14px; border-top: 1px solid var(--ui-border); padding-top: 12px; }
+#page-content .co-bridge h4 { margin: 0; font-size: 14px; }
+#page-content .co-bridge__lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+#page-content .co-bridge__lines li { display: flex; justify-content: space-between; gap: 12px; }
+#page-content .co-bridge__lines li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+#page-content .co-bridge__lines li > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 480px) {
+  #page-content .co-stock__amount { font-size: 24px; }
+  #page-content .co-snap__head { grid-template-columns: minmax(0, 1fr) 16px; }
+  #page-content .co-snap__head .co-snap__value { grid-row: 2; grid-column: 1; }
+}

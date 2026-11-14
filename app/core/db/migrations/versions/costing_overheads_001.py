@@ -1,7 +1,7 @@
 """Overheads into cost, opt-in (roadmap 8.1h, spec .agents/specs/live-cogs-overheads.md).
 
 Revision ID: costing_overheads_001
-Revises: costing_rules_002
+Revises: costing_stock_001
 
 Adds the per-org switch (``costing_settings.include_overheads``, off), the rates an org types
 (``overhead_rates``) and the mark on a purchase line that says it is freight
@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "costing_overheads_001"
-down_revision = "costing_rules_002"
+down_revision = "costing_stock_001"
 branch_labels = None
 depends_on = None
 

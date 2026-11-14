@@ -58,7 +58,7 @@ from app.features.planning.models import PlanningDemand
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
 from app.features.planning.capacity_models import PlanningCapacitySetting
 from app.features.planning.forecast_models import PlanningMaterialAssessment, PlanningMaterialBatchAssessment
-from app.features.costing.models import CostFlow, CostingSettings, LotCostEntry, OverheadRate, PurchaseAllocation, PurchaseDocument, PurchaseLine, PurchaseRule  # noqa: F401
+from app.features.costing.models import CostFlow, CostingSettings, LotCostEntry, OverheadRate, PurchaseAllocation, PurchaseDocument, PurchaseLine, PurchaseRule, StockValueLine, StockValueMovement, StockValueSnapshot  # noqa: F401
 from app.features.crm.models.xero_account import XeroAccount  # noqa: F401
 
 # this is the Alembic Config object, which provides

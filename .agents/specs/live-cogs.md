@@ -1834,3 +1834,144 @@ so they can't collide with other 8.1 builds). In short:
   prices the $150 lot at $180 and the $100 lot at $120.
 - **Not here.** Time tracking, LAL as a basis, freight across documents. The P&L bridge (8.1g)
   should treat absorbed overhead consistently — a follow-up.
+
+## 8.1g build contract — stock value and the Xero bridge (Phase 3)
+
+Spec "Xero bridge and stock value (Phase 3)" made concrete. Founder rules bind: costing works with
+no Xero (stock value and snapshots need none; only the Xero side of the bridge does), unknown cost
+is never shown as $0, closed-month figures never move, dialogs are bottom sheets, 375px works.
+
+**Time.** "The org's timezone" is NZ everywhere in costing (`purchase_sources.nz_today`; orgs have
+no timezone setting). A month-end snapshot's `cutoff_at` is 00:00 NZ on the day after its
+`as_of_date`; an event with `created_at < cutoff_at` is inside it.
+
+### Data model (migration `costing_stock_001`; additive; downgrade refuses while snapshots exist, because a closed month can't be rebuilt)
+
+- `stock_value_snapshots`: `kind` (`month_end` | `manual`), `as_of_date`, `cutoff_at`, `taken_at`,
+  `trigger` (`xero_sync` | `costing_read` | `manual`), `taken_by_user_id` (null = automatic),
+  `previous_snapshot_id`, `quantity_basis` (`exact`: nothing moved since the cutoff; `reconstructed`:
+  later movements were reversed out of the ledgers), totals `total_value`, `raw_value`,
+  `in_production_value`, `wip_value`, `finished_value`, `actual_value`, `estimated_value`,
+  `partial_value` (floors of partly-costed lots), `unknown_lots`, `partial_lots`, `lot_count`, and
+  `purchases_value` (B, below). Unique `(org_id, as_of_date)` where `kind = 'month_end'`.
+- `stock_value_lines`: per snapshot a `lot` line (item id, kept but nullable; name, unit, batch,
+  `category` raw / wip / finished, `quantity`, `unit_cost` (null unless actual or estimated),
+  `known_unit_cost` (the floor), `value` (quantity × floor; **null** when unknown), `status`) or an
+  `in_production` line (execution id, name = the process, `value` = the batch's unabsorbed pool).
+- `stock_value_movements` (the immutable valued movements): written once, when a snapshot is taken
+  after an earlier one, for the window between their cutoffs. `kind` is one of `purchase`, `sale`,
+  `sample`, `wastage`, `variance`, `transfer`, `production_loss`, `revaluation`, `added_other`,
+  `rounding`; per lot or execution with `quantity`, `unit_cost` (closing cost) and `value` (signed:
+  its effect on stock value). By construction **Σ value = closing total − opening total, exactly**.
+
+### Stock value (on-hand × unit cost)
+
+Lots with quantity > 0 that are not customer-owned, each at its engine cost (the `known_unit_cost`
+floor; unknown lots are listed with no value and counted, never valued at 0), plus one
+`in_production` line per in-progress batch holding its unabsorbed pool. The total is a floor
+whenever `unknown_lots > 0` or `partial_lots > 0` (`complete = false`). A finished batch's leftover
+pool is a production loss, not stock. Split: `actual` / `estimated` / `partial` (floor) dollars and
+`unknown_lots`. A batch's pool at a cutoff = Σ consumed flows before it × the lot's cost − Σ output
+allocations before it.
+
+### Snapshots
+
+- **Automatic** (only for orgs with `costing`): after a Xero sync's purchases phase, or, for an org
+  with no connected Xero, on a costing read of `GET /stock-value`, take a `month_end` snapshot for
+  every completed NZ month after the latest one (at most 12, oldest first); with none yet, only the
+  most recent completed month; never an empty first snapshot. Idempotent (advisory lock + unique
+  index); a failure is logged and never fails the sync or the read.
+- **Manual** (`POST /stock-value/snapshot`, `costs.manage`): `cutoff_at = taken_at`; at most 20 a day.
+- **As at the cutoff, not at the moment taken.** Quantities are the current quantity with every
+  `inventory_item.quantity_adjusted` / `consumed` / `updated` event, wastage movement and lot
+  creation at or after the cutoff reversed (the arithmetic of `stock_integrity`). Costs are those
+  known when the snapshot is taken.
+- **Held fixed.** Lines, totals and movements are never updated. `changes_since_close` (detail
+  read) re-prices the stored quantities with today's costs and compares purchases recorded now
+  against `purchases_value`; it never alters the snapshot.
+- CSV export: category, item, batch, quantity, unit, unit cost, value, status; unknown cost cells
+  are blank; per-category subtotals and a total with "N lots have no cost" when incomplete; cells
+  that begin `= + - @` are escaped.
+
+### Xero bridge (`GET /bridge?from=<snapshot>&to=<snapshot>`, default the latest two)
+
+Only between two snapshots, so only from the first snapshot on. Period = the day after
+`from.as_of_date` to `to.as_of_date`. `xero.state` is `not_connected` (200; the stock roll-forward
+below is still returned), `needs_reconnect` (token lacks `accounting.reports.profitandloss.read`,
+now in `XERO_SCOPES`), `failed` (a ref, no internals) or `ok`.
+
+- **A** = Σ Xero P&L (`get_profit_and_loss(from, to)`) for accounts whose treatment is `stock`.
+  **B** = Σ active and orphaned purchase allocations on lines dated in the period in those accounts
+  (`document_date`; refunds negative), as recorded when the closing snapshot was taken.
+- **Tie-out:** `A − B` = every stock-account line in the period with an open, skipped, partly
+  recorded or not-stock amount, listed line by line (`open_amount + not_stock_amount`), plus
+  **other entries in Xero (journals)** = A − Σ synced stock-account lines in the period (any sign).
+- **Roll-forward (stored, fixed):** `S0 + B − S1 = cost that left stock`, shown as `cogs` (sales,
+  FIFO-matched lots at closing cost), `wastage`, `samples` (tasting dispatch), `variance`
+  (corrections, plus any decrease no ledger entry explains), `production_loss`, `estimate_changes`
+  and `other` (moves between locations, and `rounding`). `estimate_changes` = `revaluation` (stock
+  held at the last close, `Q0 × (closing cost − opening cost)`, plus the same for in-production
+  pools) + `added_other` (stock added at a typed or estimated cost, or bought in another period:
+  `Σ inflow × closing cost − B`). The identity holds to the cent by construction (`rounding`
+  closes it and is shown if it exceeds a cent).
+- Beside it: Xero's duty accounts against Biz-E's duty for the period (`null` when the compliance
+  module is off or the period isn't whole months), and Xero's overhead accounts, untouched.
+
+### Acceptance criteria (extend AC49–AC51; tests in `tests/test_costing_stock_value.py` and `tests/test_costing_bridge.py`)
+
+World W: Juniper 10 kg typed price $50 ($5/kg), of which a batch consumed 3 kg (pool $15, no
+output yet); Orris, one 1 kg lot at $30 and one 2 kg lot with no price (estimated at $30/kg, $60);
+Mystery 5 kg with no cost; Gin (finished) 12 bottles typed price $120; Mash (wip) 6 L typed price $30.
+
+- **AC129 (= AC49)** Stock value now for W: total 290.0000 = raw 125 (Juniper 7 kg × 5 = 35, Orris
+  30 + 60) + in production 15 + wip 30 + finished 120; split actual 230 / estimated 60 /
+  partial 0; `unknown_lots` 1; `complete` false.
+- **AC130** Mystery is listed with `unit_cost` and `value` null and status `unknown`; the total
+  excludes it and says so. A lot made by a batch with an unknown input is `partial`: its floor is in
+  `partial` and `partial_lots`, not in `actual`.
+- **AC131** Zero-quantity and customer-owned lots aren't stock; a completed batch's leftover pool
+  isn't in the total, an in-progress batch's is.
+- **AC132** A manual snapshot of W stores header, lines and totals equal to the read; selling Gin,
+  re-pricing Juniper and consuming Orris afterwards change `GET /stock-value` but not the
+  snapshot's GET.
+- **AC133** With the NZ date moved past a month end: the first costing read for an org with no Xero
+  takes the `month_end` snapshot (`trigger costing_read`, `as_of_date` the month's last day); a
+  second read takes none; for an org with a connected Xero a read takes none and the first sync
+  takes it (`xero_sync`); a failure inside it doesn't fail the sync.
+- **AC134** A snapshot with a cutoff before later movements reverses them: Gin 12 at $10 = 120;
+  after the cutoff 2 are sold, 1 wasted and a new lot is made; the snapshot still reads 12 bottles
+  and $120, `quantity_basis reconstructed`, and the new lot is absent.
+- **AC135** Two missed months are two snapshots, oldest first; an org with no stock gets none.
+- **AC136** `costs.view` reads; taking one needs `costs.manage`; another org's snapshot is 404;
+  feature off is 404; the 21st manual snapshot in a day is 400.
+- **AC137** CSV export: one row per lot, unknown cost blank, per-category subtotals, formula
+  injection escaped.
+- **AC138** `XERO_SCOPES` carries the P&L scope; `get_profit_and_loss` parses accounts by id (name
+  fallback) from a Xero report fixture; a token without the scope gives `needs_reconnect`.
+- **AC139 (= AC51)** Tie-out: A 500 (Xero), B 300 recorded, a $120 line left open and a $50 line
+  marked not-stock listed (a line dated in another month, or a fully recorded one, isn't), other
+  entries (journals) 30 = 500 − (300 + 120 + 50).
+- **AC140 (= AC50)** Roll-forward: S0 = Juniper 10 kg × $5 = 50. In the period: Orris 4 kg bought for
+  $80 (B = 80); a batch used 6 kg Juniper ($30) to make 10 Gin ($3 each); 4 Gin sold (cogs 12), 1
+  sampled (samples 3), 1 wasted (wastage 3), 1 corrected away (variance 3). S1 = Juniper 4 × 5 = 20 +
+  Orris 80 + Gin 3 × 3 = 9 = 109. Cost that left = 50 + 80 − 109 = 21 = 12 + 3 + 3 + 3; estimate
+  changes 0; other 0.
+- **AC141** Production loss: $15 consumed after a batch's last output, then the batch completes: a
+  `production_loss` of 15 in the period it completes, and not in S1.
+- **AC142** Estimate change: Orris 2 kg estimated at $30 in S0 (60), purchase recorded afterwards at
+  $25/kg: `revaluation` = 2 × (25 − 30) = −10 of stock value, shown as `estimate_changes` of +10
+  (cost that left stock) in the roll-forward.
+- **AC143** Held fixed: after the closing snapshot a late purchase is linked to a lot in it; the
+  snapshot's lines, totals and stored movements are unchanged; `changes_since_close` shows today's
+  total and the delta.
+- **AC144** A bridge with fewer than two snapshots says so; with no Xero it returns
+  `xero.state not_connected` and the roll-forward; duty is `tracked false` with the compliance
+  module off.
+- **AC145** Org isolation and permissions for `/bridge`; `needs_reconnect` for a token without the
+  P&L scope.
+- **AC146** Migration: one alembic head; upgrade → downgrade → upgrade clean on the private DB;
+  downgrade refuses with a snapshot present.
+- **AC147 (e2e, 375×800 and desktop)** The Costs page shows "Stock value", a total with its split, a
+  Take a snapshot button for managers only, a snapshot list and the bridge; an unknown lot never
+  reads $0; no sideways scroll at 375px.
+
