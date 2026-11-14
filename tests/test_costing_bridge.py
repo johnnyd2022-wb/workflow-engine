@@ -11,7 +11,6 @@ writes fall inside the window they should.
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -34,7 +33,9 @@ OPENING, CLOSING = date(2026, 10, 31), date(2026, 11, 30)  # as_of labels; the p
 
 def pl_rows(sections):
     """``sections``: title -> [(account_id | None, name, amount)]. The report rows as Xero sends them."""
-    out = [ReportRows(row_type="Header", cells=[ReportCell(value="Account"), ReportCell(value="1 Nov 2026-30 Nov 2026")])]
+    out = [
+        ReportRows(row_type="Header", cells=[ReportCell(value="Account"), ReportCell(value="1 Nov 2026-30 Nov 2026")])
+    ]
     for title, rows in sections.items():
         body = [
             ReportRows(
@@ -48,7 +49,9 @@ def pl_rows(sections):
             )
             for account_id, name, amount in rows
         ]
-        body.append(ReportRows(row_type="SummaryRow", cells=[ReportCell(value=f"Total {title}"), ReportCell(value="1.00")]))
+        body.append(
+            ReportRows(row_type="SummaryRow", cells=[ReportCell(value=f"Total {title}"), ReportCell(value="1.00")])
+        )
         out.append(ReportRows(row_type="Section", title=title, rows=body))
     return out
 
@@ -185,7 +188,11 @@ def test_ac138_client_returns_the_report_rows_for_the_period(db, monkeypatch):
         monkeypatch.setattr(client, "_get_api_client", lambda: object())
         client._xero_tenant_id = "tenant-1"
         assert client.get_profit_and_loss(date(2026, 11, 1), date(2026, 11, 30)) == rows
-        assert (seen["from_date"], seen["to_date"], seen["tenant"]) == (date(2026, 11, 1), date(2026, 11, 30), "tenant-1")
+        assert (seen["from_date"], seen["to_date"], seen["tenant"]) == (
+            date(2026, 11, 1),
+            date(2026, 11, 30),
+            "tenant-1",
+        )
     finally:
         purge(db, org)
 
@@ -202,7 +209,12 @@ def test_ac139_tie_out_lists_every_stock_line_not_recorded_and_the_journals_gap(
     _doc, not_stock, *_ = _sync_purchase(sync_world, db, "50", on=date(2026, 11, 14), description="Gift basket")
     _sync_purchase(sync_world, db, "70", on=date(2026, 10, 20), description="Last month's botanicals")
     assert _record(client, recorded.id, [_row("Juniper", 6, 300)]).status_code == 200
-    assert client.post(f"{API}/purchases/{not_stock.id}/not-stock", json={}, headers={"Idempotency-Key": str(uuid4())}).status_code == 200
+    assert (
+        client.post(
+            f"{API}/purchases/{not_stock.id}/not-stock", json={}, headers={"Idempotency-Key": str(uuid4())}
+        ).status_code
+        == 200
+    )
     ids = account_ids(db, org.id)
     install_pl(
         monkeypatch,
@@ -223,7 +235,10 @@ def test_ac139_tie_out_lists_every_stock_line_not_recorded_and_the_journals_gap(
 
     assert body["state"] == "ok" and body["xero"]["state"] == "ok"
     assert body["period"] == {"from": "2026-11-01", "to": "2026-11-30"}
-    assert [c for c in fake.calls if c[0] == "profit_and_loss"][-1][1] == {"from": date(2026, 11, 1), "to": date(2026, 11, 30)}
+    assert [c for c in fake.calls if c[0] == "profit_and_loss"][-1][1] == {
+        "from": date(2026, 11, 1),
+        "to": date(2026, 11, 30),
+    }
     tie = body["tie_out"]
     assert (D(tie["xero_stock_total"]), D(tie["recorded"]), D(tie["difference"])) == (D("500"), D("300"), D("200"))
     listed = {row["description"]: row for row in tie["not_recorded"]}
@@ -245,7 +260,9 @@ def test_ac139_a_partly_recorded_line_lists_only_what_is_left(world, db, monkeyp
     _doc, line, *_ = _sync_purchase(sync_world, db, "200", on=date(2026, 11, 10), description="Juniper and more")
     assert _record(client, line.id, [_row("Juniper", 2, 80)]).status_code == 200  # $80 of $200, the rest later
     ids = account_ids(db, org.id)
-    install_pl(monkeypatch, fake, lambda *_: pl_rows({"Cost of Sales": [(ids["310"], "Purchases - Ingredients", "200.00")]}))
+    install_pl(
+        monkeypatch, fake, lambda *_: pl_rows({"Cost of Sales": [(ids["310"], "Purchases - Ingredients", "200.00")]})
+    )
     closing = snap(db, org, CLOSING)
 
     tie = bridge(client, opening, closing)["tie_out"]
@@ -398,6 +415,7 @@ def test_ac145_permissions_isolation_and_a_token_without_the_report_scope(world,
         purge(db, other_org)
 
     connect(db, org.id, scopes=FULL_SCOPES)  # reconnected without the P&L permission
+    fake.calls.clear()
     assert client.get(f"{API}/bridge").get_json()["xero"]["state"] == "needs_reconnect"
     assert not [c for c in fake.calls if c[0] == "profit_and_loss"]
 

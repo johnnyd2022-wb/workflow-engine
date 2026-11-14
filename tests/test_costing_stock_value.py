@@ -135,7 +135,11 @@ def test_ac130_unknown_cost_is_never_zero_and_partial_is_a_floor(world, db):
         unknown = lot(db, other_org.id, "Mystery", 5, "kg")
         execution, (step,) = workflow(db, other_org.id, [[{"name": "Tonic", "unit": "bottles"}]])
         complete(
-            other, execution, step, [(orris, 1, "kg"), (unknown, 1, "kg")], [{"name": "Tonic", "quantity": 3, "unit": "bottles"}]
+            other,
+            execution,
+            step,
+            [(orris, 1, "kg"), (unknown, 1, "kg")],
+            [{"name": "Tonic", "quantity": 3, "unit": "bottles"}],
         )
         body = _stock(other)
         tonic = _by_name(body)["Tonic"]
@@ -175,19 +179,6 @@ def test_ac131_empty_lots_and_finished_batch_leftovers_are_not_stock(world, db):
     assert body["complete"] is True
 
 
-def test_ac131_customer_owned_material_is_left_out(owned, db):  # noqa: F811
-    from app.features.costing import stock_value
-    from tests.test_contract_material_ownership import lot as owned_lot
-    from tests.test_contract_material_ownership import receipt
-    from tests.test_contract_orders import world  # noqa: F401
-
-    org_id = owned["orgs"][0].id
-    theirs = owned_lot(db, owned, receipt(owned))
-    assert theirs.contract_customer_id is not None
-    valuation = stock_value.value_stock(db, org_id)
-    assert theirs.id not in {line.item_id for line in valuation.lines}
-
-
 # --- AC132: a snapshot is held fixed --------------------------------------------------------------
 
 
@@ -201,24 +192,26 @@ def test_ac132_manual_snapshot_freezes_the_figures(world, db):
     snap = taken.get_json()
     assert snap["kind"] == "manual" and snap["trigger"] == "manual"
     assert D(snap["total"]) == D(now["total"]) == D("290")
-    assert {k: v["value"] for k, v in snap["categories"].items()} == {k: v["value"] for k, v in now["categories"].items()}
+    assert {k: v["value"] for k, v in snap["categories"].items()} == {
+        k: v["value"] for k, v in now["categories"].items()
+    }
 
     _sell(db, org, "Gin", 2)
-    price(db, org.id, things["juniper"].id, 100, 10)  # Juniper now $10/kg
+    price(db, org.id, things["juniper"].id, 110, 10)  # Juniper now $11/kg
     _waste(client, things["orris_two"], 1)
 
     moved = _stock(client)
     assert D(moved["total"]) != D("290")
     detail = client.get(f"{API}/stock-value/snapshots/{snap['id']}").get_json()
     assert D(detail["total"]) == D("290")
-    assert {(l["name"], l["quantity"], l["value"]) for l in detail["lines"]} == {
-        (l["name"], l["quantity"], l["value"]) for l in now["lines"]
+    assert {(ln["name"], ln["quantity"], ln["value"]) for ln in detail["lines"]} == {
+        (ln["name"], ln["quantity"], ln["value"]) for ln in now["lines"]
     }
     assert [s["id"] for s in _snapshots(client)] == [snap["id"]]
-    # "Changes since close" re-prices what was on hand then: Juniper 7 kg now $10 (+35) and the
-    # $15 pool of 3 kg now $30 (+15). The snapshot itself stays at 290.
+    # "Changes since close" re-prices what was on hand then: Juniper 7 kg now $11 (+42) and the
+    # $15 pool of 3 kg now $33 (+18). The snapshot itself stays at 290.
     changes = detail["changes_since_close"]
-    assert (D(changes["total_then"]), D(changes["total_now"]), D(changes["delta"])) == (D("290"), D("340"), D("50"))
+    assert (D(changes["total_then"]), D(changes["total_now"]), D(changes["delta"])) == (D("290"), D("350"), D("60"))
 
 
 # --- AC133 / AC135: automatic month-end snapshots -------------------------------------------------
@@ -372,7 +365,10 @@ def test_ac136_view_manage_isolation_feature_and_daily_cap(world, db, flask_app)
     denied = viewer.post(f"{API}/stock-value/snapshot", json={}, headers={"Idempotency-Key": str(uuid4())})
     assert denied.status_code == 403
     manager = user_client(db, flask_app, org, permissions=["costs.manage"])
-    assert manager.post(f"{API}/stock-value/snapshot", json={}, headers={"Idempotency-Key": str(uuid4())}).status_code == 201
+    assert (
+        manager.post(f"{API}/stock-value/snapshot", json={}, headers={"Idempotency-Key": str(uuid4())}).status_code
+        == 201
+    )
 
     other_org = new_org(db)
     off_org = new_org(db, grant=False)

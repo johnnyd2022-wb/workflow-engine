@@ -616,6 +616,103 @@ def readiness_detail(key):
     return jsonify(readiness.product_detail(db_session, _org(), key))
 
 
+# --- 8.1g: stock value, snapshots and the Xero bridge -----------------------------------------------------
+
+
+def _auto_month_ends(org):
+    """The first costing read after a month ends closes it, for an org with no Xero (a Xero org's
+    first sync does). Never fails the read."""
+    from app.features.costing import stock_value
+    from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+    try:
+        if XeroTenantRepository(db_session).get_connected(org) is not None:
+            return []
+        made = stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+        db_session.commit()
+        return made
+    except Exception as error:  # noqa: BLE001
+        db_session.rollback()
+        logger.exception("month_end_snapshot_failed", org_id=str(org), error_type=type(error).__name__)
+        return []
+
+
+@costing_bp.route(f"{API}/stock-value", methods=["GET"])
+@requires_auth
+def get_stock_value():
+    from app.features.costing import stock_value
+
+    org = _org()
+    made = _auto_month_ends(org)
+    return jsonify(stock_value.current_payload(db_session, org, auto=made))
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots", methods=["GET"])
+@requires_auth
+def list_stock_snapshots():
+    from app.features.costing import stock_value
+
+    org = _org()
+    _auto_month_ends(org)
+    return jsonify({"snapshots": [stock_value.snapshot_header(s) for s in stock_value.list_snapshots(db_session, org)]})
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>", methods=["GET"])
+@requires_auth
+def get_stock_snapshot(snapshot_id):
+    from app.features.costing import stock_value
+
+    org = _org()
+    snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
+    return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True))
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>/export.csv", methods=["GET"])
+@requires_auth
+def export_stock_snapshot(snapshot_id):
+    from flask import Response
+
+    from app.features.costing import stock_value
+
+    org = _org()
+    snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
+    body = stock_value.export_csv(snapshot, stock_value.stored_lines(db_session, org, snapshot.id))
+    name = f"closing-stock-{snapshot.as_of_date.isoformat()}.csv"
+    return Response(body, mimetype="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@costing_bp.route(f"{API}/stock-value/snapshot", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_stock_snapshot")
+def take_stock_snapshot():
+    from app.features.costing import stock_value
+
+    org = _org()
+    # Close any month that has ended first, so this one never leaves it uncapturable.
+    stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+    snapshot = stock_value.take_snapshot(db_session, org, kind="manual", trigger="manual", user_id=_user_id())
+    db_session.commit()
+    return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True)), 201
+
+
+@costing_bp.route(f"{API}/bridge", methods=["GET"])
+@requires_auth
+def get_bridge():
+    from app.features.costing import bridge, stock_value
+
+    org = _org()
+    first, second = request.args.get("from"), request.args.get("to")
+    if first or second:
+        if not (first and second):
+            raise service.CostingError("Send both from and to, or neither")
+        opening = stock_value.get_snapshot(db_session, org, first)
+        closing = stock_value.get_snapshot(db_session, org, second)
+    else:
+        latest = stock_value.list_snapshots(db_session, org)[:2]
+        closing, opening = (latest[0], latest[1]) if len(latest) == 2 else (None, None)
+    return jsonify(bridge.build_bridge(db_session, org, opening, closing))
+
+
 # --- 8.1d: the Purchases page -----------------------------------------------------------------------
 
 
