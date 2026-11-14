@@ -1243,7 +1243,7 @@ missing; never a silent $0.
     (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
     month-end snapshots taken on the first Xero sync (or costing read, with no Xero) after a
     month ends and held fixed, the walk from Xero's stock accounts and Biz-E's stock roll-forward,
-    closing stock CSV. (!MR)
+    closing stock CSV. (!715)
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
     spread into batch cost.
   - Done when: a producer connects Xero, works through the Purchases page once, and every
