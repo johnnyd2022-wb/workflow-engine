@@ -146,11 +146,16 @@ def _tie_out(db: Session, org_id: UUID, start, end, pl_rows) -> dict:
     recorded_by_line: dict = defaultdict(lambda: ZERO)
     active_by_line: dict = defaultdict(lambda: ZERO)
     if ids:
-        for allocation in db.query(PurchaseAllocation).filter(
-            PurchaseAllocation.org_id == org_id,
-            PurchaseAllocation.purchase_line_id.in_(ids),
-            PurchaseAllocation.status.in_(("active", "orphaned")),
-        ):
+        allocations = (
+            db.query(PurchaseAllocation)
+            .filter(
+                PurchaseAllocation.org_id == org_id,
+                PurchaseAllocation.purchase_line_id.in_(ids),
+                PurchaseAllocation.status.in_(("active", "orphaned")),
+            )
+            .all()
+        )
+        for allocation in allocations:
             recorded_by_line[allocation.purchase_line_id] += Decimal(str(allocation.amount))
             if allocation.status == "active":
                 active_by_line[allocation.purchase_line_id] += Decimal(str(allocation.amount))
@@ -239,9 +244,12 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
     totals: dict = defaultdict(lambda: ZERO)
     ids = [s.id for s in between]
     if ids:
-        for movement in db.query(StockValueMovement).filter(
-            StockValueMovement.org_id == org_id, StockValueMovement.snapshot_id.in_(ids)
-        ):
+        movements = (
+            db.query(StockValueMovement)
+            .filter(StockValueMovement.org_id == org_id, StockValueMovement.snapshot_id.in_(ids))
+            .all()
+        )
+        for movement in movements:
             totals[movement.kind] += Decimal(str(movement.value))
     purchases = totals["purchase"]
     o, c = Decimal(str(opening.total_value)), Decimal(str(closing.total_value))
