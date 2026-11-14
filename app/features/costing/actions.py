@@ -459,6 +459,29 @@ def not_stock(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     return line
 
 
+def mark_freight(db: Session, org_id: UUID, line_id) -> PurchaseLine:
+    """Mark a line as freight (8.1h): its whole amount leaves To record and is spread, as landed
+    cost, over the stock recorded from the same purchase. Only while overheads are on and nothing
+    has been recorded against the line. Reopen undoes it."""
+    from app.features.costing.service import get_settings
+
+    if not get_settings(db, org_id).get("include_overheads"):
+        raise CostingError("Turn on overheads in the Costs settings to add freight to the cost of stock")
+    line = get_line(db, org_id, line_id)
+    _, remaining = _actionable(db, line)
+    if line.state not in ("open", "skipped", "not_stock") or line_allocations(
+        db, line, statuses=("active", "orphaned")
+    ):
+        raise CostingError("Stock has already been recorded against this purchase line")
+    if _d(line.amount_ex_tax) <= 0:
+        raise CostingError("Only money spent can be freight")
+    line.freight = True
+    line.not_stock_amount = _d(line.not_stock_amount) + remaining
+    derive_state(db, line)
+    db.flush()
+    return line
+
+
 def skip(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
@@ -471,6 +494,7 @@ def reopen(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
     line.not_stock_amount = ZERO
+    line.freight = False
     line.state = "open"
     derive_state(db, line)
     db.flush()
@@ -739,6 +763,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
         "not_stock_amount": str(_q(_d(line.not_stock_amount))),
         "state": line.state,
         "review_reason": line.review_reason,
+        **({"freight": True} if line.freight else {}),  # 8.1h; absent unless marked
         "allocations": [
             {
                 "id": str(a.id),

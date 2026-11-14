@@ -17,7 +17,7 @@ from app.core.db import db_session
 from app.core.security.access_policy import has_permission
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth, requires_permission
-from app.features.costing import FEATURE_KEY, duty_today, service
+from app.features.costing import FEATURE_KEY, duty_today, overheads, service
 from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
 from app.observability import get_logger
@@ -187,6 +187,48 @@ def put_settings():
     return jsonify(result)
 
 
+# --- 8.1h: overhead rates (opt-in overheads; spec .agents/specs/live-cogs-overheads.md) ----------
+
+
+@costing_bp.errorhandler(overheads.OverheadConflictError)
+def _overhead_conflict(error):
+    db_session.rollback()
+    return jsonify({"error": str(error)}), 409
+
+
+@costing_bp.route(f"{API}/overhead-rates", methods=["GET"])
+@requires_auth
+def list_overhead_rates():
+    return jsonify({"rates": [overheads.as_dict(r) for r in overheads.list_rates(db_session, _org())]})
+
+
+@costing_bp.route(f"{API}/overhead-rates", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_create")  # a retried save after a lost reply replays, never repeats
+def create_overhead_rate():
+    rate = overheads.create_rate(db_session, _org(), _body(), user_id=_user_id())
+    db_session.commit()
+    return jsonify(overheads.as_dict(rate)), 201
+
+
+@costing_bp.route(f"{API}/overhead-rates/<rate_id>", methods=["PUT"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_update")
+def update_overhead_rate(rate_id):
+    rate = overheads.update_rate(db_session, _org(), rate_id, _body())
+    db_session.commit()
+    return jsonify(overheads.as_dict(rate))
+
+
+@costing_bp.route(f"{API}/overhead-rates/<rate_id>", methods=["DELETE"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_delete")
+def delete_overhead_rate(rate_id):
+    overheads.delete_rate(db_session, _org(), rate_id)
+    db_session.commit()
+    return jsonify({"deleted": True})
+
+
 # --- 8.1b: account treatments --------------------------------------------------------------
 
 
@@ -319,6 +361,8 @@ def _simple(action_name):
                 from app.features.costing import rules
 
                 rules.not_stock_rule(db_session, _org(), line, actions._document(db_session, line), user_id=_user_id())
+        elif action_name == "freight":
+            actions.mark_freight(db_session, _org(), line_id)
         else:
             {"skip": actions.skip, "reopen": actions.reopen}[action_name](db_session, _org(), line_id)
         db_session.commit()
@@ -328,7 +372,7 @@ def _simple(action_name):
     return view
 
 
-for _action in ("not-stock", "skip", "reopen", "review"):
+for _action in ("not-stock", "skip", "reopen", "review", "freight"):
     costing_bp.add_url_rule(
         f"{API}/purchases/<line_id>/{_action}",
         endpoint=f"purchase_{_action.replace('-', '_')}",
