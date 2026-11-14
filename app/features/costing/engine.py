@@ -33,6 +33,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
+from app.core.utils.packs import breakdown as pack_breakdown
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.modules.nz_alcohol.excise import litres_of as excise_litres
@@ -147,21 +148,37 @@ def _cycle_lot(item: InventoryItem) -> LotCost:
     return LotCost(None, UNKNOWN, "none", missing={str(item.id): item.name}, warnings={"cycle"})
 
 
+# What an engine loads from the database and can hand to another: see ``CostEngine.own_budget``.
+_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+
+
 class CostEngine:
-    def __init__(self, db: Session, org_id: UUID):
+    def __init__(
+        self,
+        db: Session,
+        org_id: UUID,
+        *,
+        settings: dict | None = None,
+        alcohol_profiles: dict | None = None,
+    ):
+        """``settings`` and ``alcohol_profiles`` are for ``own_budget``, which passes on what this
+        request already read; with neither, the engine reads them (once, here)."""
         self.db = db
         self.org_id = org_id
-        settings = get_settings(db, org_id)
+        if settings is None:
+            settings = get_settings(db, org_id)
         self.use_last_known_price = settings["use_last_known_price"]
         self.split_basis = settings["split_basis"]
-        self._alcohol_profiles = {}
-        if self.split_basis == "litres":
-            self._alcohol_profiles = {
-                profile.inventory_name.casefold(): profile
-                for profile in db.query(AlcoholProductProfile)
-                .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.is_active.is_(True))
-                .all()
-            }
+        if alcohol_profiles is None:
+            alcohol_profiles = {}
+            if self.split_basis == "litres":
+                alcohol_profiles = {
+                    profile.inventory_name.casefold(): profile
+                    for profile in db.query(AlcoholProductProfile)
+                    .filter(AlcoholProductProfile.org_id == org_id, AlcoholProductProfile.is_active.is_(True))
+                    .all()
+                }
+        self._alcohol_profiles = alcohol_profiles
         self._lots: dict[UUID, InventoryItem | None] = {}
         self._in_flow_cache: dict[UUID, list[CostFlow]] = {}
         self._entry_cache: dict[UUID, list[LotCostEntry]] = {}
@@ -175,6 +192,30 @@ class CostEngine:
         self._charged: set[tuple] = set()
         self._work = 0
 
+    def own_budget(self, *, reuse_loaded: bool = True) -> CostEngine:
+        """A new engine with a work budget, node budget and memo of its own, for when this one's
+        budget is spent (``TooLargeError``) and the next product, lot or group must not pay for it.
+
+        Reads nothing: the costing settings and alcohol profiles this engine already read are
+        passed on, so an overflowed request reads them once however many engines it goes through.
+        With ``reuse_loaded`` (the default) it also shares the rows this engine loaded, so retrying
+        one item queries nothing twice; pass False for an engine that starts with nothing loaded.
+        The rows are shared by reference, so they must only ever be whole: ``prime`` marks a lot
+        loaded only once its flows are in hand, so one that ran out of budget leaves nothing half
+        loaded behind.
+        """
+        engine = CostEngine(
+            self.db,
+            self.org_id,
+            settings={"use_last_known_price": self.use_last_known_price, "split_basis": self.split_basis},
+            alcohol_profiles=self._alcohol_profiles,
+        )
+        if reuse_loaded:
+            for cache in _LOADED_CACHES:
+                setattr(engine, cache, getattr(self, cache))
+            engine._materials = self._materials
+        return engine
+
     # --- public payloads -----------------------------------------------------------------
 
     def lot(self, item_id) -> dict:
@@ -187,11 +228,16 @@ class CostEngine:
 
         entries = active_entries(self.db, self.org_id, item.id)
         public = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
+        # A multipack lot ("24 × 200 mL" a case) breaks its price down per bottle and per litre.
+        split = pack_breakdown(public, item) if public is not None else None
         return {
             "inventory_item_id": str(item.id),
             "name": item.name,
             "unit": item.unit,
             "unit_cost": unit_str(public),
+            "pack_breakdown": (
+                {k: unit_str(v) if isinstance(v, Decimal) else v for k, v in split.items()} if split else None
+            ),
             "known_unit_cost": unit_str(cost.unit_known),
             "status": cost.status,
             "source": cost.source,
@@ -372,9 +418,6 @@ class CostEngine:
                     self._lots.setdefault(lot.id, lot)
                 for item_id in chunk:
                     self._lots.setdefault(item_id, None)
-                    self._in_flow_cache[item_id] = []
-                    self._entry_cache.setdefault(item_id, [])
-                    self._allocation_cache.setdefault(item_id, [])
 
                 receipt_ids = {lot.transfer_receipt_id for lot in lots if lot.transfer_receipt_id}
                 receipts = {}
@@ -427,6 +470,12 @@ class CostEngine:
                     .all()
                 )
                 self._spend(len(flows))
+                # Marked as loaded only now the work budget has held, so a prime that runs out of
+                # budget never leaves a lot looking loaded with no flows, entries or allocations.
+                for item_id in chunk:
+                    self._in_flow_cache[item_id] = []
+                    self._entry_cache.setdefault(item_id, [])
+                    self._allocation_cache.setdefault(item_id, [])
                 for flow in flows:
                     self._in_flow_cache[flow.inventory_item_id].append(flow)
                     if flow.execution_id is not None and flow.kind in ("produced", "reconciled_in"):

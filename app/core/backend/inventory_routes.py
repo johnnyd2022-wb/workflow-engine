@@ -29,6 +29,7 @@ from app.core.utils.inventory_quantity import (
     parse_stored_quantity_to_decimal,
     quantity_to_api_str,
 )
+from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.features.compliance_checks.routes import corechecks
 from app.features.reconciliation.service import _find_producing_step
 from app.observability import get_logger
@@ -760,6 +761,12 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         return jsonify({"error": "Product name does not match existing product for this barcode"}), 409
                     if unit is not None and unit != existing.unit:
                         return jsonify({"error": "Unit does not match existing product for this barcode"}), 409
+                    added_pack = clean_pack(data.get("pack"))
+                    existing_pack = lot_pack(existing)
+                    if added_pack and existing_pack and added_pack != existing_pack:
+                        return jsonify(
+                            {"error": f"Pack does not match this product ({describe_pack(existing_pack)})"}
+                        ), 409
                     # Add quantity to existing item; supplier is stock-level (stored in audit only, row.supplier unchanged)
                     supplier = (data.get("supplier") or "").strip() or None
                     purchase_date = None
@@ -789,6 +796,8 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         "supplier_batch_number": (data.get("supplier_batch_number") or "").strip() or None,
                     }
                     extra_merge = {"inventory_audit_history": [audit_entry]}
+                    if added_pack and not existing_pack:
+                        extra_merge[PACK_KEY] = added_pack
                     # 8.1e-2: what this delivery cost prices the new ``added`` flow, in the same
                     # transaction as the add; the lot's earlier prices stay as they were.
                     added_paid = _costing_total_paid(data, org_id)
@@ -901,6 +910,11 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 source_output_id = UUID(data["source_output_id"])
 
             extra_data = dict(data.get("metadata") or {})
+            # A pack ("24 x 200 mL") lets steps use this lot in bottles, mL or g (packs.py).
+            pack = clean_pack(data.get("pack") if "pack" in data else extra_data.pop(PACK_KEY, None))
+            extra_data.pop(PACK_KEY, None)
+            if pack:
+                extra_data[PACK_KEY] = pack
             source_method = (data.get("source_method") or "manual").strip()
             if source_method not in ("manual", "csv_upload", "barcode_scan"):
                 source_method = "manual"
@@ -1006,6 +1020,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         "supplier_batch_number": item.supplier_batch_number,
                         "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
                         "created_at": item.created_at.isoformat() if item.created_at else None,
+                        "pack": lot_pack(item),
                     }
                 ),
                 201,
@@ -1050,8 +1065,13 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
             if not item:
                 return jsonify({"error": "Inventory item not found"}), 404
 
+            # Validate before anything changes: "pack" present means set it (null clears it).
+            pack_given = "pack" in data
+            new_pack = clean_pack(data.get("pack")) if pack_given else None
+
             # Snapshot before mutation for diff
             before = {
+                "pack": describe_pack(lot_pack(item)),
                 "name": item.name,
                 "inventory_type": item.inventory_type,
                 "quantity": quantity_to_api_str(item.quantity),
@@ -1081,9 +1101,21 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
             item.expiry_date = expiry_date
             item.barcode = data.get("barcode") or None
             if data.get("metadata"):
-                item.extra_data = data.get("metadata")
+                kept_pack = (item.extra_data or {}).get(PACK_KEY)
+                item.extra_data = dict(data.get("metadata"))
+                # metadata never sets the pack unchecked; only "pack" changes it
+                item.extra_data.pop(PACK_KEY, None)
+                if kept_pack:
+                    item.extra_data[PACK_KEY] = kept_pack
+            if pack_given:
+                extra = dict(item.extra_data or {})
+                extra.pop(PACK_KEY, None)
+                if new_pack:
+                    extra[PACK_KEY] = new_pack
+                item.extra_data = extra
 
             after = {
+                "pack": describe_pack(lot_pack(item)),
                 "name": item.name,
                 "inventory_type": item.inventory_type,
                 "quantity": quantity_to_api_str(item.quantity),
@@ -1122,11 +1154,13 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         "supplier_batch_number": item.supplier_batch_number,
                         "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
                         "created_at": item.created_at.isoformat() if item.created_at else None,
+                        "pack": lot_pack(item),
                     }
                 ),
                 200,
             )
         except ValueError as e:
+            db_session.rollback()
             return jsonify({"error": str(e)}), 400
         except Exception:
             logger.exception("Error updating inventory item")

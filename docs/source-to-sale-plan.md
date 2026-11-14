@@ -1237,7 +1237,8 @@ missing; never a silent $0.
     switch-on command `workflow costing enable` (!696). Polish: costing settings sheet, cost per
     unit on the Costs list, cents suggestions, CSV money formats (!705); rules keep payees as
     typed (!707); batches open by link, finished ones read-only (!708); pack-size price hint
-    (!710). Open question, not built: "paid for by" on Add Inventory (see
+    (!710); readiness costed on a budget per product after an overflow, "Remember this" keeps
+    the typed payee, costing settings read once per request (!712). Open question, not built: "paid for by" on Add Inventory (see
     `.agents/plans/live-cogs-polish.md`).
   - [x] g. **Stock value and the Xero bridge** (spec Phase 3). Stock value on the Costs page
     (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
@@ -1246,6 +1247,10 @@ missing; never a silent $0.
     closing stock CSV. (!715)
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
     spread into batch cost.
+  - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on
+    manual, barcode, CSV and the Purchases record dialog. Steps use the lot in their own units
+    (bottles, mL, g, pieces) and take the right share; cost breaks down per case, bottle and litre
+    on the lot panel and Add Inventory hint. Spec `.agents/specs/live-cogs-packs.md`. (!713)
   - Done when: a producer connects Xero, works through the Purchases page once, and every
     batch shows a cost per bottle that is either complete or names what's missing, and
     stays right when a purchase is recorded late or changed in Xero.

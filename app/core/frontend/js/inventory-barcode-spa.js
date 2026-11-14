@@ -184,6 +184,7 @@
   }
 
   var refreshCostHint = null; // set once the Total paid field is attached
+  var packField = null; // Pack size ("24 × 200 mL"), attached with the cost field
 
   function applyLookupToForm(code, res) {
     var bi = document.getElementById('barcode-inv-barcode-input');
@@ -201,6 +202,7 @@
       if (nameEl) nameEl.value = p.name || '';
       if (unitEl) unitEl.value = p.unit || 'kg';
       if (supplierEl) supplierEl.value = (p.supplier || '').trim();
+      if (packField) { packField.clear(); if (p.pack) { packField.input.value = p.pack; packField.input.dispatchEvent(new Event('input')); } }
       if (qtyEl && p.quantity != null && String(p.quantity).trim() !== '') {
         var qn = parseFloat(String(p.quantity).replace(',', '.'));
         qtyEl.value = !isNaN(qn) ? String(qn) : '';
@@ -212,6 +214,7 @@
       if (unitEl) unitEl.value = 'kg';
       if (supplierEl) supplierEl.value = '';
       if (qtyEl) qtyEl.value = '';
+      if (packField) packField.clear();
     }
     var pd = document.getElementById('barcode-inv-purchase');
     var bn = document.getElementById('barcode-inv-batch');
@@ -272,6 +275,7 @@
     if (formWrap) formWrap.style.display = 'none';
     if (scan) scan.style.display = 'block';
     if (form) form.reset();
+    if (packField) packField.clear();
     var bdw = document.getElementById('barcode-inv-barcode-display-wrap');
     if (bdw) bdw.style.display = 'none';
     lastBarcodeValue = null;
@@ -300,11 +304,22 @@
       var unitSel = document.getElementById('barcode-inv-unit');
       var qtyInput = document.getElementById('barcode-inv-quantity');
       if (!unitSel || !window.BizECost || costField.attached) return;
-      costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
+      var nameInput = document.getElementById('barcode-inv-name');
+      packField = window.BizECost.packField(unitSel.closest('div'), {
+        id: 'barcode-inv-pack',
+        unit: function () { return unitSel.value; },
+        name: function () { return nameInput ? nameInput.value : ''; },
+        watch: [unitSel, nameInput],
+        labelClass: 'spa-field-label',
+        inputClass: 'spa-inp',
+        onChange: function () { if (costField.refresh) costField.refresh(); },
+      });
+      costField = window.BizECost.totalPaidField(packField.input.closest('div'), {
         quantity: function () { return qtyInput.value; },
         unit: function () { return unitSel.value; },
-        name: function () { var n = document.getElementById('barcode-inv-name'); return n ? n.value : ''; },
-        watch: [qtyInput, unitSel, document.getElementById('barcode-inv-name')],
+        name: function () { return nameInput ? nameInput.value : ''; },
+        pack: function () { return packField.text(); },
+        watch: [qtyInput, unitSel, nameInput, packField.input],
         labelClass: 'spa-field-label',
         inputClass: 'spa-inp',
         hint: 'What this delivery cost. Lets Biz-E cost every batch made from it.',
@@ -351,6 +366,12 @@
         return false;
       }
       if (paid != null) payload.total_paid = paid;
+      var pack = packField ? packField.value() : null;
+      if (pack === false) {
+        if (window.showNotification) window.showNotification('error', 'Check pack size', 'Write the pack size like 24 × 200 mL, 700 mL or 25 kg, or leave it blank.');
+        return false;
+      }
+      if (pack) payload.pack = pack;
       try {
         if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
           console.error('CoreAPI.createInventoryItem is not available.', payload);
