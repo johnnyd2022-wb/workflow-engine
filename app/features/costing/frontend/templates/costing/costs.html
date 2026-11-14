@@ -55,6 +55,20 @@
   </dialog>
   {% endif %}
 
+  <section class="co-stock" data-stock hidden aria-labelledby="co-stock-title">
+    <h2 class="co-section-title" id="co-stock-title">Stock value</h2>
+    <p class="co-section-lead">What the stock on hand is worth at cost, including batches still running.</p>
+    <p class="cost-error" data-stock-error role="alert" aria-live="assertive" hidden></p>
+    <div class="co-stock__card workspace-card" data-stock-now aria-live="polite"></div>
+    <div class="co-stock__bar">
+      <h3 class="co-stock__sub">Closed months and snapshots</h3>
+      {% if can('costs.manage') %}
+      <button type="button" class="workspace-button" data-stock-snapshot>Take a snapshot</button>
+      {% endif %}
+    </div>
+    <p class="cost-muted" data-stock-empty hidden>No snapshots yet. A month is closed automatically once it ends.</p>
+    <ul class="co-list" data-stock-list aria-label="Snapshots"></ul>
+  </section>
   <section class="co-prices" data-prices hidden aria-labelledby="co-prices-title">
     <h2 class="co-section-title" id="co-prices-title">What you pay for materials</h2>
     <p class="co-section-lead">The latest price for each material. Open one to see what you paid each month over the last year.</p>
@@ -64,5 +78,6 @@
   </section>
   <script src="{{ url_for('costing.static', filename='cost-ui.js') }}" defer></script>
   <script src="{{ url_for('costing.static', filename='costs.js') }}" defer></script>
+  <script src="{{ url_for('costing.static', filename='stock.js') }}" defer></script>
 </div>
 {% endblock %}
