@@ -50,6 +50,7 @@
       })
       .finally(function () { root.setAttribute('aria-busy', 'false'); });
     bindSettings();
+    bindOverheads();
 
     /* ------------------------------------------------ how costs are worked out (settings) */
     function bindSettings() {
@@ -65,6 +66,7 @@
         openBtn.disabled = true;
         get(API + '/settings').then(function (s) {
           form.elements.use_last_known_price.checked = !!s.use_last_known_price;
+          form.elements.include_overheads.checked = !!s.include_overheads;
           form.querySelectorAll('[name=split_basis]').forEach(function (r) { r.checked = r.value === (s.split_basis || 'quantity'); });
           dialog.showModal();
           form.elements.use_last_known_price.focus();
@@ -82,12 +84,171 @@
         window.BizECost.request('PUT', API + '/settings', {
           use_last_known_price: form.elements.use_last_known_price.checked,
           split_basis: basis ? basis.value : 'quantity',
+          include_overheads: form.elements.include_overheads.checked,
         }).then(function () {
           close();
           window.location.reload(); // every figure on the page depends on these
         }).catch(function (err) {
           error.textContent = 'Couldn’t save: ' + err.message;
         }).finally(function () { save.disabled = false; });
+      });
+    }
+
+    /* ------------------------------------------------ overheads (8.1h, opt-in) */
+    function bindOverheads() {
+      var section = root.querySelector('[data-overheads]');
+      if (!section) return;
+      var list = section.querySelector('[data-overheads-list]');
+      var empty = section.querySelector('[data-overheads-empty]');
+      var errorBox = section.querySelector('[data-overheads-error]');
+      var sheet = root.querySelector('[data-overheads-sheet]');
+      var addBtn = section.querySelector('[data-overheads-add]');
+      var form = sheet ? sheet.querySelector('[data-overheads-form]') : null;
+      var editing = null; // the rate being edited, or null for a new one
+      var saving = false;
+      var AMOUNT = /^\d+(\.\d{1,6})?$/;
+
+      function showError(message) {
+        errorBox.textContent = message || '';
+        errorBox.hidden = !message;
+      }
+      function niceDate(iso) {
+        return new Date(iso + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+      function today() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      function perWord(basis) { return basis === 'per_litre' ? 'per litre' : 'per batch'; }
+      function typedAmount(raw) {
+        var text = String(raw || '').replace(/[$,\s]/g, '');
+        return AMOUNT.test(text) ? text : null;
+      }
+
+      get(API + '/settings').then(function (s) {
+        if (!s.include_overheads) return null;
+        section.hidden = false;
+        return loadRates();
+      }).catch(function () { /* the section stays hidden: overheads are off or unreadable */ });
+
+      function loadRates() {
+        return get(API + '/overhead-rates').then(function (data) { renderRates(data.rates || []); })
+          .catch(function (err) { showError('Overhead rates couldn’t load: ' + err.message); });
+      }
+
+      function renderRates(rates) {
+        showError('');
+        list.replaceChildren();
+        empty.hidden = rates.length > 0;
+        rates.forEach(function (r) { list.appendChild(rateRow(r)); });
+      }
+
+      function rateRow(r) {
+        var li = el('li', 'co-row co-rate');
+        var body = el('div', 'co-rate__body');
+        body.appendChild(el('span', 'co-row__name', r.name));
+        var amount = window.BizECost.money(r.amount) || r.amount;
+        var when = r.effective_from > today() ? 'starts ' + niceDate(r.effective_from) : 'from ' + niceDate(r.effective_from);
+        body.appendChild(el('span', 'cost-muted co-rate__detail', amount + ' ' + perWord(r.basis) + ' · ' + when));
+        li.appendChild(body);
+        if (!r.is_active) li.appendChild(el('span', 'cost-pill cost-pill--muted', 'Off'));
+        if (canManage) {
+          var actions = el('div', 'co-rate__actions');
+          var edit = el('button', 'workspace-button cost-link-button', 'Edit');
+          edit.type = 'button';
+          edit.setAttribute('aria-label', 'Edit ' + r.name + ' from ' + niceDate(r.effective_from));
+          edit.addEventListener('click', function () { openSheet(r); });
+          var remove = el('button', 'workspace-button cost-link-button', 'Remove');
+          remove.type = 'button';
+          remove.setAttribute('aria-label', 'Remove ' + r.name + ' from ' + niceDate(r.effective_from));
+          remove.addEventListener('click', function () { confirmRemove(actions, r); });
+          actions.appendChild(edit);
+          actions.appendChild(remove);
+          li.appendChild(actions);
+        }
+        return li;
+      }
+
+      function confirmRemove(actions, r) {
+        actions.replaceChildren();
+        actions.appendChild(el('span', 'cost-muted', 'Remove this rate?'));
+        var yes = el('button', 'workspace-button cost-link-button', 'Remove');
+        yes.type = 'button';
+        var keep = el('button', 'workspace-button cost-link-button', 'Keep');
+        keep.type = 'button';
+        yes.addEventListener('click', function () {
+          yes.disabled = true;
+          window.BizECost.request('DELETE', API + '/overhead-rates/' + encodeURIComponent(r.id))
+            .then(function () { return loadRates(); })
+            .catch(function (err) { showError('Couldn’t remove it: ' + err.message); return loadRates(); });
+        });
+        keep.addEventListener('click', function () { loadRates(); });
+        actions.appendChild(yes);
+        actions.appendChild(keep);
+        keep.focus();
+      }
+
+      if (!sheet || !form || !addBtn) return;
+      var formError = sheet.querySelector('[data-overheads-form-error]');
+      var save = sheet.querySelector('[data-overheads-save]');
+      var activeRow = sheet.querySelector('[data-overheads-active]');
+      var amountHint = sheet.querySelector('[data-overheads-amount-hint]');
+
+      function updateHint() {
+        var basis = form.querySelector('[name=basis]:checked');
+        var parsed = typedAmount(form.elements.amount.value);
+        var m = parsed ? window.BizECost.money(parsed) : null;
+        if (m && basis) {
+          amountHint.textContent = basis.value === 'per_litre'
+            ? 'A 200 L batch adds ' + window.BizECost.money(Number(parsed) * 200) + '.'
+            : 'Each batch adds ' + m + '.';
+        } else {
+          amountHint.textContent = 'Without GST. Per litre means each litre of finished product.';
+        }
+      }
+      form.addEventListener('input', updateHint);
+      form.addEventListener('change', updateHint);
+
+      function openSheet(rate) {
+        editing = rate || null;
+        formError.textContent = '';
+        sheet.querySelector('[data-overheads-title]').textContent = rate ? 'Edit overhead rate' : 'Add an overhead rate';
+        form.elements.name.value = rate ? rate.name : '';
+        form.querySelectorAll('[name=basis]').forEach(function (b) { b.checked = b.value === (rate ? rate.basis : 'per_litre'); });
+        form.elements.amount.value = rate ? rate.amount : '';
+        form.elements.effective_from.value = rate ? rate.effective_from : today();
+        form.elements.is_active.checked = rate ? !!rate.is_active : true;
+        activeRow.hidden = !rate;
+        updateHint();
+        sheet.showModal();
+        form.elements.name.focus();
+      }
+      function closeSheet() { sheet.close(); addBtn.focus(); }
+      addBtn.addEventListener('click', function () { openSheet(null); });
+      sheet.querySelector('[data-overheads-cancel]').addEventListener('click', closeSheet);
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (saving) return;
+        var basis = form.querySelector('[name=basis]:checked');
+        var amount = typedAmount(form.elements.amount.value);
+        if (!form.elements.name.value.trim()) { formError.textContent = 'Give it a name, like Rent or Labour.'; form.elements.name.focus(); return; }
+        if (amount == null) { formError.textContent = 'Enter an amount, like 0.50.'; form.elements.amount.focus(); return; }
+        if (!form.elements.effective_from.value) { formError.textContent = 'Pick the date it starts applying.'; form.elements.effective_from.focus(); return; }
+        var body = {
+          name: form.elements.name.value.trim(),
+          basis: basis ? basis.value : 'per_litre',
+          amount: amount,
+          effective_from: form.elements.effective_from.value,
+        };
+        if (editing) body.is_active = form.elements.is_active.checked;
+        saving = true;
+        save.disabled = true;
+        formError.textContent = '';
+        var url = API + '/overhead-rates' + (editing ? '/' + encodeURIComponent(editing.id) : '');
+        window.BizECost.request(editing ? 'PUT' : 'POST', url, body)
+          .then(function () { closeSheet(); return loadRates(); })
+          .catch(function (err) { formError.textContent = err.message; })
+          .finally(function () { saving = false; save.disabled = false; });
       });
     }
 

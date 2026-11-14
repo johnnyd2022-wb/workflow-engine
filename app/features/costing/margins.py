@@ -53,6 +53,7 @@ class _Row:
     units: Decimal = ZERO
     revenue: Decimal | None = ZERO
     cost: Decimal = ZERO
+    overhead: Decimal = ZERO  # the part of ``cost`` that is overhead (8.1h; 0 unless opted in)
     statuses: list = field(default_factory=list)
     duty: Decimal | None = ZERO
     duty_tracked: bool = True
@@ -75,6 +76,7 @@ class _Costs:
         self.engine = CostEngine(db, org_id)
         self.db, self.org_id = db, org_id
         self._unit: dict = {}
+        self._overhead: dict = {}  # lot id -> the overhead part of its unit cost (8.1h)
         self._average: dict = {}
         self._oversized: set = set()  # lots the engine ran out of budget on: never "uncosted"
         wanted = {normalise(p) for p in products}
@@ -113,19 +115,25 @@ class _Costs:
             else:
                 unit = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
                 self._unit[item.id] = (unit, cost.status if cost.status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN)
+                self._overhead[item.id] = cost.unit_overhead if unit is not None else ZERO
         return self._unit[item.id]
+
+    def unit_overhead(self, item: InventoryItem) -> Decimal:
+        """The overhead part of the lot's unit cost (8.1h); 0 when off or the lot has no cost."""
+        self.lot(item)
+        return self._overhead.get(item.id, ZERO)
 
     def average(self, product: str) -> Decimal | None:
         """The product's average unit cost over its costed lots, weighted by their quantity."""
         key = normalise(product)
         if key not in self._average:
             lots = self._lots_by_name.get(key, [])
-            total, units = ZERO, ZERO
+            total, units, total_overhead = ZERO, ZERO, ZERO
             for item in lots:
                 unit, status = self.lot(item)
                 if item.id in self._oversized:
                     # A lot we couldn't cost might be the dear one: no average beats a wrong one.
-                    total, units = ZERO, ZERO
+                    total, units, total_overhead = ZERO, ZERO, ZERO
                     break
                 if unit is None or status not in (ACTUAL, ESTIMATED):
                     continue
@@ -134,9 +142,15 @@ class _Costs:
                     continue
                 weight = qty
                 total += unit * weight
+                total_overhead += self._overhead.get(item.id, ZERO) * weight
                 units += weight
-            self._average[key] = (total / units) if units else None
-        return self._average[key]
+            self._average[key] = ((total / units) if units else None, (total_overhead / units) if units else ZERO)
+        return self._average[key][0]
+
+    def average_overhead(self, product: str) -> Decimal:
+        """The overhead part of ``average`` (8.1h); only meaningful after ``average`` was costed."""
+        self.average(product)
+        return self._average[normalise(product)][1]
 
     def any_lot(self, product: str) -> InventoryItem | None:
         key = normalise(product)
@@ -184,6 +198,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             row.statuses.append(status)
             if unit is not None:
                 row.cost += units * unit
+                row.overhead += units * costs.unit_overhead(item)
                 row.cost_units += units
             if duty_on:
                 duty_pairs[sale.sold_on].append((row, item, units))
@@ -206,6 +221,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 row.statuses.append(UNKNOWN)
             else:
                 row.cost += loose * average
+                row.overhead += loose * costs.average_overhead(sale.product_name)
                 row.cost_units += loose
                 row.statuses.append(ESTIMATED)
             any_lot = costs.any_lot(sale.product_name)
@@ -236,8 +252,10 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
             row.add_duty(None if value is None else Decimal(value))
 
     sales_costs: dict[tuple[str, date], tuple[Decimal, Decimal]] = {}
+    sales_overheads: dict[tuple[str, date], Decimal] = {}
     for (product, month), row in rows.items():
         sales_costs[(normalise(product), month)] = (row.cost, row.cost_units)
+        sales_overheads[(normalise(product), month)] = row.overhead
 
     for credit in credits:
         row = row_for(credit["product"], credit["date"])
@@ -246,14 +264,18 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         amount = None if foreign else credit["amount"]
         row.add_revenue(None if amount is None else -amount)
         if credit["returned_units"] > 0:
-            month_cost, month_units = sales_costs.get(
-                (normalise(credit["product"]), month_start(credit["date"])), (ZERO, ZERO)
-            )
+            month_key = (normalise(credit["product"]), month_start(credit["date"]))
+            month_cost, month_units = sales_costs.get(month_key, (ZERO, ZERO))
             average = month_cost / month_units if month_units > 0 else costs.average(credit["product"])
             if average is None:
                 row.statuses.append(UNKNOWN)
             else:
                 row.cost -= credit["returned_units"] * average
+                row.overhead -= credit["returned_units"] * (
+                    sales_overheads.get(month_key, ZERO) / month_units
+                    if month_units > 0
+                    else costs.average_overhead(credit["product"])
+                )
                 row.cost_units -= credit["returned_units"]
                 row.statuses.append(ESTIMATED)
         row.lines.append(
@@ -278,8 +300,16 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         duty_known = not row.duty_tracked or row.duty is not None  # tracked but unmeasured: no margin
         if row.revenue is not None and cost is not None and duty_known:
             margin = row.revenue - cost - (tracked_duty or ZERO)
+        split = {}
+        if costs.engine.include_overheads:  # 8.1h: absent unless opted in
+            overhead = None if cost is None else min(max(row.overhead, ZERO), cost)
+            split = {
+                "materials_cost": None if cost is None else _m(cost - overhead),
+                "overhead_cost": None if cost is None else _m(overhead),
+            }
         out.append(
             {
+                **split,
                 "product": product,
                 "month": month.strftime("%Y-%m"),
                 "units": f"{row.units:f}",

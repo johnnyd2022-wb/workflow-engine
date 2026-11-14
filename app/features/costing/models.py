@@ -168,6 +168,8 @@ class CostingSettings(TenantScoped, Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     use_last_known_price = Column(Boolean, nullable=False, default=True, server_default=sa.true())
     split_basis = Column(String(10), nullable=False, default="quantity", server_default="quantity")
+    # 8.1h: opt-in. Off, every cost is exactly what it was before overheads existed.
+    include_overheads = Column(Boolean, nullable=False, default=False, server_default=sa.false())
     # 8.1b: purchases are fetched from start_date on, incrementally from purchases_cursor.
     start_date = Column(Date, nullable=True)
     purchases_cursor = Column(DateTime(timezone=True), nullable=True)
@@ -280,6 +282,8 @@ class PurchaseLine(TenantScoped, Base):
     not_stock_amount = Column(Numeric(18, 4), nullable=False, default=0, server_default="0")
     review_reason = Column(String(20), nullable=True)
     treatment_rule_id = Column(UUID(as_uuid=True), nullable=True)  # 8.1c-2: the rule that decided
+    # 8.1h: the user marked this line as freight (landed cost on the same document's stock)
+    freight = Column(Boolean, nullable=False, default=False, server_default=sa.false())
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -370,6 +374,43 @@ class PurchaseRule(TenantScoped, Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
 
+class OverheadRate(TenantScoped, Base):
+    """A rate the org types for overheads absorbed into a batch (8.1h): per litre of finished
+    product or per batch, from a date. Spec .agents/specs/live-cogs-overheads.md."""
+
+    __tablename__ = "overhead_rates"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_overhead_rates_org_id"),
+        ForeignKeyConstraint(
+            ["org_id", "created_by_user_id"],
+            ["users.org_id", "users.id"],
+            name="fk_overhead_rates_creator",
+            ondelete="SET NULL (created_by_user_id)",
+        ),
+        CheckConstraint("basis IN ('per_litre','per_batch')", name="ck_overhead_rates_basis"),
+        CheckConstraint("amount >= 0", name="ck_overhead_rates_amount"),
+        CheckConstraint("length(btrim(name)) BETWEEN 1 AND 80", name="ck_overhead_rates_name"),
+        Index(
+            "uq_overhead_rates_name_basis_date",
+            "org_id",
+            sa.text("lower(btrim(name))"),
+            "basis",
+            "effective_from",
+            unique=True,
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(80), nullable=False)
+    basis = Column(String(10), nullable=False)
+    amount = Column(Numeric(18, 6), nullable=False)
+    effective_from = Column(Date, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=sa.true())
+    created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
 SNAPSHOT_KINDS = ("month_end", "manual")
 SNAPSHOT_TRIGGERS = ("xero_sync", "costing_read", "manual")
 LINE_STATUSES = ("actual", "estimated", "partial", "unknown")
@@ -385,6 +426,7 @@ MOVEMENT_KINDS = (
     "revaluation",
     "added_other",
     "rounding",
+    "overhead_absorbed",  # 8.1h: overhead (a batch's rent and labour, freight) taken into stock
 )
 
 
@@ -524,7 +566,7 @@ class StockValueMovement(TenantScoped, Base):
         ),
         CheckConstraint(
             "kind IN ('purchase','sale','sample','wastage','variance','transfer','production_loss',"
-            "'revaluation','added_other','rounding')",
+            "'revaluation','added_other','rounding','overhead_absorbed')",
             name="ck_stock_value_movements_kind",
         ),
         Index("ix_stock_value_movements_snapshot", "org_id", "snapshot_id", "kind"),

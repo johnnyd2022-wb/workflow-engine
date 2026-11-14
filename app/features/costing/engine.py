@@ -38,6 +38,7 @@ from app.core.utils.unit_conversion import are_units_compatible, convert_to_inve
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.modules.nz_alcohol.excise import litres_of as excise_litres
 from app.features.compliant.modules.nz_alcohol.excise import product_base_name as _base_name
+from app.features.costing import overheads as ovh
 from app.features.costing.models import DIRECT_KINDS, CostFlow, LotCostEntry
 from app.features.costing.service import CostingNotFoundError, get_settings
 from app.observability import get_logger
@@ -107,6 +108,7 @@ class LotCost:
     priced_quantity: Decimal = ZERO
     unpriced_quantity: Decimal = ZERO
     estimate_from: InventoryItem | None = None
+    unit_overhead: Decimal = ZERO  # the part of unit_known that is overhead (8.1h; 0 when off)
 
 
 @dataclass
@@ -116,6 +118,7 @@ class Alloc:
     missing: dict
     warnings: set
     weight: Decimal
+    overhead: Decimal = ZERO  # the part of ``known`` that is overhead (8.1h; 0 when off)
 
 
 @dataclass
@@ -126,6 +129,8 @@ class StepCost:
     carry_status: str = ACTUAL
     carry_missing: dict = field(default_factory=dict)
     carry_warnings: set = field(default_factory=set)
+    carry_overhead: Decimal = ZERO  # the part of carry_known that is overhead (8.1h)
+    overhead: ovh.Applied | None = None  # the batch overheads this step took, when it is the step that does
     alloc: dict = field(default_factory=dict)  # flow id -> Alloc, for this step's outputs
     inputs: list = field(default_factory=list)
     outputs: list = field(default_factory=list)
@@ -149,7 +154,16 @@ def _cycle_lot(item: InventoryItem) -> LotCost:
 
 
 # What an engine loads from the database and can hand to another: see ``CostEngine.own_budget``.
-_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
+_LOADED_CACHES = (
+    "_lots",
+    "_in_flow_cache",
+    "_entry_cache",
+    "_allocation_cache",
+    "_transfer_cache",
+    "_exec_info",
+    "_freight",
+    "_exec_rows",
+)
 
 
 class CostEngine:
@@ -169,9 +183,10 @@ class CostEngine:
             settings = get_settings(db, org_id)
         self.use_last_known_price = settings["use_last_known_price"]
         self.split_basis = settings["split_basis"]
+        self.include_overheads = bool(settings.get("include_overheads", False))  # 8.1h, opt-in
         if alcohol_profiles is None:
             alcohol_profiles = {}
-            if self.split_basis == "litres":
+            if self.split_basis == "litres" or self.include_overheads:
                 alcohol_profiles = {
                     profile.inventory_name.casefold(): profile
                     for profile in db.query(AlcoholProductProfile)
@@ -185,6 +200,10 @@ class CostEngine:
         self._allocation_cache: dict[UUID, list] = {}
         self._transfer_cache: dict[UUID, InventoryItem | None] = {}
         self._exec_info: dict[UUID, ExecInfo | None] = {}
+        self._freight: dict[UUID, Decimal] = {}  # purchase allocation id -> freight it carries (8.1h)
+        self._exec_rows: dict[UUID, Execution | None] = {}  # 8.1h: when a batch completed
+        self._rates: list | None = None  # 8.1h: the overhead rates, read once
+        self._overhead_steps: dict[UUID, tuple | None] = {}
         self._memo: dict[tuple, object] = {}
         self._active: set[tuple] = set()  # entered, not finished: met again = cycle
         self._direct_memo: dict[UUID, LotCost] = {}
@@ -207,13 +226,18 @@ class CostEngine:
         engine = CostEngine(
             self.db,
             self.org_id,
-            settings={"use_last_known_price": self.use_last_known_price, "split_basis": self.split_basis},
+            settings={
+                "use_last_known_price": self.use_last_known_price,
+                "split_basis": self.split_basis,
+                "include_overheads": self.include_overheads,
+            },
             alcohol_profiles=self._alcohol_profiles,
         )
         if reuse_loaded:
             for cache in _LOADED_CACHES:
                 setattr(engine, cache, getattr(self, cache))
             engine._materials = self._materials
+            engine._rates = self._rates
         return engine
 
     # --- public payloads -----------------------------------------------------------------
@@ -230,7 +254,7 @@ class CostEngine:
         public = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
         # A multipack lot ("24 × 200 mL" a case) breaks its price down per bottle and per litre.
         split = pack_breakdown(public, item) if public is not None else None
-        return {
+        body = {
             "inventory_item_id": str(item.id),
             "name": item.name,
             "unit": item.unit,
@@ -265,6 +289,16 @@ class CostEngine:
             "editable": editable_reason(self.db, self.org_id, item) is None,
             "provenance": lot_provenance(self.db, self.org_id, item),
         }
+        if self.include_overheads:
+            body.update(self._split_unit(cost.unit_known, cost.unit_overhead))
+        return body
+
+    def _split_unit(self, unit_known: Decimal | None, unit_overhead: Decimal) -> dict:
+        """Materials vs overheads of a unit cost (8.1h), as a floor when the cost is partial."""
+        if unit_known is None:
+            return {"materials_unit_cost": None, "overhead_unit_cost": None}
+        overhead = min(max(unit_overhead, ZERO), unit_known)
+        return {"materials_unit_cost": unit_str(unit_known - overhead), "overhead_unit_cost": unit_str(overhead)}
 
     def execution(self, execution_id) -> dict:
         execution = self._load_execution_or_404(execution_id)
@@ -297,7 +331,7 @@ class CostEngine:
         warnings |= last.carry_warnings
         statuses = [st for s in steps for st in s.statuses]
         external = sum((i["_known"] for i in inputs if not i["internal"]), ZERO)
-        return {
+        body = {
             "execution_id": str(execution.id),
             "status": worst(ACTUAL, *statuses, last.carry_status),
             "known_input_cost": money(external),
@@ -309,6 +343,9 @@ class CostEngine:
             "inputs": [{k: v for k, v in i.items() if not k.startswith("_")} for i in inputs],
             "outputs": [o for s in steps for o in s.outputs],
         }
+        if self.include_overheads:
+            body["overheads"] = self._overheads_block(execution, steps)
+        return body
 
     # --- the walk ------------------------------------------------------------------------------
 
@@ -498,8 +535,12 @@ class CostEngine:
                         PurchaseAllocation.status.in_(("active", "orphaned")),
                     ):
                         self._allocation_cache[alloc.inventory_item_id].append(alloc)
+                if self.include_overheads:
+                    self._load_freight(a for item_id in chunk for a in self._allocation_cache[item_id])
 
             execution_ids = [execution_id for execution_id in pending if execution_id not in self._exec_info]
+            if self.include_overheads:
+                self._load_executions(pending)
             consumed_lot_ids = set()
             for start in range(0, len(execution_ids), 1000):
                 chunk = execution_ids[start : start + 1000]
@@ -631,6 +672,8 @@ class CostEngine:
                 )
                 .all()
             )
+        if self.include_overheads:
+            self._load_freight(self._allocation_cache[item_id])
         return self._allocation_cache[item_id]
 
     def _transfer_source(self, item: InventoryItem) -> InventoryItem | None:
@@ -696,7 +739,8 @@ class CostEngine:
         whole = next((e for e in entries if e.cost_flow_id is None), None)
         # A flow's price = its active entry plus its positive purchase allocations (summed);
         # negative allocations are refunds, applied once after pricing.
-        flow_prices: dict = defaultdict(lambda: [ZERO, ZERO, ACTUAL, set()])  # qty, amount, status, sources
+        # qty, amount, status, sources, and the freight inside the amount (8.1h)
+        flow_prices: dict = defaultdict(lambda: [ZERO, ZERO, ACTUAL, set(), ZERO])
         for e in entries:
             if e.cost_flow_id is not None:
                 fp = flow_prices[e.cost_flow_id]
@@ -715,8 +759,10 @@ class CostEngine:
             if alloc.cost_flow_id is None:
                 continue
             fp = flow_prices[alloc.cost_flow_id]
+            freight = self._freight.get(alloc.id, ZERO)  # landed cost: empty unless overheads are on
             fp[0] += _d(alloc.quantity)
-            fp[1] += amount
+            fp[1] += amount + freight
+            fp[4] += freight
             fp[3].add("purchase")
             if alloc.status == "orphaned":  # its purchase was deleted or changed in Xero
                 fp[2] = ESTIMATED
@@ -727,6 +773,7 @@ class CostEngine:
         sources: set = set()
         unpriced_direct = ZERO
         unpriced_other = ZERO
+        overhead_total = ZERO  # the part of the priced amount that is overhead (8.1h)
 
         for f in ins:
             q = _d(f.quantity)
@@ -744,20 +791,23 @@ class CostEngine:
                     unpriced_other += q
                     continue
                 parts.append((q, q * c.unit_known * factor, c.status))
+                overhead_total += q * c.unit_overhead * factor
                 sources.add("transfer")
             elif f.kind in ("produced", "reconciled_in"):
                 a = self._allocation(f, item)
                 parts.append((q, a.known, a.status))
+                overhead_total += a.overhead
                 missing.update(a.missing)
                 warnings |= a.warnings
                 sources.add("production")
             else:
                 fp = flow_prices.get(f.id)
                 if fp is not None and fp[0] > 0:
-                    pq, amount, fstatus, fsources = fp
+                    pq, amount, fstatus, fsources, freight = fp
                     if pq > q:  # can't happen through the services; never price more than the flow
-                        amount, pq = amount * q / pq, q
+                        amount, freight, pq = amount * q / pq, freight * q / pq, q
                     parts.append((pq, amount, fstatus))
+                    overhead_total += freight
                     sources |= fsources
                     unpriced_direct += q - pq
                 else:
@@ -788,7 +838,16 @@ class CostEngine:
                     warnings.add("refund_exceeds_cost")
             unit = total_k / total_q if total_q > 0 else None
             source = sources.pop() if len(sources) == 1 else "mixed"
-            return LotCost(unit, status, source, missing, warnings, total_q, unpriced)
+            return LotCost(
+                unit,
+                status,
+                source,
+                missing,
+                warnings,
+                total_q,
+                unpriced,
+                unit_overhead=overhead_total / total_q if total_q > 0 else ZERO,
+            )
         if refunds:
             warnings.add("refund_without_cost")
 
@@ -796,9 +855,26 @@ class CostEngine:
             estimate = self._estimate(item)
             if estimate is not None:
                 source_lot, unit = estimate
-                return LotCost(unit, ESTIMATED, "estimate", missing, warnings, ZERO, unpriced, estimate_from=source_lot)
+                return LotCost(
+                    unit,
+                    ESTIMATED,
+                    "estimate",
+                    missing,
+                    warnings,
+                    ZERO,
+                    unpriced,
+                    estimate_from=source_lot,
+                    unit_overhead=self._estimate_overhead(item, source_lot),
+                )
         missing = {**missing, str(item.id): item.name}
         return LotCost(None, UNKNOWN, "none", missing, warnings, ZERO, unpriced)
+
+    def _estimate_overhead(self, item: InventoryItem, source: InventoryItem) -> Decimal:
+        """The freight inside a last-known price, in this lot's unit (8.1h; 0 when off)."""
+        if not self.include_overheads:
+            return ZERO
+        factor = self._unit_factor(item.unit, source.unit)
+        return self._direct_cost(source).unit_overhead * factor if factor else ZERO
 
     def _unit_factor(self, lot_unit: str | None, source_unit: str | None) -> Decimal | None:
         """How many ``source_unit`` there are in one ``lot_unit`` (price conversion)."""
@@ -884,6 +960,7 @@ class CostEngine:
                 cost.carry_status = prev.carry_status
                 cost.carry_missing = dict(prev.carry_missing)
                 cost.carry_warnings = set(prev.carry_warnings)
+                cost.carry_overhead = prev.carry_overhead
 
         step_consumed = info.consumed.get(position, [])
         if not step_consumed and _completed(step):
@@ -906,6 +983,8 @@ class CostEngine:
             known = q * u.unit_known if u.unit_known is not None else ZERO
             status = u.status if u.status != UNKNOWN else PARTIAL
             cost.carry_known += known
+            if u.unit_known is not None:
+                cost.carry_overhead += q * u.unit_overhead
             cost.carry_status = worst(cost.carry_status, status)
             cost.carry_missing.update(u.missing)
             cost.carry_warnings |= u.warnings
@@ -928,21 +1007,39 @@ class CostEngine:
         step_outs = info.outs.get(position, [])
         if not step_outs:
             return cost
+        taken = self._batch_overheads(execution_id, position)
+        if taken is not None:  # the batch's overheads join its pool here, at the step that finishes it
+            cost.overhead = taken
+            cost.carry_known += taken.amount
+            cost.carry_overhead += taken.amount
+            if taken.litres_unknown:
+                cost.carry_status = worst(cost.carry_status, PARTIAL)
+                cost.carry_warnings.add("overhead_litres_unknown")
+                cost.statuses.append(PARTIAL)
         weights, assumed = self._split_weights(step, step_outs)
         cost.split_assumed = assumed
         amounts = _allocate(cost.carry_known, step_outs, weights)
+        overhead_amounts = _allocate(cost.carry_overhead, step_outs, weights) if cost.carry_overhead else {}
         for f in step_outs:
             w = weights[f.id]
             if w == 0:
                 a = Alloc(ZERO, ACTUAL, {}, set(), ZERO)
             else:
-                a = Alloc(amounts[f.id], cost.carry_status, dict(cost.carry_missing), set(cost.carry_warnings), w)
+                a = Alloc(
+                    amounts[f.id],
+                    cost.carry_status,
+                    dict(cost.carry_missing),
+                    set(cost.carry_warnings),
+                    w,
+                    overhead_amounts.get(f.id, ZERO),
+                )
             cost.alloc[f.id] = a
             lot = self._get_lot(f.inventory_item_id)
             q = _d(f.quantity)
             known_unit = a.known / q if q > 0 else None
             cost.outputs.append(
                 {
+                    **(self._split_output(a, known_unit) if self.include_overheads else {}),
                     "inventory_item_id": str(f.inventory_item_id),
                     "flow_id": str(f.id),
                     "execution_step_id": str(f.execution_step_id) if f.execution_step_id else None,
@@ -963,7 +1060,118 @@ class CostEngine:
         cost.absorbed_missing = cost.carry_missing
         cost.absorbed_warnings = cost.carry_warnings
         cost.carry_known, cost.carry_status, cost.carry_missing, cost.carry_warnings = ZERO, ACTUAL, {}, set()
+        cost.carry_overhead = ZERO
         return cost
+
+    # --- overheads (8.1h) -------------------------------------------------------------------------
+
+    @staticmethod
+    def _split_output(alloc: Alloc, known_unit: Decimal | None) -> dict:
+        overhead = min(max(alloc.overhead, ZERO), alloc.known)
+        per_unit = None
+        if known_unit is not None:
+            per_unit = overhead / alloc.known * known_unit if alloc.known > 0 else ZERO
+        return {
+            "overhead_amount": money(overhead),
+            "overhead_unit_cost": unit_str(per_unit),
+            "materials_unit_cost": unit_str(None if per_unit is None else known_unit - per_unit),
+        }
+
+    def _overhead_rates(self) -> list:
+        if self._rates is None:
+            self._rates = ovh.load_rates(self.db, self.org_id)
+        return self._rates
+
+    def _execution_row(self, execution_id: UUID) -> Execution | None:
+        if execution_id not in self._exec_rows:
+            self._exec_rows[execution_id] = (
+                self.db.query(Execution)
+                .filter(Execution.org_id == self.org_id, Execution.id == execution_id)
+                .one_or_none()
+            )
+        return self._exec_rows[execution_id]
+
+    def _overhead_step(self, execution_id: UUID) -> tuple[int, list[CostFlow]] | None:
+        """The step that takes a batch's overheads, with the finished-product outputs it made: the
+        last step whose produced outputs include a final-product lot that isn't Library stock.
+        None for a batch that makes no finished product (it takes no overheads, so a chain of
+        batches never counts them twice)."""
+        if execution_id not in self._overhead_steps:
+            info = self._info(execution_id)
+            found = None
+            for position in sorted(info.outs, reverse=True) if info is not None else ():
+                finished = [f for f in info.outs[position] if self._is_finished_product(f)]
+                if finished:
+                    found = (position, finished)
+                    break
+            self._overhead_steps[execution_id] = found
+        return self._overhead_steps[execution_id]
+
+    def _is_finished_product(self, flow: CostFlow) -> bool:
+        lot = self._get_lot(flow.inventory_item_id)
+        return (
+            lot is not None
+            and lot.inventory_type == InventoryType.FINAL_PRODUCT.value
+            and not (lot.extra_data or {}).get("library_stock")
+        )
+
+    def _batch_overheads(self, execution_id: UUID, position: int) -> ovh.Applied | None:
+        """What the batch's overheads come to, when ``position`` is the step that takes them and
+        the batch has completed; otherwise None (off, another step, or still running)."""
+        if not self.include_overheads:
+            return None
+        target = self._overhead_step(execution_id)
+        if target is None or target[0] != position:
+            return None
+        execution = self._execution_row(execution_id)
+        done_on = ovh.completion_date(execution) if execution is not None else None
+        if done_on is None:
+            return None
+        return ovh.apply(ovh.in_force(self._overhead_rates(), done_on), lambda: self._finished_litres(target[1]))
+
+    def _finished_litres(self, flows: list[CostFlow]) -> Decimal | None:
+        """Litres of finished product in these output flows; None if any can't be worked out."""
+        total = ZERO
+        for flow in flows:
+            lot = self._get_lot(flow.inventory_item_id)
+            if lot is None:
+                return None
+            profile = self._alcohol_profiles.get(_base_name(lot.name).casefold())
+            litres = excise_litres(_d(flow.quantity), lot.unit, profile)
+            if litres is None:
+                return None
+            total += litres
+        return total
+
+    def _overheads_block(self, execution: Execution, steps: list[StepCost]) -> dict:
+        """The batch card's overhead figures: the lines taken, or why there are none (yet)."""
+        if ovh.completion_date(execution) is None:
+            return {"amount": None, "lines": [], "note": "in_progress"}
+        taken = next((s.overhead for s in steps if s.overhead is not None), None)
+        if taken is None:
+            if self._overhead_step(execution.id) is None:
+                return {"amount": None, "lines": [], "note": "no_finished_product"}
+            taken = ovh.Applied()
+        return {
+            "amount": money(taken.amount),
+            "lines": taken.lines,
+            "note": "litres_unknown" if taken.litres_unknown else None,
+        }
+
+    def _load_freight(self, allocations) -> None:
+        """Freight shares for allocations not yet read: one set of queries, however many lots."""
+        fresh = [a for a in allocations if a.id not in self._freight]
+        if fresh:
+            self._freight.update(ovh.freight_shares(self.db, self.org_id, fresh))
+
+    def _load_executions(self, execution_ids) -> None:
+        missing = [i for i in execution_ids if i not in self._exec_rows]
+        for start in range(0, len(missing), 1000):
+            chunk = missing[start : start + 1000]
+            for row in self._rows_by_id(Execution, chunk):
+                self._exec_rows[row.id] = row
+            for execution_id in chunk:
+                self._exec_rows.setdefault(execution_id, None)
 
     @staticmethod
     def _logical_output(flow: CostFlow, lot: InventoryItem | None) -> tuple:

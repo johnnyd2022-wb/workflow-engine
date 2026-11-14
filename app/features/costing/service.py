@@ -333,18 +333,25 @@ def deactivate_entry(db: Session, org_id: UUID, item_id: Any, entry_id: Any) -> 
 
 def get_settings(db: Session, org_id: UUID) -> dict:
     row = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
-    return {
+    settings = {
         "use_last_known_price": True if row is None else bool(row.use_last_known_price),
         "split_basis": "quantity" if row is None else row.split_basis,
     }
+    if row is not None and row.include_overheads:
+        # Opt-in (8.1h): the key is there only when on, so an org that never opted in reads the
+        # same settings it always did.
+        settings["include_overheads"] = True
+    return settings
 
 
 def set_settings(db: Session, org_id: UUID, **changes) -> dict:
-    allowed = {"use_last_known_price", "split_basis"}
+    allowed = {"use_last_known_price", "split_basis", "include_overheads"}
     if not changes or set(changes) - allowed:
-        raise CostingError("Only use_last_known_price and split_basis can be changed")
+        raise CostingError("Only use_last_known_price, split_basis and include_overheads can be changed")
     if "use_last_known_price" in changes and not isinstance(changes["use_last_known_price"], bool):
         raise CostingError("use_last_known_price must be true or false")
+    if "include_overheads" in changes and not isinstance(changes["include_overheads"], bool):
+        raise CostingError("include_overheads must be true or false")
     if "split_basis" in changes and changes["split_basis"] not in ("quantity", "litres"):
         raise CostingError("split_basis must be quantity or litres")
     from uuid import uuid4
