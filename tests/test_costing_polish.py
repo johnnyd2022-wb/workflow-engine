@@ -168,10 +168,12 @@ def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, 
     before = {p["key"]: p["ready"] for p in _products(client)}
 
     real_own_budget = CostEngine.own_budget
+    handed_out = []
 
     def over_budget_for_figures(self, **kwargs):
         # The figures pass takes its engine from own_budget(); loading its produced lots is too big.
         engine = real_own_budget(self, **kwargs)
+        handed_out.append(engine)
 
         def too_big(ids):
             raise TooLargeError()
@@ -185,6 +187,7 @@ def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, 
     products = response.get_json()["products"]
     assert {p["key"]: p["ready"] for p in products} == before
     assert all(p["unit_cost"] is None for p in products)
+    assert len(handed_out) == 1, "only the figures pass asked for an engine of its own, so only it was over budget"
 
 
 def test_a_spent_node_budget_never_drops_later_products_figures(world, db, monkeypatch):  # noqa: F811

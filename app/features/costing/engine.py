@@ -198,9 +198,10 @@ class CostEngine:
         Reads nothing: the costing settings and alcohol profiles this engine already read are
         passed on, so an overflowed request reads them once however many engines it goes through.
         With ``reuse_loaded`` (the default) it also shares the rows this engine loaded, so retrying
-        one item queries nothing twice. That is only right after a ``prime`` that finished (or none
-        at all): a prime that ran out of budget part-way leaves rows half loaded, so pass False
-        and let the new engine load for itself.
+        one item queries nothing twice; pass False for an engine that starts with nothing loaded.
+        The rows are shared by reference, so they must only ever be whole: ``prime`` marks a lot
+        loaded only once its flows are in hand, so one that ran out of budget leaves nothing half
+        loaded behind.
         """
         engine = CostEngine(
             self.db,
@@ -411,9 +412,6 @@ class CostEngine:
                     self._lots.setdefault(lot.id, lot)
                 for item_id in chunk:
                     self._lots.setdefault(item_id, None)
-                    self._in_flow_cache[item_id] = []
-                    self._entry_cache.setdefault(item_id, [])
-                    self._allocation_cache.setdefault(item_id, [])
 
                 receipt_ids = {lot.transfer_receipt_id for lot in lots if lot.transfer_receipt_id}
                 receipts = {}
@@ -466,6 +464,12 @@ class CostEngine:
                     .all()
                 )
                 self._spend(len(flows))
+                # Marked as loaded only now the work budget has held, so a prime that runs out of
+                # budget never leaves a lot looking loaded with no flows, entries or allocations.
+                for item_id in chunk:
+                    self._in_flow_cache[item_id] = []
+                    self._entry_cache.setdefault(item_id, [])
+                    self._allocation_cache.setdefault(item_id, [])
                 for flow in flows:
                     self._in_flow_cache[flow.inventory_item_id].append(flow)
                     if flow.execution_id is not None and flow.kind in ("produced", "reconciled_in"):

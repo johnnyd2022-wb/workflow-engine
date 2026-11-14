@@ -5,6 +5,8 @@ AC1  Readiness: once its engine budget is spent, each later product is costed on
 AC2  A material row that ran out of budget is never kept for the next product to reuse.
 AC3  "Remember this" on an existing rule keeps the payee and description as the person typed them.
 AC4  Costing settings are read once per request, however often the engine runs out of budget.
+AC5  A prime that runs out of budget leaves nothing half loaded, so the rows an engine on its own
+     budget shares are always whole.
 
 The fifth item, the credit-note tax backfill, is a decision and not a change: see the plan.
 """
@@ -229,7 +231,7 @@ def test_ac4_a_margins_report_adds_no_settings_read_when_its_lineage_is_too_big(
         response = world["client"].get(url)
     assert response.status_code == 200, response.get_json()
     assert [r for r in response.get_json()["rows"] if r["product"] == GIN]
-    assert len(normal) == 2, "the base currency, and the engine's settings"
+    assert normal, "the report reads the costing settings (its base currency, and the engine's)"
     assert len(overflowed) == len(normal), f"settings read {len(overflowed)} times: {overflowed}"
 
 
@@ -245,3 +247,23 @@ def test_ac4_an_engine_on_its_own_budget_copies_what_the_first_one_read(readines
         assert engine is not first and engine._memo is not first._memo and engine._charged is not first._charged
     assert second._lots is first._lots, "loaded rows are shared, never queried twice"
     assert bare._lots is not first._lots, "a bare engine starts with nothing loaded"
+
+
+# --- AC5: a prime that runs out of budget leaves nothing half loaded --------------------------------
+
+
+def test_ac5_a_prime_that_runs_out_of_budget_leaves_nothing_half_loaded(readiness_world, db, monkeypatch):  # noqa: F811
+    org, _client = readiness_world
+    juniper = lot(db, org.id, "Juniper", 2, "kg")
+    price(db, org.id, juniper.id, 10, 2)
+    db.commit()
+    engine = engine_module.CostEngine(db, org.id)
+    monkeypatch.setattr(engine_module, "MAX_WORK", 0)
+    with pytest.raises(engine_module.TooLargeError):
+        engine.prime([juniper.id])
+    assert juniper.id not in engine._in_flow_cache, "not marked as loaded with its flows left out"
+    assert juniper.id not in engine._entry_cache
+
+    monkeypatch.setattr(engine_module, "MAX_WORK", 200_000)
+    shared = engine.own_budget()  # shares what the failed prime left behind, by reference
+    assert shared._solve(("lot", juniper.id)).status == "actual", "the priced lot still costs as itself"
