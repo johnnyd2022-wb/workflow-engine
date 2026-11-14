@@ -1242,8 +1242,11 @@ missing; never a silent $0.
     `.agents/plans/live-cogs-polish.md`).
   - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
     the walk from Xero cost of sales to Biz-E's, closing stock export.
-  - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
-    spread into batch cost.
+  - [x] h. **Overheads into cost** (spec Phase 4, opt-in per org, off by default). Rent, labour
+    and power as rates per litre of finished product or per batch from a date, taken by each
+    finished batch; freight on a purchase spread by value over the same purchase's stock; materials
+    and overheads shown apart on the batch card, lot panel and margins; readiness untouched. Spec
+    `.agents/specs/live-cogs-overheads.md`. (!TBD)
   - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on
     manual, barcode, CSV and the Purchases record dialog. Steps use the lot in their own units
     (bottles, mL, g, pieces) and take the right share; cost breaks down per case, bottle and litre
