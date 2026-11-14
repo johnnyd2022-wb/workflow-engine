@@ -222,10 +222,17 @@
         if (Number(cost.unpriced_quantity) > 0 && Number(cost.priced_quantity) > 0) {
           addFact(facts, 'Priced', cost.priced_quantity + ' of ' + (Number(cost.priced_quantity) + Number(cost.unpriced_quantity)) + ' ' + (cost.unit || ''));
         }
+        // Opt-in (8.1h): the cost's overhead part (freight on what was bought, a batch's rent and labour).
+        if (cost.overhead_unit_cost != null && Number(cost.overhead_unit_cost) > 0) {
+          addFact(facts, 'Includes', money(cost.materials_unit_cost) + ' materials · ' + money(cost.overhead_unit_cost) + ' overheads per ' + dutyUnit(cost.unit));
+        }
         if (facts.childNodes.length) body.appendChild(facts);
 
         var others = (cost.missing || []).filter(function (m) { return m.inventory_item_id !== cost.inventory_item_id; });
         if (others.length) body.appendChild(missingLine(others));
+        if ((cost.warnings || []).indexOf('overhead_litres_unknown') >= 0) {
+          body.appendChild(el('p', 'cost-muted', 'Overheads per litre couldn’t be worked out for the batch that made this. Tell Biz-E the bottle size on the product, or count it in litres.'));
+        }
         if ((cost.warnings || []).indexOf('refund_exceeds_cost') >= 0) {
           body.appendChild(el('p', 'cost-muted', 'A refund on this lot is bigger than what it cost, so its cost shows as $0.'));
         }
@@ -419,18 +426,25 @@
     }
     var figures = el('div', 'cost-card__figures');
     figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
+    var over = cost.overheads || null; // present only when the org has opted in to overheads (8.1h)
+    if (over && over.amount != null) figures.appendChild(figure('Overheads', money(over.amount) || '$0.00'));
     outputs.forEach(function (o) {
       var unitText = perUnit(o.unit_cost, o.unit);
       var outputFigure = figure(o.name + ' per ' + dutyUnit(o.unit), unitText ? money(o.unit_cost) : '—');
+      if (o.overhead_unit_cost != null && Number(o.overhead_unit_cost) > 0 && unitText) {
+        outputFigure.appendChild(el('p', 'cost-split', money(o.materials_unit_cost) + ' materials + ' + money(o.overhead_unit_cost) + ' overheads'));
+      }
       var line = dutyLine(o.duty_today, o.unit);
       if (line) outputFigure.appendChild(el('p', 'cost-muted', line));
       figures.appendChild(outputFigure);
     });
     card.appendChild(figures);
+    if (over) card.appendChild(overheadsDetail(over));
 
     var status = finished ? cost.status : cost.cost_so_far_status;
     if (status === 'estimated') card.appendChild(pill('warn', 'Includes estimates from earlier prices'));
-    if (status === 'partial' || status === 'unknown' || (cost.missing || []).length) {
+    var onlyOverheadsMissing = over && over.note === 'litres_unknown' && !(cost.missing || []).length;
+    if (!onlyOverheadsMissing && (status === 'partial' || status === 'unknown' || (cost.missing || []).length)) {
       var missing = cost.missing || [];
       var box = el('div', 'cost-card__missing');
       box.appendChild(pill('warn', missing.length ? 'Incomplete — ' + plural(missing.length, 'input') + ' not costed' : 'Incomplete'));
@@ -452,6 +466,38 @@
       card.appendChild(el('p', 'cost-muted', 'Cost is split between outputs by quantity, because no split was recorded.'));
     }
     return card;
+  }
+
+  /* What the batch's overheads are made of, or why there are none yet (8.1h). */
+  function overheadsDetail(over) {
+    var box = el('div', 'cost-card__overheads');
+    if (over.note === 'in_progress') {
+      box.appendChild(el('p', 'cost-muted', 'Overheads are added when the batch is complete.'));
+      return box;
+    }
+    if (over.note === 'no_finished_product') {
+      box.appendChild(el('p', 'cost-muted', 'This batch makes no finished product, so it takes no overheads.'));
+      return box;
+    }
+    if ((over.lines || []).length) {
+      var list = el('ul', 'cost-overheads');
+      over.lines.forEach(function (l) {
+        var row = el('li', 'cost-overheads__row');
+        var litres = Math.round(Number(l.quantity) * 100) / 100;
+        row.appendChild(el('span', '', l.name + ' — ' + (l.basis === 'per_litre'
+          ? litres + ' L × ' + money(l.rate) + ' per litre' : money(l.rate) + ' per batch')));
+        row.appendChild(el('span', '', money(l.amount)));
+        list.appendChild(row);
+      });
+      box.appendChild(list);
+    } else if (over.note !== 'litres_unknown') {
+      box.appendChild(el('p', 'cost-muted', 'No overhead rates apply to this batch.'));
+    }
+    if (over.note === 'litres_unknown') {
+      box.appendChild(pill('warn', 'Overheads per litre not worked out'));
+      box.appendChild(el('p', 'cost-muted', 'Biz-E needs the bottle size to turn bottles into litres. Add it to the product, or count it in litres, and the cost completes.'));
+    }
+    return box;
   }
 
   function figure(label, value) {

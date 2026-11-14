@@ -176,6 +176,7 @@ IDs are prefixed `OV` so they can't collide with the AC numbers other 8.1 builds
 | OV15 | Margins carry materials and overhead cost | `test_ac_ov15_margins_show_the_split` |
 | OV16 | Isolation and permissions: feature off 404, other org's rate 404, viewer can't write | `test_ac_ov16_tenant_isolation_and_permissions` |
 | OV17 | Migration adds the columns and table, reversible | `test_ac_ov17_migration_shape` |
+| OV19 | Pricing many batches together costs no query per batch | `test_ac_ov19_primed_costs_do_not_query_per_batch` |
 | OV18 | Browser: turn on, add a rate, see the split on the batch card and lot panel at phone width | `tests/e2e/test_costing_overheads_browser.py` |
 
 ## Assumptions (each can be overturned in review)

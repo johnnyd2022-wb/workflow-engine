@@ -247,6 +247,7 @@ def load_rates(db: Session, org_id: UUID) -> list[Rate]:
 def in_force(rates: Iterable[Rate], on: date) -> list[Rate]:
     """Per (name, basis), the rate with the latest ``effective_from`` on or before ``on`` (ties:
     the newest row). A $0 rate is how a name is ended, so it applies nothing."""
+
     def newest(rate: Rate) -> tuple:
         return (rate.effective_from, rate.created_at or datetime.min.replace(tzinfo=UTC), rate.id)
 
@@ -348,26 +349,31 @@ def freight_shares(db: Session, org_id: UUID, allocations: Iterable[PurchaseAllo
     }
     if not active:
         return shares
+    candidates = (
+        db.query(PurchaseLine)
+        .filter(
+            PurchaseLine.org_id == org_id,
+            PurchaseLine.document_id.in_(active),
+            PurchaseLine.superseded_at.is_(None),
+            PurchaseLine.amount_ex_tax > 0,
+            or_(PurchaseLine.freight.is_(True), PurchaseLine.treatment == "overhead"),
+        )
+        .all()
+    )
     freight: dict[UUID, Decimal] = defaultdict(Decimal)
     freight_lines: set[UUID] = set()
-    for line in db.query(PurchaseLine).filter(
-        PurchaseLine.org_id == org_id,
-        PurchaseLine.document_id.in_(active),
-        PurchaseLine.superseded_at.is_(None),
-        PurchaseLine.amount_ex_tax > 0,
-        or_(PurchaseLine.freight.is_(True), PurchaseLine.treatment == "overhead"),
-    ):
+    for line in candidates:
         if is_freight_line(line):
             freight[line.document_id] += Decimal(str(line.amount_ex_tax))
             freight_lines.add(line.id)
     if not freight:
         return shares
-    value: dict[UUID, Decimal] = {
-        document_id: Decimal(str(total))
-        for document_id, total in db.query(PurchaseLine.document_id, func.sum(PurchaseAllocation.amount))
+    totals = (
+        db.query(PurchaseLine.document_id, func.sum(PurchaseAllocation.amount))
         .join(
             PurchaseAllocation,
-            (PurchaseAllocation.org_id == PurchaseLine.org_id) & (PurchaseAllocation.purchase_line_id == PurchaseLine.id),
+            (PurchaseAllocation.org_id == PurchaseLine.org_id)
+            & (PurchaseAllocation.purchase_line_id == PurchaseLine.id),
         )
         .filter(
             PurchaseLine.org_id == org_id,
@@ -377,7 +383,9 @@ def freight_shares(db: Session, org_id: UUID, allocations: Iterable[PurchaseAllo
             PurchaseAllocation.amount > 0,
         )
         .group_by(PurchaseLine.document_id)
-    }
+        .all()
+    )
+    value: dict[UUID, Decimal] = {document_id: Decimal(str(total)) for document_id, total in totals}
     for allocation in positive:
         if allocation.purchase_line_id in freight_lines:
             continue

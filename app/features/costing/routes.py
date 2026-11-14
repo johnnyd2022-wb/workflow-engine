@@ -671,7 +671,10 @@ def purchases_page():
     from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 
     connected = XeroTenantRepository(db_session).get_connected(_org()) is not None
-    return render_template("costing/purchases.html", active_page="core", xero_connected=connected)
+    include_overheads = bool(service.get_settings(db_session, _org()).get("include_overheads"))
+    return render_template(
+        "costing/purchases.html", active_page="core", xero_connected=connected, include_overheads=include_overheads
+    )
 
 
 @costing_bp.route("/core/costing/rules", methods=["GET"])

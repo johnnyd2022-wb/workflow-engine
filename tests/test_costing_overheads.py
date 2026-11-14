@@ -257,7 +257,9 @@ def test_ac_ov05_effective_dates(world, db):
     assert unit(date(2026, 12, 5)) == D("5.000000")  # a $0 row ends it
 
     # An inactive row is ignored: switching off Nov's rate leaves Oct's in force.
-    nov = next(r for r in client.get(f"{API}/overhead-rates").get_json()["rates"] if r["effective_from"] == "2026-11-01")
+    nov = next(
+        r for r in client.get(f"{API}/overhead-rates").get_json()["rates"] if r["effective_from"] == "2026-11-01"
+    )
     client.put(f"{API}/overhead-rates/{nov['id']}", json={"is_active": False})
     assert unit(date(2026, 11, 15)) == D("5.500000")
 
@@ -337,9 +339,7 @@ def test_ac_ov07_overheads_land_once_on_finished_product(world, db):
     # stock, even on the last step) takes nothing, and says why.
     spirit = lot(db, org.id, f"Neutral spirit {uuid4().hex[:6]}", 100, "L")
     price(db, org.id, spirit.id, 1000, 100)
-    only_wip, (single,) = workflow(
-        db, org.id, [[{"name": "Sample", "unit": "L", "extra_data": {"sample_only": True}}]]
-    )
+    only_wip, (single,) = workflow(db, org.id, [[{"name": "Sample", "unit": "L", "extra_data": {"sample_only": True}}]])
     complete(
         client,
         only_wip,
@@ -411,7 +411,12 @@ def test_ac_ov09_overheads_follow_the_cost_share(world, db):
     execution, (step,) = workflow(
         db,
         org.id,
-        [[{"name": "Gin", "unit": "L", "cost_share": {"mode": "percent", "value": 80}}, {"name": "Vodka", "unit": "L"}]],
+        [
+            [
+                {"name": "Gin", "unit": "L", "cost_share": {"mode": "percent", "value": 80}},
+                {"name": "Vodka", "unit": "L"},
+            ]
+        ],
     )
     defs = {d["name"]: d["id"] for d in output_defs(step)}
     complete(
@@ -548,3 +553,39 @@ def test_ac_ov17_migration_shape(db):
     assert any("amount" in text and ">=" in text for text in checks.values())
     uniques = {i["name"] for i in inspector.get_indexes("overhead_rates") if i.get("unique")}
     assert "uq_overhead_rates_name_basis_date" in uniques
+
+
+# --- AC-OV19: no query per batch ---------------------------------------------------------------------------
+
+
+def test_ac_ov19_primed_costs_do_not_query_per_batch(world, db):
+    from sqlalchemy import event
+
+    from app.features.costing.engine import CostEngine
+
+    org, client = world["org"], world["client"]
+    _rate(client, "Rent", "per_litre", "0.50")
+    _rate(client, "Labour", "per_batch", "40")
+    _switch(client, True)
+    batches = [_batch(db, client, org) for _ in range(6)]
+
+    def queries(count):
+        db.expire_all()
+        ids = {batch["gin"].id for batch in batches[:count]}
+        seen = 0
+
+        def tick(*_args):
+            nonlocal seen
+            seen += 1
+
+        engine = CostEngine(db, org.id)
+        event.listen(db.get_bind(), "before_cursor_execute", tick)
+        try:
+            engine.prime(ids)
+            costs = [engine._solve(("lot", item_id)) for item_id in ids]
+        finally:
+            event.remove(db.get_bind(), "before_cursor_execute", tick)
+        assert all(cost.unit_known == D("5.7") for cost in costs)  # overheads included, every time
+        return seen
+
+    assert abs(queries(6) - queries(2)) <= 1

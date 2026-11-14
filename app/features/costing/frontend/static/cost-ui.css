@@ -188,3 +188,28 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
   #page-content .co-bars__value { font-size: 10px; }
   #page-content .co-bars__label { font-size: 10px; }
 }
+
+/* Costs › Overheads (live-cogs 8.1h, opt-in) */
+#page-content .co-overheads { margin-top: 32px; }
+#page-content .co-overheads[hidden], #page-content .co-overheads [hidden] { display: none; }
+#page-content .co-overheads__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 16px; flex-wrap: wrap; }
+#page-content .co-overheads__head > div { flex: 1 1 320px; min-width: 0; }
+#page-content .co-overheads__head .workspace-button { flex: none; }
+#page-content .co-overheads [data-overheads-empty], #page-content .co-overheads [data-overheads-error] { margin: 8px 0 12px; }
+#page-content .co-rate { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding: 12px 16px; min-height: 52px; }
+#page-content .co-rate__body { display: grid; gap: 2px; min-width: 0; flex: 1 1 220px; }
+#page-content .co-rate__detail { margin: 0; overflow-wrap: anywhere; }
+#page-content .co-rate__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+#page-content .co-rate__basis { grid-template-columns: 1fr 1fr; }
+@media (max-width: 720px) {
+  #page-content .co-rate__basis { grid-template-columns: 1fr; }
+}
+/* the materials / overheads split under a cost figure */
+#page-content .cost-split { margin: 2px 0 0; font-size: 12px; color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+#page-content .cost-overheads { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+#page-content .cost-overheads__row { display: flex; justify-content: space-between; gap: 12px; }
+#page-content .cost-overheads__row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .co-opt[hidden] { display: none; }
+#page-content .cost-card__figures { align-items: flex-start; }
+#page-content .cost-card__overheads { display: grid; gap: 8px; justify-items: start; }
+#page-content .cost-card__overheads .cost-overheads { justify-self: stretch; }

@@ -45,11 +45,66 @@
           <span><span class="co-opt__label">Litres</span>
             <span class="cost-hint">Outputs share by volume — bottles by their size, Library stock by its litres. Needs each bottled product's pack size; a step without it falls back to quantity.</span></span></label>
       </fieldset>
+      <label class="co-opt">
+        <input type="checkbox" name="include_overheads">
+        <span><span class="co-opt__label">Add overheads to what a batch costs</span>
+          <span class="cost-hint">Rent, labour, power and the freight on what you buy, from the rates you set on this page. Materials stay visible on their own. Off, a cost is materials only.</span></span>
+      </label>
       <p class="cost-hint">Changes apply to every cost straight away, including past batches — nothing is stored, so nothing needs recalculating.</p>
       <p class="cost-error" role="alert" data-costs-settings-error></p>
       <div class="ru-dialog__actions">
         <button type="button" class="workspace-button" data-costs-settings-cancel>Cancel</button>
         <button type="submit" class="workspace-button workspace-button--primary" data-costs-settings-save>Save</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
+
+  <section class="co-overheads" data-overheads hidden aria-labelledby="co-overheads-title">
+    <div class="co-overheads__head">
+      <div>
+        <h2 class="co-section-title" id="co-overheads-title">Overheads</h2>
+        <p class="co-section-lead">Added to the cost of each batch that finishes on or after the date you set — per litre of finished product, or per batch.</p>
+      </div>
+      {% if can('costs.manage') %}<button type="button" class="workspace-button" data-overheads-add>Add a rate</button>{% endif %}
+    </div>
+    <p class="cost-muted" data-overheads-empty hidden>No overhead rates yet. Add rent, labour or power and it joins the cost of each batch finished from its date.</p>
+    <p class="cost-error" data-overheads-error role="alert" aria-live="assertive" hidden></p>
+    <ul class="co-list" data-overheads-list aria-label="Overhead rates"></ul>
+  </section>
+  {% if can('costs.manage') %}
+  <dialog class="ru-dialog" data-overheads-sheet aria-labelledby="co-rate-title">
+    <form method="dialog" hx-boost="false" data-overheads-form novalidate>
+      <h2 id="co-rate-title" data-overheads-title>Add an overhead rate</h2>
+      <label class="cost-field"><span class="cost-field__label">Name</span>
+        <input type="text" name="name" maxlength="80" autocomplete="off" placeholder="Rent, Labour, Power…" required>
+      </label>
+      <fieldset class="ru-fieldset co-rate__basis">
+        <legend>Charged</legend>
+        <label class="co-opt"><input type="radio" name="basis" value="per_litre" checked>
+          <span><span class="co-opt__label">Per litre</span>
+            <span class="cost-hint">Of finished product — bottles by their size.</span></span></label>
+        <label class="co-opt"><input type="radio" name="basis" value="per_batch">
+          <span><span class="co-opt__label">Per batch</span>
+            <span class="cost-hint">Once for each batch that makes finished product.</span></span></label>
+      </fieldset>
+      <label class="cost-field"><span class="cost-field__label">Amount (ex GST)</span>
+        <input type="text" name="amount" inputmode="decimal" autocomplete="off" placeholder="0.50" required>
+        <span class="cost-hint" data-overheads-amount-hint></span>
+      </label>
+      <label class="cost-field"><span class="cost-field__label">Applies to batches finished from</span>
+        <input type="date" name="effective_from" required>
+        <span class="cost-hint">To change a rate later, add the new amount from the date it starts — past batches keep the old one.</span>
+      </label>
+      <label class="co-opt" data-overheads-active hidden>
+        <input type="checkbox" name="is_active" checked>
+        <span><span class="co-opt__label">In use</span>
+          <span class="cost-hint">Off keeps the rate here but stops it being added to any batch.</span></span>
+      </label>
+      <p class="cost-error" role="alert" data-overheads-form-error></p>
+      <div class="ru-dialog__actions">
+        <button type="button" class="workspace-button" data-overheads-cancel>Cancel</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-overheads-save>Save</button>
       </div>
     </form>
   </dialog>

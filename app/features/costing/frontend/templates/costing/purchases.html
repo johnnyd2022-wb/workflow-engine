@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('costing.static', filename='purchases.css') }}">
 <div class="pu-shell workspace-overview workspace-page" data-purchases-root
      data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}"
+     data-overheads="{{ 'true' if include_overheads else 'false' }}"
      data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"
      data-xero-connected="{{ 'true' if xero_connected else 'false' }}" aria-busy="true">
   <header class="workspace-header">
