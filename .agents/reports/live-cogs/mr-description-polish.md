@@ -95,3 +95,5 @@ An existing test also went red on the first full run
 (`test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness`): it injected the
 over-budget engine through `readiness.CostEngine`, a seam that no longer exists. Fixed at the seam;
 assertions kept.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

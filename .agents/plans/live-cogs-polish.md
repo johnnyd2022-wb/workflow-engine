@@ -62,16 +62,16 @@ Behaviour is fixed; these would pin it:
   it as a cycle (!700/!705).
 - Readiness: once its shared engine budget is spent, each later product's material rows are
   costed on a budget of its own, and a row that ran out of budget is never kept for the next
-  product, so a list row reads as its own page does (!MR).
+  product, so a list row reads as its own page does (!712).
 - "Remember this" on an existing rule keeps the payee and description as typed; a rule saved
-  before the typed form existed takes the purchase's casing (!MR).
+  before the typed form existed takes the purchase's casing (!712).
 - Costing settings (and the litres-split alcohol profiles) are read once per request:
   `CostEngine.own_budget()` is the one way to get an engine with budgets of its own, and it
   passes on what the first engine read. Readiness, price history, the materials picker and
-  margins use it instead of building engines that re-read them (!MR).
+  margins use it instead of building engines that re-read them (!712).
 - Engine: `prime` marks a lot loaded only once its work budget has held, so an engine that ran
   out part-way (and the engines sharing its rows) never holds a lot that looks loaded with no
-  flows or entries (!MR).
+  flows or entries (!712).
 
 ## Still open
 
