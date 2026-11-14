@@ -424,9 +424,15 @@
       card.appendChild(el('p', 'cost-muted', 'No materials recorded against this batch yet. Cost builds up as each step records what went in.'));
       return card;
     }
-    var figures = el('div', 'cost-card__figures');
-    figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
     var over = cost.overheads || null; // present only when the org has opted in to overheads (8.1h)
+    var figures = el('div', 'cost-card__figures');
+    if (over && finished) {
+      // What went in includes freight and overhead carried in from earlier work; the split is of the outputs.
+      var made = 0, overheadMade = 0;
+      outputs.forEach(function (o) { made += Number(o.known_amount || 0); overheadMade += Number(o.overhead_amount || 0); });
+      if (made > 0) total = String(Math.max(made - overheadMade, 0));
+    }
+    figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
     if (over && over.amount != null) figures.appendChild(figure('Overheads', money(over.amount) || '$0.00'));
     outputs.forEach(function (o) {
       var unitText = perUnit(o.unit_cost, o.unit);

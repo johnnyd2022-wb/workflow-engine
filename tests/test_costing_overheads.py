@@ -589,3 +589,40 @@ def test_ac_ov19_primed_costs_do_not_query_per_batch(world, db):
         return seen
 
     assert abs(queries(6) - queries(2)) <= 1
+
+
+# --- review follow-ups ---------------------------------------------------------------------------------
+
+
+def test_ac_ov14b_a_bottled_lot_with_unmeasured_overhead_does_not_unready_what_uses_it(world, db):
+    org, client = world["org"], world["client"]
+    _bottles(db, client, org, library=False)  # Gin in bottles, no pack size
+    _rate(client, "Rent", "per_litre", "0.50")
+    _switch(client, True)
+    from app.features.costing.models import CostFlow
+
+    gin = db.query(CostFlow).filter(CostFlow.org_id == org.id, CostFlow.kind == "produced").first()
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gift pack", "unit": "packs"}]])
+    from app.core.db.models.inventory_item import InventoryItem
+
+    lot_row = db.query(InventoryItem).filter(InventoryItem.id == gin.inventory_item_id).one()
+    complete(
+        client,
+        execution,
+        step,
+        [(lot_row, 2, "bottles")],
+        [{"name": "Gift pack", "quantity": 1, "unit": "packs", "output_id": output_defs(step)[0]["id"]}],
+    )
+    products = {p["name"].lower(): p for p in client.get(f"{API}/readiness").get_json()["products"]}
+    assert products["gift pack"]["ready"] is True
+
+
+def test_ac_ov05b_completion_date_is_the_nz_date(world, db):
+    org, client = world["org"], world["client"]
+    _rate(client, "Rent", "per_litre", "0.50", "2026-11-01")
+    _switch(client, True)
+    batch = _batch(db, client, org)
+    row = db.query(Execution).filter(Execution.id == batch["execution"].id).one()
+    row.completed_at = datetime(2026, 10, 31, 23, 30, tzinfo=ZoneInfo("UTC"))  # 12:30 on 1 Nov in NZ
+    db.commit()
+    assert D(lot_cost(db, org.id, batch["gin"].id)["unit_cost"]) == D("5.500000")

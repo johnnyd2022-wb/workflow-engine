@@ -485,6 +485,8 @@ def mark_freight(db: Session, org_id: UUID, line_id) -> PurchaseLine:
 def skip(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
+    if line.freight:
+        raise CostingError("This line is marked as freight; undo that first")
     line.state = "skipped"
     db.flush()
     return line

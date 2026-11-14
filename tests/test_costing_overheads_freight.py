@@ -166,3 +166,11 @@ def test_ac_ov13_mark_a_line_as_freight(world, db, flask_app):
     assert _unit(db, world, juniper) == D("75.000000")
     db.expire_all()
     assert db.query(PurchaseLine).filter(PurchaseLine.id == courier.id).one().freight is False
+
+
+def test_ac_ov13b_a_freight_line_cannot_be_skipped(world, db):
+    client = world["client"]
+    _stock, courier = _bill_with_courier_on_a_stock_account(world, db)
+    _switch(client)
+    assert client.post(f"{API}/purchases/{courier.id}/freight").status_code == 200
+    assert client.post(f"{API}/purchases/{courier.id}/skip").status_code == 400

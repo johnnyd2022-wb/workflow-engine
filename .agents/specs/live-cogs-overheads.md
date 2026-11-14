@@ -189,6 +189,7 @@ IDs are prefixed `OV` so they can't collide with the AC numbers other 8.1 builds
 - ASSUMPTION H2: overheads attach to the batch that makes finished product and are taken at its
   completion. Rejected: spreading across WIP batches (double counts), or applying while running
   (litres aren't known yet).
+  Caveat: this relies on intermediate outputs being work-in-progress, which Core does for every non-terminal step; a bulk output typed final product and then bottled would take overheads at both stages.
 - ASSUMPTION H3: freight spreads over one purchase document's *recorded* stock by value; a freight
   line on a separate document is not matched to anything. Rejected: matching by date/supplier (a guess).
 - ASSUMPTION H4: freight shows as overhead in the split (it is not material). Its lot status is unchanged.

@@ -167,7 +167,14 @@ def _lot_rows(lot_ids, engine: CostEngine, cache: dict | None = None, *, raise_w
             row = {
                 "name": cost["name"],
                 "inventory_item_id": str(item_id),
-                "costed": cost["status"] in (ACTUAL, ESTIMATED),
+                # A finished lot whose only gap is overhead per litre (8.1h) still has every material
+                # costed: overheads never make a product "not ready".
+                "costed": cost["status"] in (ACTUAL, ESTIMATED)
+                or (
+                    cost["status"] == "partial"
+                    and not cost["missing"]
+                    and set(cost["warnings"]) == {"overhead_litres_unknown"}
+                ),
                 "status": cost["status"],
             }
             if "too_large" in cost["warnings"]:
