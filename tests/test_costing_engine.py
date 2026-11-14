@@ -201,6 +201,112 @@ def test_ac56_one_active_whole_lot_price(world, db):
     db.rollback()
 
 
+def _forged_entry(org_id, item_id, **overrides):
+    """A lot_cost_entries row built by hand, so the service's own validation is bypassed and the
+    database is the only thing left to refuse it. Inactive, so the partial unique indexes on
+    active rows cannot be what rejects it."""
+    from app.features.costing.models import LotCostEntry
+
+    fields = dict(
+        org_id=org_id, inventory_item_id=item_id, kind="manual", amount=D("1"), quantity=D("1"), is_active=False
+    )
+    fields.update(overrides)
+    return LotCostEntry(**fields)
+
+
+@pytest.mark.parametrize(
+    ("broken", "repaired", "constraint"),
+    [
+        pytest.param({"kind": "gift"}, {"kind": "manual"}, "ck_lot_cost_entries_kind", id="unknown-kind"),
+        pytest.param({"amount": D("-0.0001")}, {"amount": D("0")}, "ck_lot_cost_entries_amount", id="negative-amount"),
+        pytest.param(
+            {"quantity": D("0")}, {"quantity": D("0.0001")}, "ck_lot_cost_entries_quantity", id="zero-quantity"
+        ),
+        pytest.param(
+            {"quantity": D("-1")}, {"quantity": D("0.0001")}, "ck_lot_cost_entries_quantity", id="negative-quantity"
+        ),
+        pytest.param(
+            {"kind": "free", "amount": D("1")},
+            {"kind": "free", "amount": D("0")},
+            "ck_lot_cost_entries_free_zero",
+            id="free-with-an-amount",
+        ),
+    ],
+)
+def test_ac56_lot_cost_entry_check_constraints_are_enforced_by_the_database(world, db, broken, repaired, constraint):
+    """AC56 (data model): the invariants hold below the service. A row that breaks one is refused
+    by Postgres naming that constraint; the same row with just that field put right is accepted
+    (so the refusal is the constraint's doing, not some other malformed field), and the repaired
+    values sit on the boundary (amount 0, quantity 0.0001) so a `>=` turned into `>` is caught."""
+    from sqlalchemy.exc import IntegrityError
+
+    org, _ = world
+    item = lot(db, org.id, "Constrained", 1, "kg")
+    item_id = item.id
+
+    db.add(_forged_entry(org.id, item_id, **broken))
+    with pytest.raises(IntegrityError, match=constraint):
+        db.flush()
+    db.rollback()
+
+    db.add(_forged_entry(org.id, item_id, **repaired))
+    db.flush()  # accepted
+    db.rollback()
+
+
+def test_ac56_lot_cost_entries_cannot_point_at_another_orgs_lot_or_flow(world, db):
+    """AC56 (composite tenant FKs): an entry names a lot and a flow of its own org. Pointing at
+    another org's lot, or at another org's flow on its own lot, is refused by the database."""
+    from sqlalchemy.exc import IntegrityError
+
+    org, _ = world
+    other = new_org(db)
+    try:
+        mine = lot(db, org.id, "Mine", 1, "kg")
+        theirs = lot(db, other.id, "Theirs", 1, "kg")
+        my_flow = _created_flow(db, org.id, mine)
+        their_flow = _created_flow(db, other.id, theirs)
+        mine_id, theirs_id, my_flow_id, their_flow_id = mine.id, theirs.id, my_flow.id, their_flow.id
+
+        db.add(_forged_entry(org.id, theirs_id))
+        with pytest.raises(IntegrityError, match="fk_lot_cost_entries_item"):
+            db.flush()
+        db.rollback()
+
+        db.add(_forged_entry(org.id, mine_id, cost_flow_id=their_flow_id))
+        with pytest.raises(IntegrityError, match="fk_lot_cost_entries_flow"):
+            db.flush()
+        db.rollback()
+
+        db.add(_forged_entry(org.id, mine_id, cost_flow_id=my_flow_id))  # control: its own lot and flow
+        db.flush()
+        db.rollback()
+    finally:
+        purge(db, other)
+
+
+def test_ac54_database_refuses_a_second_active_entry_for_one_flow(world, db):
+    """AC54 (data model): the service supersedes a flow's price (see
+    test_ac54_second_flow_price_replaces_first); the partial unique index is what stops two active
+    entries for one (lot, flow) if anything else ever writes the table."""
+    from sqlalchemy.exc import IntegrityError
+
+    org, _ = world
+    item = lot(db, org.id, "Flowing", 2, "kg")
+    flow = _created_flow(db, org.id, item)
+    item_id, flow_id = item.id, flow.id
+    price(db, org.id, item_id, 20, 2, cost_flow_id=flow_id)  # the flow's active entry
+
+    db.add(_forged_entry(org.id, item_id, cost_flow_id=flow_id, is_active=True))
+    with pytest.raises(IntegrityError, match="uq_lot_cost_entries_active_flow"):
+        db.flush()
+    db.rollback()
+
+    db.add(_forged_entry(org.id, item_id, cost_flow_id=flow_id, is_active=False))  # control: history is fine
+    db.flush()
+    db.rollback()
+
+
 def test_ac57_production_lot_is_not_editable(world, db):
     org, client = world
     from app.features.costing.service import CostingError
