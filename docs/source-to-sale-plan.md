@@ -1240,8 +1240,11 @@ missing; never a silent $0.
     (!710); readiness costed on a budget per product after an overflow, "Remember this" keeps
     the typed payee, costing settings read once per request (!712). Open question, not built: "paid for by" on Add Inventory (see
     `.agents/plans/live-cogs-polish.md`).
-  - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
-    the walk from Xero cost of sales to Biz-E's, closing stock export.
+  - [x] g. **Stock value and the Xero bridge** (spec Phase 3). Stock value on the Costs page
+    (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
+    month-end snapshots taken on the first Xero sync (or costing read, with no Xero) after a
+    month ends and held fixed, the walk from Xero's stock accounts and Biz-E's stock roll-forward,
+    closing stock CSV. (!715)
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
     spread into batch cost.
   - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on

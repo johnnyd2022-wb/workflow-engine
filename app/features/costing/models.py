@@ -368,3 +368,174 @@ class PurchaseRule(TenantScoped, Base):
     created_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+SNAPSHOT_KINDS = ("month_end", "manual")
+SNAPSHOT_TRIGGERS = ("xero_sync", "costing_read", "manual")
+LINE_STATUSES = ("actual", "estimated", "partial", "unknown")
+STOCK_CATEGORIES = ("raw", "in_production", "wip", "finished")
+MOVEMENT_KINDS = (
+    "purchase",
+    "sale",
+    "sample",
+    "wastage",
+    "variance",
+    "transfer",
+    "production_loss",
+    "revaluation",
+    "added_other",
+    "rounding",
+)
+
+
+class StockValueSnapshot(TenantScoped, Base):
+    """What the stock was worth at a cutoff, held fixed (live-cogs 8.1g, "8.1g build contract").
+
+    Written once. Nothing here is ever updated: a closed month's figures don't move, and later
+    cost changes are shown beside it as "changes since close".
+    """
+
+    __tablename__ = "stock_value_snapshots"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_stock_value_snapshots_org_id"),
+        ForeignKeyConstraint(
+            ["org_id", "taken_by_user_id"],
+            ["users.org_id", "users.id"],
+            name="fk_stock_value_snapshots_user",
+            ondelete="SET NULL (taken_by_user_id)",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "previous_snapshot_id"],
+            ["stock_value_snapshots.org_id", "stock_value_snapshots.id"],
+            name="fk_stock_value_snapshots_previous",
+            ondelete="SET NULL (previous_snapshot_id)",
+        ),
+        CheckConstraint("kind IN ('month_end','manual')", name="ck_stock_value_snapshots_kind"),
+        CheckConstraint("trigger IN ('xero_sync','costing_read','manual')", name="ck_stock_value_snapshots_trigger"),
+        CheckConstraint("quantity_basis IN ('exact','reconstructed')", name="ck_stock_value_snapshots_basis"),
+        Index(
+            "uq_stock_value_snapshots_month_end",
+            "org_id",
+            "as_of_date",
+            unique=True,
+            postgresql_where=sa.text("kind = 'month_end'"),
+        ),
+        Index("ix_stock_value_snapshots_cutoff", "org_id", "cutoff_at"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind = Column(String(10), nullable=False)
+    as_of_date = Column(Date, nullable=False)
+    cutoff_at = Column(DateTime(timezone=True), nullable=False)
+    taken_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    trigger = Column(String(15), nullable=False)
+    taken_by_user_id = Column(UUID(as_uuid=True), nullable=True)
+    previous_snapshot_id = Column(UUID(as_uuid=True), nullable=True)
+    quantity_basis = Column(String(15), nullable=False, default="exact", server_default="exact")
+    currency = Column(String(3), nullable=True)
+    total_value = Column(Numeric(18, 4), nullable=False, default=0)
+    raw_value = Column(Numeric(18, 4), nullable=False, default=0)
+    in_production_value = Column(Numeric(18, 4), nullable=False, default=0)
+    wip_value = Column(Numeric(18, 4), nullable=False, default=0)
+    finished_value = Column(Numeric(18, 4), nullable=False, default=0)
+    actual_value = Column(Numeric(18, 4), nullable=False, default=0)
+    estimated_value = Column(Numeric(18, 4), nullable=False, default=0)
+    partial_value = Column(Numeric(18, 4), nullable=False, default=0)
+    unknown_lots = Column(Integer, nullable=False, default=0)
+    partial_lots = Column(Integer, nullable=False, default=0)
+    lot_count = Column(Integer, nullable=False, default=0)
+    purchases_value = Column(Numeric(18, 4), nullable=True)  # B for the window since the previous snapshot
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class StockValueLine(TenantScoped, Base):
+    """One lot, or one unfinished batch, in a snapshot, as it stood then (names kept as typed)."""
+
+    __tablename__ = "stock_value_lines"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_stock_value_lines_org_id"),
+        ForeignKeyConstraint(
+            ["org_id", "snapshot_id"],
+            ["stock_value_snapshots.org_id", "stock_value_snapshots.id"],
+            name="fk_stock_value_lines_snapshot",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "inventory_item_id"],
+            ["inventory_items.org_id", "inventory_items.id"],
+            name="fk_stock_value_lines_item",
+            ondelete="SET NULL (inventory_item_id)",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "execution_id"],
+            ["executions.org_id", "executions.id"],
+            name="fk_stock_value_lines_execution",
+            ondelete="SET NULL (execution_id)",
+        ),
+        CheckConstraint("line_type IN ('lot','in_production')", name="ck_stock_value_lines_type"),
+        CheckConstraint("category IN ('raw','in_production','wip','finished')", name="ck_stock_value_lines_category"),
+        CheckConstraint("status IN ('actual','estimated','partial','unknown')", name="ck_stock_value_lines_status"),
+        Index("ix_stock_value_lines_snapshot", "org_id", "snapshot_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id = Column(UUID(as_uuid=True), nullable=False)
+    line_type = Column(String(15), nullable=False)
+    inventory_item_id = Column(UUID(as_uuid=True), nullable=True)
+    execution_id = Column(UUID(as_uuid=True), nullable=True)
+    name = Column(String(255), nullable=False)
+    unit = Column(String(50), nullable=True)
+    batch = Column(String(255), nullable=True)
+    category = Column(String(15), nullable=False)
+    quantity = Column(Numeric(18, 4), nullable=False, default=0)
+    unit_cost = Column(Numeric(18, 6), nullable=True)  # null unless actual or estimated
+    known_unit_cost = Column(Numeric(18, 6), nullable=True)  # the floor; null when nothing is costed
+    value = Column(Numeric(18, 4), nullable=True)  # null when unknown: never 0
+    status = Column(String(10), nullable=False)
+
+
+class StockValueMovement(TenantScoped, Base):
+    """A valued stock movement between two snapshots, written once with the later snapshot.
+
+    ``value`` is its signed effect on stock value, so Σ value over a snapshot's movements is
+    exactly closing minus opening.
+    """
+
+    __tablename__ = "stock_value_movements"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_stock_value_movements_org_id"),
+        ForeignKeyConstraint(
+            ["org_id", "snapshot_id"],
+            ["stock_value_snapshots.org_id", "stock_value_snapshots.id"],
+            name="fk_stock_value_movements_snapshot",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "inventory_item_id"],
+            ["inventory_items.org_id", "inventory_items.id"],
+            name="fk_stock_value_movements_item",
+            ondelete="SET NULL (inventory_item_id)",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "execution_id"],
+            ["executions.org_id", "executions.id"],
+            name="fk_stock_value_movements_execution",
+            ondelete="SET NULL (execution_id)",
+        ),
+        CheckConstraint(
+            "kind IN ('purchase','sale','sample','wastage','variance','transfer','production_loss',"
+            "'revaluation','added_other','rounding')",
+            name="ck_stock_value_movements_kind",
+        ),
+        Index("ix_stock_value_movements_snapshot", "org_id", "snapshot_id", "kind"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    snapshot_id = Column(UUID(as_uuid=True), nullable=False)
+    kind = Column(String(20), nullable=False)
+    inventory_item_id = Column(UUID(as_uuid=True), nullable=True)
+    execution_id = Column(UUID(as_uuid=True), nullable=True)
+    name = Column(String(255), nullable=True)
+    quantity = Column(Numeric(18, 4), nullable=False, default=0)
+    unit_cost = Column(Numeric(18, 6), nullable=True)
+    value = Column(Numeric(18, 4), nullable=False)
