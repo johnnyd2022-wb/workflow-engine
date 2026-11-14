@@ -69,6 +69,9 @@ Behaviour is fixed; these would pin it:
   `CostEngine.own_budget()` is the one way to get an engine with budgets of its own, and it
   passes on what the first engine read. Readiness, price history, the materials picker and
   margins use it instead of building engines that re-read them (!MR).
+- Engine: `prime` marks a lot loaded only once its work budget has held, so an engine that ran
+  out part-way (and the engines sharing its rows) never holds a lot that looks loaded with no
+  flows or entries (!MR).
 
 ## Still open
 
