@@ -140,7 +140,37 @@ def test_clean_pack_reads_a_count_with_no_size(text, expected):
     assert clean_pack({"count": expected["count"]}) == expected
 
 
-@pytest.mark.parametrize("text", ["1", "1 pcs", "0", "a few", "lots of labels", "12 oz", "3 lb", "10 gal"])
+def test_only_single_items_come_out_of_a_multipack_lot():
+    cases = lot("cases", CASE)
+    for other in ("pallets", "kegs", "boxes"):
+        assert not can_convert_for_lot(other, cases), other  # not "one of 24 in a case"
+    # nor does a pack count on a lot of bottles turn cases into bottles
+    assert not can_convert_for_lot("cases", lot("bottles", {"count": 6}))
+
+
+def test_settle_take_leaves_a_zero_take_alone():
+    from app.core.utils.packs import settle_take
+
+    assert settle_take(Decimal("0.0001"), Decimal("0"), lot("cases", CASE)) == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1",
+        "1 pcs",
+        "0",
+        "a few",
+        "lots of labels",
+        "12 oz",
+        "3 lb",
+        "10 gal",
+        "12 ounces",
+        "3 gallons",
+        "2 tonnes",
+        "12 fl oz",
+    ],
+)
 def test_a_count_with_no_size_needs_more_than_one(text):
     with pytest.raises(ValueError):
         clean_pack(text)

@@ -84,29 +84,9 @@ def parse_pack(text: str | None) -> dict | None:
 
 # A count with no size, typed by a person: "500", "500 labels", "24 bottles", "500 per box".
 _COUNT_ONLY_RE = re.compile(r"^\s*(\d{1,6})\s*(?:[x×]\s*)?(?:[a-z][a-z .\-]{0,30})?\s*$", re.IGNORECASE)
-_UNREADABLE_MEASURES = frozenset(
-    {
-        "oz",
-        "lb",
-        "lbs",
-        "gal",
-        "mg",
-        "cl",
-        "dl",
-        "pt",
-        "qt",
-        "ton",
-        "tonne",
-        "m",
-        "cm",
-        "mm",
-        "ft",
-        "in",
-        "l",
-        "ml",
-        "g",
-        "kg",
-    }
+_UNREADABLE_MEASURE = re.compile(
+    r"^(?:oz|ounces?|lbs?|pounds?|gal|gallons?|mg|milligrams?|cl|dl|pts?|pints?|qts?|quarts?|tonnes?|tons?|fl"
+    r"|met(?:re|er)s?|cm|mm|ft|foot|feet|inch(?:es)?|in|l|ml|g|kg)$"
 )
 _PACK_HELP = "Pack size must look like '24 x 200 mL', '700 mL', '25 kg' or '500 pcs'"
 
@@ -129,7 +109,7 @@ def clean_pack(raw) -> dict | None:
         counted = _COUNT_ONLY_RE.match(raw.replace("\u00a0", " "))
         word = re.sub(r"^\s*\d+\s*(?:[x\u00d7]\s*)?", "", raw).strip().lower().split(" ")[0]
         # "12 oz" is a weight we can't read, not twelve of something: say so rather than guess.
-        if counted and int(counted.group(1)) > 1 and word not in _UNREADABLE_MEASURES:
+        if counted and int(counted.group(1)) > 1 and not _UNREADABLE_MEASURE.match(word):
             return {"count": int(counted.group(1))}
         raise ValueError(_PACK_HELP)
     if isinstance(raw, dict):
@@ -200,6 +180,13 @@ _CONTAINER_WORDS = {
 COUNTED_UNITS = frozenset(COUNT_UNITS | _CONTAINER_WORDS)
 
 
+# What a pack's count counts: single items. A pallet or a keg is not "one of 24 in a case", so a
+# step using those against a lot of cases is refused rather than divided by 24.
+_ITEM_WORDS = frozenset(
+    {"unit", "units", "each", "ea", "bottle", "bottles", "can", "cans", "jar", "jars", "pc", "pcs", "piece", "pieces"}
+)
+
+
 def _same_word(a: str, b: str) -> bool:
     return a.rstrip("s") == b.rstrip("s") or a.removesuffix("es") == b.removesuffix("es")
 
@@ -228,12 +215,12 @@ def convert_for_lot(quantity: Decimal, unit: str | None, item, *, exact: bool = 
     if held in COUNTED_UNITS:
         if used in COUNTED_UNITS and _same_word(used, held):  # "bag" of a lot in "bags"
             return rounded(q)
-        if used in COUNTED_UNITS and count > 1:  # bottles from a lot of cases: containers ÷ per case
+        if used in _ITEM_WORDS and count > 1:  # bottles from a lot of cases: containers ÷ per case
             return rounded(q / count)
         if size and _measured(used) and are_units_compatible(used, size_unit):  # 2.4 L from cases of 24 × 200 mL
             in_size_unit = convert_quantity_decimal(q, used, size_unit) if used != size_unit else q
             return rounded(in_size_unit / (count * size))
-    elif size and _measured(held) and used in COUNTED_UNITS and are_units_compatible(size_unit, held):
+    elif size and _measured(held) and used in _ITEM_WORDS and are_units_compatible(size_unit, held):
         # bottles of 700 mL from a lot held in litres
         return rounded(convert_quantity_decimal(q * size, size_unit, held))
     raise ValueError(f"Cannot convert {unit} to {lot_unit} with pack {describe_pack(pack)}")
@@ -291,7 +278,7 @@ def settle_take(current: Decimal, take: Decimal, item) -> Decimal:
     4 decimals) and the take is whatever gets there. Any other lot, or a take that leaves part
     of a container open, is returned as is."""
     per = containers_per_unit(item)
-    if per is None:
+    if per is None or take <= 0:
         return take
     left = (current - take) * per
     whole = left.to_integral_value(rounding=ROUND_HALF_UP)
@@ -313,8 +300,8 @@ def whole_containers(quantity: Decimal, item) -> Decimal | None:
 
 # Storage rounding is at most 0.00005 of a lot unit per write; twice that, in containers, is
 # still a tiny fraction of one container for any real pack size.
-_SNAP = Decimal("0.0002")
+_SNAP = Decimal("0.0001")
 
 
 def _tolerance(per: Decimal) -> Decimal:
-    return min(per * _SNAP, Decimal("0.25"))
+    return min(per * _SNAP, Decimal("0.05"))

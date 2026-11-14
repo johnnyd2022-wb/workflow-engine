@@ -79,7 +79,7 @@
     // ("650 g/L") is a strength, not a size, and is skipped. The last size wins. Mirrors
     // app/core/utils/packs.py parse_pack, which the server uses to store the pack.
     var src = String(text || '').replace(/\u00a0/g, ' ');
-    var re = /(?:(\d+)\s*[x×]\s*)?(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*[.,]?\d+)\s*(ml|millilitres?|l|litres?|liters?|g|grams?|kg|kilos?|kilograms?)(?![a-z])(?!\s*\/)(?:\s*[x×]\s*(\d+)(?!\s*(?:ml|l|g|kg)))?/gi;
+    var re = /(?:(\d+)\s*[x×]\s*)?(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*[.,]?\d+)\s*(ml|millilitres?|milliliters?|l|litres?|liters?|g|grams?|kg|kilos?|kilograms?)(?![a-z])(?!\s*\/)(?:\s*[x×]\s*(\d+)(?!\s*[a-z]))?/gi;
     var match, last = null;
     while ((match = re.exec(src)) !== null) last = match;
     if (!last) {
@@ -87,7 +87,7 @@
       var counted = typed ? /^\s*(\d{1,6})\s*(?:[x×]\s*)?(?:([a-z])[a-z .\-]{0,30})?\s*$/i.exec(src) : null;
       // "12 oz" is a weight we can't read, not twelve of something: refuse it rather than guess.
       var word = typed ? src.replace(/^\s*\d+\s*(?:[x×]\s*)?/i, '').trim().toLowerCase().split(' ')[0] : '';
-      var weight = /^(oz|lbs?|gal|mg|cl|dl|pt|qt|tonne?|m|cm|mm|ft|in|l|ml|g|kg)$/.test(word);
+      var weight = /^(oz|ounces?|lbs?|pounds?|gal|gallons?|mg|milligrams?|cl|dl|pts?|pints?|qts?|quarts?|tonnes?|tons?|fl|met(re|er)s?|cm|mm|ft|foot|feet|inch(es)?|in|l|ml|g|kg)$/.test(word);
       return counted && !weight && Number(counted[1]) > 1 ? { count: Number(counted[1]), size: null, unit: null } : null;
     }
     var raw = last[2];
@@ -95,7 +95,7 @@
     var count = Number(last[1] || last[4] || 1);
     var u = last[3].toLowerCase();
     if (!(size > 0) || !(count > 0)) return null;
-    var unit = /^(ml|millilitre)/.test(u) ? 'mL' : /^(l$|litre|liter)/.test(u) ? 'L' : /^(g$|gram)/.test(u) ? 'g' : 'kg';
+    var unit = /^(ml|milli)/.test(u) ? 'mL' : /^(l$|litre|liter)/.test(u) ? 'L' : /^(g$|gram)/.test(u) ? 'g' : 'kg';
     return { count: count, size: size, unit: unit };
   }
   function packText(pack) {
@@ -106,7 +106,7 @@
   }
   function packSize(name, packed) {
     // The stored/typed pack when there is one, else a size in the item's name.
-    var pack = packed ? parsePack(packed, true) : parsePack(name);
+    var pack = packed == null ? parsePack(name) : packed ? parsePack(packed, true) : null; // a pack field's blank means none
     if (!pack) return null;
     if (!pack.unit) return { count: pack.count, amount: null, per: null }; // a count, no size
     var n = pack.size * pack.count;
@@ -502,7 +502,7 @@
         wrap.classList.remove('is-invalid');
         var q = options.quantity ? Number(options.quantity()) : NaN;
         var unit = options.unit ? options.unit() : '';
-        hint.textContent = q > 0 ? packHint(Number(amount), q, unit, options.name ? options.name() : '', options.pack ? options.pack() : '') : '';
+        hint.textContent = q > 0 ? packHint(Number(amount), q, unit, options.name ? options.name() : '', options.pack ? options.pack() : null) : '';
       }
       input.addEventListener('input', update);
       (options.watch || []).forEach(function (node) { if (node) node.addEventListener('input', update); if (node) node.addEventListener('change', update); });
@@ -553,9 +553,13 @@
 
     function unitWord() { return dutyUnit(options.unit ? options.unit() : ''); }
     function update() {
+      paint();
+      if (options.onChange) options.onChange(); // the cost hint follows the pack, filled, cleared or unreadable
+    }
+    function paint() {
       var counted = COUNT_UNITS.test(String(options.unit ? options.unit() : '').trim());
+      if (!edited && options.name) input.value = counted ? packText(parsePack(options.name())) : '';
       wrap.hidden = !counted && !input.value.trim();
-      if (!edited && options.name) input.value = packText(parsePack(options.name()));
       var raw = input.value.trim();
       wrap.classList.remove('is-invalid');
       if (!raw) { hint.textContent = 'What one ' + unitWord() + ' holds, so workflows can use it in bottles, mL or g.'; return; }
@@ -566,9 +570,8 @@
         ? 'One ' + unitWord() + ' = ' + pack.count + ' × ' + packText({ count: 1, size: pack.size, unit: pack.unit }) +
           '. Workflows can take single ones or ' + (pack.unit === 'g' || pack.unit === 'kg' ? 'grams' : 'mL') + '.'
         : 'One ' + unitWord() + ' holds ' + packText(pack) + '.';
-      if (options.onChange) options.onChange();
     }
-    input.addEventListener('input', function () { edited = input.value.trim() !== ''; update(); });
+    input.addEventListener('input', function () { edited = true; update(); }); // blank by hand stays blank
     (options.watch || []).forEach(function (node) { if (node) { node.addEventListener('input', update); node.addEventListener('change', update); } });
     update();
     handle.attached = true;

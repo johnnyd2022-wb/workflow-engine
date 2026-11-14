@@ -134,6 +134,19 @@ def test_the_record_dialog_takes_a_pack_and_stores_it_on_the_lot(manager, page, 
     }
 
 
+def test_clearing_the_pack_clears_the_cost_hint_and_kg_names_stay_unpacked(manager, page, app_url, db):
+    page.goto(app_url + "/core/inventory/add/manual")
+    page.locator("#add-inventory-name").fill("Juniper 25 kg bag")  # unit is kg: no pack is offered
+    expect(page.locator("#inventory-pack")).to_be_hidden()
+    page.locator("#add-inventory-unit").select_option("units")
+    expect(page.locator("#inventory-pack")).to_have_value("25 kg")
+    page.locator("#add-inventory-quantity").fill("2")
+    page.locator("#cost-total-paid").fill("120")
+    expect(page.locator("#cost-total-paid-hint")).to_have_text("= $60.00 per unit · $2.40 per kg")
+    page.locator("#inventory-pack").fill("")
+    expect(page.locator("#cost-total-paid-hint")).to_have_text("= $60.00 per unit")
+
+
 def test_the_pack_field_does_not_scroll_a_phone_sideways(manager, page, app_url, db):
     """375px: the manual form with the pack field open, and the record dialog as a bottom sheet."""
     page.set_viewport_size({"width": 375, "height": 844})
