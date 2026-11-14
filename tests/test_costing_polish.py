@@ -158,7 +158,6 @@ def test_a_cost_per_unit_built_on_an_estimated_price_says_so(world, db):  # noqa
 def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, db, monkeypatch):  # noqa: F811
     """Review r4: the cost-per-unit pass runs on its own engine; if loading it is over budget the
     list still answers (200) with the same readiness, just without figures."""
-    from app.features.costing import readiness
     from app.features.costing.engine import CostEngine, TooLargeError
 
     org, client = world
@@ -168,20 +167,19 @@ def test_costing_the_list_out_of_budget_leaves_figures_out_not_readiness(world, 
     _gin_batch(db, org, client, juniper, coriander)
     before = {p["key"]: p["ready"] for p in _products(client)}
 
-    class OverBudgetForFigures(CostEngine):
-        made = 0
+    real_own_budget = CostEngine.own_budget
 
-        def __init__(self, *a, **kw):
-            super().__init__(*a, **kw)
-            OverBudgetForFigures.made += 1
-            self.second = OverBudgetForFigures.made >= 2
+    def over_budget_for_figures(self, **kwargs):
+        # The figures pass takes its engine from own_budget(); loading its produced lots is too big.
+        engine = real_own_budget(self, **kwargs)
 
-        def prime(self, ids):
-            if self.second:
-                raise TooLargeError()
-            return super().prime(ids)
+        def too_big(ids):
+            raise TooLargeError()
 
-    monkeypatch.setattr(readiness, "CostEngine", OverBudgetForFigures)
+        engine.prime = too_big
+        return engine
+
+    monkeypatch.setattr(CostEngine, "own_budget", over_budget_for_figures)
     response = client.get("/api/core/costing/readiness")
     assert response.status_code == 200
     products = response.get_json()["products"]
