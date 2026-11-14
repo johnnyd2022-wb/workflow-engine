@@ -36,9 +36,9 @@ def manager(fresh_user, page, db):
         # review !710: thousands commas, multipacks, leading dots, ratios, unit words
         ("100", "1", "units", "Bottle 1,000 mL", "= $100.00 per unit · $100.00 per litre"),
         ("100", "1", "units", "Spirit IBC 1,000 L", "= $100.00 per unit · $0.10 per litre"),
-        ("100", "1", "units", "Tonic 24 x 200ml", "= $100.00 per unit · $20.83 per litre"),
-        ("100", "1", "cases", "Case 6x700ml", "= $100.00 per case · $23.81 per litre"),
-        ("100", "1", "cases", "Gin 700ml x 6", "= $100.00 per case · $23.81 per litre"),
+        ("100", "1", "units", "Tonic 24 x 200ml", "= $100.00 per unit · $4.17 each of 24 · $20.83 per litre"),
+        ("100", "1", "cases", "Case 6x700ml", "= $100.00 per case · $16.67 each of 6 · $23.81 per litre"),
+        ("100", "1", "cases", "Gin 700ml x 6", "= $100.00 per case · $16.67 each of 6 · $23.81 per litre"),
         ("10", "1", "units", "Vodka .5L", "= $10.00 per unit · $20.00 per litre"),
         ("10", "1", "units", "Sugar syrup 650 g/L", "= $10.00 per unit"),
         ("10", "1", "units", "Oil 1,5 L", "= $10.00 per unit · $6.67 per litre"),

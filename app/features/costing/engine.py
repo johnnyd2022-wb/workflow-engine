@@ -33,6 +33,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
+from app.core.utils.packs import breakdown as pack_breakdown
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.modules.nz_alcohol.excise import litres_of as excise_litres
@@ -187,11 +188,16 @@ class CostEngine:
 
         entries = active_entries(self.db, self.org_id, item.id)
         public = cost.unit_known if cost.status in (ACTUAL, ESTIMATED) else None
+        # A multipack lot ("24 × 200 mL" a case) breaks its price down per bottle and per litre.
+        split = pack_breakdown(public, item) if public is not None else None
         return {
             "inventory_item_id": str(item.id),
             "name": item.name,
             "unit": item.unit,
             "unit_cost": unit_str(public),
+            "pack_breakdown": (
+                {k: unit_str(v) if isinstance(v, Decimal) else v for k, v in split.items()} if split else None
+            ),
             "known_unit_cost": unit_str(cost.unit_known),
             "status": cost.status,
             "source": cost.source,

@@ -232,15 +232,29 @@
 
       // Live cost (8.1e-2): "Total paid" for people who may enter cost; nothing for anyone else.
       var costField = { value: function () { return null; } };
+      // Pack size: what one unit holds ("24 × 200 mL"), for everyone adding counted stock.
+      var packField = { value: function () { return null; }, text: function () { return ''; } };
       function attachCost() {
         var unitSel = document.getElementById('add-inventory-unit');
         var qtyInput = document.getElementById('add-inventory-quantity');
+        var nameInput = document.getElementById('add-inventory-name');
         if (!unitSel || !window.BizECost || costField.attached) return;
-        costField = window.BizECost.totalPaidField(unitSel.closest('div'), {
+        if (!packField.attached) {
+          packField = window.BizECost.packField(unitSel.closest('div'), {
+            unit: function () { return unitSel.value; },
+            name: function () { return nameInput ? nameInput.value : ''; },
+            watch: [unitSel, nameInput],
+            labelClass: 'spa-field-label',
+            inputClass: 'spa-inp',
+            onChange: function () { if (costField.refresh) costField.refresh(); },
+          });
+        }
+        costField = window.BizECost.totalPaidField(packField.input ? packField.input.closest('div') : unitSel.closest('div'), {
           quantity: function () { return qtyInput.value; },
           unit: function () { return unitSel.value; },
-          name: function () { var n = document.getElementById('add-inventory-name'); return n ? n.value : ''; },
-          watch: [qtyInput, unitSel, document.getElementById('add-inventory-name')],
+          name: function () { return nameInput ? nameInput.value : ''; },
+          pack: function () { return packField.text(); },
+          watch: [qtyInput, unitSel, nameInput, packField.input],
           labelClass: 'spa-field-label',
           inputClass: 'spa-inp',
         });
@@ -320,6 +334,12 @@
           return false;
         }
         if (paid != null) payload.total_paid = paid;
+        var pack = packField.value();
+        if (pack === false) {
+          window.showNotification && window.showNotification('error', 'Check pack size', 'Write the pack size like 24 × 200 mL, 700 mL or 25 kg, or leave it blank.');
+          return false;
+        }
+        if (pack && invType !== 'work_in_progress' && invType !== 'final_product') payload.pack = pack;
 
         try {
           if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
@@ -337,6 +357,7 @@
           window.showNotification && window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');
 
           this.reset();
+          if (packField.clear) packField.clear();
 
           try {
             var sp = new URLSearchParams(window.location.search);

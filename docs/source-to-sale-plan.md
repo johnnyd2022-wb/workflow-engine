@@ -1243,6 +1243,14 @@ missing; never a silent $0.
     the walk from Xero cost of sales to Biz-E's, closing stock export.
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
     spread into batch cost.
+  - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on
+    manual, barcode, CSV and the Purchases record dialog. Steps use the lot in their own units
+    (bottles, mL, g, pieces) and take the right share; cost breaks down per case, bottle and litre
+    on the lot panel and Add Inventory hint. Spec `.agents/specs/live-cogs-packs.md`. (!MRNUM)
+  - [x] i. **Multipacks.** An optional pack on the lot ("24 x 200 mL", "25 kg", "500 pcs"),
+    entered on every Add Inventory path and the Purchases record dialog, lets a step use a case
+    by the bottle, mL or g and cost the right share; the lot cost panel breaks the price per
+    bottle and per litre. Spec `.agents/specs/live-cogs-packs.md`. (!MR)
   - Done when: a producer connects Xero, works through the Purchases page once, and every
     batch shows a cost per bottle that is either complete or names what's missing, and
     stays right when a purchase is recorded late or changed in Xero.

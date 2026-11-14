@@ -17,7 +17,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason
-from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.core.utils.packs import convert_for_lot
 from app.features.costing.flows import add_key, consume_key, create_key, created_kind, insert_flow
 
 
@@ -33,11 +33,9 @@ def _in_lot_unit(quantity: Decimal, unit: str | None, lot: InventoryItem) -> Dec
     lot_unit = lot.unit or ""
     if not (unit or "").strip() or (unit or "").strip().lower() == lot_unit.strip().lower():
         return quantity
-    if not are_units_compatible(unit, lot_unit):
-        return None
     try:
-        return convert_to_inventory_unit_decimal(quantity, unit, lot_unit)
-    except (ValueError, InvalidOperation):
+        return convert_for_lot(quantity, unit, lot)  # through the lot's pack when it has one
+    except (ValueError, InvalidOperation, ZeroDivisionError):
         return None
 
 
