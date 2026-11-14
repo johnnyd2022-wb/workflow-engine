@@ -15,6 +15,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.utils.packs import COUNTED_UNITS, PACK_KEY, clean_pack, describe_pack, lot_pack, parse_pack
 from app.core.utils.time import utc_now
 from app.features.costing.models import (
     DIRECT_KINDS,
@@ -223,6 +224,10 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
             raise CostingError("Each row needs a name and a unit")
         if inventory_type not in RECORDABLE_TYPES:
             raise CostingError("inventory_type must be raw_material or final_product")
+        try:
+            pack = clean_pack(row.get("pack"))  # "24 x 200 mL": lets steps use the case by the bottle
+        except ValueError as error:
+            raise CostingError(str(error)) from None
         parsed.append(
             (
                 row,
@@ -231,6 +236,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
                 inventory_type,
                 parse_amount(row.get("quantity"), "Quantity", allow_zero=False),
                 parse_amount(row.get("amount"), "Amount", allow_zero=True),
+                pack,
             )
         )
     total = sum((p[5] for p in parsed), ZERO)
@@ -238,7 +244,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
         raise CostingError(f"Rows total {total}, more than the {remaining} left on this purchase")
 
     repo = InventoryRepository(db)
-    for row, name, unit, inventory_type, quantity, amount in parsed:
+    for row, name, unit, inventory_type, quantity, amount, pack in parsed:
         try:
             item = repo.create_inventory_item(
                 org_id=org_id,
@@ -252,6 +258,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
                 expiry_date=_date(row.get("expiry_date")),
                 location_id=_uuid(row.get("location_id")) if row.get("location_id") else None,
                 site_id=_uuid(row.get("site_id")) if row.get("site_id") else None,
+                extra_data={PACK_KEY: pack} if pack else None,
                 commit=False,
             )
         except ValueError as error:
@@ -274,6 +281,14 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
     derive_state(db, line)
     db.flush()
     return line
+
+
+def _pack_suggestion(name, unit) -> str | None:
+    """A pack read from the item's name ("Tonic 24 x 200ml"), offered for counted stock only. The
+    person confirms or edits it in the record dialog; nothing is stored until they save."""
+    if unit and str(unit).strip().lower() not in COUNTED_UNITS:
+        return None
+    return describe_pack(parse_pack(name))
 
 
 def _date(raw) -> date | None:
@@ -1008,6 +1023,7 @@ def prefill(
                     "unit": t["unit"],
                     "quantity": quantity,
                     "amount": str(_q(amount)),
+                    "pack": _pack_suggestion(t["name"], t["unit"]),
                     "ask": _ask_flags(t),
                 }
             )
@@ -1043,6 +1059,7 @@ def prefill(
                         "unit": item.unit,
                         "quantity": str(_d(a.quantity)),
                         "amount": str(_q(amount)),
+                        "pack": describe_pack(lot_pack(item)) or _pack_suggestion(item.name, item.unit),
                         "ask": [],
                     }
                 )
@@ -1063,6 +1080,7 @@ def prefill(
                 "unit": None,
                 "quantity": None if quantity is None else str(quantity),
                 "amount": str(_q(remaining)),
+                "pack": _pack_suggestion(name, None),
                 "ask": (["unit"] if name else ["name", "unit"])
                 if quantity is not None
                 else ["name", "unit", "quantity"],

@@ -42,7 +42,7 @@ from app.core.security.permissions import requires_auth
 from app.core.services.lot_holds import LotOnHoldError
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
-from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.core.utils.packs import can_convert_for_lot, convert_for_lot, settle_take
 from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.observability import get_logger
 
@@ -821,7 +821,8 @@ def register_routes(
                                 conversion_failed = True
                                 break
                             if consumed_unit and inventory_unit:
-                                if not are_units_compatible(consumed_unit, inventory_unit):
+                                # A pack ("24 x 200 mL") lets a step use a lot of cases in bottles or mL.
+                                if not can_convert_for_lot(consumed_unit, inventory_item):
                                     execution_errors.append(
                                         f"Cannot consume {quantity_consumed} {consumed_unit} from inventory "
                                         f"item {item_id_str} (unit: {inventory_unit}): units are incompatible"
@@ -830,9 +831,7 @@ def register_routes(
                                     break
                                 try:
                                     qty_decimal = Decimal(str(quantity_consumed))
-                                    converted = convert_to_inventory_unit_decimal(
-                                        qty_decimal, consumed_unit, inventory_unit
-                                    )
+                                    converted = convert_for_lot(qty_decimal, consumed_unit, inventory_item)
                                 except (ValueError, InvalidOperation) as conv_error:
                                     execution_errors.append(
                                         f"Failed to convert {quantity_consumed} {consumed_unit} to {inventory_unit}: {conv_error}"
@@ -852,6 +851,9 @@ def register_routes(
 
                         if conversion_failed:
                             continue
+                        # Multipacks: leave a whole number of bottles, so storage rounding of
+                        # 1/24 of a case never strands the last one (packs.settle_take).
+                        total_converted = settle_take(current_quantity, total_converted, inventory_item)
                         if total_converted > current_quantity:
                             execution_errors.append(
                                 f"Total quantity requested for inventory item (batch) exceeds available: "

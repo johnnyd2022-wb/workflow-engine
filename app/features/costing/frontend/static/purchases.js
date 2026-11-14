@@ -415,18 +415,21 @@
         var amount = input('text', cents(r.amount), { inputmode: 'decimal', 'aria-label': 'Amount', placeholder: 'the rest' });
         var batch = input('text', '', { 'aria-label': 'Supplier batch number' });
         var expiry = input('date', '', { 'aria-label': 'Expiry date' });
+        var pack = input('text', r.pack || '', { 'aria-label': 'Pack size', placeholder: '24 × 200 mL', autocomplete: 'off' });
         box.appendChild(field('What', name));
         box.appendChild(field('Quantity', qty));
         box.appendChild(field('Unit', unit));
         box.appendChild(field('Amount', amount));
         box.appendChild(field('Batch no.', batch));
         box.appendChild(field('Expiry', expiry));
+        box.appendChild(field('Pack size', pack));
         if ((r.ask || []).indexOf('batch_number') >= 0) batch.required = true;
         box.read = function () {
           return {
             name: name.value.trim(), quantity: qty.value.trim(), unit: unit.value.trim(), amount: amount.value.trim(),
             inventory_type: r.inventory_type || 'raw_material',
-            supplier_batch_number: batch.value.trim() || undefined, expiry_date: expiry.value || undefined
+            supplier_batch_number: batch.value.trim() || undefined, expiry_date: expiry.value || undefined,
+            pack: pack.value.trim() || undefined
           };
         };
         amount.addEventListener('input', updateSum);
