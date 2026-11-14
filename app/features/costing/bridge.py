@@ -24,7 +24,7 @@ from app.features.costing.models import (
     StockValueMovement,
     StockValueSnapshot,
 )
-from app.features.costing.service import CostingError
+from app.features.costing.service import CostingError, get_settings
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -242,6 +242,7 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
         .all()
     )
     totals: dict = defaultdict(lambda: ZERO)
+    absorbed = {"batch": ZERO, "freight": ZERO}  # 8.1h: overhead taken into stock, by where it came from
     ids = [s.id for s in between]
     if ids:
         movements = (
@@ -251,6 +252,9 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
         )
         for movement in movements:
             totals[movement.kind] += Decimal(str(movement.value))
+            if movement.kind == "overhead_absorbed":
+                source = "freight" if movement.inventory_item_id is not None else "batch"
+                absorbed[source] += Decimal(str(movement.value))
     purchases = totals["purchase"]
     o, c = Decimal(str(opening.total_value)), Decimal(str(closing.total_value))
     components = {
@@ -262,7 +266,12 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
         "estimate_changes": -(totals["revaluation"] + totals["added_other"]),
         "other": -(totals["transfer"] + totals["rounding"]),
     }
-    return {
+    # Overhead taken into stock (a batch's rent and labour, freight on a purchase) shows only for an org
+    # that has opted in to overheads (or already holds such movements): off, the roll-forward is 8.1g's.
+    show_overhead = bool(totals["overhead_absorbed"]) or bool(get_settings(db, org_id).get("include_overheads"))
+    if show_overhead:
+        components["overhead_absorbed"] = -totals["overhead_absorbed"]
+    out = {
         "opening": money(o),
         "purchases": money(purchases),
         "closing": money(c),
@@ -272,6 +281,13 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
         "rounding": money(totals["rounding"]),
         "balanced": abs(totals["rounding"]) <= Decimal("0.01"),
     }
+    if show_overhead:
+        out["absorbed"] = {
+            "batch": money(absorbed["batch"]),
+            "freight": money(absorbed["freight"]),
+            "total": money(absorbed["batch"] + absorbed["freight"]),
+        }
+    return out
 
 
 def build_bridge(
@@ -282,12 +298,14 @@ def build_bridge(
     if opening.cutoff_at >= closing.cutoff_at:
         raise CostingError("The first snapshot must be earlier than the second")
     start, end = opening.as_of_date + timedelta(days=1), closing.as_of_date
+    roll_forward = _roll_forward(db, org_id, opening, closing)
+    absorbed = roll_forward.pop("absorbed", None)
     body = {
         "state": "ok",
         "from": stock_value.snapshot_header(opening),
         "to": stock_value.snapshot_header(closing),
         "period": {"from": start.isoformat(), "to": end.isoformat()},
-        "roll_forward": _roll_forward(db, org_id, opening, closing),
+        "roll_forward": roll_forward,
         "changes_since_close": stock_value.changes_since_close(db, org_id, closing),
         "tie_out": None,
     }
@@ -305,4 +323,6 @@ def build_bridge(
             body["tie_out"] = tie
     body["duty"] = _duty(db, org_id, start, end, xero_total_duty)
     body["overhead"] = {"xero_total": money(xero_total_overhead) if xero_total_overhead is not None else None}
+    if absorbed is not None:
+        body["overhead"]["absorbed"] = absorbed
     return body

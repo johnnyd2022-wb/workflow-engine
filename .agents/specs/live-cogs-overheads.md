@@ -31,6 +31,8 @@ and posting anything to Xero. See "Assumptions".
 
 - `costing_settings.include_overheads BOOLEAN NOT NULL DEFAULT false`.
 - `purchase_lines.freight BOOLEAN NOT NULL DEFAULT false` — the user marked this line as freight.
+- `stock_value_movements.kind` (8.1g) gains `overhead_absorbed` (its check constraint is widened; downgrade
+  refuses while one is stored).
 - `overhead_rates` (`TenantScoped`, `UniqueConstraint(org_id, id)`):
 
 | Column | Notes |
@@ -176,6 +178,7 @@ IDs are prefixed `OV` so they can't collide with the AC numbers other 8.1 builds
 | OV15 | Margins carry materials and overhead cost | `test_ac_ov15_margins_show_the_split` |
 | OV16 | Isolation and permissions: feature off 404, other org's rate 404, viewer can't write | `test_ac_ov16_tenant_isolation_and_permissions` |
 | OV17 | Migration adds the columns and table, reversible | `test_ac_ov17_migration_shape` |
+| OV20 | The bridge's roll-forward shows absorbed overhead as its own component and stays balanced; off, it is 8.1g's | `test_ac_ov20_*` (`tests/test_costing_overheads_bridge.py`) |
 | OV19 | Pricing many batches together costs no query per batch | `test_ac_ov19_primed_costs_do_not_query_per_batch` |
 | OV18 | Browser: turn on, add a rate, see the split on the batch card and lot panel at phone width | `tests/e2e/test_costing_overheads_browser.py` |
 
@@ -191,6 +194,10 @@ IDs are prefixed `OV` so they can't collide with the AC numbers other 8.1 builds
 - ASSUMPTION H4: freight shows as overhead in the split (it is not material). Its lot status is unchanged.
 - ASSUMPTION H5: an unmeasurable per-litre rate makes the batch partial rather than being
   guessed or skipped silently.
-- Follow-up (8.1g, stock value / P&L bridge): absorbed overhead (batch rates and freight) is part
-  of a lot's value, so the bridge should compare "overhead absorbed into stock" with Xero's
-  overhead spend instead of treating all overhead spend as unabsorbed. Not built here.
+- ASSUMPTION H6 (with 8.1g, stock value and the Xero bridge): overhead taken into stock is part of
+  a lot's value, so the roll-forward shows it as its own component, **overhead_absorbed**, instead of a
+  negative production loss (a batch's rent and labour) or an estimate change (freight on a purchase).
+  It is a stored movement kind (so a closed month stays fixed), shown only for an org that has opted
+  in. The batch pool the stock value carries stays materials only. The bridge's Xero overhead total
+  is untouched and now sits beside `absorbed: {batch, freight, total}`. Overhead spend not absorbed
+  (rent paid but no batch finished) simply isn't in stock, so it needs no line.

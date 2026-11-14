@@ -28,7 +28,7 @@ from app.core.db.models.inventory_movement import InventoryMovement, InventoryMo
 from app.core.db.models.process import Process
 from app.core.utils.time import utc_now
 from app.core.utils.unit_conversion import convert_to_inventory_unit_decimal
-from app.features.costing import FEATURE_KEY, purchase_sources
+from app.features.costing import FEATURE_KEY, overheads, purchase_sources
 from app.features.costing.engine import (
     ACTUAL,
     ESTIMATED,
@@ -224,10 +224,35 @@ class _Pricer:
                         continue
                     allocation = step.alloc.get(flow.id)
                     if allocation is not None:
-                        known -= allocation.known
+                        # What the batch took in overheads (8.1h) is not a cost the pool carried, so it
+                        # is not part of what an output absorbed from it: the pool stays materials.
+                        known -= allocation.known - self._new_overhead(step, allocation)
             return known, status
         except TooLargeError:
             return ZERO, PARTIAL
+
+    @staticmethod
+    def _new_overhead(step, allocation) -> Decimal:
+        return ZERO if step.overhead is None else step.overhead.amount * allocation.weight
+
+    def absorbed(self, execution_id: UUID, start: datetime, end: datetime) -> Decimal:
+        """Overheads (8.1h) the batch took into stock in [start, end): its outputs' share of what the
+        batch added at completion, by when each output was made."""
+        engine = self.engine
+        try:
+            info = engine._info(execution_id)
+            if info is None:
+                return ZERO
+            total = ZERO
+            for position in range(len(info.steps)):
+                step = engine._solve(("step", execution_id, position))
+                for flow in info.outs.get(position, []):
+                    allocation = step.alloc.get(flow.id)
+                    if allocation is not None and start <= flow.created_at < end:
+                        total += self._new_overhead(step, allocation)
+            return total
+        except TooLargeError:
+            return ZERO
 
 
 # --- as at a cutoff -----------------------------------------------------------------------------------
@@ -709,6 +734,11 @@ def compute_movements(
         else {}
     )
     pricer = current.pricer or _Pricer(db, org_id, lot_ids)
+    freight: dict[UUID, Decimal] = defaultdict(lambda: ZERO)  # freight spread onto each lot's purchases (8.1h)
+    if pricer.engine.include_overheads:
+        spread = overheads.freight_shares(db, org_id, [a for a, _line, _doc in allocations])
+        for allocation, _line, _doc in allocations:
+            freight[allocation.inventory_item_id] += spread.get(allocation.id, ZERO)
     rows: list[_Movement] = []
 
     def add(kind, value, item=None, quantity=ZERO, unit_cost=None, execution_id=None, name=None):
@@ -756,7 +786,10 @@ def compute_movements(
         if paid:
             add("purchase", paid, item, ZERO, u1)
         if direct or paid:
-            add("added_other", direct * u1 - paid, item, direct, u1)
+            landed = freight.get(item_id, ZERO)
+            add("added_other", direct * u1 - paid - landed, item, direct, u1)
+            if landed:
+                add("overhead_absorbed", landed, item, ZERO, u1)
 
     # batches: pools carried across the window, and what a finished batch leaves unabsorbed
     open_then = {
@@ -783,6 +816,9 @@ def compute_movements(
         loss = (ZERO if is_open else pool_now) - (ZERO if was_open else pool_then)
         if loss:
             add("production_loss", -loss, execution_id=execution_id, name="Batch")
+        taken = pricer.absorbed(execution_id, start, end)
+        if taken:
+            add("overhead_absorbed", taken, execution_id=execution_id, name="Batch overheads")
     return rows
 
 

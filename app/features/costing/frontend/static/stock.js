@@ -7,7 +7,7 @@
   var COMPONENTS = [
     ['cogs', 'Sold (cost of goods sold)'], ['wastage', 'Wasted'], ['samples', 'Samples and tastings'],
     ['variance', 'Stock corrections'], ['production_loss', 'Lost in production'],
-    ['estimate_changes', 'Cost changes and estimates'], ['other', 'Other'],
+    ['estimate_changes', 'Cost changes and estimates'], ['overhead_absorbed', 'Overheads added to stock'], ['other', 'Other'],
   ];
 
   function el(tag, className, text) {
@@ -187,7 +187,7 @@
       var lines = el('ul', 'co-bridge__lines');
       COMPONENTS.forEach(function (c) {
         var value = r.components[c[0]];
-        if (Number(value) === 0 && c[0] !== 'cogs') return;
+        if (value == null || (Number(value) === 0 && c[0] !== 'cogs')) return; // overhead_absorbed exists only for an org that opted in
         var li = el('li');
         li.appendChild(el('span', '', c[1]));
         li.appendChild(el('span', '', $(value)));

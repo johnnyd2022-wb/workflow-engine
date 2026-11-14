@@ -15,12 +15,15 @@ import pytest
 
 from tests.costing_helpers import D, complete, lot, new_org, price, purge, user_client, workflow
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
+from tests.test_costing_allocations import _record, _row
 from tests.test_costing_bridge import bridge, snap
 from tests.test_costing_overheads import _rate, _switch
-from tests.test_costing_overheads_freight import _bill, _lot_id
-from tests.test_costing_allocations import _record, _row
+from tests.test_costing_overheads_freight import (
+    JUNIPER_AND_CORIANDER,  # noqa: F401
+    _bill,
+    _lot_id,
+)
 from tests.test_costing_purchases import FakeXero, connect
-from tests.test_costing_overheads_freight import JUNIPER_AND_CORIANDER  # noqa: F401
 
 OPENING, CLOSING = date(2026, 10, 31), date(2026, 11, 30)
 

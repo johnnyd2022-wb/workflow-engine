@@ -426,6 +426,7 @@ MOVEMENT_KINDS = (
     "revaluation",
     "added_other",
     "rounding",
+    "overhead_absorbed",  # 8.1h: overhead (a batch's rent and labour, freight) taken into stock
 )
 
 
@@ -565,7 +566,7 @@ class StockValueMovement(TenantScoped, Base):
         ),
         CheckConstraint(
             "kind IN ('purchase','sale','sample','wastage','variance','transfer','production_loss',"
-            "'revaluation','added_other','rounding')",
+            "'revaluation','added_other','rounding','overhead_absorbed')",
             name="ck_stock_value_movements_kind",
         ),
         Index("ix_stock_value_movements_snapshot", "org_id", "snapshot_id", "kind"),
