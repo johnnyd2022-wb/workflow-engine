@@ -1239,8 +1239,11 @@ missing; never a silent $0.
     typed (!707); batches open by link, finished ones read-only (!708); pack-size price hint
     (!710). Open question, not built: "paid for by" on Add Inventory (see
     `.agents/plans/live-cogs-polish.md`).
-  - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
-    the walk from Xero cost of sales to Biz-E's, closing stock export.
+  - [x] g. **Stock value and the Xero bridge** (spec Phase 3). Stock value on the Costs page
+    (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
+    month-end snapshots taken on the first Xero sync (or costing read, with no Xero) after a
+    month ends and held fixed, the walk from Xero's stock accounts and Biz-E's stock roll-forward,
+    closing stock CSV. (!MR)
   - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
     spread into batch cost.
   - Done when: a producer connects Xero, works through the Purchases page once, and every

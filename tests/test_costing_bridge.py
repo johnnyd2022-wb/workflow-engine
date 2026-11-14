@@ -428,3 +428,24 @@ def test_ac145_permissions_isolation_and_a_token_without_the_report_scope(world,
     failed = client.get(f"{API}/bridge").get_json()
     assert failed["xero"]["state"] == "failed" and failed["xero"]["ref"]
     assert "SELECT" not in str(failed) and failed["roll_forward"]["balanced"] is True
+
+
+def test_ac145_duty_is_compared_when_tracked_and_the_period_is_whole_months(plain, db, monkeypatch):
+    from app.features.costing import margins
+
+    org, client = plain
+    lot(db, org.id, "Juniper", 4, "kg")
+    first, second = snap(db, org, OPENING), snap(db, org, CLOSING)
+    monkeypatch.setattr("app.features.compliant.service.nz_alcohol_active", lambda *_: True)
+    seen = {}
+
+    def report(_db, _org, start, end):
+        seen["months"] = (start, end)
+        return {"rows": [{"duty": "12.50"}, {"duty": "7.50"}]}
+
+    monkeypatch.setattr(margins, "report", report)
+
+    duty = bridge(client, first, second)["duty"]
+
+    assert duty["tracked"] is True and D(duty["computed"]) == D("20")
+    assert seen["months"] == (date(2026, 11, 1), date(2026, 11, 1))

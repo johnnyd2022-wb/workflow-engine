@@ -179,7 +179,8 @@
         box.appendChild(el('p', 'cost-muted', 'The comparison needs two snapshots.'));
         return;
       }
-      box.appendChild(el('h4', '', 'What left stock, ' + day(b.period.from) + ' to ' + day(b.period.to)));
+      box.appendChild(el('h4', '', (b.xero && b.xero.state === 'same_day') ? 'What left stock between the two snapshots'
+        : 'What left stock, ' + day(b.period.from) + ' to ' + day(b.period.to)));
       var r = b.roll_forward;
       box.appendChild(kv([['Opening stock', $(r.opening)], ['Bought into stock', $(r.purchases)], ['Closing stock', $(r.closing)],
         ['Cost that left stock', $(r.cost_left), true]]));
