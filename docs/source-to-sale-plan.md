@@ -1237,7 +1237,8 @@ missing; never a silent $0.
     switch-on command `workflow costing enable` (!696). Polish: costing settings sheet, cost per
     unit on the Costs list, cents suggestions, CSV money formats (!705); rules keep payees as
     typed (!707); batches open by link, finished ones read-only (!708); pack-size price hint
-    (!710). Open question, not built: "paid for by" on Add Inventory (see
+    (!710); readiness costed on a budget per product after an overflow, "Remember this" keeps
+    the typed payee, costing settings read once per request (!712). Open question, not built: "paid for by" on Add Inventory (see
     `.agents/plans/live-cogs-polish.md`).
   - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
     the walk from Xero cost of sales to Biz-E's, closing stock export.

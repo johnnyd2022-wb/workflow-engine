@@ -150,19 +150,32 @@ def _material_lots(graph: _Graph, execution_id) -> list:
     return list(lots)
 
 
-def _lot_rows(lot_ids, engine: CostEngine, cache: dict | None = None) -> list[dict]:
-    """``cache``: one lot's cost, worked out once for every product that used it."""
+def _lot_rows(lot_ids, engine: CostEngine, cache: dict | None = None, *, raise_when_spent: bool = False) -> list[dict]:
+    """The material rows for one product.
+
+    ``cache``: one lot's cost, worked out once for every product that used it. A lot the engine ran
+    out of budget on is never put in it: whether a lot fits depends on the budget it was costed
+    under, so the next product must find that out for itself.
+    ``raise_when_spent``: raise ``TooLargeError`` for such a lot instead of returning it as unknown,
+    so the caller can cost this product again on a budget of its own.
+    """
     cache = {} if cache is None else cache
     rows = []
     for item_id in lot_ids:
         if item_id not in cache:
             cost = engine.lot(item_id)
-            cache[item_id] = {
+            row = {
                 "name": cost["name"],
                 "inventory_item_id": str(item_id),
                 "costed": cost["status"] in (ACTUAL, ESTIMATED),
                 "status": cost["status"],
             }
+            if "too_large" in cost["warnings"]:
+                if raise_when_spent:
+                    raise TooLargeError()
+                rows.append(row)  # costed on a budget of its own and still too big: unknown, as its page says
+                continue
+            cache[item_id] = row
         rows.append(dict(cache[item_id]))
     return sorted(rows, key=lambda r: (r["name"] or "", r["inventory_item_id"]))
 
@@ -213,11 +226,21 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     names |= {norm for declared_names in declared.values() for norm in declared_names}
     engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
     lot_rows_cache: dict = {}
+    shared = True  # until the shared engine's budget runs out
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)
         if execution_id is not None:
-            basis, materials = "latest_batch", _lot_rows(lots_by_key[key], engine, lot_rows_cache)
+            basis, materials = "latest_batch", None
+            if shared:
+                try:
+                    materials = _lot_rows(lots_by_key[key], engine, lot_rows_cache, raise_when_spent=True)
+                except TooLargeError:
+                    # The shared budget is spent: this product and every later one gets a budget of
+                    # its own (over what's loaded), so each reads as its own page does.
+                    shared = False
+            if materials is None:
+                materials = _lot_rows(lots_by_key[key], engine.own_budget(), None)
         elif key in declared:
             basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
         else:
@@ -232,18 +255,6 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
         }
     _add_unit_costs(db, org_id, out, latest, engine)
     return out
-
-
-_LOADED_CACHES = ("_lots", "_in_flow_cache", "_entry_cache", "_allocation_cache", "_transfer_cache", "_exec_info")
-
-
-def _own_budget(loaded: CostEngine, db: Session, org_id: UUID) -> CostEngine:
-    """A fresh engine (its own work and node budgets) over another engine's loaded rows."""
-    engine = CostEngine(db, org_id)
-    for cache in _LOADED_CACHES:
-        setattr(engine, cache, getattr(loaded, cache))
-    engine._materials = loaded._materials
-    return engine
 
 
 def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: CostEngine) -> None:
@@ -269,7 +280,7 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
         produced_by_batch[execution_id].append(item_id)
     # What readiness already loaded is reused (no query twice); the work and node budgets are this
     # engine's own, so these figures can't eat into readiness's.
-    engine = _own_budget(loaded, db, org_id)
+    engine = loaded.own_budget()
     try:
         engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
     except TooLargeError:
@@ -279,14 +290,14 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
         lots = produced_by_batch.get(execution_id, [])
         try:
             try:
-                figure = _latest_unit_cost(engine if shared else _own_budget(engine, db, org_id), lots, key)
+                figure = _latest_unit_cost(engine if shared else engine.own_budget(), lots, key)
             except TooLargeError:
                 if not shared:
                     raise
                 # The shared budget is spent: this product and every later one gets an engine of
                 # its own (reusing what's loaded), so each shows what its own page shows.
                 shared = False
-                figure = _latest_unit_cost(_own_budget(engine, db, org_id), lots, key)
+                figure = _latest_unit_cost(engine.own_budget(), lots, key)
         except TooLargeError:
             figure = {}
         out[key].update(figure)
