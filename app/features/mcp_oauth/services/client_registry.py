@@ -236,7 +236,7 @@ def http_get_pinned(url: str, *, ip: str, hostname: str, timeout: float, max_byt
         assert_hostname=hostname,
         cert_reqs="CERT_REQUIRED",
         ca_certs=certifi.where(),
-        timeout=urllib3.Timeout(connect=timeout, read=timeout),
+        timeout=urllib3.Timeout(total=timeout),
         retries=False,
     )
     try:
@@ -250,7 +250,12 @@ def http_get_pinned(url: str, *, ip: str, hostname: str, timeout: float, max_byt
         )
         try:
             body = b""
-            for chunk in response.stream(8192):
+            while True:
+                # read1 returns what has arrived instead of waiting to fill a buffer, so the
+                # deadline below is checked after every bit of data, not only after 8 KB.
+                chunk = response.read1(8192, decode_content=False)
+                if not chunk:
+                    break
                 body += chunk
                 if len(body) > max_bytes:
                     raise ClientError("invalid_client", "The client metadata document is too large")
@@ -336,6 +341,7 @@ def lookup_client(db, client_id, *, now: datetime | None = None) -> OAuthClient:
         return row
     if row is not None and (row.registration != REGISTRATION_METADATA_URL or _fresh(row, now)):
         return row
+    db.commit()  # do not hold a transaction (and its pooled connection) open across the network call
     document = fetch_client_metadata(client_id)  # raises when the URL is refused or unreachable
     if row is None:
         row = OAuthClient(

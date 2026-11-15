@@ -158,6 +158,7 @@ def exchange_code(db, form) -> Issued:
             raise invalid
         if (
             grant.revoked_at is not None
+            or client.disabled_at is not None
             or grant.client_pk != client.id
             or row.expires_at <= now
             or redirect_uri != row.redirect_uri
@@ -193,10 +194,15 @@ def refresh(db, form) -> Issued:
             db.rollback()
             raise invalid
         if token.revoked_at is not None:
-            # A rotated-out refresh token coming back: someone has a copy. End the connection.
-            revoke(db, repo, grant, "refresh_reuse", now)
+            if token.replaced_by_id is not None:
+                # A rotated-out refresh token coming back: someone has a copy. End the connection.
+                revoke(db, repo, grant, "refresh_reuse", now)
+            else:
+                # Revoked by a reconnection (M2), not by rotation: that device is simply signed out.
+                # Not a theft signal, so the newer connection stays.
+                db.rollback()
             raise invalid
-        if grant.revoked_at is not None or token.expires_at <= now:
+        if grant.revoked_at is not None or client.disabled_at is not None or token.expires_at <= now:
             db.rollback()
             raise invalid
         if resource is not None and resource != grant.resource:

@@ -142,6 +142,10 @@ def _login_redirect():
 @limiter.limit("60 per minute", key_func=get_remote_address)
 def authorize():
     db = db_session()
+    if g.current_user is None and authorization.needs_metadata_fetch(db, request.args.get("client_id")):
+        # A stranger must not be able to make this server fetch a URL of their choosing: an unknown
+        # metadata-URL client is only looked up after someone has signed in.
+        return _login_redirect()
     try:
         req = authorization.parse_authorize(db, request.args)
     except authorization.PageError as err:

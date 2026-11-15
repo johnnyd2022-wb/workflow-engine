@@ -98,6 +98,14 @@ def append_query(uri: str, params: dict[str, str]) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
 
 
+def needs_metadata_fetch(db, client_id) -> bool:
+    """True for an https client_id we would have to fetch (no usable cached row yet)."""
+    if not isinstance(client_id, str) or not client_id.startswith("https://") or len(client_id) > 2000:
+        return False
+    row = db.query(OAuthClient).filter(OAuthClient.client_id == client_id).one_or_none()
+    return row is None or (row.registration == "metadata_url" and not client_registry._fresh(row, datetime.now(UTC)))
+
+
 def parse_authorize(db, args) -> AuthorizeRequest:
     """Validate an authorization request (query string or consent form). Raises the two errors above."""
     resource_expected = config.mcp_resource
@@ -171,6 +179,12 @@ def approve(db, user, req: AuthorizeRequest) -> str:
     repo = GrantRepository(db)
     org_id = user.org_id
     grant = repo.get_live_grant(org_id, user.id, req.client.id)
+    if grant is not None and grant.auth_stamp != auth_stamp(user.password_hash):
+        # The password changed since this connection was made. It is over: do not revive its tokens
+        # by refreshing the stamp in place; start a fresh grant.
+        repo.revoke_grant(org_id, grant.id, "password_changed", now)
+        db.flush()
+        grant = None
     if grant is None:
         grant = OAuthGrant(
             org_id=org_id,

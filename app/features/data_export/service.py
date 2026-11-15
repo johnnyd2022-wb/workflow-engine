@@ -45,6 +45,8 @@ EXCLUDED_TABLES: dict[str, str] = {
     "system_findings_cache": "a cache of computed notifications, rebuilt from the other records",
     "admin_org_notes": "Biz-E staff's internal account notes",
     "admin_org_documents": "Biz-E staff's internal account documents",
+    "oauth_tokens": "AI assistant access and refresh token hashes (secrets)",
+    "oauth_authorization_codes": "AI assistant sign-in code hashes (secrets)",
 }
 
 # Tables with no org_id: either the organisation itself (exported, filtered by id) or
@@ -52,6 +54,7 @@ EXCLUDED_TABLES: dict[str, str] = {
 ORG_TABLE = "organisations"
 NON_TENANT_TABLES: dict[str, str] = {
     "customers": "legacy table with no organisation; holds no business's records",
+    "oauth_clients": "registered AI assistant apps, shared by every organisation; holds no business's records",
 }
 
 # Columns dropped from an exported table: secrets and duplicate-request internals.
@@ -70,10 +73,12 @@ EXCLUDED_COLUMNS: dict[tuple[str, str], str] = {
     ("tastings", "dispatch_key"): "internal",
     ("tastings", "dispatch_hash"): "internal",
     ("tastings", "finalise_hash"): "internal",
+    ("oauth_grants", "auth_stamp"): "secret",
 }
 
 # Columns whose names look secret but hold ordinary business data.
 SAFE_LOOKING_SECRET: dict[tuple[str, str], str] = {
+    ("mcp_allowed_roles", "role_key"): "which role may connect an AI assistant (a role name, not a secret)",
     ("cost_flows", "source_key"): "which stock write a cost movement came from",
     ("purchase_lines", "fingerprint"): "a hash of a purchase line's content, to notice edits",
     ("purchase_lines", "line_key"): "which Xero line a purchase line came from",

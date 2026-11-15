@@ -69,9 +69,9 @@ def parse_bearer(header: str | None) -> str | None:
     but is the wrong kind or the wrong shape is *ours to refuse*, so it gets ``invalid_token`` rather
     than being mistaken for no credentials.
     """
-    if not header or not header.startswith("Bearer "):
+    if not header or header[:7].lower() != "bearer ":  # the scheme name is case-insensitive (RFC 7235)
         return None
-    raw = header[len("Bearer ") :].strip()
+    raw = header[7:].strip()
     return raw if raw.startswith((ACCESS_PREFIX, REFRESH_PREFIX, CODE_PREFIX)) else None
 
 
@@ -111,10 +111,12 @@ def authenticate(db, raw: str, *, now: datetime | None = None) -> BearerPrincipa
         repo.touch_last_used(org_id, grant.id, now, now - LAST_USED_RESOLUTION)
         db.commit()
         client = db.query(OAuthClient).filter(OAuthClient.id == grant.client_pk).one_or_none()
+        if client is None or client.disabled_at is not None:
+            raise _invalid("client_disabled")  # the kill switch ends live connections, not just new ones
         return BearerPrincipal(
             user=user,
             org=org,
             grant=grant,
-            client_id=(client.client_id if client else "")[:200],
+            client_id=client.client_id[:200],
             scope=grant.scope,
         )
