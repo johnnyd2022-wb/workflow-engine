@@ -117,7 +117,9 @@ def _capture_and_measure(page, path):
           heading: document.querySelector('h1')?.textContent?.trim() || '',
           sideways: [...document.querySelectorAll('#page-content *')].filter(el => {
             const style = getComputedStyle(el);
-            return el.getClientRects().length &&
+            // The section tab strip scrolls on purpose (edge fade, current tab scrolled into view;
+            // tests/e2e/test_section_tabs_phone.py). Every other inner region must not.
+            return el.getClientRects().length && !el.matches('.section-tabs') &&
               ['auto', 'scroll'].includes(style.overflowX) &&
               el.scrollWidth > el.clientWidth + 2;
           }).map(el => ({
