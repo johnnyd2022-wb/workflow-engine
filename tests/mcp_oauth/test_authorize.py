@@ -362,6 +362,27 @@ def test_the_consent_form_is_csrf_protected(world, flask_app, monkeypatch, db):
     assert db.query(OAuthGrant).filter_by(org_id=world.org.id).count() == 0
 
 
+def test_the_consent_form_works_with_csrf_on_when_it_sends_its_token_and_referer(world, flask_app, monkeypatch):
+    """What the browser does: CSRF is enforced and Flask-WTF also wants a same-origin Referer on HTTPS."""
+    import re
+
+    session, params, resp, _ = _consent_form(world)
+    html = resp.get_data(as_text=True)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+    # The page tells the browser to send the Referer to its own site, and to nobody else.
+    assert resp.headers["Referrer-Policy"] == "same-origin"
+    assert '<meta name="referrer" content="same-origin">' in html
+    monkeypatch.setitem(flask_app.config, "WTF_CSRF_ENABLED", True)
+    posted = session.post(
+        "/oauth/authorize",
+        data={**params, "decision": "approve", "access_level": "read", "csrf_token": token},
+        headers={"Referer": "https://localhost/oauth/authorize"},
+    )
+    assert posted.status_code == 302
+    assert redirect_params(posted)["code"].startswith("bzc_")
+    assert posted.headers["Referrer-Policy"] == "same-origin"
+
+
 def test_the_authorize_endpoints_cannot_be_reached_by_a_bearer_token(world):
     from tests.mcp_oauth.support import bearer, mint_grant
 

@@ -17,6 +17,7 @@ from flask_limiter.util import get_remote_address
 
 from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
+from app.core.security.permissions import requires_auth
 from app.features.mcp_oauth import SUPPORTED_SCOPES
 from app.features.mcp_oauth.services import authorization, client_registry, token_service
 from app.features.mcp_oauth.services.client_registry import ClientError
@@ -45,8 +46,10 @@ def _headers(response):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     if request.endpoint in {"oauth.authorize", "oauth.authorize_decision"}:
-        # A redirect carrying a code, or a page about to send one, must not leak it in a Referer.
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # The consent form's own POST needs a Referer (Flask-WTF checks it on HTTPS), so this is
+        # "same-origin" rather than "no-referrer": the page's address still never reaches another
+        # site, including the assistant's callback the form sends the browser on to.
+        response.headers["Referrer-Policy"] = "same-origin"
     return response
 
 
@@ -133,7 +136,9 @@ def _login_redirect():
     return redirect("/?login=1&next=" + quote(target, safe=""))
 
 
-@oauth_bp.get("/oauth/authorize")
+# A signed-out visitor must reach this route: it sends them to sign in and back (the POST below
+# requires a session). Classified SIGNED_IN in POLICY, which only judges signed-in users.
+@oauth_bp.get("/oauth/authorize")  # nosemgrep: route-missing-requires-auth
 @limiter.limit("60 per minute", key_func=get_remote_address)
 def authorize():
     db = db_session()
@@ -162,6 +167,7 @@ def authorize():
 
 
 @oauth_bp.post("/oauth/authorize")
+@requires_auth
 @limiter.limit("60 per minute", key_func=get_remote_address)
 def authorize_decision():
     db = db_session()
@@ -172,8 +178,6 @@ def authorize_decision():
     except authorization.RedirectError as err:
         return redirect(err.location())
     user = g.current_user
-    if user is None:
-        return jsonify({"error": "Session expired or not authenticated", "code": "signed_out"}), 401
     reason = authorization.consent_block_reason(db, user, req.client)
     if reason:
         logger.info("mcp.consent_blocked", client=req.client.client_id[:200], reason=reason[:40])
