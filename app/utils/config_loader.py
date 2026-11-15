@@ -369,6 +369,16 @@ class Config:
         return self.get("email", "support_email", "")
 
     @property
+    def mcp_issuer(self) -> str:
+        """The app's own public origin: the OAuth issuer for AI assistants (public MCP 8.2b)."""
+        return (self.get("mcp", "issuer", "") or "").strip().rstrip("/")
+
+    @property
+    def mcp_resource(self) -> str:
+        """The MCP server's URL: the audience every assistant token is bound to (RFC 8707)."""
+        return (self.get("mcp", "resource", "") or "").strip()
+
+    @property
     def invoice_button_enabled(self) -> bool:
         return self.getboolean("features", "invoice_button_enabled", False)
 

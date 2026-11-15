@@ -84,3 +84,10 @@ rum_posthog_api_key =
 # (scripts/run_prod.sh, from KeePassXC). The redirect URI must be registered on that client.
 enabled = true
 redirect_uri = https://biz-e.app/auth/google/callback
+
+[mcp]
+# Public MCP (roadmap 8.2): the app is the OAuth authorization server for AI assistants.
+# issuer: this app's public origin. resource: the MCP server's URL; every assistant token
+# is bound to it, and a token for any other audience is refused.
+issuer = https://biz-e.app
+resource = https://mcp.biz-e.app/mcp
