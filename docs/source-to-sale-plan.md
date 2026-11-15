@@ -1266,12 +1266,22 @@ missing; never a silent $0.
   - [x] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
     bound to the MCP server), read-only rule in the access policy, per-org switch and role check.
     Walkthrough `docs/public-mcp-oauth.md`. (!719)
-  - [ ] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), read tools over
-    stock, tracing, batches, compliance, excise, sales and costs.
+  - [ ] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), three tools:
+    `discover` (business knowledge and API operations), `docs` (one concept or operation in
+    full) and `execute` (up to five allowlisted, read-only API calls, composed declaratively;
+    no model-written code), all filtered to what the person may see.
   - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
     `mcp.biz-e.app` / `mcp-test.biz-e.app`.
   - [ ] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
     revoke.
+  - [ ] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
+    (every `/api/` route, its permission and domain), with `x-bize` business metadata and full,
+    tested schemas for the operations assistants can use. Served at `/api/openapi.json`.
+  - [ ] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
+    models stock, batches, tracing, compliance, sales and cost, read by the model on demand.
+  - [ ] h. **OAuth security check.** RFC 9700 best practice and the latest MCP authorization
+    revision: `iss` on authorization responses (RFC 9207), Google and 2FA-enrolment return to
+    consent, clickjacking headers, a written checklist.
   - Done when: a producer's admin turns it on, a staff member connects Claude from
     `mcp.biz-e.app/mcp`, asks "how much orris root do we have and what did it cost", gets the
     right answer, and the admin can see and revoke that connection.

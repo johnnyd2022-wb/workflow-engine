@@ -132,30 +132,16 @@ scripts/run_mcp.sh            build + run the container, test|prod (modelled on 
 - It imports nothing from `app/`. Its own small dependency group in `pyproject.toml`, so the
   main app image doesn't grow (or a separate `bize_mcp/pyproject.toml`; build-time choice).
 
-## 6. MVP tools (read only)
+## 6. MVP tools: three layers, three tools (revised 16 Nov 2026, founder)
 
-Each one wraps an existing GET route. Final list confirmed in the spec, once each route has
-been checked.
-
-| Tool | Answers | Needs |
-|---|---|---|
-| `search_inventory` | stock on hand by name/type/site | inventory.view |
-| `get_lot` | one lot: quantity, supplier, received, location | inventory.view |
-| `trace_lot` | lineage forward/back (sourcemap/trace routes) | inventory.view |
-| `list_workflows` | products/processes and their steps | production.view |
-| `list_batches` / `get_batch` | executions, status, step progress | production.view |
-| `list_compliance_checks` | due / overdue / recent checks | compliance.view |
-| `get_excise_summary` | duty return figures for a period | compliance.view |
-| `list_invoices` / `sales_summary` | invoices, revenue by product/customer | sales.view |
-| `get_cost` | lot / batch / product cost with its status | costs.view |
-| `stock_value` | stock value now and at month ends (8.1g) | costs.view |
-
-- A tool the user's role can't reach isn't offered (`tools/list` is filtered per token), and
-  the call would 403 anyway.
-- Results are capped (e.g. 50 rows, with a cursor), and carry `unknown` costs as unknown,
-  never 0, as the UI does.
-- Tool descriptions say plainly that returned text (names, notes) is user data and not
-  instructions. That's the prompt-injection boundary on our side.
+Replaced the per-route tool list with the founder's design: business knowledge (layer 1), an
+OpenAPI catalogue with `x-bize` metadata (layer 2) and Biz-E's own calculations exposed as
+operations (layer 3). The model gets three tools, `discover`, `docs` and `execute`, and works as
+discover → docs → execute → explain. `execute` is a declarative list of up to five
+allowlisted GET calls with references and projections, not model-written code (Code Mode's
+sandbox is a larger surface; it stays a later option behind the same gate). Full contract:
+spec §"Three layers, three tools", §8.2f OpenAPI, §8.2g Business knowledge, §8.2h OAuth
+security check.
 
 ## 7. Security and operations
 
