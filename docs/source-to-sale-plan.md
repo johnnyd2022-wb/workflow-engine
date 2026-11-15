@@ -1258,6 +1258,23 @@ missing; never a silent $0.
     batch shows a cost per bottle that is either complete or names what's missing, and
     stays right when a purchase is recorded late or changed in Xero.
 
+- [ ] 8.2 **Connect your own AI assistant (public MCP).** People connect Claude, ChatGPT or any
+  MCP client to Biz-E with their normal login and read what they can already see in the app.
+  Read only to start; off per org until an admin turns it on and picks the roles; in every plan.
+  Plan `.agents/plans/public-mcp.md`, spec `.agents/specs/public-mcp.md`.
+  - [x] a. **Plan and spec** (!716).
+  - [ ] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
+    bound to the MCP server), read-only rule in the access policy, per-org switch and role check.
+  - [ ] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), read tools over
+    stock, tracing, batches, compliance, excise, sales and costs.
+  - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
+    `mcp.biz-e.app` / `mcp-test.biz-e.app`.
+  - [ ] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
+    revoke.
+  - Done when: a producer's admin turns it on, a staff member connects Claude from
+    `mcp.biz-e.app/mcp`, asks "how much orris root do we have and what did it cost", gets the
+    right answer, and the admin can see and revoke that connection.
+
 ---
 
 ## Order
