@@ -57,6 +57,7 @@ APP_PAGES = [
     "/core/planner/board",
     "/core/settings",
     "/core/integrations",
+    "/core/ai-assistants",
     "/core/sites",
     "/core/site-transfers",
     "/core/stocktake",

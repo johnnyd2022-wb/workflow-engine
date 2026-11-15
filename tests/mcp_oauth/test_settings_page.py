@@ -8,6 +8,8 @@ is session-only, and that the Settings tab row and the page registry know about 
 
 from __future__ import annotations
 
+import html as html_lib
+
 from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings
 from app.ui.navigation import SECTION_TABS, resolve, section_tabs
 from app.ui.page_registry import PAGES, page_for
@@ -20,7 +22,7 @@ PATH = "/core/ai-assistants"
 def _page(world, who) -> str:
     resp = world.session(who).get(PATH)
     assert resp.status_code == 200, resp.status_code
-    return resp.get_data(as_text=True)
+    return html_lib.unescape(resp.get_data(as_text=True))  # "hasn't" is "hasn&#39;t" in the markup
 
 
 # --- the page, and who gets the admin controls --------------------------------------------------

@@ -15,7 +15,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from app.core.db.models.user import UserRole
-from tests.e2e.conftest import login_through_ui
+from tests.e2e.conftest import login_through_ui, purge_org
 
 pytestmark = pytest.mark.e2e
 
@@ -30,7 +30,7 @@ LONG_NAME = "An assistant with a very long name that a person might pick on the 
 def world(fresh_user, db):
     """An org with an admin and a member, one client per grant, and a way to read the tables back."""
     from app.core.db.models.user import User
-    from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings, OAuthClient, OAuthGrant, OAuthToken
+    from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings, OAuthClient, OAuthGrant
     from tests.mcp_oauth.support import make_client, mint_grant
 
     admin = fresh_user(UserRole.ADMIN)
@@ -72,15 +72,12 @@ def world(fresh_user, db):
     yield w
 
     db.rollback()
-    grant_ids = [g.id for g in db.query(OAuthGrant).filter(OAuthGrant.org_id == org_id)]
-    if grant_ids:
-        db.query(OAuthToken).filter(OAuthToken.grant_id.in_(grant_ids)).delete(synchronize_session=False)
-        db.query(OAuthGrant).filter(OAuthGrant.id.in_(grant_ids)).delete(synchronize_session=False)
-    db.query(McpAllowedRole).filter_by(org_id=org_id).delete()
-    db.query(McpOrgSettings).filter_by(org_id=org_id).delete()
+    # Everything the org holds (grants and tokens included), then the member; fresh_user's own
+    # teardown removes the admin. The clients are global rows, so they go by name.
+    purge_org(db, org_id, UUID(member["user_id"]))
+    db.query(User).filter(User.id == UUID(member["user_id"])).delete(synchronize_session=False)
     for client in clients:
         db.query(OAuthClient).filter(OAuthClient.id == client.id).delete(synchronize_session=False)
-    db.query(User).filter(User.id == UUID(member["user_id"])).delete(synchronize_session=False)
     db.commit()
 
 
@@ -88,6 +85,12 @@ def _open(page: Page, person: dict) -> None:
     login_through_ui(page, person["email"], person["password"])
     page.goto(PATH)
     expect(page.get_by_role("heading", name="AI assistants", level=1)).to_be_visible()
+
+
+def _settled(sheet):
+    """The sheet's bounding box once its slide-up animation has finished (mid-slide it is below the fold)."""
+    sheet.evaluate("el => Promise.all(el.getAnimations().map(a => a.finished))")
+    return sheet.bounding_box()
 
 
 def _roles(page: Page):
@@ -186,7 +189,7 @@ def test_ac34_connected_apps_lists_a_grant_and_revoke_goes_through_the_bottom_sh
     assert not world.revoked(grant.id)
 
     # A bottom sheet: pinned to the bottom edge of the viewport and centred.
-    box = sheet.bounding_box()
+    box = _settled(sheet)
     viewport = page.viewport_size
     assert abs((box["y"] + box["height"]) - viewport["height"]) <= 1, box
     assert abs((box["x"] + box["width"] / 2) - viewport["width"] / 2) <= 2, box
@@ -322,7 +325,7 @@ def test_ac35_at_375px_the_page_has_no_sideways_scroll(world, page, theme):
     sheet = page.locator("[data-ai-dialog]")
     expect(sheet).to_be_visible()
     _no_sideways_scroll(page, f"{theme}: bottom sheet open")
-    box = sheet.bounding_box()
+    box = _settled(sheet)
     assert box["x"] >= -1 and box["x"] + box["width"] <= PHONE["width"] + 1, f"sheet sticks out: {box}"
     assert abs((box["y"] + box["height"]) - PHONE["height"]) <= 1, f"sheet is not at the bottom: {box}"
 
