@@ -44,7 +44,7 @@ html[data-spa-theme="dark"] #page-content .ai-switch__input:checked ~ .ai-switch
 /* Roles */
 #page-content .ai-roles { min-width: 0; margin: 8px 0 0; padding: 18px 0 0; border: 0; border-top: 1px solid var(--ui-border, #e2e8f0);
   display: flex; flex-direction: column; gap: 10px; }
-#page-content .ai-roles legend { padding: 0; float: left; width: 100%; margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); }
+#page-content .ai-roles legend { padding: 0; float: left; width: 100%; margin: 0; font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); }
 #page-content .ai-roles legend + * { clear: both; }
 #page-content .ai-roles__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: 6px 16px; }
 #page-content .ai-roles__group { grid-column: 1 / -1; margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }

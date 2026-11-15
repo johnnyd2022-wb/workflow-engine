@@ -1270,8 +1270,8 @@ missing; never a silent $0.
     stock, tracing, batches, compliance, excise, sales and costs.
   - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
     `mcp.biz-e.app` / `mcp-test.biz-e.app`.
-  - [ ] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
-    revoke.
+  - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
+    revoke. (!MRNUM)
   - Done when: a producer's admin turns it on, a staff member connects Claude from
     `mcp.biz-e.app/mcp`, asks "how much orris root do we have and what did it cost", gets the
     right answer, and the admin can see and revoke that connection.
