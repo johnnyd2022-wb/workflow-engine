@@ -1,6 +1,6 @@
 # Public MCP server for Biz-E — plan
 
-Status: **draft, awaiting founder approval** (work board `MCP-PUBLIC`). No code until approved.
+Status: **approved by the founder, 15 Nov 2026** (work board `MCP-PUBLIC`). Decisions in §10.
 Founder brief (14 Nov 2026): a public MCP for the app that wraps the user's existing Biz-E
 credentials, with access levels *read* and *read and write*; MVP is read only. It lives in this
 repo but has its own directory and entrypoint outside the main app, and the deploy scripts run
@@ -207,19 +207,25 @@ been checked.
 | 4 | Connected apps | Settings page: list grants, revoke, org `mcp_enabled` toggle (Style 1, bottom-sheet dialogs, 375 px) |
 | later | Read and write | `bize.write`, write tools with idempotency keys (existing `ApiIdempotencyKey`), confirmations |
 
-## 10. Open questions for the founder
+## 10. Founder decisions (15 Nov 2026)
 
-1. **Hostnames:** `mcp.biz-e.app` / `mcp-test.biz-e.app`? And what's the production app host
-   the authorization server will live on?
-2. **Default per org:** off until an admin turns it on (recommended for a compliance product),
-   or on for everyone?
-3. **Who can register clients:** any client via DCR (truly public, labelled unverified on
-   consent), or only an allowlist (Claude, ChatGPT, Cursor) to start? Recommended: open, but
-   admins can disable clients.
-4. **Which roles may connect at all:** everyone with a login, or only roles an admin ticks?
-5. **First tools:** is §6 the right first dozen, or is there a question you most want it to
-   answer?
-6. **Plan gating:** part of every Biz-E plan, or a paid add-on?
+1. **Hostnames:** `mcp.biz-e.app` (prod) and `mcp-test.biz-e.app` (test). Authorization server
+   on the app: `https://biz-e.app` (prod), `https://test.biz-e.app` (test).
+2. **Off by default per org.** An org admin turns it on in Settings **and chooses which roles
+   may use it**. Data model: org setting `mcp_enabled` plus `mcp_roles` (built-in roles and
+   custom `org_roles`). A user whose role isn't ticked can't complete consent (clear message),
+   and their existing grants stop working the moment their role is unticked or changed (checked
+   on every request, not only at issue).
+3. **Client registration:** open (CIMD + DCR). A self-registered client is labelled unverified
+   on consent; admins can disable a client.
+4. **Who may connect:** the roles ticked in 2.
+5. **First tools:** §6 as written.
+6. **Plans:** in every plan. Users bring their own AI subscription, so it costs us nothing
+   beyond API load, which the rate limits cover.
+
+Phase 4's Settings page therefore carries the on/off switch, the role picker and Connected apps.
+The role check is enforced in the bearer path from phase 1, so phase 1 ships the two settings
+columns. Until phase 4 they're set by the CLI or tests.
 
 ## 11. Risks
 
