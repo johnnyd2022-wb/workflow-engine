@@ -224,6 +224,13 @@ def create_app():
 
     app.register_blueprint(costing_bp)
 
+    # Public MCP 8.2b: the app is the OAuth authorization server for AI assistants, and serves the
+    # org's switch and connected-apps API. Always mounted; each org is off until an admin turns it on.
+    from app.features.mcp_oauth.routes import mcp_bp, oauth_bp
+
+    app.register_blueprint(oauth_bp)
+    app.register_blueprint(mcp_bp)
+
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
@@ -597,6 +604,12 @@ def create_app():
                 "ingest_faro_telemetry",
                 "ingest_posthog_telemetry",
                 "csp_report",
+                # Public MCP 8.2b: an assistant calls these with no cookie and no session, so there
+                # is nothing for a forged cross-site request to ride on. The consent form
+                # (oauth.authorize_decision) is NOT here: it is an ordinary CSRF-protected form.
+                "oauth.register",
+                "oauth.token",
+                "oauth.revoke",
             }:
                 csrf.exempt(view)
 

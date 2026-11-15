@@ -179,6 +179,15 @@ SIGNED_IN = "signed_in"  # any signed-in user, whatever their role
 _READ = frozenset({"GET", "HEAD", "OPTIONS"})
 ANY_WORKSPACE = ("production.view", "inventory.view", "sales.view", "compliance.view")
 
+# What a read-only assistant token (scope ``bize.read``, public MCP 8.2b) may reach: GET/HEAD on
+# routes whose rule names one of these. People, settings, exports and every write sit outside it
+# whatever the person's role, and the rule needs no edit as routes are added: a new route is
+# unreachable by a token until its POLICY rule names a view permission.
+READ_PERMISSIONS = frozenset({"production.view", "inventory.view", "sales.view", "compliance.view", "costs.view"})
+# Signed-in-only routes a token may also read: they return the token user's own identity and
+# nothing of the organisation's data. Keep this list as short as it is.
+MCP_TOKEN_ENDPOINTS = frozenset({"mcp.get_me"})
+
 # (endpoint glob, methods or None for all, requirement). First match wins, so specific
 # rules come before the broad ones under them. A requirement is PUBLIC, SIGNED_IN, a
 # permission, or a tuple meaning "any of these".
@@ -202,6 +211,20 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("ingest_faro_telemetry", None, PUBLIC),
     ("ingest_posthog_telemetry", None, PUBLIC),
     ("csp_report", None, PUBLIC),
+    # --- assistants (public MCP 8.2b): OAuth endpoints and the settings / connected-apps API.
+    # authorize is SIGNED_IN, yet a signed-out visitor reaches it: this hook only judges signed-in
+    # users, and the route itself sends the visitor to sign in and back.
+    ("oauth.metadata", None, PUBLIC),
+    ("oauth.register", None, PUBLIC),
+    ("oauth.token", None, PUBLIC),
+    ("oauth.revoke", None, PUBLIC),
+    ("oauth.authorize", None, SIGNED_IN),
+    ("oauth.authorize_decision", None, SIGNED_IN),
+    ("mcp.get_me", _READ, SIGNED_IN),
+    ("mcp.get_settings", _READ, "users.manage"),
+    ("mcp.update_settings", None, "users.manage"),
+    ("mcp.list_grants", _READ, SIGNED_IN),  # your own; every grant in the organisation with users.manage
+    ("mcp.revoke_grant", None, SIGNED_IN),  # your own; any in the organisation with users.manage
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),
@@ -466,6 +489,31 @@ def allows(user, endpoint: str, method: str) -> bool:
     return has_permission(user, *required)
 
 
+_TOKEN_METHODS = frozenset({"GET", "HEAD"})
+
+
+def token_access(user, endpoint: str, method: str) -> str:
+    """How a request authenticated with an assistant token fares against the policy.
+
+    ``"ok"``: public, the token user's own identity, or a read route whose view permission the
+    person holds. ``"out_of_scope"``: a write method, or a route that names no view permission
+    (``users.manage``, ``settings.manage``, signed-in-only pages, anything unclassified).
+    ``"denied"``: a view route the person's own role does not hold.
+    """
+    if method.upper() not in _TOKEN_METHODS:
+        return "out_of_scope"
+    requirement = requirement_for(endpoint, method)
+    if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
+        return "ok"
+    if requirement in (DENY, PORTAL_SIGNED_IN, SIGNED_IN):
+        return "out_of_scope"
+    required = requirement if isinstance(requirement, tuple) else (requirement,)
+    readable = READ_PERMISSIONS.intersection(required)
+    if not readable:
+        return "out_of_scope"
+    return "ok" if has_permission(user, *readable) else "denied"
+
+
 def setup_access_policy(app) -> None:
     """Enforce ``POLICY`` for signed-in users. Register after tenant context."""
 
@@ -486,7 +534,18 @@ def setup_access_policy(app) -> None:
             session.clear()  # nosemgrep: bize-session-clear-without-rotate
             session.modified = True
             return jsonify({"error": "Your access to this organisation has ended.", "code": "access_expired"}), 401
-        if allows(user, endpoint, request.method):
+        if getattr(g, "auth_via", None) == "mcp":
+            verdict = token_access(user, endpoint, request.method)
+            if verdict == "out_of_scope":
+                logger.warning("mcp.out_of_scope", endpoint=endpoint, method=request.method, user_id=str(user.id))
+                response = jsonify({"error": "insufficient_scope"})
+                response.status_code = 403
+                response.headers["WWW-Authenticate"] = 'Bearer error="insufficient_scope", scope="bize.read"'
+                return response
+            permitted = verdict == "ok"
+        else:
+            permitted = allows(user, endpoint, request.method)
+        if permitted:
             return None
 
         requirement = requirement_for(endpoint, request.method)

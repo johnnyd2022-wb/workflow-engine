@@ -152,6 +152,13 @@ HTTP Request
 - `compliant` – `/compliant/*`, `/api/compliant/*` — compliance modules, NZ Alcohol first (feature flag: `compliant_enabled`, plus a per-org subscription)
 - `operational_cases` – `/core/cases/*`, `/api/core/cases/*` — operational cases (always mounted; access gated per org)
 - `process_templates` – industry workflow template catalogue (always mounted; exposure gated per org)
+- `oauth` / `mcp` – `/oauth/*`, `/.well-known/oauth-authorization-server` and `/api/core/mcp/*`: the OAuth server that lets
+  an AI assistant sign in on a person's normal login, plus the org's switch, roles and connected apps
+  (`app/features/mcp_oauth/`, always mounted; each org is off until an admin turns it on —
+  `uv run workflow mcp enable --org-id <id> --roles admin,member` until the Settings page lands).
+  A request may carry `Authorization: Bearer bza_…` instead of a session: `tenant_context` resolves it, and
+  `access_policy.token_access` limits it to GET/HEAD on routes whose rule names a view permission
+  (`READ_PERMISSIONS`). Spec `.agents/specs/public-mcp.md`.
 
 `/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 

@@ -555,4 +555,17 @@ ENDPOINT_COVERAGE = {
     ("contract_portal.send_message", "POST"): "blocked",
     ("contract_portal.reorder", "POST"): "blocked",
     ("contracts.portal_send_message", "POST"): "blocked",
+    # Public MCP 8.2b: OAuth for AI assistants and the org's switch / connected-apps API. None of it
+    # is site-scoped; a selected-site person is refused here as everywhere until that audit lands.
+    ("oauth.metadata", "GET"): "blocked",
+    ("oauth.register", "POST"): "blocked",
+    ("oauth.authorize", "GET"): "blocked",
+    ("oauth.authorize_decision", "POST"): "blocked",
+    ("oauth.token", "POST"): "blocked",
+    ("oauth.revoke", "POST"): "blocked",
+    ("mcp.get_me", "GET"): "blocked",
+    ("mcp.get_settings", "GET"): "blocked",
+    ("mcp.update_settings", "PUT"): "blocked",
+    ("mcp.list_grants", "GET"): "blocked",
+    ("mcp.revoke_grant", "POST"): "blocked",
 }

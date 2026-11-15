@@ -1263,8 +1263,9 @@ missing; never a silent $0.
   Read only to start; off per org until an admin turns it on and picks the roles; in every plan.
   Plan `.agents/plans/public-mcp.md`, spec `.agents/specs/public-mcp.md`.
   - [x] a. **Plan and spec** (!716).
-  - [ ] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
+  - [x] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
     bound to the MCP server), read-only rule in the access policy, per-org switch and role check.
+    Walkthrough `docs/public-mcp-oauth.md`. (!719)
   - [ ] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), read tools over
     stock, tracing, batches, compliance, excise, sales and costs.
   - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and

@@ -158,3 +158,23 @@ and the factories, not the `tests/unit/<slug>/` shape in `new-feature`'s SKILL.m
    `org_routes.py`"), and `backend.py` now holds 7 `@requires_auth` routes (not 61). Open
    item 2 rests on the first claim. The `g.org_id` / `g.current_org_id` counts (95 and 13)
    were not recounted either. Re-derive §3 before relying on it.
+
+## 8. A second way in must be added where the first one is resolved (public MCP 8.2b)
+
+- **Resolve a bearer token in `tenant_context`, and only when there is no session user.**
+  `app/api/middleware/tenant_context.py` (`_authenticate_bearer`): a request that carries a session
+  user is always a session request, so a token can never be used to step round the session's CSRF
+  check. Everything after it (the two-factor, staff-site and access-policy hooks) then runs on the
+  same `g.current_user` as for a session.
+- **Narrow a token in `POLICY`, not in each route.** `access_policy.token_access` lets a token
+  through only on GET/HEAD where the rule names a view permission (`READ_PERMISSIONS`), is
+  `PUBLIC`, or is `MCP_TOKEN_ENDPOINTS`. A new route is closed to tokens until its rule names a view
+  permission. A new anonymous endpoint (the OAuth ones) also goes in `tenant_context.PUBLIC_ENDPOINTS`
+  so a stray cookie or bearer header never gives it a tenant.
+- **Endpoints that look up a row by a secret are the one place a repository method has no `org_id`
+  yet.** `GrantRepository.find_*_by_hash` runs `unscoped()` for exactly that lookup, then the caller
+  works inside `tenant_scope(row.org_id)`.
+- **A consent form posts to our own origin, so its referrer policy is `same-origin`.** Flask-WTF
+  checks the Referer on HTTPS; `no-referrer` made every approval fail with "The referrer header is
+  missing" (caught by `tests/e2e/test_mcp_oauth_consent.py`, not by the unit tests, which run with
+  CSRF off).
