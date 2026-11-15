@@ -75,6 +75,10 @@ _TEXT_RULES = (
         r"\1[REDACTED]",
     ),
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[EMAIL]"),
+    # Public MCP 8.2b: an assistant's access token, refresh token or authorization code
+    # (bza_/bzr_/bzc_ then 32 random bytes as base64url) must never reach a log, wherever it
+    # turns up: a header dump, a URL, an exception message.
+    (re.compile(r"\bbz[acr]_[A-Za-z0-9_-]{8,}"), "[REDACTED_TOKEN]"),
 )
 
 

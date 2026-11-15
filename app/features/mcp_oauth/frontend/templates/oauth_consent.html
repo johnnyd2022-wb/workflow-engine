@@ -1,0 +1,61 @@
+{% extends "oauth_base.html" %}
+{% block title %}Connect {{ req.client.client_name }} · Biz-E{% endblock %}
+{% block body %}
+  {% set person = ((user.first_name or '') ~ ' ' ~ (user.last_name or '')) | trim %}
+  {% if blocked %}
+    <h1>{{ req.client.client_name }} can't connect yet</h1>
+    <p class="notice" role="alert">{{ blocked }}</p>
+    <div class="who">
+      <strong>{{ person or user.email }}</strong>
+      <span class="muted">{{ org.name }}</span>
+    </div>
+    <p class="fine">Nothing was shared. You can close this tab and go back to {{ req.client.client_name }}.</p>
+  {% else %}
+    <h1>Connect {{ req.client.client_name }} to Biz-E</h1>
+    <p class="muted">
+      {% if not req.client.verified %}<span class="badge">Unverified app</span>{% endif %}
+      After you choose, you're sent back to <strong>{{ host }}</strong>.
+    </p>
+
+    <div class="who">
+      <span class="muted">Signed in as</span>
+      <strong>{{ person or user.email }}{% if person %} <span class="muted">· {{ user.email }}</span>{% endif %}</strong>
+      <span class="muted">{{ org.name }}</span>
+    </div>
+
+    <form method="post" action="/oauth/authorize">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for name, value in fields.items() %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+
+      <h2>Access level</h2>
+      <fieldset>
+        <legend class="muted" style="position:absolute;left:-9999px">Access level</legend>
+        <label class="choice">
+          <input type="radio" name="access_level" value="read" checked>
+          <span><span class="name">Read only</span><span class="hint">Look at your data. It can't change anything.</span></span>
+        </label>
+        <label class="choice is-off">
+          <input type="radio" name="access_level" value="write" disabled>
+          <span><span class="name">Read and write <span class="badge" style="background:var(--soft);color:var(--muted)">Coming later</span></span><span class="hint">Not available yet.</span></span>
+        </label>
+      </fieldset>
+
+      <h2>{{ req.client.client_name }} will be able to read</h2>
+      {% if covers %}
+      <ul class="covers">
+        {% for line in covers %}<li>{{ line }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">Nothing: your role has no read access yet.</p>
+      {% endif %}
+      <p class="fine">Only what your own role can see in Biz-E. People, settings and downloads are never included.</p>
+
+      <div class="actions">
+        <button type="submit" name="decision" value="approve" class="primary">Allow read-only access</button>
+        <button type="submit" name="decision" value="deny" class="secondary">Cancel</button>
+      </div>
+    </form>
+  {% endif %}
+{% endblock %}

@@ -377,6 +377,9 @@ def test_ac10_no_raw_token_is_logged_while_a_connection_is_made(world, caplog, c
         rotated["access_token"],
         rotated["refresh_token"],
     ]
+    # The scan is only meaningful if the run actually logged what we expect it to.
+    assert "mcp.token_issued" in haystack
+    assert "mcp.request" in haystack
     for secret in secrets_seen:
         assert secret not in haystack, secret[:8]
 

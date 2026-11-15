@@ -321,18 +321,20 @@ def _run(*args):
 
 def test_cli_enable_sets_the_switch_and_the_roles(world, db):
     world.enable(enabled=False, roles=[])
-    result = _run("enable", "--org-id", str(world.org.id), "--roles", "admin,member")
+    org_id = world.org.id
+    result = _run("enable", "--org-id", str(org_id), "--roles", "admin,member")
     assert result.exit_code == 0, result.output
-    row, keys = _settings(db, world.org.id)
+    row, keys = _settings(db, org_id)
     assert row.enabled is True
     assert keys == ["builtin:admin", "builtin:member"]
 
 
 def test_cli_enable_rejects_an_unknown_role_and_an_unknown_org(world, db):
     world.enable(enabled=False, roles=[])
-    bad_role = _run("enable", "--org-id", str(world.org.id), "--roles", "admin,wizard")
+    org_id = world.org.id  # the CLI closes the shared session, so read this before it runs
+    bad_role = _run("enable", "--org-id", str(org_id), "--roles", "admin,wizard")
     assert bad_role.exit_code != 0
-    assert _settings(db, world.org.id)[0].enabled is False
+    assert _settings(db, org_id)[0].enabled is False
     bad_org = _run("enable", "--org-id", str(uuid4()), "--roles", "admin")
     assert bad_org.exit_code != 0
     not_a_uuid = _run("enable", "--org-id", "nope", "--roles", "admin")
@@ -341,8 +343,9 @@ def test_cli_enable_rejects_an_unknown_role_and_an_unknown_org(world, db):
 
 def test_cli_disable_turns_it_off_and_keeps_the_roles(world, db):
     world.enable(enabled=True, roles=["admin"])
-    result = _run("disable", "--org-id", str(world.org.id))
+    org_id = world.org.id
+    result = _run("disable", "--org-id", str(org_id))
     assert result.exit_code == 0, result.output
-    row, keys = _settings(db, world.org.id)
+    row, keys = _settings(db, org_id)
     assert row.enabled is False
     assert keys == ["builtin:admin"]

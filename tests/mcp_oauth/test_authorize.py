@@ -109,6 +109,16 @@ def test_ac4_the_error_page_does_not_reflect_markup(world):
 # --- AC5 ----------------------------------------------------------------------------------------
 
 
+def _landing_page(path):
+    """The sign-in page lives on app.app (the top-level pages), not on create_app()."""
+    import app.app as app_module
+
+    client = app_module.app.test_client()
+    client.environ_base["wsgi.url_scheme"] = "https"
+    client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+    return client.get(path)
+
+
 def test_ac5_signed_out_authorize_lands_on_login_and_returns_to_consent_after_password_and_2fa(world, db):
     user = world.users["member"]
     secret = pyotp.random_base32()
@@ -130,7 +140,7 @@ def test_ac5_signed_out_authorize_lands_on_login_and_returns_to_consent_after_pa
     assert query["login"] == ["1"]
     assert query["next"] == [original]  # the whole request, so consent sees the same parameters
 
-    landing = browser.get(location)
+    landing = _landing_page(location)
     assert landing.status_code == 200
     assert b"loginModal" in landing.data  # the normal sign-in page
 
@@ -150,7 +160,7 @@ def test_ac5_signed_out_authorize_lands_on_login_and_returns_to_consent_after_pa
 def test_ac5_the_landing_page_only_follows_a_next_that_stays_on_oauth_authorize(world):
     """The landing script's guard, checked as text: next is only used when it starts with
     /oauth/authorize? (a path on this site), so the sign-in page is not an open redirect."""
-    html = world.anon().get("/").get_data(as_text=True)
+    html = _landing_page("/").get_data(as_text=True)
     assert "/oauth/authorize?" in html
     assert "postLoginTarget" in html
 

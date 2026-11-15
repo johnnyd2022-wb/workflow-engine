@@ -12,6 +12,7 @@ from app.core.db.models.user import User, UserRole
 from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings, OAuthClient
 from tests.factories import DEFAULT_TEST_PASSWORD, InventoryItemFactory, OrganisationFactory, UserFactory
 from tests.mcp_oauth.support import TEST_NAME_PREFIX, make_client, unique_addr
+from tests.org_purge import purge_orgs
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 ROLES = ("admin", "member", "production", "compliance", "sales", "auditor")
@@ -102,6 +103,6 @@ def world(db, flask_app):
     with flask_app.app_context():
         yield w
     db.rollback()
-    db.query(Organisation).filter(Organisation.id.in_(org_ids)).delete(synchronize_session=False)
+    purge_orgs(db, org_ids)
     db.query(OAuthClient).filter(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%")).delete(synchronize_session=False)
     db.commit()

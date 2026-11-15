@@ -13,7 +13,7 @@ from app.core.security.access_policy import DENY, PUBLIC, SIGNED_IN, requirement
 from app.core.security.auth_service import AuthService
 from app.features.mcp_oauth.models import McpOrgSettings, OAuthGrant, OAuthToken
 from app.features.mcp_oauth.services import rate_limit
-from tests.mcp_oauth.support import bearer, mint_grant
+from tests.mcp_oauth.support import bearer, mint_grant, unique_addr
 
 WWW_INVALID = 'Bearer error="invalid_token"'
 
@@ -64,12 +64,15 @@ def test_ac11_a_token_reaches_exactly_what_its_roles_session_reaches_on_reads(wo
 
 def _non_get_routes():
     import app.app as app_module
+    from app.api.middleware.tenant_context import PUBLIC_ENDPOINTS
 
     routes = []
     for rule in app_module.app.url_map.iter_rules():
         for method in sorted(rule.methods - {"GET", "HEAD", "OPTIONS"}):
-            if requirement_for(rule.endpoint, method) == PUBLIC:
-                continue  # public endpoints stay public: the bearer rule only narrows signed-in ones
+            if requirement_for(rule.endpoint, method) == PUBLIC or rule.endpoint in PUBLIC_ENDPOINTS:
+                # Public endpoints stay public, and the anonymous ones (sign-in, telemetry, the
+                # OAuth endpoints) never read a bearer token at all: the rule narrows signed-in routes.
+                continue
             values = {}
             for arg in rule.arguments:
                 kind = type(rule._converters[arg]).__name__
@@ -87,6 +90,18 @@ def _non_get_routes():
 NON_GET_ROUTES = _non_get_routes()
 
 
+def _full_app_client():
+    """A cookie-less client on the top-level app, which also serves /, /dashboard and /initialize
+    (create_app() alone does not), so the walk over the URL map reaches every route it lists."""
+    import app.app as app_module
+
+    client = app_module.app.test_client()
+    client.environ_base["wsgi.url_scheme"] = "https"
+    client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+    client.environ_base["REMOTE_ADDR"] = unique_addr()
+    return client
+
+
 @pytest.fixture
 def admin_token_without_rate_limit(world, monkeypatch):
     monkeypatch.setattr(rate_limit, "BEARER_REQUESTS_PER_MINUTE", 10_000_000)
@@ -102,7 +117,7 @@ def test_ac12_the_parametrised_set_covers_every_signed_in_non_get_route():
 def test_ac12_a_read_token_on_any_write_route_is_403_insufficient_scope(
     world, admin_token_without_rate_limit, endpoint, method, url
 ):
-    resp = world.anon().open(url, method=method, json={}, headers=bearer(admin_token_without_rate_limit))
+    resp = _full_app_client().open(url, method=method, json={}, headers=bearer(admin_token_without_rate_limit))
     assert resp.status_code == 403, (endpoint, resp.status_code)
     assert resp.get_json()["error"] == "insufficient_scope"
     assert resp.headers["WWW-Authenticate"] == 'Bearer error="insufficient_scope", scope="bize.read"'
@@ -175,7 +190,7 @@ def test_ac13_every_get_route_without_a_read_permission_is_refused_for_an_admin_
 
     monkeypatch.setattr(rate_limit, "BEARER_REQUESTS_PER_MINUTE", 10_000_000)
     _g, access, _r = _token_for(world, "admin")
-    client = world.anon()
+    client = _full_app_client()
     refused = 0
     wrong = []
     for endpoint, url in _get_routes_without_arguments():
@@ -345,7 +360,6 @@ def test_ac17_a_password_change_revokes_the_users_grants(world, db):
 def test_ac17_the_change_password_endpoint_ends_the_grant_too(world, db):
     from tests.mcp_oauth.conftest import PASSWORD
 
-    user = world.users["member"]
     _g, access, _r = _token_for(world, "member")
     session = world.session("member")
     resp = session.post(
@@ -353,12 +367,11 @@ def test_ac17_the_change_password_endpoint_ends_the_grant_too(world, db):
         json={
             "current_password": PASSWORD,
             "new_password": "Brand-New-Passw0rd!7",
-            "confirm_password": "Brand-New-Passw0rd!7",
+            "new_password_confirm": "Brand-New-Passw0rd!7",
         },
     )
     assert resp.status_code == 200, resp.get_json()
     assert _get(world, "/api/core/inventory", access).status_code == 401
-    assert user.email
 
 
 def test_ac17_a_deactivated_user_gets_401(world, db):

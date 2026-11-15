@@ -11,7 +11,7 @@ Rules:
 import hmac
 from uuid import UUID, uuid4
 
-from flask import abort, g, request, session
+from flask import abort, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 
 from app.core.db import db_session
@@ -37,7 +37,56 @@ PUBLIC_ENDPOINTS = {
     "ingest_faro_telemetry",
     "ingest_posthog_telemetry",
     "static",
+    # Public MCP 8.2b: the OAuth endpoints an assistant calls with no session at all. They never
+    # load a session user (a cookie must not put a different organisation's scope on a token
+    # exchange) and never read a bearer token.
+    "oauth.metadata",
+    "oauth.register",
+    "oauth.token",
+    "oauth.revoke",
 }
+
+
+def _json_response(status: int, body: dict, headers: dict | None = None):
+    response = jsonify(body)
+    response.status_code = status
+    for name, value in (headers or {}).items():
+        response.headers[name] = value
+    return response
+
+
+def _authenticate_bearer(raw_token: str):
+    """Resolve an assistant's bearer token into the request's user and organisation (spec "Bearer
+    path"). Returns a response to send instead of running the route, or ``None`` on success."""
+    from app.features.mcp_oauth.services.bearer_auth import BearerRejectedError, authenticate
+
+    db = db_session()
+    try:
+        principal = authenticate(db, raw_token)
+    except BearerRejectedError as rejected:
+        LOGGER.info("mcp.bearer_rejected", reason=rejected.reason, status=rejected.status)
+        return _json_response(rejected.status, {"error": rejected.error}, rejected.headers)
+    except Exception:
+        db.rollback()
+        LOGGER.exception("failed_to_authenticate_bearer")
+        return _json_response(500, {"error": "server_error"})
+
+    user, org = principal.user, principal.org
+    g.current_user = user
+    g.current_org = org
+    g.current_org_id = org.id
+    activate_request_org_id(org.id)
+    g.user_id = str(user.id)
+    g.user_email = getattr(user, "email", None)
+    g.user_role = getattr(user, "role", None).value if getattr(user, "role", None) else None
+    g.org_id = str(org.id)
+    g.org_name = getattr(org, "name", None)
+    g.org_status = getattr(org, "status", None).value if getattr(org, "status", None) else None
+    g.auth_via = "mcp"
+    g.mcp_scope = principal.scope
+    g.mcp_client_id = principal.client_id
+    g.mcp_grant_id = str(principal.grant.id)
+    return None
 
 
 def setup_tenant_context(app):
@@ -70,6 +119,12 @@ def setup_tenant_context(app):
         g.org_name = None
         g.user_role = None
         g.org_status = None
+        # How this request was authenticated: "session", "mcp" (an assistant's bearer token), or
+        # None. The access-policy hook narrows an "mcp" request to read-only routes.
+        g.auth_via = None
+        g.mcp_scope = None
+        g.mcp_client_id = None
+        g.mcp_grant_id = None
 
         if not request.endpoint:
             return
@@ -81,6 +136,14 @@ def setup_tenant_context(app):
         # Session must contain user_id
         raw_user_id = session.get("user_id")
         if not raw_user_id:
+            # No session user. An assistant may be calling with a bearer token (public MCP 8.2b).
+            # A request that carries a session user is always a session request, whatever else it
+            # carries, so a token can never be used to step around the session's CSRF check.
+            from app.features.mcp_oauth.services.bearer_auth import parse_bearer
+
+            raw_token = parse_bearer(request.headers.get("Authorization"))
+            if raw_token is not None:
+                return _authenticate_bearer(raw_token)
             # Unauthenticated request — nothing to load
             return
 
@@ -153,6 +216,7 @@ def setup_tenant_context(app):
             g.org_id = str(org.id)
             g.org_name = getattr(org, "name", None)
             g.org_status = getattr(org, "status", None).value if getattr(org, "status", None) else None
+            g.auth_via = "session"
 
             # Optional: cache lightweight primitives in session for performance
             # CRITICAL: Only cache safe, non-sensitive data (no passwords, tokens, or secrets)
@@ -174,6 +238,23 @@ def setup_tenant_context(app):
         except Exception:
             LOGGER.exception("failed_to_load_tenant_context")
             abort(500, "Failed to load tenant context")
+
+    @app.after_request
+    def log_mcp_request(response):
+        # One event per assistant request: who, which organisation, which app, which route, and the
+        # outcome. Never the token, and never the query string's values.
+        if getattr(g, "auth_via", None) == "mcp":
+            LOGGER.info(
+                "mcp.request",
+                user_id=g.user_id,
+                org_id=g.org_id,
+                client=g.mcp_client_id,
+                grant_id=g.mcp_grant_id,
+                endpoint=request.endpoint,
+                method=request.method,
+                status=response.status_code,
+            )
+        return response
 
     @app.after_request
     def clear_tenant_context(response):

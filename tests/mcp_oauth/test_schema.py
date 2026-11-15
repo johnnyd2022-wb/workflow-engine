@@ -130,9 +130,18 @@ def test_the_global_tenant_filter_hides_other_orgs_grants(world, db):
 
 def test_deleting_an_org_removes_its_settings_grants_and_tokens(world, db):
     from app.core.db.models.organisation import Organisation
+    from tests.factories import OrganisationFactory, UserFactory
 
-    grant, _a, _r = mint_grant(db, world.users["member"], world.client_row)
-    grant_id, org_id = grant.id, world.org.id
+    org = OrganisationFactory()
+    user = UserFactory(org_id=org.id)
+    db.commit()
+    org_id = org.id
+    db.add(McpOrgSettings(org_id=org_id, enabled=True))
+    db.add(McpAllowedRole(org_id=org_id, role_key="builtin:member"))
+    grant, _a, _r = mint_grant(db, user, world.client_row)
+    grant_id = grant.id
+    db.commit()
+
     db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
     db.commit()
     db.expire_all()
