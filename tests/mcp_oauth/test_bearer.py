@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 import pytest
 
@@ -15,6 +14,7 @@ from app.features.mcp_oauth.models import McpOrgSettings, OAuthGrant, OAuthToken
 from app.features.mcp_oauth.services import rate_limit
 from tests.mcp_oauth.support import bearer, mint_grant, unique_addr
 
+FIXED_UUID = "00000000-0000-4000-8000-000000000000"  # stable test ids: xdist workers must collect identically
 WWW_INVALID = 'Bearer error="invalid_token"'
 
 
@@ -67,7 +67,7 @@ def _non_get_routes():
     from app.api.middleware.tenant_context import PUBLIC_ENDPOINTS
 
     routes = []
-    for rule in app_module.app.url_map.iter_rules():
+    for rule in sorted(app_module.app.url_map.iter_rules(), key=lambda r: (r.rule, r.endpoint)):
         for method in sorted(rule.methods - {"GET", "HEAD", "OPTIONS"}):
             if requirement_for(rule.endpoint, method) == PUBLIC or rule.endpoint in PUBLIC_ENDPOINTS:
                 # Public endpoints stay public, and the anonymous ones (sign-in, telemetry, the
@@ -76,7 +76,7 @@ def _non_get_routes():
             values = {}
             for arg in rule.arguments:
                 kind = type(rule._converters[arg]).__name__
-                values[arg] = str(uuid4()) if kind == "UUIDConverter" else (1 if kind == "IntegerConverter" else "x")
+                values[arg] = FIXED_UUID if kind == "UUIDConverter" else (1 if kind == "IntegerConverter" else "x")
             routes.append(
                 (
                     rule.endpoint,

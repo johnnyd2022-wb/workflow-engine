@@ -162,9 +162,10 @@ def upgrade():
 
 def downgrade():
     bind = op.get_bind()
-    for table in ("mcp_org_settings", "mcp_allowed_roles"):
-        if bind.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).first():  # noqa: S608 -- fixed names
-            raise RuntimeError(f"{table} contains rows an administrator set; downgrading would lose them")
+    if bind.execute(text("SELECT 1 FROM mcp_org_settings LIMIT 1")).first():
+        raise RuntimeError("mcp_org_settings contains rows an administrator set; downgrading would lose them")
+    if bind.execute(text("SELECT 1 FROM mcp_allowed_roles LIMIT 1")).first():
+        raise RuntimeError("mcp_allowed_roles contains rows an administrator set; downgrading would lose them")
     op.drop_table("oauth_tokens")
     op.drop_table("oauth_authorization_codes")
     op.drop_table("oauth_grants")
