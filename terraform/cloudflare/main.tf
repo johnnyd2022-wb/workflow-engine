@@ -1,7 +1,7 @@
 # Everything Cloudflare serves from the one tunnel on this machine: hostname => origin.
 #
 # To add a site, add a line and apply. The module puts Cloudflare Access (founders only)
-# in front of it, then creates the tunnel route and the DNS record, with the same settings
+# in front of it (minus any public_paths), then creates the tunnel route and the DNS record, with the same settings
 # as every other site. The whistlebird.co.nz hostnames share the tunnel; their DNS records
 # and Access applications are managed outside this root.
 #
@@ -22,8 +22,7 @@ module "tunnel" {
     "dev.biz-e.app"        = "https://172.26.121.16:8005"        # local development
 
     # The public MCP server (bize_mcp, scripts/run_mcp.sh): plain HTTP, published on loopback only.
-    # Founders-only behind Access like every biz-e.app host (founder, 17 Nov 2026). Hosted assistants
-    # need these hosts and the app's /oauth/* and /.well-known/* exempted before MCP goes public.
+    # Founders-only behind Access like every biz-e.app host, except the paths in public_paths.
     "mcp-test.biz-e.app" = "http://host.docker.internal:8030" # test
     "mcp.biz-e.app"      = "http://host.docker.internal:8031" # production
 
@@ -31,4 +30,18 @@ module "tunnel" {
     "test-inventory.whistlebird.co.nz" = "https://host.docker.internal:5001"
     "access.whistlebird.co.nz"         = "rdp://host.docker.internal:3389"
   }
+
+  # What an AI assistant calls by itself, with no browser to pass Access (public MCP 8.2; founder,
+  # 17 Nov 2026). Each still has its own sign-in: MCP and the OAuth token/registration endpoints
+  # are bearer- or PKCE-protected and rate limited. /oauth/authorize (the approve screen) opens in
+  # the person's browser, so it stays founders-only for now. Test only; production gets the same
+  # when MCP goes public.
+  public_paths = [
+    "mcp-test.biz-e.app/mcp",
+    "mcp-test.biz-e.app/.well-known/*",
+    "test.biz-e.app/.well-known/*",
+    "test.biz-e.app/oauth/token",
+    "test.biz-e.app/oauth/register",
+    "test.biz-e.app/oauth/revoke",
+  ]
 }

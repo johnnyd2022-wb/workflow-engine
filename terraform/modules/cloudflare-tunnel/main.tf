@@ -76,6 +76,32 @@ resource "cloudflare_zero_trust_access_application" "this" {
   policies                   = [{ id = cloudflare_zero_trust_access_policy.founders.id, precedence = 1 }]
 }
 
+# Paths that skip Access (var.public_paths): their own application, more specific than the
+# host's, with a bypass policy. Only paths on hosts this module publishes.
+resource "cloudflare_zero_trust_access_application" "public" {
+  for_each = toset([
+    for entry in var.public_paths : entry
+    if contains(local.published, split("/", entry)[0])
+  ])
+
+  account_id                = var.account_id
+  name                      = "Public: ${each.value}"
+  type                      = "self_hosted"
+  domain                    = each.value
+  destinations              = [{ type = "public", uri = each.value }]
+  session_duration          = local.access_session
+  auto_redirect_to_identity = false
+  options_preflight_bypass  = false
+  policies                  = [{ id = cloudflare_zero_trust_access_policy.public.id, precedence = 1 }]
+}
+
+resource "cloudflare_zero_trust_access_policy" "public" {
+  account_id = var.account_id
+  name       = "Public path (no sign-in)"
+  decision   = "bypass"
+  include    = [{ everyone = {} }]
+}
+
 resource "cloudflare_zero_trust_access_policy" "founders" {
   account_id       = var.account_id
   name             = "Founder access"
