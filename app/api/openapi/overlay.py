@@ -78,6 +78,10 @@ class Overlay:
     schemas: dict[str, dict]
 
 
+# Keys whose value may genuinely be null inside a schema or a parameter.
+_NULLABLE_KEYS = frozenset({"example", "default", "const", "x-example"})
+
+
 def _stray_flow_keys(node, where: str) -> None:
     """A comma in an unquoted flow-mapping value (``{type: string, description: a, b}``) splits it, and
     PyYAML keeps the tail as a key with no value. Refuse that instead of publishing a broken schema."""
@@ -87,12 +91,13 @@ def _stray_flow_keys(node, where: str) -> None:
                 raise OverlayError(
                     f"{where}: key {key!r} is not text; quote it (on, off, yes, no and numbers need quotes)"
                 )
-        if "description" in node or "type" in node:
+        if isinstance(node.get("description"), str) or isinstance(node.get("type"), (str, list)):
             for key, value in node.items():
-                if value is None and isinstance(key, str) and " " in key:
+                if value is None and isinstance(key, str) and key not in _NULLABLE_KEYS:
                     raise OverlayError(f"{where}: {key!r} looks like part of a description cut at a comma; quote it")
-        for value in node.values():
-            _stray_flow_keys(value, where)
+        for key, value in node.items():
+            if key not in ("example", "examples", "default", "const", "enum"):  # data, not schema
+                _stray_flow_keys(value, where)
     elif isinstance(node, list):
         for value in node:
             _stray_flow_keys(value, where)
@@ -104,7 +109,9 @@ def _check_operation(name: str, where: str, entry) -> None:
     unknown = sorted(set(entry) - OPERATION_KEYS)
     if unknown:
         raise OverlayError(f"{where}: {name} has unknown keys {unknown}; allowed: {sorted(OPERATION_KEYS)}")
-    xbize = entry.get("x-bize", {})
+    xbize = entry.get("x-bize") or {}
+    if not isinstance(xbize, dict):
+        raise OverlayError(f"{where}: {name} x-bize must be a mapping")
     unknown = sorted(set(xbize) - XBIZE_KEYS)
     if unknown:
         raise OverlayError(f"{where}: {name} x-bize has unknown keys {unknown}; allowed: {sorted(XBIZE_KEYS)}")
@@ -113,10 +120,10 @@ def _check_operation(name: str, where: str, entry) -> None:
     if "mcp" in xbize and not isinstance(xbize["mcp"], bool):
         raise OverlayError(f"{where}: {name} x-bize.mcp must be true or false")
     response = entry.get("response")
-    if response is not None and "schema" not in response:
+    if response is not None and not (isinstance(response, dict) and "schema" in response):
         raise OverlayError(f"{where}: {name} response needs a schema")
     for parameter in entry.get("parameters", []):
-        if not {"name", "in"} <= set(parameter):
+        if not isinstance(parameter, dict) or not {"name", "in"} <= set(parameter):
             raise OverlayError(f"{where}: {name} has a parameter with no name or no 'in'")
 
 

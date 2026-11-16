@@ -9,7 +9,7 @@ schemas:
       One stock line (a lot): a raw material, a work-in-progress intermediate or a finished product.
       Fields not listed here may appear; the ones listed are always present.
     additionalProperties: true
-    required: [id, name, inventory_type, quantity, unit, created_at]
+    required: [id, name, inventory_type, quantity, unit]
     properties:
       id: {type: string, format: uuid}
       name: {type: string, description: "The material or product name."}
@@ -22,7 +22,8 @@ schemas:
           Amount on hand as a decimal string. This is on-hand stock, not what is free to use: see
           `committed` and `quality_hold`.
       unit: {type: string, description: "The unit `quantity` is in, such as kg or L."}
-      created_at: {type: string, description: "When the lot was created (ISO 8601)."}
+      created_at: {type: string, description: "When the lot was created (ISO 8601). Absent in the compact view."}
+      display_label: {type: ["string", "null"], description: "Only in the compact view."}
       expiry_date: {type: [string, "null"], description: "The lot's expiry date, or null when it has none."}
       supplier: {type: [string, "null"]}
       supplier_batch_number: {type: [string, "null"]}
@@ -133,6 +134,10 @@ operations:
         in: query
         description: Only lots held at this site.
         schema: {type: string, format: uuid}
+      - name: view
+        in: query
+        description: "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present."
+        schema: {type: string, enum: [compact]}
       - name: limit
         in: query
         description: Page size. Without it the whole list is returned. Capped by the server.

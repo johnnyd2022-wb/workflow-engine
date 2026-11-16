@@ -132,6 +132,17 @@ def openapi_path(rule: str) -> tuple[str, tuple[dict, ...]]:
     return _RULE_ARGUMENT.sub(lambda m: "{" + m.group("name") + "}", rule), tuple(parameters)
 
 
+# Internal tracking ids developers put in docstrings ("GL-P01b: ...", "8.1f-2: ...", "(GL-P07 B5)"): not for callers.
+_LEADING_ID = re.compile(r"^(?:GL-[A-Z]+\d+[a-z]?|\d+\.\d+[a-z]?(?:-\d+)?|AC\d+)\s*:\s*")
+_PAREN_ID = re.compile(r"\s*\((?:GL-[A-Z]+\d+[a-z]?|AC\d+)[^)]*\)")
+
+
+def _clean(text: str | None) -> str | None:
+    if not text:
+        return text
+    return _PAREN_ID.sub("", _LEADING_ID.sub("", text.strip())).strip() or None
+
+
 def docstring_parts(function) -> tuple[str | None, str | None]:
     """(summary, description) from a docstring.
 
@@ -147,10 +158,10 @@ def docstring_parts(function) -> tuple[str | None, str | None]:
     rest = paragraphs[1].strip() if len(paragraphs) > 1 else ""
     lines = first.splitlines()
     if len(lines) > 1 and not lines[0].rstrip().endswith((".", "?", "!", ":", ")")):
-        return " ".join(part.strip() for part in lines), rest or None
+        return _clean(" ".join(part.strip() for part in lines)), rest or None
     tail = "\n".join(lines[1:]).strip()
     description = "\n\n".join(part for part in (tail, rest) if part)
-    return lines[0].strip(), description or None
+    return _clean(lines[0]), description or None
 
 
 def domain_for(endpoint: str, rule: str) -> str:

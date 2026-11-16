@@ -220,7 +220,12 @@ def build(app, overlay: Overlay | None = None) -> BuiltDocument:
     paths: dict[str, dict] = {}
     endpoints: dict[str, tuple[str, str]] = {}
     for op in operations:
-        paths.setdefault(op.path, {})[op.method.lower()] = _operation(op, overlay.operations.get(op.operation_id, {}))
+        item = paths.setdefault(op.path, {})
+        if op.method.lower() in item:
+            raise ValueError(
+                f"{op.method} {op.path} is served by two rules (second: {op.endpoint}); the document needs one operation"
+            )
+        item[op.method.lower()] = _operation(op, overlay.operations.get(op.operation_id, {}))
         endpoints[op.operation_id] = (op.endpoint, op.method)
     document = {
         "openapi": OPENAPI_VERSION,

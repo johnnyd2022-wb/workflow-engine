@@ -110,7 +110,7 @@ operations:
           status: {$ref: "#/components/schemas/CostStatus"}
           cost_so_far: {type: [string, "null"], description: "The cost of the inputs used so far."}
           cost_so_far_status: {$ref: "#/components/schemas/CostStatus"}
-          known_input_cost: {type: string, description: "The part of the input cost that is known."}
+          known_input_cost: {type: [string, "null"], description: "The part of the input cost that is known, or null when the batch is too large to cost."}
           split_assumed: {type: boolean, description: "True when the cost was split across outputs by an assumption."}
           inputs: {type: array, items: {type: object, additionalProperties: true}}
           outputs: {type: array, items: {type: object, additionalProperties: true}}
@@ -317,16 +317,16 @@ operations:
             items:
               type: object
               additionalProperties: true
-              required: [inventory_item_id, name, category, quantity, unit, status, unit_cost, value]
+              required: [inventory_item_id, name, category, quantity, status, unit_cost, value]
               properties:
-                inventory_item_id: {type: string, format: uuid}
+                inventory_item_id: {type: [string, "null"], format: uuid, description: "Null for a batch still in production, which has no lot yet."}
                 name: {type: string}
                 batch: {type: [string, "null"]}
                 category: {type: string}
                 kind: {type: string}
                 execution_id: {type: [string, "null"]}
                 quantity: {type: string}
-                unit: {type: string}
+                unit: {type: [string, "null"]}
                 status: {$ref: "#/components/schemas/CostStatus"}
                 unit_cost: {type: [string, "null"]}
                 known_unit_cost: {type: [string, "null"]}

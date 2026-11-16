@@ -43,7 +43,7 @@ operations:
         in: path
         description: The lot to trace back from, from the inventory list.
         schema: {type: string, format: uuid}
-    errors: [404]
+    errors: [400, 404]
     response:
       description: The lot and everything upstream of it.
       schema:
@@ -90,7 +90,7 @@ operations:
         in: path
         description: The raw-material lot id, from the inventory list.
         schema: {type: string, format: uuid}
-    errors: [404]
+    errors: [400, 404]
     response:
       description: The raw material and everything downstream of it.
       schema:
@@ -133,7 +133,7 @@ operations:
         in: path
         description: The lot to trace, from the inventory list.
         schema: {type: string, format: uuid}
-    errors: [404]
+    errors: [400, 404]
     response:
       description: The graph around the lot.
       schema:
@@ -141,10 +141,15 @@ operations:
         additionalProperties: true
         required: [traced_item, all_items, connections]
         properties:
-          traced_item: {$ref: "#/components/schemas/TraceItem"}
+          traced_item:
+            description: The lot that was traced, or null when it is not in this organisation.
+            oneOf:
+              - {$ref: "#/components/schemas/TraceItem"}
+              - {type: "null"}
           all_items:
             type: array
-            items: {$ref: "#/components/schemas/TraceItem"}
+            description: "The lots in the graph and, where sales are connected, one node per sale line (its id is not a lot id)."
+            items: {type: object, additionalProperties: true, required: [id], properties: {id: {type: string}, name: {type: string}, node_type: {type: string}}}
           connections:
             type: array
             items: {$ref: "#/components/schemas/TraceConnection"}

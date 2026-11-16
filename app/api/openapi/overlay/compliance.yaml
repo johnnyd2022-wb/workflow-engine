@@ -81,7 +81,7 @@ operations:
               label: {type: string}
               period_start: {type: string}
               due: {type: string}
-              estimate: {type: string}
+              estimate: {type: [string, "null"], description: "Null while the period's entry is incomplete, such as unfinished product setup."}
               ccas: {type: integer}
               total_lal: {type: string, description: "Litres of absolute alcohol removed this period."}
           stocktake:
@@ -166,13 +166,13 @@ operations:
     summary: One excise period's return
     description: >-
       One period's excise return as it stands: the lines by product, adjustments, CCA transfers, totals and
-      any problems that stop it being lodged. Defaults to the current period. With several licences it shows
+      any problems that stop it being lodged. Defaults to the most recent complete period. With several licences it shows
       one CCA's entry (`cca`, else the first).
     parameters:
       - name: period
         in: query
-        description: The period to show, as its start month (YYYY-MM). Defaults to the current period.
-        schema: {type: string}
+        description: "A date inside the period to show (YYYY-MM-DD, for example 2026-10-01). Defaults to the most recent complete period, the one before the current."
+        schema: {type: string, format: date}
       - name: cca
         in: query
         description: The CCA licence id, when the organisation has several.

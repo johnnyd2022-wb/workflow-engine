@@ -146,8 +146,15 @@
             "type": "array"
           },
           "created_at": {
-            "description": "When the lot was created (ISO 8601).",
+            "description": "When the lot was created (ISO 8601). Absent in the compact view.",
             "type": "string"
+          },
+          "display_label": {
+            "description": "Only in the compact view.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "event_summary": {
             "additionalProperties": true,
@@ -295,8 +302,7 @@
           "name",
           "inventory_type",
           "quantity",
-          "unit",
-          "created_at"
+          "unit"
         ],
         "type": "object"
       },
@@ -2568,14 +2574,15 @@
     },
     "/api/compliant/nz-alcohol/excise": {
       "get": {
-        "description": "One period's excise return as it stands: the lines by product, adjustments, CCA transfers, totals and any problems that stop it being lodged. Defaults to the current period. With several licences it shows one CCA's entry (`cca`, else the first).",
+        "description": "One period's excise return as it stands: the lines by product, adjustments, CCA transfers, totals and any problems that stop it being lodged. Defaults to the most recent complete period. With several licences it shows one CCA's entry (`cca`, else the first).",
         "operationId": "compliant_compliant_api_get_excise_period",
         "parameters": [
           {
-            "description": "The period to show, as its start month (YYYY-MM). Defaults to the current period.",
+            "description": "A date inside the period to show (YYYY-MM-DD, for example 2026-10-01). Defaults to the most recent complete period, the one before the current.",
             "in": "query",
             "name": "period",
             "schema": {
+              "format": "date",
               "type": "string"
             }
           },
@@ -3152,7 +3159,11 @@
                           "type": "string"
                         },
                         "estimate": {
-                          "type": "string"
+                          "description": "Null while the period's entry is incomplete, such as unfinished product setup.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "label": {
                           "type": "string"
@@ -6125,8 +6136,11 @@
                       "type": "array"
                     },
                     "known_input_cost": {
-                      "description": "The part of the input cost that is known.",
-                      "type": "string"
+                      "description": "The part of the input cost that is known, or null when the batch is too large to cost.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "missing": {
                       "items": {
@@ -8001,8 +8015,12 @@
                             ]
                           },
                           "inventory_item_id": {
+                            "description": "Null for a batch still in production, which has no lot yet.",
                             "format": "uuid",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "kind": {
                             "type": "string"
@@ -8023,7 +8041,10 @@
                             "$ref": "#/components/schemas/CostStatus"
                           },
                           "unit": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "unit_cost": {
                             "type": [
@@ -8044,7 +8065,6 @@
                           "name",
                           "category",
                           "quantity",
-                          "unit",
                           "status",
                           "unit_cost",
                           "value"
@@ -9654,6 +9674,17 @@
             }
           },
           {
+            "description": "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present.",
+            "in": "query",
+            "name": "view",
+            "schema": {
+              "enum": [
+                "compact"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "description": "Page size. Without it the whole list is returned. Capped by the server.",
             "in": "query",
             "name": "limit",
@@ -10442,6 +10473,9 @@
             },
             "description": "The lot and everything upstream of it."
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
@@ -10516,8 +10550,24 @@
                   "additionalProperties": true,
                   "properties": {
                     "all_items": {
+                      "description": "The lots in the graph and, where sales are connected, one node per sale line (its id is not a lot id).",
                       "items": {
-                        "$ref": "#/components/schemas/TraceItem"
+                        "additionalProperties": true,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "node_type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
                       },
                       "type": "array"
                     },
@@ -10528,7 +10578,15 @@
                       "type": "array"
                     },
                     "traced_item": {
-                      "$ref": "#/components/schemas/TraceItem"
+                      "description": "The lot that was traced, or null when it is not in this organisation.",
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/TraceItem"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -10541,6 +10599,9 @@
               }
             },
             "description": "The graph around the lot."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -10659,6 +10720,9 @@
               }
             },
             "description": "The raw material and everything downstream of it."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -12120,7 +12184,7 @@
             "bearerToken": []
           }
         ],
-        "summary": "When could a new order for n be ready? (GL-P07 B5)",
+        "summary": "When could a new order for n be ready?",
         "tags": [
           "planning"
         ],
@@ -16920,7 +16984,7 @@
             "bearerToken": []
           }
         ],
-        "summary": "GL-P01b: the sale lines on an invoice that goods could come back from.",
+        "summary": "the sale lines on an invoice that goods could come back from.",
         "tags": [
           "sales"
         ],
@@ -17463,7 +17527,7 @@
             "bearerToken": []
           }
         ],
-        "summary": "GL-P01b: goods customers sent back, newest first.",
+        "summary": "goods customers sent back, newest first.",
         "tags": [
           "sales"
         ],
@@ -17494,7 +17558,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "GL-P01b: record what physically came back. Only this moves stock; a credit note never does.",
+        "summary": "record what physically came back. Only this moves stock; a credit note never does.",
         "tags": [
           "sales"
         ],
@@ -17566,7 +17630,7 @@
             "bearerToken": []
           }
         ],
-        "summary": "GL-P01b: the stock areas a return can be received into, and whether each is in bond.",
+        "summary": "the stock areas a return can be received into, and whether each is in bond.",
         "tags": [
           "sales"
         ],
