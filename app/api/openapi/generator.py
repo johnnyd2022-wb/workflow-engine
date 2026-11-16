@@ -83,7 +83,7 @@ _BLUEPRINT_DOMAIN: dict[str, str] = {
     "openapi": "account",
 }
 # Product areas an organisation may not have. The blueprint's first segment names the product.
-_BLUEPRINT_FEATURE: dict[str, str] = {"crm": "crm", "tastings": "crm", "compliant": "compliant"}
+_BLUEPRINT_FEATURE: dict[str, str] = {"crm": "crm", "tastings": "crm", "compliant": "compliant", "costing": "costing"}
 
 DOMAINS: dict[str, str] = {
     "inventory": "Stock on hand, lots, holds, sites, locations and stocktakes.",

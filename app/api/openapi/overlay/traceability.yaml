@@ -2,7 +2,161 @@
 # What the code cannot say about a route: its query parameters, response, concepts and an example.
 # Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
 # generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  TraceItem:
+    type: object
+    description: A lot that appears in a trace, with where it came from.
+    additionalProperties: true
+    required: [id, name, inventory_type, quantity, unit]
+    properties:
+      id: {type: string, format: uuid}
+      name: {type: string}
+      inventory_type: {type: string}
+      quantity: {type: string}
+      unit: {type: string}
+      batch_id: {type: [string, "null"]}
+      created_at: {type: [string, "null"]}
+      purchase_date: {type: [string, "null"]}
+      expiry_date: {type: [string, "null"]}
+      supplier: {type: [string, "null"]}
+      supplier_batch_number: {type: [string, "null"]}
+      process_name: {type: [string, "null"], description: "The workflow that made the lot, when it was made."}
+      source_execution_id: {type: [string, "null"]}
+      source_execution_step_id: {type: [string, "null"]}
+      source_step_name: {type: [string, "null"]}
+      step_data: {type: [object, "null"], additionalProperties: true}
+      custom_prompts: {type: [object, "null"], additionalProperties: true}
+      extra_data: {type: [object, "null"], additionalProperties: true}
+  TraceConnection:
+    type: object
+    description: "An edge in the trace graph: one lot consumed into another by a step."
+    additionalProperties: true
 operations:
+  core_trace_inventory_backward:
+    summary: Trace a lot back to its sources
+    description: >-
+      Starting from any lot (raw, intermediate or finished), every lot it was made from, the steps in between
+      and the supplier and batch of each raw material. Use it to answer where an ingredient came from. The
+      walk is computed by Biz-E over the recorded batches, so quote it rather than inferring from names.
+    parameters:
+      - name: inventory_item_id
+        in: path
+        description: The lot to trace back from, from the inventory list.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The lot and everything upstream of it.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [traced_item, all_items, raw_materials, intermediates, connections, trace_steps]
+        properties:
+          traced_item: {$ref: "#/components/schemas/TraceItem"}
+          all_items:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          raw_materials:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          intermediates:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          connections:
+            type: array
+            items: {$ref: "#/components/schemas/TraceConnection"}
+          trace_steps:
+            type: array
+            items: {type: object, additionalProperties: true}
+      example:
+        traced_item: {id: 0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44, name: Dry Gin, inventory_type: final_product, quantity: "240", unit: bottle, source_execution_id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20}
+        all_items: []
+        raw_materials: []
+        intermediates: []
+        connections: []
+        trace_steps: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [traceability.back]
+      related_operations: [core_trace_raw_material, core_trace_inventory_to_sale_graph, core_list_inventory]
+  core_trace_raw_material:
+    summary: Trace a raw material forward to what it went into
+    description: >-
+      Starting from a raw-material lot, every intermediate and finished lot made with it. Use it to scope a
+      recall or to answer which products an ingredient batch went into. To see the customers those products
+      reached, use the to-sale graph on a finished lot.
+    parameters:
+      - name: raw_material_id
+        in: path
+        description: The raw-material lot id, from the inventory list.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The raw material and everything downstream of it.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [raw_material, all_items, intermediates, finals, connections]
+        properties:
+          raw_material: {$ref: "#/components/schemas/TraceItem"}
+          all_items:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          intermediates:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          finals:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          connections:
+            type: array
+            items: {$ref: "#/components/schemas/TraceConnection"}
+      example:
+        raw_material: {id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11, name: Juniper berries, inventory_type: raw_material, quantity: "12.5", unit: kg}
+        all_items: []
+        intermediates: []
+        finals: []
+        connections: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [traceability.forward]
+      related_operations: [core_trace_inventory_backward, core_trace_inventory_to_sale_graph, core_list_expired_materials]
+  core_trace_inventory_to_sale_graph:
+    summary: Trace a lot from source material through production to sales
+    description: >-
+      The whole graph around one lot: the source materials, the production steps and, where sales are
+      connected, the invoices and customers the lot reached. The authoritative answer to who bought a
+      given batch. Biz-E builds the graph, so read it rather than reconstructing it.
+    parameters:
+      - name: inventory_item_id
+        in: path
+        description: The lot to trace, from the inventory list.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The graph around the lot.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [traced_item, all_items, connections]
+        properties:
+          traced_item: {$ref: "#/components/schemas/TraceItem"}
+          all_items:
+            type: array
+            items: {$ref: "#/components/schemas/TraceItem"}
+          connections:
+            type: array
+            items: {$ref: "#/components/schemas/TraceConnection"}
+      example:
+        traced_item: {id: 0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44, name: Dry Gin, inventory_type: final_product, quantity: "240", unit: bottle}
+        all_items: []
+        connections: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [traceability.to_sale, traceability.back, traceability.forward]
+      related_operations: [core_trace_inventory_backward, core_trace_raw_material, crm_crm_api_get_org_invoices]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
   recalls_acknowledged:
     summary: Acknowledged

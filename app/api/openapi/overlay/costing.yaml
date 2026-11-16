@@ -2,7 +2,352 @@
 # What the code cannot say about a route: its query parameters, response, concepts and an example.
 # Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
 # generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  CostStatus:
+    type: string
+    enum: [actual, estimated, partial, unknown]
+    description: >-
+      How far a cost can be trusted. `actual`: every input priced from a real purchase or entry.
+      `estimated`: priced from the last known price or an average. `partial`: some inputs are unpriced.
+      `unknown`: nothing could be priced. A cost that is not known is null beside this status, never 0.
+  LotCost:
+    type: object
+    additionalProperties: true
+    required: [inventory_item_id, name, unit, status, unit_cost, known_unit_cost, missing, warnings]
+    properties:
+      inventory_item_id: {type: string, format: uuid}
+      name: {type: string}
+      unit: {type: string}
+      status: {$ref: "#/components/schemas/CostStatus"}
+      unit_cost:
+        type: [string, "null"]
+        description: Cost per unit as a decimal string, or null when it cannot be stated (see `status`). Never 0 for unknown.
+      known_unit_cost:
+        type: [string, "null"]
+        description: The part of the unit cost that is known, when the cost is partial.
+      priced_quantity: {type: string}
+      unpriced_quantity: {type: string}
+      source: {type: string, description: "Where the cost comes from, such as a purchase, a manual entry or the batch that made the lot."}
+      editable: {type: boolean}
+      estimate_from: {type: [object, "null"], additionalProperties: true}
+      pack_breakdown: {type: [object, "null"], additionalProperties: true}
+      provenance: {type: [object, "array", "null"], additionalProperties: true}
+      entries:
+        type: array
+        description: The price entries behind the cost.
+        items: {type: object, additionalProperties: true}
+      missing:
+        type: array
+        description: Input lots that have no price, which is why a cost is partial or unknown.
+        items:
+          type: object
+          additionalProperties: false
+          required: [inventory_item_id, name]
+          properties:
+            inventory_item_id: {type: string, format: uuid}
+            name: {type: string}
+      warnings: {type: array, items: {type: string}}
 operations:
+  costing_get_lot_cost:
+    summary: Cost of one lot
+    description: >-
+      What a lot cost per unit and how that was worked out: the price entries behind it, anything missing and
+      any warning. For a lot made in a batch the cost is carried from its inputs. A lot with no price returns
+      `unit_cost: null` with a status that says why, never 0. Biz-E computes this; quote it rather than
+      multiplying quantities yourself. Only for organisations that have costing.
+    parameters:
+      - name: item_id
+        in: path
+        description: The lot (inventory item) id.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The lot's cost.
+      schema: {$ref: "#/components/schemas/LotCost"}
+      example:
+        inventory_item_id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11
+        name: Juniper berries
+        unit: kg
+        status: unknown
+        unit_cost: null
+        known_unit_cost: null
+        priced_quantity: "0"
+        unpriced_quantity: "12.5"
+        source: none
+        editable: true
+        estimate_from: null
+        pack_breakdown: null
+        provenance: null
+        entries: []
+        missing: [{inventory_item_id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11, name: Juniper berries}]
+        warnings: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.cost_status, costing.last_known_price]
+      related_operations: [costing_get_execution_cost, costing_get_stock_value, core_list_inventory]
+  costing_get_execution_cost:
+    summary: Cost of one batch
+    description: >-
+      What a batch cost so far: each input and its cost, the cost of what it made, the status of the figure
+      and the duty that applies today where excise is tracked. Where a batch makes several outputs the split
+      between them may be assumed (`split_assumed`). Unknown inputs leave the cost partial or unknown, never
+      zero. Only for organisations that have costing.
+    parameters:
+      - name: execution_id
+        in: path
+        description: The batch (execution) id.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The batch's cost.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [execution_id, status, cost_so_far, cost_so_far_status, known_input_cost, inputs, outputs, missing, warnings]
+        properties:
+          execution_id: {type: string, format: uuid}
+          status: {$ref: "#/components/schemas/CostStatus"}
+          cost_so_far: {type: [string, "null"], description: "The cost of the inputs used so far."}
+          cost_so_far_status: {$ref: "#/components/schemas/CostStatus"}
+          known_input_cost: {type: string, description: "The part of the input cost that is known."}
+          split_assumed: {type: boolean, description: "True when the cost was split across outputs by an assumption."}
+          inputs: {type: array, items: {type: object, additionalProperties: true}}
+          outputs: {type: array, items: {type: object, additionalProperties: true}}
+          missing: {type: array, items: {type: object, additionalProperties: true}}
+          warnings: {type: array, items: {type: string}}
+          duty_today:
+            type: object
+            additionalProperties: true
+            description: Excise duty per unit at today's rate, when the organisation tracks it.
+      example:
+        execution_id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20
+        status: unknown
+        cost_so_far: "0"
+        cost_so_far_status: unknown
+        known_input_cost: "0"
+        split_assumed: false
+        inputs: []
+        outputs: []
+        missing: []
+        warnings: []
+        duty_today: {tracked: false, "on": "2026-11-16", per_unit: null, landed_per_unit: null, total: null}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.cost_status, costing.joint_outputs]
+      related_operations: [costing_get_lot_cost, core_get_execution, costing_readiness_list]
+  costing_readiness_list:
+    summary: Which products can be costed yet
+    description: >-
+      Each product with whether it is ready to cost (every declared material priced), how many of its
+      materials are costed, and its unit cost where ready. Use it to see what is blocking a cost.
+    response:
+      description: One row per product.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [products]
+        properties:
+          products:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: [key, name, ready, materials_total, materials_costed, unit_cost, unit, unit_cost_status]
+              properties:
+                key: {type: string, description: "The product key to pass to the readiness detail operation."}
+                name: {type: string}
+                ready: {type: boolean}
+                materials_total: {type: integer}
+                materials_costed: {type: integer}
+                unit_cost: {type: [string, "null"]}
+                unit: {type: [string, "null"]}
+                unit_cost_status: {type: [string, "null"]}
+      example:
+        products:
+          - {key: dry-gin, name: Dry Gin, ready: false, materials_total: 5, materials_costed: 3, unit_cost: null, unit: bottle, unit_cost_status: null}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.readiness, costing.cost_status]
+      related_operations: [costing_readiness_detail, costing_margins_report]
+  costing_readiness_detail:
+    summary: Costing readiness of one product
+    description: >-
+      For one product, each material it uses, whether it is priced, and the basis used (the latest batch or
+      the declared inputs). Tells you exactly which material to price to make the product ready.
+    parameters:
+      - name: key
+        in: path
+        description: The product key from the readiness list. It may contain slashes.
+        schema: {type: string}
+    errors: [404]
+    response:
+      description: The product's readiness.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [key, name, basis, ready, materials]
+        properties:
+          key: {type: string}
+          name: {type: string}
+          basis: {type: string, description: "latest_batch or declared_inputs."}
+          execution_id: {type: [string, "null"]}
+          ready: {type: boolean}
+          unit_cost: {type: [string, "null"]}
+          unit: {type: [string, "null"]}
+          unit_cost_status: {type: [string, "null"]}
+          materials:
+            type: array
+            items: {type: object, additionalProperties: true}
+      example:
+        key: dry-gin
+        name: Dry Gin
+        basis: declared_inputs
+        execution_id: null
+        ready: false
+        unit_cost: null
+        unit: bottle
+        unit_cost_status: null
+        materials: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.readiness, costing.last_known_price]
+      related_operations: [costing_readiness_list, costing_get_lot_cost]
+  costing_margins_report:
+    summary: Margin per product per month
+    description: >-
+      Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue
+      is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403.
+      A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the
+      last six months. At most a fixed number of months at a time.
+    parameters:
+      - name: from
+        in: query
+        description: First month, YYYY-MM. Defaults to five months before this one.
+        schema: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}
+      - name: to
+        in: query
+        description: Last month, YYYY-MM. Defaults to the current month.
+        schema: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}
+    errors: [400]
+    response:
+      description: One row per product per month.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [from, to, currency, rows]
+        properties:
+          from: {type: string}
+          to: {type: string}
+          currency: {type: string}
+          rows:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+              required: [product, month, units, revenue, cost, cost_status, margin]
+              properties:
+                product: {type: string}
+                month: {type: string, description: "YYYY-MM."}
+                units: {type: string}
+                revenue: {type: [string, "null"]}
+                cost: {type: [string, "null"]}
+                cost_status: {type: string}
+                duty: {type: [string, "null"]}
+                duty_tracked: {type: boolean}
+                margin: {type: [string, "null"]}
+                margin_percent: {type: [string, number, "null"]}
+                average_cost_per_unit: {type: [string, "null"]}
+                lines: {type: array, items: {type: object, additionalProperties: true}}
+      example:
+        from: "2026-06"
+        to: "2026-11"
+        currency: NZD
+        rows:
+          - {product: Dry Gin, month: "2026-10", units: "220", revenue: "9900.00", cost: null, cost_status: unknown, duty: null, duty_tracked: false, margin: null, margin_percent: null, average_cost_per_unit: null, lines: []}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.cost_status, costing.joint_outputs, sales.fifo_matching]
+      related_operations: [crm_crm_api_monthly_sales, costing_readiness_list, costing_get_stock_value]
+  costing_get_stock_value:
+    summary: Value of stock on hand
+    description: >-
+      The value of every lot on hand now, by category (raw, work in progress, finished, in production),
+      with how much of it is actual, estimated or partial. `complete` is false while any lot has no cost, and
+      the total then covers only the lots that do: say so rather than quoting it as the whole value. Lots with
+      an unknown cost have a null value, never 0. Only for organisations that have costing.
+    response:
+      description: The valuation as of now.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [as_of, currency, total, complete, lot_count, unknown_lots, partial_lots, categories, split, lines]
+        properties:
+          as_of: {type: string}
+          currency: {type: string}
+          total: {type: string, description: "The value of the lots whose cost is known."}
+          complete: {type: boolean, description: "True only when every lot has a cost."}
+          lot_count: {type: integer}
+          unknown_lots: {type: integer, description: "Lots with no cost at all."}
+          partial_lots: {type: integer}
+          categories:
+            type: object
+            additionalProperties:
+              type: object
+              additionalProperties: false
+              required: [lots, value]
+              properties:
+                lots: {type: integer}
+                value: {type: string}
+          split:
+            type: object
+            description: The total split by how trustworthy the cost is.
+            additionalProperties: false
+            required: [actual, estimated, partial]
+            properties:
+              actual: {type: string}
+              estimated: {type: string}
+              partial: {type: string}
+          lines:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+              required: [inventory_item_id, name, category, quantity, unit, status, unit_cost, value]
+              properties:
+                inventory_item_id: {type: string, format: uuid}
+                name: {type: string}
+                batch: {type: [string, "null"]}
+                category: {type: string}
+                kind: {type: string}
+                execution_id: {type: [string, "null"]}
+                quantity: {type: string}
+                unit: {type: string}
+                status: {$ref: "#/components/schemas/CostStatus"}
+                unit_cost: {type: [string, "null"]}
+                known_unit_cost: {type: [string, "null"]}
+                value: {type: [string, "null"], description: "Null when the lot's cost is unknown."}
+      example:
+        as_of: "2026-11-16T09:00:00+13:00"
+        currency: NZD
+        total: "1520.00"
+        complete: false
+        lot_count: 12
+        unknown_lots: 2
+        partial_lots: 1
+        categories: {raw: {lots: 6, value: "420.00"}, wip: {lots: 1, value: "0"}, finished: {lots: 4, value: "1100.00"}, in_production: {lots: 1, value: "0"}}
+        split: {actual: "1100.00", estimated: "420.00", partial: "0"}
+        lines:
+          - {inventory_item_id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11, name: Juniper berries, batch: null, category: raw, kind: lot, execution_id: null, quantity: "12.5", unit: kg, status: unknown, unit_cost: null, known_unit_cost: null, value: null}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [costing.stock_value, costing.cost_status, costing.xero_bridge]
+      related_operations: [costing_get_lot_cost, costing_margins_report, core_list_inventory]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
   costing_bulk_purchases:
     summary: Bulk purchases
@@ -24,18 +369,12 @@ operations:
     summary: Get accounts
   costing_get_bridge:
     summary: Get bridge
-  costing_get_execution_cost:
-    summary: Get execution cost
-  costing_get_lot_cost:
-    summary: Get lot cost
   costing_get_material_history:
     summary: Get material history
   costing_get_settings:
     summary: Get settings
   costing_get_stock_snapshot:
     summary: Get stock snapshot
-  costing_get_stock_value:
-    summary: Get stock value
   costing_historical_run:
     summary: Historical run
   costing_link_purchase:
@@ -68,10 +407,6 @@ operations:
     summary: Put lot cost
   costing_put_settings:
     summary: Put settings
-  costing_readiness_detail:
-    summary: Get readiness detail
-  costing_readiness_list:
-    summary: Get readiness list
   costing_record_purchase:
     summary: Record purchase
   costing_refund_purchase:

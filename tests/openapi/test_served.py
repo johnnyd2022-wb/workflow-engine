@@ -29,7 +29,8 @@ def _endpoints(app) -> dict[str, str]:
     }
 
 
-def _served(client, query="", **kwargs):
+def _served(client, query="", kwargs=None, **more):
+    kwargs = {**(kwargs or {}), **more}
     resp = client.get(URL + query, **kwargs)
     assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
     return resp.get_json()
@@ -225,11 +226,12 @@ def test_ac38_a_narrowed_document_does_not_mention_what_the_caller_cannot_reach(
     visible operation's ``related_operations``."""
     served = _served(world.session("sales"))
     text = json.dumps(served)
-    hidden = [(oid, path) for oid, (path, _method, op) in by_id(full_doc).items() if oid not in by_id(served)]
+    shown = {(path, method) for oid, (path, method, _op) in by_id(served).items()}
+    hidden = [(oid, path, method) for oid, (path, method, _op) in by_id(full_doc).items() if oid not in by_id(served)]
     assert hidden
-    for oid, path in hidden:
+    for oid, path, method in hidden:
         assert f'"{oid}"' not in text, oid
-        assert path not in served["paths"], path
+        assert (path, method) not in shown, (path, method)
     # ... and the related operations a caller is given are ones they can themselves reach
     visible = set(by_id(served))
     for oid, (_path, _method, op) in by_id(served).items():

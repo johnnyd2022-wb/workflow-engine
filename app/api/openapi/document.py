@@ -35,7 +35,7 @@ meaning "any of these". `signed_in` means any signed-in person, `public` anyone.
 caller only the operations their own permissions reach.
 
 **Reading the `x-bize` fields.** `domain` groups operations; `feature` is set when the operation exists
-only for an organisation that has that product area (`crm`, `compliant`); `kind` is `record`, `list` or
+only for an organisation that has that product area (`crm`, `compliant`, `costing`); `kind` is `record`, `list` or
 `calculation` (a figure Biz-E computes authoritatively, which should be read, not recomputed);
 `mcp` marks the operations an assistant may call; `concepts` name the business-knowledge topics that
 explain the fields; `related_operations` are the operations usually read next. `schema_status` is

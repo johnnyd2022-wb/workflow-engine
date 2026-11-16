@@ -78,6 +78,26 @@ class Overlay:
     schemas: dict[str, dict]
 
 
+def _stray_flow_keys(node, where: str) -> None:
+    """A comma in an unquoted flow-mapping value (``{type: string, description: a, b}``) splits it, and
+    PyYAML keeps the tail as a key with no value. Refuse that instead of publishing a broken schema."""
+    if isinstance(node, dict):
+        for key in node:
+            if not isinstance(key, str):  # YAML 1.1 reads a bare on/off/yes/no as a boolean: quote it
+                raise OverlayError(
+                    f"{where}: key {key!r} is not text; quote it (on, off, yes, no and numbers need quotes)"
+                )
+        if "description" in node or "type" in node:
+            for key, value in node.items():
+                if value is None and isinstance(key, str) and " " in key:
+                    raise OverlayError(f"{where}: {key!r} looks like part of a description cut at a comma; quote it")
+        for value in node.values():
+            _stray_flow_keys(value, where)
+    elif isinstance(node, list):
+        for value in node:
+            _stray_flow_keys(value, where)
+
+
 def _check_operation(name: str, where: str, entry) -> None:
     if not isinstance(entry, dict):
         raise OverlayError(f"{where}: {name} must be a mapping")
@@ -113,6 +133,7 @@ def load_overlay(directory: Path = OVERLAY_DIR) -> Overlay:
             json.dumps(data)
         except TypeError as exc:  # an unquoted date or timestamp in an example, say
             raise OverlayError(f"{where}: a value is not plain JSON ({exc}); quote dates and timestamps") from exc
+        _stray_flow_keys(data, where)
         unknown = sorted(set(data) - FILE_KEYS)
         if unknown:
             raise OverlayError(f"{where}: unknown top-level keys {unknown}; allowed: {sorted(FILE_KEYS)}")

@@ -1,14 +1,1035 @@
 {
   "components": {
     "responses": {
+      "BadRequest": {
+        "description": "The request was not understood: a parameter is missing or invalid."
+      },
       "Forbidden": {
         "description": "Signed in, but the person's role does not hold the required permission."
+      },
+      "NotFound": {
+        "description": "No such record in this organisation."
       },
       "Unauthorized": {
         "description": "Not signed in, or the access token is invalid, expired or revoked."
       }
     },
-    "schemas": {},
+    "schemas": {
+      "CostStatus": {
+        "description": "How far a cost can be trusted. `actual`: every input priced from a real purchase or entry. `estimated`: priced from the last known price or an average. `partial`: some inputs are unpriced. `unknown`: nothing could be priced. A cost that is not known is null beside this status, never 0.",
+        "enum": [
+          "actual",
+          "estimated",
+          "partial",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ExcisePeriodSettings": {
+        "additionalProperties": true,
+        "properties": {
+          "frequency": {
+            "description": "How often returns are lodged, such as monthly.",
+            "type": "string"
+          },
+          "reminders_from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tracking_from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ExecutionStepRecord": {
+        "additionalProperties": true,
+        "description": "One step of a batch, with what was actually used and made.",
+        "properties": {
+          "actual_inputs": {
+            "description": "What was consumed, as recorded by the person who did the step.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "actual_outputs": {
+            "description": "What the step produced, as recorded.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "execution_data": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "pending, ready, in_progress, completed or skipped.",
+            "type": "string"
+          },
+          "step_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "step_inputs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "step_number": {
+            "type": "integer"
+          },
+          "step_outputs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "step_id",
+          "step_number",
+          "status"
+        ],
+        "type": "object"
+      },
+      "InventoryLot": {
+        "additionalProperties": true,
+        "description": "One stock line (a lot): a raw material, a work-in-progress intermediate or a finished product. Fields not listed here may appear; the ones listed are always present.",
+        "properties": {
+          "barcode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "committed": {
+            "description": "Planned batches that already hold some of this lot.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "description": "When the lot was created (ISO 8601).",
+            "type": "string"
+          },
+          "event_summary": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "expiry_date": {
+            "description": "The lot's expiry date, or null when it has none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra_data": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inventory_type": {
+            "description": "Where the lot sits in production, such as a raw material, work in progress or a final product.",
+            "type": "string"
+          },
+          "location_id": {
+            "description": "The stock area inside the site.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The material or product name.",
+            "type": "string"
+          },
+          "process_name": {
+            "description": "The workflow that produced the lot, when it was produced.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producing_step_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producing_step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quality_hold": {
+            "additionalProperties": true,
+            "description": "The open quality hold on this lot, or null. A lot on hold is not usable whatever its quantity.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "quantity": {
+            "description": "Amount on hand as a decimal string. This is on-hand stock, not what is free to use: see `committed` and `quality_hold`.",
+            "type": "string"
+          },
+          "ready_date_display": {
+            "description": "When the lot becomes usable, when it is not yet.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "site_id": {
+            "description": "The site the lot is held at.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_execution_id": {
+            "description": "The batch that produced the lot.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_execution_step_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_output_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplier_batch_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "system_findings": {
+            "description": "Things that need attention on this lot, such as expired stock.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "unit": {
+            "description": "The unit `quantity` is in, such as kg or L.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "inventory_type",
+          "quantity",
+          "unit",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "Invoice": {
+        "additionalProperties": false,
+        "description": "A Xero invoice (or credit) synced into Biz-E, with its line items.",
+        "properties": {
+          "amount_due": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "amount_paid": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "contact_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currency_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fully_paid_on_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "invoice_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoice_type": {
+            "description": "ACCREC is a sale to a customer.",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line_items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "account_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "discount_rate": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "item_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "line_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "quantity": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "tax_type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tracking": {
+                  "additionalProperties": true,
+                  "type": [
+                    "array",
+                    "object",
+                    "null"
+                  ]
+                },
+                "unit_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "Xero status, such as DRAFT, AUTHORISED or PAID.",
+            "type": "string"
+          },
+          "sub_total": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total_tax": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "xero_invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "xero_invoice_id",
+          "status",
+          "invoice_type",
+          "total",
+          "line_items"
+        ],
+        "type": "object"
+      },
+      "LotCost": {
+        "additionalProperties": true,
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "entries": {
+            "description": "The price entries behind the cost.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "estimate_from": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "inventory_item_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "known_unit_cost": {
+            "description": "The part of the unit cost that is known, when the cost is partial.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "missing": {
+            "description": "Input lots that have no price, which is why a cost is partial or unknown.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "inventory_item_id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "inventory_item_id",
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pack_breakdown": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "priced_quantity": {
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "Where the cost comes from, such as a purchase, a manual entry or the batch that made the lot.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CostStatus"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_cost": {
+            "description": "Cost per unit as a decimal string, or null when it cannot be stated (see `status`). Never 0 for unknown.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unpriced_quantity": {
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "inventory_item_id",
+          "name",
+          "unit",
+          "status",
+          "unit_cost",
+          "known_unit_cost",
+          "missing",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "LotHold": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inventory_item_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "open": {
+            "description": "True while the hold is still in force.",
+            "type": "boolean"
+          },
+          "placed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "placed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "release_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "released_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "released_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_hold_id": {
+            "description": "The hold this one was placed because of.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "inventory_item_id",
+          "reason",
+          "open"
+        ],
+        "type": "object"
+      },
+      "MonthlySales": {
+        "additionalProperties": false,
+        "properties": {
+          "invoice_count": {
+            "type": "integer"
+          },
+          "month": {
+            "description": "YYYY-MM.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Net sales for the month, credit notes taken off.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "month",
+          "total",
+          "invoice_count"
+        ],
+        "type": "object"
+      },
+      "ProcessSummary": {
+        "additionalProperties": true,
+        "description": "A workflow (process) the organisation has defined, with how many batches are running and done.",
+        "properties": {
+          "active_executions": {
+            "description": "Batches of this workflow still in progress.",
+            "type": "integer"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_executions": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event_summary": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "is_draft": {
+            "description": "A draft workflow cannot be run yet.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "step_count": {
+            "type": "integer"
+          },
+          "steps": {
+            "description": "Present only when `include_steps` is true.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_draft",
+          "step_count",
+          "active_executions",
+          "completed_executions"
+        ],
+        "type": "object"
+      },
+      "StockPositionLot": {
+        "additionalProperties": false,
+        "properties": {
+          "batch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "measure": {
+            "description": "The regulated measure of this lot (for example litres of absolute alcohol), when the organisation tracks one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "stage": {
+            "description": "Finished or In progress.",
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "batch",
+          "stage",
+          "quantity",
+          "unit"
+        ],
+        "type": "object"
+      },
+      "StockPositionPlace": {
+        "additionalProperties": false,
+        "properties": {
+          "inside_licensed_area": {
+            "type": "boolean"
+          },
+          "location_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/StockPositionLot"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "total_measure": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "inside_licensed_area",
+          "lots",
+          "total_measure"
+        ],
+        "type": "object"
+      },
+      "StocktakeReconciliationRow": {
+        "additionalProperties": false,
+        "properties": {
+          "counted": {
+            "description": "What was counted, or null while any line is uncounted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "declared": {
+            "additionalProperties": true,
+            "description": "What was declared for the same stretch (for excise, the lodged figure), when the product has one.",
+            "type": [
+              "object",
+              "string",
+              "number",
+              "null"
+            ]
+          },
+          "expected": {
+            "description": "What the books say should be on hand.",
+            "type": "string"
+          },
+          "explained": {
+            "description": "The part of the variance already resolved with a reason.",
+            "type": "string"
+          },
+          "losses": {
+            "description": "Recorded wastage since the last stocktake.",
+            "type": "string"
+          },
+          "opening": {
+            "description": "What the previous stocktake counted, or null when there is none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "produced_and_in": {
+            "description": "The balancing figure, when there is an opening count.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product": {
+            "type": "string"
+          },
+          "removed": {
+            "description": "Removals less returns since the last stocktake.",
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "variance": {
+            "description": "Counted minus expected, or null while any line is uncounted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "product",
+          "unit",
+          "expected",
+          "explained",
+          "removed",
+          "losses"
+        ],
+        "type": "object"
+      },
+      "TraceConnection": {
+        "additionalProperties": true,
+        "description": "An edge in the trace graph: one lot consumed into another by a step.",
+        "type": "object"
+      },
+      "TraceItem": {
+        "additionalProperties": true,
+        "description": "A lot that appears in a trace, with where it came from.",
+        "properties": {
+          "batch_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "custom_prompts": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "expiry_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra_data": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "inventory_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "process_name": {
+            "description": "The workflow that made the lot, when it was made.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purchase_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "source_execution_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_execution_step_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "step_data": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "supplier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplier_batch_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "inventory_type",
+          "quantity",
+          "unit"
+        ],
+        "type": "object"
+      }
+    },
     "securitySchemes": {
       "bearerToken": {
         "description": "An AI assistant's access token. Read-only: GET operations a person's role may read.",
@@ -24,7 +1045,7 @@
     }
   },
   "info": {
-    "description": "The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.\n\n**Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token\n(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches GET operations\nonly. Every operation lists the schemes that work for it under `security`.\n\n**Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list\nmeaning \"any of these\". `signed_in` means any signed-in person, `public` anyone. This document shows a\ncaller only the operations their own permissions reach.\n\n**Reading the `x-bize` fields.** `domain` groups operations; `feature` is set when the operation exists\nonly for an organisation that has that product area (`crm`, `compliant`); `kind` is `record`, `list` or\n`calculation` (a figure Biz-E computes authoritatively, which should be read, not recomputed);\n`mcp` marks the operations an assistant may call; `concepts` name the business-knowledge topics that\nexplain the fields; `related_operations` are the operations usually read next. `schema_status` is\n`documented` when the response is described and `skeleton` when only the summary and permission are.\n\n**Costs.** A cost that is not known is `null` beside a status that says why. It is never `0`.\n",
+    "description": "The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.\n\n**Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token\n(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches GET operations\nonly. Every operation lists the schemes that work for it under `security`.\n\n**Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list\nmeaning \"any of these\". `signed_in` means any signed-in person, `public` anyone. This document shows a\ncaller only the operations their own permissions reach.\n\n**Reading the `x-bize` fields.** `domain` groups operations; `feature` is set when the operation exists\nonly for an organisation that has that product area (`crm`, `compliant`, `costing`); `kind` is `record`, `list` or\n`calculation` (a figure Biz-E computes authoritatively, which should be read, not recomputed);\n`mcp` marks the operations an assistant may call; `concepts` name the business-knowledge topics that\nexplain the fields; `related_operations` are the operations usually read next. `schema_status` is\n`documented` when the response is described and `skeleton` when only the summary and permission are.\n\n**Costs.** A cost that is not known is `null` beside a status that says why. It is never `0`.\n",
     "summary": "Production, stock, traceability, compliance, sales and cost for a small producer.",
     "title": "Biz-E API",
     "version": "1.0.0"
@@ -1547,11 +2568,135 @@
     },
     "/api/compliant/nz-alcohol/excise": {
       "get": {
+        "description": "One period's excise return as it stands: the lines by product, adjustments, CCA transfers, totals and any problems that stop it being lodged. Defaults to the current period. With several licences it shows one CCA's entry (`cca`, else the first).",
         "operationId": "compliant_compliant_api_get_excise_period",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "The period to show, as its start month (YYYY-MM). Defaults to the current period.",
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The CCA licence id, when the organisation has several.",
+            "in": "query",
+            "name": "cca",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "draft": {
+                    "adjustments": [],
+                    "due": "2026-12-20",
+                    "label": "November 2026",
+                    "lines": [],
+                    "open": true,
+                    "period_end": "2026-11-30",
+                    "period_start": "2026-11-01",
+                    "problems": [],
+                    "status": "open",
+                    "total_duty": "700.00",
+                    "total_lal": "52.4"
+                  },
+                  "settings": {
+                    "frequency": "monthly",
+                    "reminders_from": null,
+                    "tracking_from": null
+                  }
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "draft": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "adjustments": {
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "due": {
+                          "type": "string"
+                        },
+                        "entry": {
+                          "additionalProperties": true,
+                          "type": "object"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "open": {
+                          "type": "boolean"
+                        },
+                        "period_end": {
+                          "type": "string"
+                        },
+                        "period_start": {
+                          "type": "string"
+                        },
+                        "problems": {
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "total_duty": {
+                          "type": "string"
+                        },
+                        "total_lal": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "period_start",
+                        "period_end",
+                        "due",
+                        "status",
+                        "total_duty",
+                        "total_lal",
+                        "lines",
+                        "problems"
+                      ],
+                      "type": "object"
+                    },
+                    "settings": {
+                      "$ref": "#/components/schemas/ExcisePeriodSettings"
+                    }
+                  },
+                  "required": [
+                    "draft",
+                    "settings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The period's return, as a draft until lodged."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1568,16 +2713,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "One period's entry; with several sites, one CCA licence's (``cca``, else the first).",
+        "summary": "One excise period's return",
         "tags": [
           "compliance"
         ],
         "x-bize": {
+          "concepts": [
+            "compliance.excise_periods",
+            "compliance.cca_movements"
+          ],
           "domain": "compliance",
           "feature": "compliant",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "compliance.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "compliant_compliant_api_list_excise_periods",
+            "compliant_compliant_api_get_excise_position"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -1724,11 +2878,119 @@
     },
     "/api/compliant/nz-alcohol/excise/periods": {
       "get": {
+        "description": "The current excise period and the last eleven, newest first, each with whether it is open, lodged or not yet lodged, its due date and, once lodged, its total. With several licences, pass `cca` to see one licence's periods.",
         "operationId": "compliant_compliant_api_list_excise_periods",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "The CCA licence id, when the organisation has several. Defaults to the first.",
+            "in": "query",
+            "name": "cca",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "periods": [
+                    {
+                      "due": "2026-12-20",
+                      "label": "November 2026",
+                      "lodged_on": null,
+                      "nil_return": null,
+                      "open": true,
+                      "period_end": "2026-11-30",
+                      "period_start": "2026-11-01",
+                      "status": "open",
+                      "total": null,
+                      "total_lal": null
+                    }
+                  ],
+                  "settings": {
+                    "frequency": "monthly",
+                    "reminders_from": null,
+                    "tracking_from": null
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "periods": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "due": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "lodged_on": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "nil_return": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "open": {
+                            "type": "boolean"
+                          },
+                          "period_end": {
+                            "type": "string"
+                          },
+                          "period_start": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "description": "Duty for the period once lodged, else null.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "total_lal": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "period_start",
+                          "period_end",
+                          "due",
+                          "status",
+                          "open"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "settings": {
+                      "$ref": "#/components/schemas/ExcisePeriodSettings"
+                    }
+                  },
+                  "required": [
+                    "periods",
+                    "settings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The periods."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1745,26 +3007,242 @@
             "bearerToken": []
           }
         ],
-        "summary": "The current period and the last eleven, newest first, with lodged status.",
+        "summary": "Excise periods, current and last eleven",
         "tags": [
           "compliance"
         ],
         "x-bize": {
+          "concepts": [
+            "compliance.excise_periods"
+          ],
           "domain": "compliance",
           "feature": "compliant",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "compliance.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "compliant_compliant_api_get_excise_period",
+            "compliant_compliant_api_get_excise_position"
+          ],
+          "schema_status": "documented"
         }
       }
     },
     "/api/compliant/nz-alcohol/excise/position": {
       "get": {
+        "description": "The excise position: the year's duty so far (lodged and estimated), this period's estimate and due date, periods not yet lodged, remissions, the stocktake status and what setup is still missing. Biz-E computes this from the recorded removals and the rates in force, so quote it rather than calculating duty yourself. Only for organisations with the NZ alcohol module.",
         "operationId": "compliant_compliant_api_get_excise_position",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "frequency": "monthly",
+                  "overdue_periods": 0,
+                  "remissions": [],
+                  "setup": {
+                    "incomplete": [],
+                    "products": 3
+                  },
+                  "stocktake": {
+                    "bulk_tolerance_percent": "0.5",
+                    "frequency": "annual",
+                    "last_completed_on": null,
+                    "next_due": null,
+                    "open_differences": 0,
+                    "open_duty": "0",
+                    "overdue": false
+                  },
+                  "this_period": {
+                    "ccas": 1,
+                    "due": "2026-12-20",
+                    "estimate": "700.00",
+                    "label": "November 2026",
+                    "period_start": "2026-11-01",
+                    "total_lal": "52.4"
+                  },
+                  "today": "2026-11-16",
+                  "unlodged_periods": 0,
+                  "year": {
+                    "duty": "4200.00",
+                    "estimated_duty": "700.00",
+                    "from": "2026-07-01",
+                    "lodged_duty": "3500.00",
+                    "lodged_periods": 4,
+                    "monthly_until": null,
+                    "six_monthly_allowed": false,
+                    "six_monthly_limit": "1000000",
+                    "twelve_monthly_allowed": false,
+                    "twelve_monthly_limit": "100000"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "frequency": {
+                      "type": "string"
+                    },
+                    "overdue_periods": {
+                      "type": "integer"
+                    },
+                    "remissions": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "setup": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "incomplete": {
+                          "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "products": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "stocktake": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "bulk_tolerance_percent": {
+                          "type": "string"
+                        },
+                        "frequency": {
+                          "type": "string"
+                        },
+                        "last_completed_on": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "next_due": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "open_differences": {
+                          "type": "integer"
+                        },
+                        "open_duty": {
+                          "type": "string"
+                        },
+                        "overdue": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "this_period": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "ccas": {
+                          "type": "integer"
+                        },
+                        "due": {
+                          "type": "string"
+                        },
+                        "estimate": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "period_start": {
+                          "type": "string"
+                        },
+                        "total_lal": {
+                          "description": "Litres of absolute alcohol removed this period.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "period_start",
+                        "due",
+                        "estimate"
+                      ],
+                      "type": "object"
+                    },
+                    "today": {
+                      "type": "string"
+                    },
+                    "unlodged_periods": {
+                      "type": "integer"
+                    },
+                    "year": {
+                      "additionalProperties": true,
+                      "properties": {
+                        "duty": {
+                          "description": "Duty for the year so far, lodged plus estimated.",
+                          "type": "string"
+                        },
+                        "estimated_duty": {
+                          "type": "string"
+                        },
+                        "from": {
+                          "type": "string"
+                        },
+                        "lodged_duty": {
+                          "type": "string"
+                        },
+                        "lodged_periods": {
+                          "type": "integer"
+                        },
+                        "monthly_until": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "six_monthly_allowed": {
+                          "type": "boolean"
+                        },
+                        "six_monthly_limit": {
+                          "type": "string"
+                        },
+                        "twelve_monthly_allowed": {
+                          "type": "boolean"
+                        },
+                        "twelve_monthly_limit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "duty",
+                        "estimated_duty",
+                        "lodged_duty",
+                        "lodged_periods"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "today",
+                    "frequency",
+                    "year",
+                    "this_period",
+                    "stocktake",
+                    "setup",
+                    "unlodged_periods",
+                    "overdue_periods",
+                    "remissions"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The position as at today."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1781,16 +3259,26 @@
             "bearerToken": []
           }
         ],
-        "summary": "Where the org stands with Customs: the year's duty, this period, stocktake, remissions, setup.",
+        "summary": "Where the organisation stands with Customs",
         "tags": [
           "compliance"
         ],
         "x-bize": {
+          "concepts": [
+            "compliance.excise_position",
+            "compliance.excise_periods"
+          ],
           "domain": "compliance",
           "feature": "compliant",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "compliance.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "compliant_compliant_api_list_excise_periods",
+            "compliant_compliant_api_get_excise_period",
+            "stocktake_get_stocktake_reconciliation"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -2068,11 +3556,44 @@
     },
     "/api/compliant/records": {
       "get": {
+        "description": "The compliance records the organisation has logged (checks, attestations, log entries), newest first, optionally for one framework. These are what an inspector would ask to see. Only for organisations that have a compliance module.",
         "operationId": "compliant_compliant_api_list_records",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Only records of this compliance framework, for example nz_alcohol.",
+            "in": "query",
+            "name": "framework",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "records": []
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "records": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The records."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -2089,16 +3610,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "List records",
+        "summary": "Compliance records",
         "tags": [
           "compliance"
         ],
         "x-bize": {
+          "concepts": [
+            "compliance.nz_alcohol_records"
+          ],
           "domain": "compliance",
           "feature": "compliant",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "compliance.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "compliant_compliant_api_get_excise_position",
+            "core_list_expired_materials"
+          ],
+          "schema_status": "documented"
         }
       },
       "post": {
@@ -4442,6 +5971,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -4483,6 +6013,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -4518,6 +6049,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -4526,26 +6058,129 @@
     },
     "/api/core/costing/executions/{execution_id}/cost": {
       "get": {
+        "description": "What a batch cost so far: each input and its cost, the cost of what it made, the status of the figure and the duty that applies today where excise is tracked. Where a batch makes several outputs the split between them may be assumed (`split_assumed`). Unknown inputs leave the cost partial or unknown, never zero. Only for organisations that have costing.",
         "operationId": "costing_get_execution_cost",
         "parameters": [
           {
+            "description": "The batch (execution) id.",
             "in": "path",
             "name": "execution_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "cost_so_far": "0",
+                  "cost_so_far_status": "unknown",
+                  "duty_today": {
+                    "landed_per_unit": null,
+                    "on": "2026-11-16",
+                    "per_unit": null,
+                    "total": null,
+                    "tracked": false
+                  },
+                  "execution_id": "2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20",
+                  "inputs": [],
+                  "known_input_cost": "0",
+                  "missing": [],
+                  "outputs": [],
+                  "split_assumed": false,
+                  "status": "unknown",
+                  "warnings": []
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "cost_so_far": {
+                      "description": "The cost of the inputs used so far.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cost_so_far_status": {
+                      "$ref": "#/components/schemas/CostStatus"
+                    },
+                    "duty_today": {
+                      "additionalProperties": true,
+                      "description": "Excise duty per unit at today's rate, when the organisation tracks it.",
+                      "type": "object"
+                    },
+                    "execution_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "inputs": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "known_input_cost": {
+                      "description": "The part of the input cost that is known.",
+                      "type": "string"
+                    },
+                    "missing": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "outputs": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "split_assumed": {
+                      "description": "True when the cost was split across outputs by an assumption.",
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/CostStatus"
+                    },
+                    "warnings": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "execution_id",
+                    "status",
+                    "cost_so_far",
+                    "cost_so_far_status",
+                    "known_input_cost",
+                    "inputs",
+                    "outputs",
+                    "missing",
+                    "warnings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The batch's cost."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -4556,40 +6191,87 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get execution cost",
+        "summary": "Cost of one batch",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.cost_status",
+            "costing.joint_outputs"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "costing_get_lot_cost",
+            "core_get_execution",
+            "costing_readiness_list"
+          ],
+          "schema_status": "documented"
         }
       }
     },
     "/api/core/costing/lots/{item_id}/cost": {
       "get": {
+        "description": "What a lot cost per unit and how that was worked out: the price entries behind it, anything missing and any warning. For a lot made in a batch the cost is carried from its inputs. A lot with no price returns `unit_cost: null` with a status that says why, never 0. Biz-E computes this; quote it rather than multiplying quantities yourself. Only for organisations that have costing.",
         "operationId": "costing_get_lot_cost",
         "parameters": [
           {
+            "description": "The lot (inventory item) id.",
             "in": "path",
             "name": "item_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "editable": true,
+                  "entries": [],
+                  "estimate_from": null,
+                  "inventory_item_id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                  "known_unit_cost": null,
+                  "missing": [
+                    {
+                      "inventory_item_id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                      "name": "Juniper berries"
+                    }
+                  ],
+                  "name": "Juniper berries",
+                  "pack_breakdown": null,
+                  "priced_quantity": "0",
+                  "provenance": null,
+                  "source": "none",
+                  "status": "unknown",
+                  "unit": "kg",
+                  "unit_cost": null,
+                  "unpriced_quantity": "12.5",
+                  "warnings": []
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LotCost"
+                }
+              }
+            },
+            "description": "The lot's cost."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -4600,15 +6282,26 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get lot cost",
+        "summary": "Cost of one lot",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.cost_status",
+            "costing.last_known_price"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "costing_get_execution_cost",
+            "costing_get_stock_value",
+            "core_list_inventory"
+          ],
+          "schema_status": "documented"
         }
       },
       "put": {
@@ -4645,6 +6338,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -4694,6 +6388,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -4702,11 +6397,158 @@
     },
     "/api/core/costing/margins": {
       "get": {
+        "description": "Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403. A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the last six months. At most a fixed number of months at a time.",
         "operationId": "costing_margins_report",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "First month, YYYY-MM. Defaults to five months before this one.",
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Last month, YYYY-MM. Defaults to the current month.",
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "currency": "NZD",
+                  "from": "2026-06",
+                  "rows": [
+                    {
+                      "average_cost_per_unit": null,
+                      "cost": null,
+                      "cost_status": "unknown",
+                      "duty": null,
+                      "duty_tracked": false,
+                      "lines": [],
+                      "margin": null,
+                      "margin_percent": null,
+                      "month": "2026-10",
+                      "product": "Dry Gin",
+                      "revenue": "9900.00",
+                      "units": "220"
+                    }
+                  ],
+                  "to": "2026-11"
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "currency": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "rows": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "average_cost_per_unit": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cost": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cost_status": {
+                            "type": "string"
+                          },
+                          "duty": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "duty_tracked": {
+                            "type": "boolean"
+                          },
+                          "lines": {
+                            "items": {
+                              "additionalProperties": true,
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "margin": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "margin_percent": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "month": {
+                            "description": "YYYY-MM.",
+                            "type": "string"
+                          },
+                          "product": {
+                            "type": "string"
+                          },
+                          "revenue": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "units": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "product",
+                          "month",
+                          "units",
+                          "revenue",
+                          "cost",
+                          "cost_status",
+                          "margin"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "currency",
+                    "rows"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One row per product per month."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -4723,15 +6565,27 @@
             "bearerToken": []
           }
         ],
-        "summary": "8.1f-2: margin per product per month. Revenue is sales data: costs.view (the policy) and sales.view both (AC47).",
+        "summary": "Margin per product per month",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.cost_status",
+            "costing.joint_outputs",
+            "sales.fifo_matching"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "crm_crm_api_monthly_sales",
+            "costing_readiness_list",
+            "costing_get_stock_value"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -4764,6 +6618,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -4808,6 +6663,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -4840,6 +6696,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "signed_in",
           "schema_status": "skeleton"
@@ -4875,6 +6732,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -4905,6 +6763,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -4946,6 +6805,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -4985,6 +6845,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5020,6 +6881,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -5052,6 +6914,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5084,6 +6947,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5125,6 +6989,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5169,6 +7034,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -5210,6 +7076,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5251,6 +7118,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5292,6 +7160,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5333,6 +7202,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5374,6 +7244,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5415,6 +7286,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5456,6 +7328,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5497,6 +7370,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5538,6 +7412,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5546,11 +7421,92 @@
     },
     "/api/core/costing/readiness": {
       "get": {
+        "description": "Each product with whether it is ready to cost (every declared material priced), how many of its materials are costed, and its unit cost where ready. Use it to see what is blocking a cost.",
         "operationId": "costing_readiness_list",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "products": [
+                    {
+                      "key": "dry-gin",
+                      "materials_costed": 3,
+                      "materials_total": 5,
+                      "name": "Dry Gin",
+                      "ready": false,
+                      "unit": "bottle",
+                      "unit_cost": null,
+                      "unit_cost_status": null
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "products": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "description": "The product key to pass to the readiness detail operation.",
+                            "type": "string"
+                          },
+                          "materials_costed": {
+                            "type": "integer"
+                          },
+                          "materials_total": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "ready": {
+                            "type": "boolean"
+                          },
+                          "unit": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "unit_cost": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "unit_cost_status": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "name",
+                          "ready",
+                          "materials_total",
+                          "materials_costed",
+                          "unit_cost",
+                          "unit",
+                          "unit_cost_status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "products"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One row per product."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5567,23 +7523,35 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get readiness list",
+        "summary": "Which products can be costed yet",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.readiness",
+            "costing.cost_status"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "costing_readiness_detail",
+            "costing_margins_report"
+          ],
+          "schema_status": "documented"
         }
       }
     },
     "/api/core/costing/readiness/{key}": {
       "get": {
+        "description": "For one product, each material it uses, whether it is priced, and the basis used (the latest batch or the declared inputs). Tells you exactly which material to price to make the product ready.",
         "operationId": "costing_readiness_detail",
         "parameters": [
           {
+            "description": "The product key from the readiness list. It may contain slashes.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -5594,13 +7562,88 @@
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "basis": "declared_inputs",
+                  "execution_id": null,
+                  "key": "dry-gin",
+                  "materials": [],
+                  "name": "Dry Gin",
+                  "ready": false,
+                  "unit": "bottle",
+                  "unit_cost": null,
+                  "unit_cost_status": null
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "basis": {
+                      "description": "latest_batch or declared_inputs.",
+                      "type": "string"
+                    },
+                    "execution_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "materials": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "ready": {
+                      "type": "boolean"
+                    },
+                    "unit": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "unit_cost": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "unit_cost_status": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "name",
+                    "basis",
+                    "ready",
+                    "materials"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The product's readiness."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -5611,15 +7654,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get readiness detail",
+        "summary": "Costing readiness of one product",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.readiness",
+            "costing.last_known_price"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "costing_readiness_list",
+            "costing_get_lot_cost"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -5652,6 +7705,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -5682,6 +7736,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5723,6 +7778,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5762,6 +7818,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5797,6 +7854,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -5827,6 +7885,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5835,11 +7894,218 @@
     },
     "/api/core/costing/stock-value": {
       "get": {
+        "description": "The value of every lot on hand now, by category (raw, work in progress, finished, in production), with how much of it is actual, estimated or partial. `complete` is false while any lot has no cost, and the total then covers only the lots that do: say so rather than quoting it as the whole value. Lots with an unknown cost have a null value, never 0. Only for organisations that have costing.",
         "operationId": "costing_get_stock_value",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_of": "2026-11-16T09:00:00+13:00",
+                  "categories": {
+                    "finished": {
+                      "lots": 4,
+                      "value": "1100.00"
+                    },
+                    "in_production": {
+                      "lots": 1,
+                      "value": "0"
+                    },
+                    "raw": {
+                      "lots": 6,
+                      "value": "420.00"
+                    },
+                    "wip": {
+                      "lots": 1,
+                      "value": "0"
+                    }
+                  },
+                  "complete": false,
+                  "currency": "NZD",
+                  "lines": [
+                    {
+                      "batch": null,
+                      "category": "raw",
+                      "execution_id": null,
+                      "inventory_item_id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                      "kind": "lot",
+                      "known_unit_cost": null,
+                      "name": "Juniper berries",
+                      "quantity": "12.5",
+                      "status": "unknown",
+                      "unit": "kg",
+                      "unit_cost": null,
+                      "value": null
+                    }
+                  ],
+                  "lot_count": 12,
+                  "partial_lots": 1,
+                  "split": {
+                    "actual": "1100.00",
+                    "estimated": "420.00",
+                    "partial": "0"
+                  },
+                  "total": "1520.00",
+                  "unknown_lots": 2
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "as_of": {
+                      "type": "string"
+                    },
+                    "categories": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lots": {
+                            "type": "integer"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "lots",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    },
+                    "complete": {
+                      "description": "True only when every lot has a cost.",
+                      "type": "boolean"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "lines": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "batch": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "category": {
+                            "type": "string"
+                          },
+                          "execution_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "inventory_item_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "known_unit_cost": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "$ref": "#/components/schemas/CostStatus"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "unit_cost": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "value": {
+                            "description": "Null when the lot's cost is unknown.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "inventory_item_id",
+                          "name",
+                          "category",
+                          "quantity",
+                          "unit",
+                          "status",
+                          "unit_cost",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "lot_count": {
+                      "type": "integer"
+                    },
+                    "partial_lots": {
+                      "type": "integer"
+                    },
+                    "split": {
+                      "additionalProperties": false,
+                      "description": "The total split by how trustworthy the cost is.",
+                      "properties": {
+                        "actual": {
+                          "type": "string"
+                        },
+                        "estimated": {
+                          "type": "string"
+                        },
+                        "partial": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actual",
+                        "estimated",
+                        "partial"
+                      ],
+                      "type": "object"
+                    },
+                    "total": {
+                      "description": "The value of the lots whose cost is known.",
+                      "type": "string"
+                    },
+                    "unknown_lots": {
+                      "description": "Lots with no cost at all.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "as_of",
+                    "currency",
+                    "total",
+                    "complete",
+                    "lot_count",
+                    "unknown_lots",
+                    "partial_lots",
+                    "categories",
+                    "split",
+                    "lines"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The valuation as of now."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5856,15 +8122,27 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get stock value",
+        "summary": "Value of stock on hand",
         "tags": [
           "costing"
         ],
         "x-bize": {
+          "concepts": [
+            "costing.stock_value",
+            "costing.cost_status",
+            "costing.xero_bridge"
+          ],
           "domain": "costing",
-          "mcp": false,
+          "feature": "costing",
+          "kind": "calculation",
+          "mcp": true,
           "permission": "costs.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "costing_get_lot_cost",
+            "costing_margins_report",
+            "core_list_inventory"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -5894,6 +8172,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.manage",
           "schema_status": "skeleton"
@@ -5929,6 +8208,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -5973,6 +8253,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -6017,6 +8298,7 @@
         ],
         "x-bize": {
           "domain": "costing",
+          "feature": "costing",
           "mcp": false,
           "permission": "costs.view",
           "schema_status": "skeleton"
@@ -6423,11 +8705,204 @@
     },
     "/api/core/executions": {
       "get": {
+        "description": "Batches of a workflow, newest first, each with its status, progress, current step and the steps already recorded. Filter by workflow or status. With `count=1` only the total is returned. A completed batch's outputs are the lots it created: follow `source_execution_id` on a lot to get back here.",
         "operationId": "core_list_executions",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Only batches of this workflow.",
+            "in": "query",
+            "name": "process_id",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only batches in this status.",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "failed",
+                "cancelled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Set to 1 to return only `{count}` (the number of matching batches) instead of the batches.",
+            "in": "query",
+            "name": "count",
+            "schema": {
+              "enum": [
+                "1",
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Without it every matching batch is returned. Capped by the server.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The `next_cursor` of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "executions": [
+                    {
+                      "completed_at": null,
+                      "completed_by": null,
+                      "created_at": "2026-11-14T07:55:00",
+                      "current_step": null,
+                      "event_summary": null,
+                      "evidence": [],
+                      "execution_steps": [],
+                      "id": "2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20",
+                      "process_id": "7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88",
+                      "progress": 33.3,
+                      "started_at": "2026-11-14T08:00:00",
+                      "status": "in_progress",
+                      "total_steps": 6
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "description": "Only with count=1.",
+                      "type": "integer"
+                    },
+                    "executions": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "completed_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "completed_by": {
+                            "description": "Who finished the batch.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "current_step": {
+                            "additionalProperties": true,
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "event_summary": {
+                            "additionalProperties": true,
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "evidence": {
+                            "items": {
+                              "additionalProperties": true,
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "execution_steps": {
+                            "items": {
+                              "$ref": "#/components/schemas/ExecutionStepRecord"
+                            },
+                            "type": "array"
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "process_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "progress": {
+                            "description": "Percent of steps completed.",
+                            "type": "number"
+                          },
+                          "started_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "in_progress",
+                              "completed",
+                              "failed",
+                              "cancelled"
+                            ],
+                            "type": "string"
+                          },
+                          "total_steps": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "process_id",
+                          "status",
+                          "progress",
+                          "total_steps"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The batches, or just `count` when `count=1`. `has_more` and `next_cursor` appear only with `limit`."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -6444,15 +8919,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "List executions, optionally filtered by process",
+        "summary": "List batches (executions)",
         "tags": [
           "production"
         ],
         "x-bize": {
+          "concepts": [
+            "production.batches",
+            "production.steps"
+          ],
           "domain": "production",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_get_execution",
+            "core_list_processes",
+            "costing_get_execution_cost"
+          ],
+          "schema_status": "documented"
         }
       },
       "post": {
@@ -6488,26 +8973,103 @@
     },
     "/api/core/executions/{execution_id}": {
       "get": {
+        "description": "A batch (execution) with every step, what was actually consumed and produced at each, and the evidence attached. This is the record of what happened. To see the cost of the batch use the batch cost operation; to see where its outputs went use the trace operations on an output lot.",
         "operationId": "core_get_execution",
         "parameters": [
           {
+            "description": "The batch id, from the batch list.",
             "in": "path",
             "name": "execution_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "completed_at": null,
+                  "evidence": [],
+                  "execution_steps": [],
+                  "id": "2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20",
+                  "process_id": "7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88",
+                  "started_at": "2026-11-14T08:00:00",
+                  "status": "in_progress"
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "completed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "evidence": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "execution_steps": {
+                      "items": {
+                        "$ref": "#/components/schemas/ExecutionStepRecord"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "process_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "started_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "process_id",
+                    "status",
+                    "execution_steps"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The batch."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -6518,15 +9080,26 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get an execution with its steps",
+        "summary": "One batch with its steps",
         "tags": [
           "production"
         ],
         "x-bize": {
+          "concepts": [
+            "production.batches",
+            "production.inputs_and_outputs",
+            "production.intermediates"
+          ],
           "domain": "production",
-          "mcp": false,
+          "kind": "record",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_list_executions",
+            "core_get_process",
+            "costing_get_execution_cost"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -6806,11 +9379,132 @@
     },
     "/api/core/holds": {
       "get": {
+        "description": "Every lot on hold right now, newest hold first, with the lot's name and quantity. A lot on hold cannot be used, moved or sold until the hold is released, whatever its quantity.",
         "operationId": "lot_holds_list_open_holds",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "holds": [
+                    {
+                      "id": "3d0a7b1e-2c43-4c1b-8f5e-6a2d9e4b7c10",
+                      "inventory_item_id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                      "lot": {
+                        "name": "Dry Gin DG-014",
+                        "quantity": "240",
+                        "unit": "bottle"
+                      },
+                      "open": true,
+                      "placed_at": "2026-11-10T08:00:00+00:00",
+                      "placed_by": null,
+                      "reason": "Failed ABV check",
+                      "release_note": null,
+                      "released_at": null,
+                      "released_by": null,
+                      "source_hold_id": null
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "holds": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "inventory_item_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "lot": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "quantity": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "quantity",
+                              "unit"
+                            ],
+                            "type": "object"
+                          },
+                          "open": {
+                            "type": "boolean"
+                          },
+                          "placed_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "placed_by": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "release_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "released_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "released_by": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source_hold_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "inventory_item_id",
+                          "reason",
+                          "open",
+                          "lot"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "holds"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The open holds."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -6827,15 +9521,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Every lot on hold now, with its name and quantity: the quality board.",
+        "summary": "Lots currently on quality hold",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.holds",
+            "inventory.availability"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "lot_holds_get_lot_holds",
+            "core_list_inventory"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -6921,11 +9624,106 @@
     },
     "/api/core/inventory": {
       "get": {
+        "description": "Every stock line the organisation holds with a quantity above zero: raw materials, work in progress and finished products, each with its supplier, batch, expiry, site, any open quality hold and the planned batches that already hold some of it. `quantity` is what is on hand. It is not what is free to use: a lot on hold, expired, not yet ready, or committed to a planned batch is on hand but not available. Use this to find a lot's id for the trace, cost and hold operations.",
         "operationId": "core_list_inventory",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Only lots of this inventory type (for example a raw material or a final product).",
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only lots produced by this workflow.",
+            "in": "query",
+            "name": "process_id",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only lots held at this site.",
+            "in": "query",
+            "name": "site_id",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Without it the whole list is returned. Capped by the server.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The `next_cursor` of the previous page, to read the page after it.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "inventory_items": [
+                    {
+                      "committed": [],
+                      "created_at": "2026-11-02T09:15:00",
+                      "expiry_date": "2027-06-30",
+                      "id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                      "inventory_type": "raw_material",
+                      "name": "Juniper berries",
+                      "quality_hold": null,
+                      "quantity": "12.5",
+                      "site_id": null,
+                      "supplier": "Island Botanicals",
+                      "supplier_batch_number": "JB-2211",
+                      "system_findings": [],
+                      "unit": "kg"
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "inventory_items": {
+                      "items": {
+                        "$ref": "#/components/schemas/InventoryLot"
+                      },
+                      "type": "array"
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "inventory_items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The lots, newest first. `has_more` and `next_cursor` appear only when `limit` was given."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -6942,15 +9740,27 @@
             "bearerToken": []
           }
         ],
-        "summary": "List inventory items, optionally filtered by type or process",
+        "summary": "List stock lots on hand",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.lots",
+            "inventory.availability",
+            "inventory.units_and_packs"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "lot_holds_get_lot_holds",
+            "core_trace_inventory_backward",
+            "costing_get_lot_cost",
+            "stocktake_get_stock_position"
+          ],
+          "schema_status": "documented"
         }
       },
       "post": {
@@ -7225,12 +10035,53 @@
     },
     "/api/core/inventory/expired-materials": {
       "get": {
-        "description": "The expired_materials check runs a DAG traversal per expired-with-stock raw\nmaterial (~700ms / hundreds of queries on a real org). This endpoint feeds the\nsourcemap Findings tab and flows2 on page load, so it reads the slice from the\nshared per-org system-findings cache (fresh until NZ midnight, invalidated on\ninventory/execution/process mutations) rather than recomputing every request.\n\nUses the narrow `get_expired_materials_result` accessor, not `get_check_results`:\nthe latter also runs every cheap live check on each request only to discard them\nhere.",
+        "description": "Raw materials that are past their expiry date and still in stock, the finished and intermediate lots made with them, and the connections between them. Biz-E walks the production graph to find impacted lots, so use this instead of matching names yourself. The result is cached per organisation until midnight (New Zealand time) or the next change to stock, batches or workflows.",
         "operationId": "core_list_expired_materials",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "connections": [],
+                  "expired_raw_materials": [],
+                  "impacted_items": []
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "connections": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "expired_raw_materials": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "impacted_items": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "expired_raw_materials",
+                    "impacted_items",
+                    "connections"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The expired materials and the lots they reached."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7247,15 +10098,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "List expired raw materials and products made with expired ingredients.",
+        "summary": "Expired raw materials and what was made with them",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.expiry",
+            "traceability.forward"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_list_inventory",
+            "core_trace_raw_material"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -7333,12 +10193,35 @@
     },
     "/api/core/inventory/output-ready-date": {
       "get": {
-        "description": "Uses CoreChecksRunner (output_ready_date check). Used by system findings banner\nand sourcemap highlighting.",
+        "description": "Finished and intermediate lots whose ready date has not arrived (for example a spirit resting or a ferment maturing). Such a lot is on hand but not available until its ready date. Biz-E computes the date from the step that produced it, so quote it rather than estimating.",
         "operationId": "core_list_output_ready_date",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "output_ready_date_items": []
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "output_ready_date_items": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "output_ready_date_items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The lots still waiting for their ready date."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7355,15 +10238,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "List output ready date findings (outputs not yet usable).",
+        "summary": "Outputs that are not yet usable",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.ready_dates",
+            "inventory.availability"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_list_inventory",
+            "core_list_expired_materials"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -7465,27 +10357,99 @@
     },
     "/api/core/inventory/trace-backward/{inventory_item_id}": {
       "get": {
-        "description": "Returns all items in the production chain regardless of current quantity — zero-quantity\nintermediates must be visible for a complete audit trail.",
+        "description": "Starting from any lot (raw, intermediate or finished), every lot it was made from, the steps in between and the supplier and batch of each raw material. Use it to answer where an ingredient came from. The walk is computed by Biz-E over the recorded batches, so quote it rather than inferring from names.",
         "operationId": "core_trace_inventory_backward",
         "parameters": [
           {
+            "description": "The lot to trace back from, from the inventory list.",
             "in": "path",
             "name": "inventory_item_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "all_items": [],
+                  "connections": [],
+                  "intermediates": [],
+                  "raw_materials": [],
+                  "trace_steps": [],
+                  "traced_item": {
+                    "id": "0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44",
+                    "inventory_type": "final_product",
+                    "name": "Dry Gin",
+                    "quantity": "240",
+                    "source_execution_id": "2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20",
+                    "unit": "bottle"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "all_items": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "connections": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceConnection"
+                      },
+                      "type": "array"
+                    },
+                    "intermediates": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "raw_materials": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "trace_steps": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "traced_item": {
+                      "$ref": "#/components/schemas/TraceItem"
+                    }
+                  },
+                  "required": [
+                    "traced_item",
+                    "all_items",
+                    "raw_materials",
+                    "intermediates",
+                    "connections",
+                    "trace_steps"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The lot and everything upstream of it."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -7496,41 +10460,96 @@
             "bearerToken": []
           }
         ],
-        "summary": "Trace backward from any inventory item (raw, intermediate, or final) to find all source items.",
+        "summary": "Trace a lot back to its sources",
         "tags": [
           "traceability"
         ],
         "x-bize": {
+          "concepts": [
+            "traceability.back"
+          ],
           "domain": "traceability",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_trace_raw_material",
+            "core_trace_inventory_to_sale_graph",
+            "core_list_inventory"
+          ],
+          "schema_status": "documented"
         }
       }
     },
     "/api/core/inventory/trace-graph/{inventory_item_id}": {
       "get": {
-        "description": "The graph is bidirectional around the selected item, then augmented with terminal\nsales nodes using the persisted FIFO allocations. A sale edge therefore identifies\nthe exact labelled final-product batch that fulfilled the invoice line.",
+        "description": "The whole graph around one lot: the source materials, the production steps and, where sales are connected, the invoices and customers the lot reached. The authoritative answer to who bought a given batch. Biz-E builds the graph, so read it rather than reconstructing it.",
         "operationId": "core_trace_inventory_to_sale_graph",
         "parameters": [
           {
+            "description": "The lot to trace, from the inventory list.",
             "in": "path",
             "name": "inventory_item_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "all_items": [],
+                  "connections": [],
+                  "traced_item": {
+                    "id": "0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44",
+                    "inventory_type": "final_product",
+                    "name": "Dry Gin",
+                    "quantity": "240",
+                    "unit": "bottle"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "all_items": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "connections": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceConnection"
+                      },
+                      "type": "array"
+                    },
+                    "traced_item": {
+                      "$ref": "#/components/schemas/TraceItem"
+                    }
+                  },
+                  "required": [
+                    "traced_item",
+                    "all_items",
+                    "connections"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The graph around the lot."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -7541,41 +10560,114 @@
             "bearerToken": []
           }
         ],
-        "summary": "Trace any inventory item from its source material through production to sales.",
+        "summary": "Trace a lot from source material through production to sales",
         "tags": [
           "traceability"
         ],
         "x-bize": {
+          "concepts": [
+            "traceability.to_sale",
+            "traceability.back",
+            "traceability.forward"
+          ],
           "domain": "traceability",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_trace_inventory_backward",
+            "core_trace_raw_material",
+            "crm_crm_api_get_org_invoices"
+          ],
+          "schema_status": "documented"
         }
       }
     },
     "/api/core/inventory/trace/{raw_material_id}": {
       "get": {
-        "description": "Returns all items in the production chain regardless of current quantity — zero-quantity\nintermediates must be visible for a complete audit trail.",
+        "description": "Starting from a raw-material lot, every intermediate and finished lot made with it. Use it to scope a recall or to answer which products an ingredient batch went into. To see the customers those products reached, use the to-sale graph on a finished lot.",
         "operationId": "core_trace_raw_material",
         "parameters": [
           {
+            "description": "The raw-material lot id, from the inventory list.",
             "in": "path",
             "name": "raw_material_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "all_items": [],
+                  "connections": [],
+                  "finals": [],
+                  "intermediates": [],
+                  "raw_material": {
+                    "id": "6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11",
+                    "inventory_type": "raw_material",
+                    "name": "Juniper berries",
+                    "quantity": "12.5",
+                    "unit": "kg"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "all_items": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "connections": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceConnection"
+                      },
+                      "type": "array"
+                    },
+                    "finals": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "intermediates": {
+                      "items": {
+                        "$ref": "#/components/schemas/TraceItem"
+                      },
+                      "type": "array"
+                    },
+                    "raw_material": {
+                      "$ref": "#/components/schemas/TraceItem"
+                    }
+                  },
+                  "required": [
+                    "raw_material",
+                    "all_items",
+                    "intermediates",
+                    "finals",
+                    "connections"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The raw material and everything downstream of it."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -7586,15 +10678,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Trace forward from a raw material to find all connected intermediates and final products.",
+        "summary": "Trace a raw material forward to what it went into",
         "tags": [
           "traceability"
         ],
         "x-bize": {
+          "concepts": [
+            "traceability.forward"
+          ],
           "domain": "traceability",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_trace_inventory_backward",
+            "core_trace_inventory_to_sale_graph",
+            "core_list_expired_materials"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -7824,26 +10925,77 @@
     },
     "/api/core/inventory/{item_id}/holds": {
       "get": {
+        "description": "The open hold on a lot (if any), its full hold history, and the lots it was made from that are or were also affected. Use it to answer whether a lot is usable and why not.",
         "operationId": "lot_holds_get_lot_holds",
         "parameters": [
           {
+            "description": "The lot (inventory item) id, from the inventory list.",
             "in": "path",
             "name": "item_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "history": [],
+                  "made_from": [],
+                  "open": null
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "history": {
+                      "items": {
+                        "$ref": "#/components/schemas/LotHold"
+                      },
+                      "type": "array"
+                    },
+                    "made_from": {
+                      "description": "Lots this one was made from, with their hold status.",
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "open": {
+                      "description": "The hold in force now, or null.",
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/LotHold"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "open",
+                    "history",
+                    "made_from"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The lot's holds."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -7854,15 +11006,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get lot holds",
+        "summary": "Quality holds on one lot",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.holds",
+            "inventory.availability"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "record",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "lot_holds_list_open_holds",
+            "core_trace_inventory_backward"
+          ],
+          "schema_status": "documented"
         }
       },
       "post": {
@@ -8185,11 +11346,62 @@
     },
     "/api/core/planner/batches": {
       "get": {
+        "description": "The batches the planner has scheduled between two dates (default the next seven days), with their workflow, planned date and state. `truncated` is true when more matched than were returned. These are plans, not records of production: a started plan becomes a batch you can read with the batch operations.",
         "operationId": "planning_get_planning_batches",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "First day, YYYY-MM-DD. Defaults to today.",
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Last day, YYYY-MM-DD. Defaults to six days after `start`.",
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "batches": [],
+                  "truncated": false
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "batches": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "batches",
+                    "truncated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The planned batches."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -8206,15 +11418,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get planning batches",
+        "summary": "Planned batches in a date range",
         "tags": [
           "planning"
         ],
         "x-bize": {
+          "concepts": [
+            "planning.planned_batches",
+            "production.batches"
+          ],
           "domain": "planning",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "planning_get_stock_cover",
+            "core_list_executions"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -8381,11 +11602,185 @@
     },
     "/api/core/planner/cover": {
       "get": {
+        "description": "For every product that sells or has a cover target: its sales rate per week over the window, the stock available, the date it runs out, and how many batches to plan and by when. Each row carries a sentence Biz-E has already worked out (`sentence`), so use it rather than redoing the arithmetic. Soonest to run out first. `available` follows the planner's rules: stock on hold, expired, not yet ready or committed to a planned batch is not counted. Needs sales connected to give a rate.",
         "operationId": "planning_get_stock_cover",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "The sales window in weeks used for the rate, from 4 to 52. Default 12.",
+            "in": "query",
+            "name": "weeks",
+            "schema": {
+              "maximum": 52,
+              "minimum": 4,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Cover for one site, when the organisation runs several. Defaults to the default site.",
+            "in": "query",
+            "name": "site_id",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "products": [
+                    {
+                      "name": "Dry Gin",
+                      "rate_per_week": "24",
+                      "runs_out_on": "2026-12-30",
+                      "sentence": "Dry Gin runs out 30 Dec at 24 bottles a week; plan 1 batch by 14 Dec.",
+                      "summary": "Runs out 30 Dec at 24 bottles a week; plan 1 batch by 14 Dec.",
+                      "unit": "bottle",
+                      "unknowns": []
+                    }
+                  ],
+                  "sales_connected": true,
+                  "seasonal": false,
+                  "site_id": null,
+                  "sites": [],
+                  "unmapped_products": [],
+                  "window_weeks": 12
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "products": {
+                      "items": {
+                        "additionalProperties": true,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "rate_per_week": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "runs_out_on": {
+                            "description": "The date stock runs out, or null.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sentence": {
+                            "description": "One sentence stating the cover, ready to quote.",
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "unit": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "unknowns": {
+                            "description": "Why a figure is missing.",
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "summary",
+                          "sentence"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "sales_connected": {
+                      "description": "False means there is no sales source, so rates are unknown.",
+                      "type": "boolean"
+                    },
+                    "seasonal": {
+                      "description": "True when a full year of sales history exists.",
+                      "type": "boolean"
+                    },
+                    "site_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sites": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "is_default": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "is_default"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "unmapped_products": {
+                      "description": "Sold products that are not mapped to a workflow output, so cannot be covered.",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "product_name": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "product_name",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "window_weeks": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "window_weeks",
+                    "sales_connected",
+                    "seasonal",
+                    "site_id",
+                    "sites",
+                    "products",
+                    "unmapped_products"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The cover rows, soonest to run out first."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -8402,15 +11797,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get stock cover",
+        "summary": "Stock cover for each product",
         "tags": [
           "planning"
         ],
         "x-bize": {
+          "concepts": [
+            "planning.stock_cover",
+            "inventory.availability"
+          ],
           "domain": "planning",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "planning_get_planning_batches",
+            "core_list_inventory",
+            "crm_crm_api_monthly_sales"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -9320,11 +12725,60 @@
     },
     "/api/core/processes": {
       "get": {
+        "description": "The organisation's workflows (processes), each with its step count and how many batches of it are in progress and completed. Use a workflow's id to filter the batch list or open its steps.",
         "operationId": "core_list_processes",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Set to true to include each workflow's steps. Larger response.",
+            "in": "query",
+            "name": "include_steps",
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "processes": [
+                    {
+                      "active_executions": 1,
+                      "category": null,
+                      "completed_executions": 14,
+                      "created_at": "2026-01-12T00:00:00",
+                      "description": "London dry gin",
+                      "event_summary": null,
+                      "id": "7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88",
+                      "is_draft": false,
+                      "name": "Dry Gin",
+                      "step_count": 6
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "processes": {
+                      "items": {
+                        "$ref": "#/components/schemas/ProcessSummary"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "processes"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The workflows."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -9341,15 +12795,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "List all processes for the current organisation",
+        "summary": "List workflows",
         "tags": [
           "production"
         ],
         "x-bize": {
+          "concepts": [
+            "production.workflows",
+            "production.steps"
+          ],
           "domain": "production",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_get_process",
+            "core_list_executions"
+          ],
+          "schema_status": "documented"
         }
       },
       "post": {
@@ -9425,26 +12888,105 @@
         }
       },
       "get": {
+        "description": "A workflow's definition: its steps in order, with the inputs each step takes and the outputs it makes. This is the recipe, not a record of what was made: use the batch operations for that.",
         "operationId": "core_get_process",
         "parameters": [
           {
+            "description": "The workflow id, from the workflow list.",
             "in": "path",
             "name": "process_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "category": null,
+                  "created_at": "2026-01-12T00:00:00",
+                  "description": "London dry gin",
+                  "id": "7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88",
+                  "is_draft": false,
+                  "name": "Dry Gin",
+                  "settings": {},
+                  "steps": [],
+                  "updated_at": "2026-02-01T00:00:00"
+                },
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "category": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "is_draft": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "settings": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "steps": {
+                      "description": "The steps in order. Each lists its declared inputs and outputs.",
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "updated_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "is_draft",
+                    "steps"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The workflow."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -9455,15 +12997,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get a process with its steps",
+        "summary": "One workflow with its steps",
         "tags": [
           "production"
         ],
         "x-bize": {
+          "concepts": [
+            "production.workflows",
+            "production.steps",
+            "production.inputs_and_outputs"
+          ],
           "domain": "production",
-          "mcp": false,
+          "kind": "record",
+          "mcp": true,
           "permission": "production.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_list_processes",
+            "core_list_executions"
+          ],
+          "schema_status": "documented"
         }
       },
       "put": {
@@ -10725,11 +14277,88 @@
     },
     "/api/core/stock-position": {
       "get": {
+        "description": "Finished goods and work in progress with a quantity above zero, grouped by the place they are held (inside or outside the licensed area) and by batch, as at today. Built for showing a regulator what is on the premises. Raw materials are not counted. Where the organisation tracks a regulated measure the lots carry it and `declared` lists the periods already declared.",
         "operationId": "stocktake_get_stock_position",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Set to csv to download the table as CSV instead of JSON. Leave unset for JSON.",
+            "in": "query",
+            "name": "format",
+            "schema": {
+              "enum": [
+                "csv"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_at": "2026-11-16",
+                  "declared": [],
+                  "labels": {},
+                  "places": [
+                    {
+                      "inside_licensed_area": true,
+                      "location_id": null,
+                      "lots": [
+                        {
+                          "batch": "DG-014",
+                          "detail": null,
+                          "id": "0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44",
+                          "measure": null,
+                          "name": "Dry Gin",
+                          "quantity": "240",
+                          "stage": "Finished",
+                          "unit": "bottle"
+                        }
+                      ],
+                      "name": "Main",
+                      "total_measure": "0"
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "as_at": {
+                      "description": "The date (YYYY-MM-DD).",
+                      "type": "string"
+                    },
+                    "declared": {
+                      "description": "Periods already declared, newest first.",
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "labels": {
+                      "additionalProperties": true,
+                      "description": "Names for the regulated measure, or an empty object when the organisation tracks none.",
+                      "type": "object"
+                    },
+                    "places": {
+                      "items": {
+                        "$ref": "#/components/schemas/StockPositionPlace"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "as_at",
+                    "labels",
+                    "places",
+                    "declared"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The position as at today."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -10746,15 +14375,25 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get stock position",
+        "summary": "Stock position by place and batch",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.availability",
+            "inventory.sites_and_locations",
+            "compliance.excise_position"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "core_list_inventory",
+            "stocktake_get_stocktake_reconciliation"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -11040,26 +14679,95 @@
     },
     "/api/core/stocktakes/{stocktake_id}/reconciliation": {
       "get": {
+        "description": "For one stocktake, per product since the previous completed stocktake: opening plus what came in, less removals and losses, equals what is expected; then what was counted, the variance, and how much of it is already explained. Biz-E computes this, so quote its figures instead of redoing the sums. A count that is not finished leaves `counted` and `variance` null for the product. Where a compliance module tracks regulated flows, only the controlled area is counted.",
         "operationId": "stocktake_get_stocktake_reconciliation",
         "parameters": [
           {
+            "description": "The stocktake to reconcile.",
             "in": "path",
             "name": "stocktake_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "labels": {},
+                  "products": [
+                    {
+                      "counted": "256",
+                      "declared": null,
+                      "expected": "258",
+                      "explained": "0",
+                      "losses": "2",
+                      "opening": "180",
+                      "produced_and_in": "300",
+                      "product": "Dry Gin",
+                      "removed": "220",
+                      "unit": "bottle",
+                      "variance": "-2"
+                    }
+                  ],
+                  "since": "2026-05-14",
+                  "to": "2026-11-14",
+                  "tracks_flows": false
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "labels": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "products": {
+                      "items": {
+                        "$ref": "#/components/schemas/StocktakeReconciliationRow"
+                      },
+                      "type": "array"
+                    },
+                    "since": {
+                      "description": "The date of the previous completed stocktake, or null for the first.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "to": {
+                      "description": "The date of this stocktake.",
+                      "type": "string"
+                    },
+                    "tracks_flows": {
+                      "description": "True when removals come from a compliance module's recorded flows.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "since",
+                    "to",
+                    "tracks_flows",
+                    "labels",
+                    "products"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One row per product."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         },
         "security": [
@@ -11070,15 +14778,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get stocktake reconciliation",
+        "summary": "Reconcile a stocktake against the books",
         "tags": [
           "inventory"
         ],
         "x-bize": {
+          "concepts": [
+            "inventory.stocktakes",
+            "compliance.excise_position"
+          ],
           "domain": "inventory",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "inventory.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "stocktake_get_stock_position",
+            "compliant_compliant_api_get_excise_position"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -11838,11 +15555,69 @@
     },
     "/api/crm/analytics/monthly-sales": {
       "get": {
+        "description": "Net revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most recent month first. Revenue is Xero's figure, in the organisation's currency. Credit notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.",
         "operationId": "crm_crm_api_monthly_sales",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "How many months back, 1 to 24. Default 12.",
+            "in": "query",
+            "name": "months",
+            "schema": {
+              "maximum": 24,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "monthly_sales": [
+                    {
+                      "invoice_count": 14,
+                      "month": "2026-10",
+                      "total": 9900.0
+                    }
+                  ],
+                  "months": [
+                    {
+                      "invoice_count": 14,
+                      "month": "2026-10",
+                      "total": 9900.0
+                    }
+                  ]
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "monthly_sales": {
+                      "items": {
+                        "$ref": "#/components/schemas/MonthlySales"
+                      },
+                      "type": "array"
+                    },
+                    "months": {
+                      "description": "The same list as `monthly_sales`.",
+                      "items": {
+                        "$ref": "#/components/schemas/MonthlySales"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "monthly_sales",
+                    "months"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The months. `months` repeats `monthly_sales` for older clients."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -11859,16 +15634,24 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get monthly sales",
+        "summary": "Net sales per month",
         "tags": [
           "sales"
         ],
         "x-bize": {
+          "concepts": [
+            "sales.xero_invoices"
+          ],
           "domain": "sales",
           "feature": "crm",
-          "mcp": false,
+          "kind": "calculation",
+          "mcp": true,
           "permission": "sales.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "crm_crm_api_get_org_invoices",
+            "costing_margins_report"
+          ],
+          "schema_status": "documented"
         }
       }
     },
@@ -12783,11 +16566,112 @@
     },
     "/api/crm/invoices": {
       "get": {
+        "description": "The organisation's Xero invoices with their line items, newest first, optionally only this month's or only those still outstanding. Money here is Xero's, in its currency, as numbers. To find which stock a sale took, use the to-sale trace on a lot. Only for organisations with sales (Xero) connected.",
         "operationId": "crm_crm_api_get_org_invoices",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "all (default), this_month, or outstanding (unpaid).",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "enum": [
+                "all",
+                "this_month",
+                "outstanding"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, from 1.",
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Invoices per page. Default 50.",
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The request succeeded. The response body is not described yet."
+            "content": {
+              "application/json": {
+                "example": {
+                  "invoices": [
+                    {
+                      "amount_due": 0.0,
+                      "amount_paid": 1150.0,
+                      "contact_id": null,
+                      "contact_name": "Corner Bottle Store",
+                      "currency_code": "NZD",
+                      "date": "2026-10-28",
+                      "due_date": "2026-11-20",
+                      "fully_paid_on_date": "2026-11-05",
+                      "id": "5a1c9e3f-7b2d-4f60-8e11-9d3b6a4c2f01",
+                      "invoice_number": "INV-0007",
+                      "invoice_type": "ACCREC",
+                      "last_synced_at": "2026-11-15T20:00:00+00:00",
+                      "line_items": [],
+                      "reference": null,
+                      "status": "PAID",
+                      "sub_total": 1000.0,
+                      "total": 1150.0,
+                      "total_tax": 150.0,
+                      "xero_invoice_id": "INV-0007"
+                    }
+                  ],
+                  "kind": "all",
+                  "page": 1,
+                  "page_size": 50,
+                  "total": 1
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "invoices": {
+                      "items": {
+                        "$ref": "#/components/schemas/Invoice"
+                      },
+                      "type": "array"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "description": "How many invoices match, over all pages.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "invoices",
+                    "total",
+                    "page",
+                    "page_size",
+                    "kind"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One page of invoices."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -12804,16 +16688,26 @@
             "bearerToken": []
           }
         ],
-        "summary": "Get org invoices",
+        "summary": "List sales invoices",
         "tags": [
           "sales"
         ],
         "x-bize": {
+          "concepts": [
+            "sales.xero_invoices",
+            "sales.fifo_matching"
+          ],
           "domain": "sales",
           "feature": "crm",
-          "mcp": false,
+          "kind": "list",
+          "mcp": true,
           "permission": "sales.view",
-          "schema_status": "skeleton"
+          "related_operations": [
+            "crm_crm_api_monthly_sales",
+            "core_trace_inventory_to_sale_graph",
+            "costing_margins_report"
+          ],
+          "schema_status": "documented"
         }
       }
     },

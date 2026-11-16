@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # The ratchet. The number of operations still shown as a skeleton (a summary and a permission, but no
 # described response) may go down and never up. Lower it in the MR that documents more routes.
-MAX_OPERATIONS_WITHOUT_SCHEMAS = 10_000  # set to the real count once the overlay exists
+MAX_OPERATIONS_WITHOUT_SCHEMAS = 357
 
 # What the spec's first wave names: the routes people ask about, plus the layer-3 calculations.
 FIRST_WAVE = frozenset(

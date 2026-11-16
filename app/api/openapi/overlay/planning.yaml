@@ -3,6 +3,118 @@
 # Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
 # generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
 operations:
+  planning_get_stock_cover:
+    summary: Stock cover for each product
+    description: >-
+      For every product that sells or has a cover target: its sales rate per week over the window, the stock
+      available, the date it runs out, and how many batches to plan and by when. Each row carries a sentence
+      Biz-E has already worked out (`sentence`), so use it rather than redoing the arithmetic. Soonest to run
+      out first. `available` follows the planner's rules: stock on hold, expired, not yet ready or committed
+      to a planned batch is not counted. Needs sales connected to give a rate.
+    parameters:
+      - name: weeks
+        in: query
+        description: The sales window in weeks used for the rate, from 4 to 52. Default 12.
+        schema: {type: integer, minimum: 4, maximum: 52}
+      - name: site_id
+        in: query
+        description: Cover for one site, when the organisation runs several. Defaults to the default site.
+        schema: {type: string, format: uuid}
+    errors: [400]
+    response:
+      description: The cover rows, soonest to run out first.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [window_weeks, sales_connected, seasonal, site_id, sites, products, unmapped_products]
+        properties:
+          window_weeks: {type: integer}
+          sales_connected: {type: boolean, description: "False means there is no sales source, so rates are unknown."}
+          seasonal: {type: boolean, description: "True when a full year of sales history exists."}
+          site_id: {type: [string, "null"]}
+          sites:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: [id, name, is_default]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+                is_default: {type: boolean}
+          products:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+              required: [name, summary, sentence]
+              properties:
+                name: {type: string}
+                unit: {type: [string, "null"]}
+                rate_per_week: {type: [string, number, "null"]}
+                runs_out_on: {type: [string, "null"], description: "The date stock runs out, or null."}
+                summary: {type: string}
+                sentence: {type: string, description: "One sentence stating the cover, ready to quote."}
+                unknowns: {type: array, items: {type: string}, description: "Why a figure is missing."}
+          unmapped_products:
+            type: array
+            description: Sold products that are not mapped to a workflow output, so cannot be covered.
+            items:
+              type: object
+              additionalProperties: false
+              required: [product_name, reason]
+              properties:
+                product_name: {type: string}
+                reason: {type: string}
+      example:
+        window_weeks: 12
+        sales_connected: true
+        seasonal: false
+        site_id: null
+        sites: []
+        unmapped_products: []
+        products:
+          - {name: Dry Gin, unit: bottle, rate_per_week: "24", runs_out_on: "2026-12-30", summary: "Runs out 30 Dec at 24 bottles a week; plan 1 batch by 14 Dec.", sentence: "Dry Gin runs out 30 Dec at 24 bottles a week; plan 1 batch by 14 Dec.", unknowns: []}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [planning.stock_cover, inventory.availability]
+      related_operations: [planning_get_planning_batches, core_list_inventory, crm_crm_api_monthly_sales]
+  planning_get_planning_batches:
+    summary: Planned batches in a date range
+    description: >-
+      The batches the planner has scheduled between two dates (default the next seven days), with their
+      workflow, planned date and state. `truncated` is true when more matched than were returned. These are
+      plans, not records of production: a started plan becomes a batch you can read with the batch operations.
+    parameters:
+      - name: start
+        in: query
+        description: First day, YYYY-MM-DD. Defaults to today.
+        schema: {type: string, format: date}
+      - name: end
+        in: query
+        description: Last day, YYYY-MM-DD. Defaults to six days after `start`.
+        schema: {type: string, format: date}
+    errors: [400]
+    response:
+      description: The planned batches.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [batches, truncated]
+        properties:
+          batches:
+            type: array
+            items: {type: object, additionalProperties: true}
+          truncated: {type: boolean}
+      example:
+        batches: []
+        truncated: false
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [planning.planned_batches, production.batches]
+      related_operations: [planning_get_stock_cover, core_list_executions]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
   planning_add_demand:
     summary: Add demand
@@ -18,10 +130,6 @@ operations:
     summary: Get demands
   planning_get_material_assessment:
     summary: Get material assessment
-  planning_get_planning_batches:
-    summary: Get planning batches
-  planning_get_stock_cover:
-    summary: Get stock cover
   planning_plan_production_demand:
     summary: Plan production demand
   planning_planning_workflows:

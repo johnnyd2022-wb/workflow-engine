@@ -2,7 +2,215 @@
 # What the code cannot say about a route: its query parameters, response, concepts and an example.
 # Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
 # generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  ExcisePeriodSettings:
+    type: object
+    additionalProperties: true
+    properties:
+      frequency: {type: string, description: "How often returns are lodged, such as monthly."}
+      reminders_from: {type: [string, "null"]}
+      tracking_from: {type: [string, "null"]}
 operations:
+  compliant_compliant_api_list_records:
+    summary: Compliance records
+    description: >-
+      The compliance records the organisation has logged (checks, attestations, log entries), newest first,
+      optionally for one framework. These are what an inspector would ask to see. Only for organisations that
+      have a compliance module.
+    parameters:
+      - name: framework
+        in: query
+        description: Only records of this compliance framework, for example nz_alcohol.
+        schema: {type: string}
+    response:
+      description: The records.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [records]
+        properties:
+          records:
+            type: array
+            items: {type: object, additionalProperties: true}
+      example:
+        records: []
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [compliance.nz_alcohol_records]
+      related_operations: [compliant_compliant_api_get_excise_position, core_list_expired_materials]
+  compliant_compliant_api_get_excise_position:
+    summary: Where the organisation stands with Customs
+    description: >-
+      The excise position: the year's duty so far (lodged and estimated), this period's estimate and due date,
+      periods not yet lodged, remissions, the stocktake status and what setup is still missing. Biz-E computes
+      this from the recorded removals and the rates in force, so quote it rather than calculating duty
+      yourself. Only for organisations with the NZ alcohol module.
+    response:
+      description: The position as at today.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [today, frequency, year, this_period, stocktake, setup, unlodged_periods, overdue_periods, remissions]
+        properties:
+          today: {type: string}
+          frequency: {type: string}
+          unlodged_periods: {type: integer}
+          overdue_periods: {type: integer}
+          remissions: {type: array, items: {type: object, additionalProperties: true}}
+          year:
+            type: object
+            additionalProperties: true
+            required: [from, duty, estimated_duty, lodged_duty, lodged_periods]
+            properties:
+              from: {type: string}
+              duty: {type: string, description: "Duty for the year so far, lodged plus estimated."}
+              estimated_duty: {type: string}
+              lodged_duty: {type: string}
+              lodged_periods: {type: integer}
+              monthly_until: {type: [string, "null"]}
+              six_monthly_allowed: {type: boolean}
+              six_monthly_limit: {type: string}
+              twelve_monthly_allowed: {type: boolean}
+              twelve_monthly_limit: {type: string}
+          this_period:
+            type: object
+            additionalProperties: true
+            required: [label, period_start, due, estimate]
+            properties:
+              label: {type: string}
+              period_start: {type: string}
+              due: {type: string}
+              estimate: {type: string}
+              ccas: {type: integer}
+              total_lal: {type: string, description: "Litres of absolute alcohol removed this period."}
+          stocktake:
+            type: object
+            additionalProperties: true
+            properties:
+              frequency: {type: string}
+              bulk_tolerance_percent: {type: string}
+              last_completed_on: {type: [string, "null"]}
+              next_due: {type: [string, "null"]}
+              open_differences: {type: integer}
+              open_duty: {type: string}
+              overdue: {type: boolean}
+          setup:
+            type: object
+            additionalProperties: true
+            properties:
+              products: {type: integer}
+              incomplete: {type: array, items: {type: object, additionalProperties: true}}
+      example:
+        today: "2026-11-16"
+        frequency: monthly
+        unlodged_periods: 0
+        overdue_periods: 0
+        remissions: []
+        year:
+          {from: "2026-07-01", duty: "4200.00", estimated_duty: "700.00", lodged_duty: "3500.00", lodged_periods: 4, monthly_until: null, six_monthly_allowed: false, six_monthly_limit: "1000000", twelve_monthly_allowed: false, twelve_monthly_limit: "100000"}
+        this_period: {label: November 2026, period_start: "2026-11-01", due: "2026-12-20", estimate: "700.00", ccas: 1, total_lal: "52.4"}
+        stocktake: {frequency: annual, bulk_tolerance_percent: "0.5", last_completed_on: null, next_due: null, open_differences: 0, open_duty: "0", overdue: false}
+        setup: {products: 3, incomplete: []}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [compliance.excise_position, compliance.excise_periods]
+      related_operations: [compliant_compliant_api_list_excise_periods, compliant_compliant_api_get_excise_period, stocktake_get_stocktake_reconciliation]
+  compliant_compliant_api_list_excise_periods:
+    summary: Excise periods, current and last eleven
+    description: >-
+      The current excise period and the last eleven, newest first, each with whether it is open, lodged or
+      not yet lodged, its due date and, once lodged, its total. With several licences, pass `cca` to see one
+      licence's periods.
+    parameters:
+      - name: cca
+        in: query
+        description: The CCA licence id, when the organisation has several. Defaults to the first.
+        schema: {type: string}
+    response:
+      description: The periods.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [periods, settings]
+        properties:
+          settings: {$ref: "#/components/schemas/ExcisePeriodSettings"}
+          periods:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+              required: [label, period_start, period_end, due, status, open]
+              properties:
+                label: {type: string}
+                period_start: {type: string}
+                period_end: {type: string}
+                due: {type: string}
+                status: {type: string}
+                open: {type: boolean}
+                lodged_on: {type: [string, "null"]}
+                nil_return: {type: [boolean, "null"]}
+                total: {type: [string, "null"], description: "Duty for the period once lodged, else null."}
+                total_lal: {type: [string, "null"]}
+      example:
+        settings: {frequency: monthly, reminders_from: null, tracking_from: null}
+        periods:
+          - {label: November 2026, period_start: "2026-11-01", period_end: "2026-11-30", due: "2026-12-20", status: open, open: true, lodged_on: null, nil_return: null, total: null, total_lal: null}
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [compliance.excise_periods]
+      related_operations: [compliant_compliant_api_get_excise_period, compliant_compliant_api_get_excise_position]
+  compliant_compliant_api_get_excise_period:
+    summary: One excise period's return
+    description: >-
+      One period's excise return as it stands: the lines by product, adjustments, CCA transfers, totals and
+      any problems that stop it being lodged. Defaults to the current period. With several licences it shows
+      one CCA's entry (`cca`, else the first).
+    parameters:
+      - name: period
+        in: query
+        description: The period to show, as its start month (YYYY-MM). Defaults to the current period.
+        schema: {type: string}
+      - name: cca
+        in: query
+        description: The CCA licence id, when the organisation has several.
+        schema: {type: string}
+    errors: [400]
+    response:
+      description: The period's return, as a draft until lodged.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [draft, settings]
+        properties:
+          settings: {$ref: "#/components/schemas/ExcisePeriodSettings"}
+          draft:
+            type: object
+            additionalProperties: true
+            required: [label, period_start, period_end, due, status, total_duty, total_lal, lines, problems]
+            properties:
+              label: {type: string}
+              period_start: {type: string}
+              period_end: {type: string}
+              due: {type: string}
+              status: {type: string}
+              open: {type: boolean}
+              total_duty: {type: string}
+              total_lal: {type: string}
+              lines: {type: array, items: {type: object, additionalProperties: true}}
+              adjustments: {type: array, items: {type: object, additionalProperties: true}}
+              problems: {type: array, items: {type: object, additionalProperties: true}}
+              entry: {type: object, additionalProperties: true}
+      example:
+        settings: {frequency: monthly, reminders_from: null, tracking_from: null}
+        draft: {label: November 2026, period_start: "2026-11-01", period_end: "2026-11-30", due: "2026-12-20", status: open, open: true, total_duty: "700.00", total_lal: "52.4", lines: [], adjustments: [], problems: []}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [compliance.excise_periods, compliance.cca_movements]
+      related_operations: [compliant_compliant_api_list_excise_periods, compliant_compliant_api_get_excise_position]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
   compliant_compliant_api_add_excise_rate:
     summary: Add excise rate
@@ -22,8 +230,6 @@ operations:
     summary: List alcohol products
   compliant_compliant_api_list_excise_rates:
     summary: List excise rates
-  compliant_compliant_api_list_records:
-    summary: List records
   compliant_compliant_api_lodge_excise_period:
     summary: Lodge excise period
   compliant_compliant_api_np3_audit:
