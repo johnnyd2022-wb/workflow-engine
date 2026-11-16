@@ -28,7 +28,7 @@ measurement or a decision before it counts as a defect.
 
 ## Security findings
 
-- **S1. The app does not enforce the MCP allowlist.** Confirmed in code.
+- **S1. Security: the app does not enforce the MCP allowlist (token bypass).** Confirmed in code.
     - Problem: `token_scope_includes` (`app/core/security/access_policy.py:507`) checks only that the
       method is GET/HEAD and the route needs a view permission; it never checks `x-bize.mcp`. In
       `docs/openapi.json`, 160 of 178 GET operations are token-reachable; 28 are in the catalogue.
@@ -38,7 +38,7 @@ measurement or a decision before it counts as a defect.
       stock snapshot CSV. Audience binding protects nothing because the app accepts the token from any caller.
     - Fix: enforce `x-bize.mcp` in `token_scope_includes` (deny by default), and accept `bza_` tokens
       only from the MCP container (a service credential or network rule).
-- **S2. Some GET routes write.** Confirmed in code.
+- **S2. Security: read-only bypass, because some GET routes write irreversible state.** Confirmed in code.
     - Problem: `GET /api/core/costing/stock-value` (in the MCP catalogue) takes and commits the
       month-end snapshot for an org with no Xero (`app/features/costing/routes.py:675`), which is then
       held fixed. `GET /api/core/costing/bridge` calls Xero's P&L API on every request
@@ -46,7 +46,7 @@ measurement or a decision before it counts as a defect.
     - Impact: a read-only assistant can perform an irreversible month close and spend the org's Xero rate limit.
     - Fix: no snapshot on a token request; a test that runs every token-reachable GET against a
       session that fails on flush. L1 removes the write from the read path entirely.
-- **S3. Consent cannot tell a real client from an impostor.** Confirmed in code.
+- **S3. Security: consent cannot tell a real client from an impostor (authorization).** Confirmed in code.
     - Problem: every client is created with `verified=False`
       (`app/features/mcp_oauth/services/client_registry.py:142`, `:354`) and nothing sets it true;
       registration is open.
@@ -55,17 +55,17 @@ measurement or a decision before it counts as a defect.
       off-by-default limit this but don't close it.
     - Fix: seed verified records for known clients by metadata URL or redirect URIs; an org setting,
       default on, allowing verified clients only.
-- **S4. Rate limits are per worker.** Confirmed in code; production config not checked.
+- **S4. Security: rate limits are per worker, so brute-force limits are doubled.** Confirmed in code; production config not checked.
     - Problem: gunicorn runs `WEB_CONCURRENCY=2` by default and the limiter keeps counts in process
       memory unless `[ratelimit] storage_uri` is set; the templates leave it commented out.
     - Impact: 120/min per grant is really 240; 10 registrations/hour is 20. One request can walk the whole cost graph (L6).
     - Fix: a shared store before any production org enables MCP, and a lower limit for `calculation` operations.
-- **S5. Refresh-token reuse has no grace window.** Risk.
+- **S5. Refresh-token reuse has no grace window, so retries crash the grant.** Risk.
     - Problem: presenting a replaced refresh token revokes the grant
       (`app/features/mcp_oauth/services/token_service.py:197`).
     - Impact: a client retrying after a lost response disconnects itself.
     - Fix: accept the previous token for 30–60 s and return the same successor.
-- **S6. Text written outside the org reaches the model.** Risk; needs validation.
+- **S6. Security: text written outside the org reaches the model (data leak risk).** Risk; needs validation.
     - Problem: portal users, Xero payees/descriptions and customer names are third-party text; the
       only defence is a sentence in each tool description.
     - Impact: an assistant that also has email or web tools can be steered into sending data out.
@@ -74,7 +74,7 @@ measurement or a decision before it counts as a defect.
 
 ## Cross-cutting findings
 
-- **X1. Two revenue figures, both published as authoritative.** Confirmed in code.
+- **X1. Incorrect revenue: two figures, both published as authoritative.** Confirmed in code.
     - Problem: `GET /api/crm/analytics/monthly-sales` sums `XeroInvoice.total`
       (`app/features/crm/repositories/xero_invoice_repo.py:391`): GST-inclusive, every line incl.
       freight, foreign currency unconverted, as float, while its docstring says "net revenue". Margins
@@ -82,18 +82,18 @@ measurement or a decision before it counts as a defect.
     - Impact: the same month differs by 15%+ between Sales and margins; both are `x-bize.kind: calculation`.
     - Fix: one revenue function in `sales_sources` (ex-GST, base currency) used by both; if the invoiced
       total is wanted, name it `invoiced_inc_gst`.
-- **X2. Margins and the bridge give different cost of sales for one month.** Confirmed in the spec, not traced in code.
+- **X2. Incorrect cost of sales: margins and the bridge disagree for one month.** Confirmed in the spec, not traced in code.
     - Problem: margins date a sale by invoice date at today's lot cost; the bridge dates movements by
       `created_at` before the cutoff at closing cost, then freezes them.
     - Impact: a sale invoiced 30 Oct and synced 2 Nov is October in one and November in the other.
     - Fix: date by sale date in both; for a closed month, margins read the frozen movements and show "changed since close".
-- **X3. Four definitions of stock on hand.** Confirmed in code.
+- **X3. Incorrect stock totals: four definitions of stock on hand.** Confirmed in code.
     - Problem: costing stock value counts held, expired and not-ready lots; planner `stock.on_hand`
       counts only lots with the output's `source_output_id`, drops held/expired, subtracts pending
       inputs, ignores ready dates; `stocktake.stock_position` and the inventory list are two more.
     - Impact: "how much gin do I have" has a different answer per operation.
     - Fix: one availability module in Core with named rules (on hand, usable, sellable); each response says which rule it used.
-- **X4. Materials are matched by name.** Risk; needs validation.
+- **X4. Possible incorrect estimates: materials are matched by name.** Risk; needs validation.
     - Problem: last known price, price history and legacy readiness match lots by normalised name and compatible unit.
     - Impact: 200 mL and 700 mL "Bottles" can share a price estimate that then counts as complete in margins.
     - Fix: don't estimate across differing packs; show the estimate's source lot wherever it feeds a
@@ -101,12 +101,12 @@ measurement or a decision before it counts as a defect.
 
 ## MCP design findings
 
-- **M1. No server-side totals.** Confirmed in code.
+- **M1. Wrong total risk: no server-side totals, so the model sums partial pages.** Confirmed in code.
     - Problem: lists cap at 50 rows; `select` projects fields but there is no filter, sum, count or sort.
     - Impact: the model adds up the first page; the truncation note is a request, not a control.
     - Fix: every `list` operation returns `total_count` and a server-computed total of its main
       quantity; add a few aggregate operations (stock by product, batches by period, sales by product).
-- **M2. Results that must be complete are cut short.** Confirmed in code.
+- **M2. Incorrect traces: results that must be complete are cut short.** Confirmed in code.
     - Problem: nested lists in a calculation are cut to 50 with a note and no cursor (`_cap_lists` in `bize_mcp/tools/execute.py`).
     - Impact: a partial forward trace (the scope of a recall) is presented as an answer.
     - Fix: trace, excise and reconciliation are complete-or-fail; over the limit they return counts and a link to the app page.
@@ -122,7 +122,7 @@ measurement or a decision before it counts as a defect.
 
 ## Analytics findings
 
-- **A1. Margins silently drop unmapped sales.** Confirmed in code.
+- **A1. Incorrect totals: margins silently drop unmapped sales.** Confirmed in code.
     - Problem: `app/features/costing/margins.py:170` discards `_unmapped` from `sale_lines`.
     - Impact: margins revenue is below Xero's by an unshown amount.
     - Fix: return an `unmapped` total (revenue, line count) beside the product rows.
@@ -136,23 +136,23 @@ measurement or a decision before it counts as a defect.
 
 All in `app/features/planning/forecast_service.py` unless stated.
 
-- **P1. The seasonal factor counts the current season twice.** Confirmed in code.
+- **P1. Miscalculated forecast: the seasonal factor counts the current season twice.** Confirmed in code.
     - Problem: `weekly_rate` scales the trailing-N-week average by last year's next N weeks ÷ last year's
       annual average. The trailing average already sits at this season's level.
     - Impact: 100/wk average, 150/wk Oct–Dec, 80/wk Jan–Mar. On 31 Dec it forecasts 150 × 80/100 = 120;
       right is 150 × 80/150 = 80 (50% high). End of September it is about 15% low (128 vs 150).
     - Fix: factor = last year's next N weeks ÷ last year's trailing N weeks, keeping the clamps.
-- **P2. Run-out ignores when planned stock arrives, and counts blocked plans.** Confirmed in code.
+- **P2. Incorrect run-out date: it ignores when planned stock arrives, and counts blocked plans.** Confirmed in code.
     - Problem: `cover_row` uses `available = on_hand + planned − ordered` then `today + available ÷ rate`;
       the per-batch ready dates from `planned_output` are discarded, and `blocked` batches count as supply.
     - Impact: a batch eight weeks out hides a stock-out in week three.
     - Fix: walk supply by ready date (the net-requirements engine in `engine.py` already does this);
       show blocked batches separately.
-- **P3. New products are under-forecast.** Confirmed in code.
+- **P3. Miscalculated rate: new products are under-forecast.** Confirmed in code.
     - Problem: the rate divides by the full window even when the first sale is inside it; out-of-stock weeks count as zero demand.
     - Impact: a three-week-old product on a 12-week window shows a quarter of its rate.
     - Fix: divide by weeks since first sale (with a floor) and say so on the row.
-- **P4. On-hand counts only lots made by the workflow.** Confirmed in code; size needs validation.
+- **P4. Incorrect on-hand: it counts only lots made by the workflow.** Confirmed in code; size needs validation.
     - Problem: `stock.on_hand` filters on `source_output_id`; bought-in, imported and legacy lots have none.
     - Fix: count Whistlebird's finished lots without `source_output_id` before choosing how to match them.
 - **P5. Planning docs no longer describe the code.** Confirmed.
@@ -162,14 +162,14 @@ All in `app/features/planning/forecast_service.py` unless stated.
 
 ## Live cost findings
 
-- **L1. A month closes itself before its purchases are recorded.** Confirmed in code.
+- **L1. Irreversible close: a month closes itself before its purchases are recorded.** Confirmed in code.
     - Problem: `ensure_month_end_snapshots` (`app/features/costing/stock_value.py:965`) snapshots on the
       first sync or costing read after month end, pricing at costs known then and freezing B; no grace period.
     - Impact: the closed value is priced on estimates and the bridge's "not recorded as stock" is
       frozen high; the accountant's CSV is the frozen one.
     - Fix: freeze quantities at the cutoff automatically; keep valuation provisional until a
       `costs.manage` user closes the month or a set day (e.g. the 20th).
-- **L2. Foreign-currency purchases can't be costed from Xero.** Confirmed in code.
+- **L2. Incorrect stock value: foreign-currency purchases can't be costed from Xero.** Confirmed in code.
     - Problem: non-base documents are `needs_rate` with no amount and accept no action
       (`app/features/costing/purchase_sources.py:432`); assumption A11 is unresolved.
     - Fix: confirm the rate direction on one real transaction, or let the user type the NZD paid.
@@ -181,7 +181,7 @@ All in `app/features/planning/forecast_service.py` unless stated.
 - **L5. Absorbed overhead is never compared with actual.** Risk.
     - Problem: rates are typed; Xero overhead lines are stored but shown "untouched"; freight can enter cost three ways.
     - Fix: show absorbed overhead beside Xero's overhead accounts per period.
-- **L6. Every cost read walks the graph, and MCP multiplies reads.** Risk; needs measuring.
+- **L6. Performance: every cost read walks the graph, and MCP multiplies reads.** Risk; needs measuring.
     - Fix: time margins and stock value at 10× Whistlebird's size before enabling MCP in production; lower limit for calculations (S4).
 
 ## Gaps
@@ -193,7 +193,7 @@ All in `app/features/planning/forecast_service.py` unless stated.
 - Costing and planning assume NZ time throughout; blocks a first Australian customer.
 - Stale spec text: the 8.2d deploy section still expects `tools/list` to contain `search_inventory`; the plan's directory layout still lists per-area tool modules.
 
-## Next steps
+## Fix order
 
 Before any production org enables MCP:
 
@@ -217,7 +217,7 @@ Then:
 12. Specs for planning and sales analytics (P5, A3).
 13. Tighter output limits; refresh grace window (M3, S5).
 
-## Open questions
+## To validate before deciding
 
 - Is any pilot producer not GST registered? (L3)
 - Does a month's margin duty equal its excise return? (L4)
