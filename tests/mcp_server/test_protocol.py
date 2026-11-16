@@ -173,3 +173,14 @@ def test_an_sdk_client_can_list_and_call_tools(world, app_transport, admin_token
     assert {tool.name for tool in listed.tools} == ALL_TOOLS
     assert not called.is_error
     assert "Org A Juniper" in str(called.structured_content["results"][0]["data"])
+
+
+def test_the_harness_works_while_another_event_loop_is_running_on_this_thread(world, app_transport, admin_token):
+    """CI runs browser tests in the same process, which leave a loop running; this once broke every test here."""
+    import asyncio
+
+    async def inside_a_running_loop():
+        with Mcp(app_transport) as mcp:
+            return mcp.discover(admin_token, "inventory").is_error
+
+    assert asyncio.run(inside_a_running_loop()) is False

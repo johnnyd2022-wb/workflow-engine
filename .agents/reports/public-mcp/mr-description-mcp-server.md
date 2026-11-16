@@ -52,6 +52,6 @@ Advisory Claude review at high effort (Codex is out of quota until 17 Nov): `.ag
 
 ## Verification run
 
-* `tests/mcp_server` 203 passed; `tests/openapi`, `tests/test_knowledge_docs.py`, `tests/mcp_oauth/test_bearer.py`, `test_settings_api.py`, `test_review_findings.py`, `tests/test_access_policy.py`, `tests/test_select_relevant_tests.py` pass.
+* `tests/mcp_server` 202 passed; `tests/openapi`, `tests/test_knowledge_docs.py`, `tests/mcp_oauth/test_bearer.py`, `test_settings_api.py`, `test_review_findings.py`, `tests/test_access_policy.py`, `tests/test_select_relevant_tests.py` pass.
 * `ruff check`/`format` on `app/ bize_mcp/ tests/mcp_server`; `semgrep --config .semgrep/rules/ bize_mcp app/features/mcp_oauth --error`: 0 findings.
 * Per the brief, the full verification chain was not run; the whole feature is reviewed at the end.

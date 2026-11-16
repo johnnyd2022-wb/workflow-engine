@@ -8,7 +8,10 @@ in production). Nothing here talks to a socket. Tokens are minted with 8.2b's ``
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
+import queue
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,19 +63,24 @@ class FlaskTransport(httpx2.AsyncBaseTransport):
         self.client = flask_app.test_client(use_cookies=False)
         self.client.environ_base["REMOTE_ADDR"] = unique_addr()
         self.requests: list[httpx2.Request] = []
+        self.dispatch = None  # set by ``Mcp``: runs a callable on the test's own thread
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         query = request.url.query
         query = query.decode() if isinstance(query, bytes) else query
         headers = [(k, v) for k, v in request.headers.items() if k.lower() != "content-length"]
-        reply = self.client.open(
-            path=_raw_path(request),
-            query_string=query,
-            method=request.method,
-            headers=headers,
-            data=request.content,
-        )
+
+        def call():
+            return self.client.open(
+                path=_raw_path(request),
+                query_string=query,
+                method=request.method,
+                headers=headers,
+                data=request.content,
+            )
+
+        reply = await self.dispatch(call) if self.dispatch else call()
         return httpx2.Response(
             reply.status_code,
             headers=[(k, v) for k, v in reply.headers.items()],
@@ -202,10 +210,34 @@ class Mcp:
         self.app_transport = app_transport
         self.app = create_app(self.config, transport=app_transport)
 
+    # The app's event loop runs on a worker thread, so it works even when another test left a loop
+    # running on this one (CI runs the browser tests in the same process). Everything that touches the
+    # Flask app and its database session is handed back to the test's own thread (``_on_test_thread``),
+    # which services those jobs while it waits in ``run``.
     def __enter__(self):
-        self._runner = asyncio.Runner()
-        self._runner.run(self._start())
+        self._jobs: queue.Queue = queue.Queue()
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._thread.start()
+        transport = self.app_transport
+        while transport is not None:
+            if hasattr(transport, "dispatch"):
+                transport.dispatch = self._on_test_thread
+            transport = getattr(transport, "inner", None)
+        self.run(self._start())
         return self
+
+    async def _on_test_thread(self, fn):
+        done: concurrent.futures.Future = concurrent.futures.Future()
+
+        def job():
+            try:
+                done.set_result(fn())
+            except BaseException as error:  # handed back to the awaiting coroutine
+                done.set_exception(error)
+
+        self._jobs.put(job)
+        return await asyncio.wrap_future(done)
 
     async def _start(self):
         # The app's lifespan (anyio cancel scopes) must be entered and left by one task, so it gets its own.
@@ -233,15 +265,23 @@ class Mcp:
 
     def __exit__(self, *exc):
         try:
-            self._runner.run(self._finish())
+            self.run(self._finish())
         finally:
-            self._runner.close()
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join(timeout=10)
+            self._loop.close()
 
     def run(self, coro):
-        return self._runner.run(coro)
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        while not future.done():
+            try:
+                self._jobs.get(timeout=0.005)()
+            except queue.Empty:
+                pass
+        return future.result()
 
     def request(self, method: str, path: str, **kwargs) -> httpx2.Response:
-        return self._runner.run(self.http.request(method, path, **kwargs))
+        return self.run(self.http.request(method, path, **kwargs))
 
     def rpc(self, token, method: str, params=None, *, request_id=1, headers=None) -> httpx2.Response:
         merged = dict(JSON_HEADERS)
