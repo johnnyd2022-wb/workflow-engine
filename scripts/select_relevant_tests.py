@@ -187,6 +187,17 @@ RULES = (
     ),
     Rule("Demo data product", ("app/features/demo_data/**",), ("tests/test_demo_data.py",)),
     Rule(
+        "OpenAPI document",
+        ("app/api/openapi/**", "docs/openapi.json", "scripts/check_openapi.py"),
+        (
+            "tests/openapi/test_document.py",
+            "tests/openapi/test_served.py",
+            "tests/openapi/test_coverage.py",
+            "tests/openapi/test_responses.py",
+            "tests/test_access_policy.py",
+        ),
+    ),
+    Rule(
         "Observability",
         ("app/observability/**",),
         (
