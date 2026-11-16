@@ -1271,7 +1271,7 @@ missing; never a silent $0.
     full) and `execute` (up to five allowlisted, read-only API calls, composed declaratively;
     no model-written code), all filtered to what the person may see. Guide `docs/public-mcp-server.md`. (!725)
   - [x] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
-    `mcp.biz-e.app` / `mcp-test.biz-e.app`. (!MR)
+    `mcp.biz-e.app` / `mcp-test.biz-e.app`. (!726)
   - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
     revoke. (!720)
   - [x] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
