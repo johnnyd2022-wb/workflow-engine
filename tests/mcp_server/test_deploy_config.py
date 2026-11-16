@@ -8,7 +8,6 @@ verifies, and an unrecognised one is refused, so a typo can never switch verific
 
 from __future__ import annotations
 
-import asyncio
 import http.server
 import ssl
 import threading
@@ -18,7 +17,7 @@ import pytest
 
 from bize_mcp.client import AppClient
 from bize_mcp.config import Config, ConfigError
-from tests.mcp_server.support import make_config
+from tests.mcp_server.support import make_config, run_coroutine
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -85,7 +84,7 @@ def _ping(base_url: str, **overrides) -> bool:
         finally:
             await client.aclose()
 
-    return asyncio.run(run())
+    return run_coroutine(run())
 
 
 def test_the_client_refuses_a_self_signed_app_by_default(tls_app):
