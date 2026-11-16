@@ -349,3 +349,28 @@ def test_cli_disable_turns_it_off_and_keeps_the_roles(world, db):
     row, keys = _settings(db, org_id)
     assert row.enabled is False
     assert keys == ["builtin:admin"]
+
+
+def test_cli_audit_log_works_with_no_flask_app_context(world, db):
+    """The real CLI runs with no app context (pytest's fixtures provide one, which hid this):
+    `log_action` must not touch `g` then. A new thread has no app context, like the CLI."""
+    import threading
+
+    from app.core.db.models.audit_log import AuditLog
+    from app.core.utils.log_action import log_action
+
+    org_id = world.org.id
+    errors = []
+
+    def call():
+        try:
+            log_action("mcp.cli_probe", "mcp_settings", org_id=org_id, metadata={"probe": True})
+        except Exception as exc:  # noqa: BLE001 -- the assertion below reports it
+            errors.append(exc)
+
+    worker = threading.Thread(target=call)
+    worker.start()
+    worker.join()
+    assert errors == []
+    db.expire_all()
+    assert db.query(AuditLog).filter(AuditLog.org_id == org_id, AuditLog.action == "mcp.cli_probe").count() == 1
