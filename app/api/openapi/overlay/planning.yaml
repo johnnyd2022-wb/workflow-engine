@@ -1,0 +1,36 @@
+# OpenAPI overlay: the planning domain. Stock cover, the planner's batches, capacity and demand.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  planning_add_demand:
+    summary: Add demand
+  planning_assess_materials:
+    summary: Assess materials
+  planning_cancel_demand:
+    summary: Cancel demand
+  planning_change_planning_batch:
+    summary: Change planning batch
+  planning_get_capacity:
+    summary: Get capacity
+  planning_get_demands:
+    summary: Get demands
+  planning_get_material_assessment:
+    summary: Get material assessment
+  planning_get_planning_batches:
+    summary: Get planning batches
+  planning_get_stock_cover:
+    summary: Get stock cover
+  planning_plan_production_demand:
+    summary: Plan production demand
+  planning_planning_workflows:
+    summary: Get planning workflows
+  planning_save_capacity:
+    summary: Save capacity
+  planning_save_planning_workflow:
+    summary: Save planning workflow
+  planning_save_stock_target:
+    summary: Save stock target
+  planning_start_planning_batch:
+    summary: Start planning batch

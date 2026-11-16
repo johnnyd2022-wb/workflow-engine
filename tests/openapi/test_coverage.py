@@ -120,7 +120,9 @@ def test_ac37_the_layer_three_calculations_say_so(full_doc):
     assert kinds <= {"record", "list", "calculation"}
 
 
-def test_ac37_every_assistant_operation_is_a_get_that_a_token_can_reach_and_names_a_read_permission(flask_app, full_doc):
+def test_ac37_every_assistant_operation_is_a_get_that_a_token_can_reach_and_names_a_read_permission(
+    flask_app, full_doc
+):
     endpoints = {rule.endpoint.replace(".", "_"): rule.endpoint for rule in flask_app.url_map.iter_rules()}
     for oid, (_path, method, op) in mcp_operations(full_doc).items():
         assert method == "GET", oid

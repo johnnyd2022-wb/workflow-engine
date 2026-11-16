@@ -75,4 +75,6 @@ def schema_errors(doc: dict, schema: dict, instance, *, strict: bool = True) -> 
         body, components = _strict(body), _strict(components)
     wrapper = {**body, "components": components}
     validator = Draft202012Validator(wrapper, format_checker=FormatChecker())
-    return [f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}" for e in validator.iter_errors(instance)]
+    return [
+        f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}" for e in validator.iter_errors(instance)
+    ]

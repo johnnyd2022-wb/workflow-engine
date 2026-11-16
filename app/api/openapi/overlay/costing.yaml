@@ -1,0 +1,86 @@
+# OpenAPI overlay: the costing domain. Cost per lot and batch, readiness, margins, stock value and the cost settings.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  costing_bulk_purchases:
+    summary: Bulk purchases
+  costing_create_overhead_rate:
+    summary: Create overhead rate
+  costing_create_rule:
+    summary: Create rule
+  costing_delete_lot_cost:
+    summary: Delete lot cost
+  costing_delete_overhead_rate:
+    summary: Delete overhead rate
+  costing_delete_rule:
+    summary: Delete rule
+  costing_edit_purchase_allocations:
+    summary: Edit purchase allocations
+  costing_export_stock_snapshot:
+    summary: Export stock snapshot
+  costing_get_accounts:
+    summary: Get accounts
+  costing_get_bridge:
+    summary: Get bridge
+  costing_get_execution_cost:
+    summary: Get execution cost
+  costing_get_lot_cost:
+    summary: Get lot cost
+  costing_get_material_history:
+    summary: Get material history
+  costing_get_settings:
+    summary: Get settings
+  costing_get_stock_snapshot:
+    summary: Get stock snapshot
+  costing_get_stock_value:
+    summary: Get stock value
+  costing_historical_run:
+    summary: Historical run
+  costing_link_purchase:
+    summary: Link purchase
+  costing_list_materials:
+    summary: List materials
+  costing_list_overhead_rates:
+    summary: List overhead rates
+  costing_list_purchases:
+    summary: List purchases
+  costing_list_rules:
+    summary: List rules
+  costing_list_stock_snapshots:
+    summary: List stock snapshots
+  costing_purchase_candidates:
+    summary: Get purchase candidates
+  costing_purchase_freight:
+    summary: Purchase freight
+  costing_purchase_not_stock:
+    summary: Purchase not stock
+  costing_purchase_reopen:
+    summary: Purchase reopen
+  costing_purchase_review:
+    summary: Purchase review
+  costing_purchase_skip:
+    summary: Purchase skip
+  costing_put_account:
+    summary: Put account
+  costing_put_lot_cost:
+    summary: Put lot cost
+  costing_put_settings:
+    summary: Put settings
+  costing_readiness_detail:
+    summary: Get readiness detail
+  costing_readiness_list:
+    summary: Get readiness list
+  costing_record_purchase:
+    summary: Record purchase
+  costing_refund_purchase:
+    summary: Refund purchase
+  costing_remember_purchase:
+    summary: Remember purchase
+  costing_take_stock_snapshot:
+    summary: Take stock snapshot
+  costing_update_overhead_rate:
+    summary: Update overhead rate
+  costing_update_rule:
+    summary: Update rule

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.openapi.seeds import SEEDS, Call, Showcase, showcase_world  # noqa: F401  (the fixture)
+from tests.openapi.seeds import SEEDS, Call, Showcase
 from tests.openapi.support import by_id, mcp_operations, response_schema, schema_errors
 
 

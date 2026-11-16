@@ -1,0 +1,130 @@
+# OpenAPI overlay: the sales domain. Customers, Xero invoices, sales analytics and returns.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  crm_crm_api_assign_matching_line:
+    summary: Assign matching line
+  crm_crm_api_assign_task_lane:
+    summary: Assign task lane
+  crm_crm_api_authorise_invoice:
+    summary: Authorise invoice
+  crm_crm_api_churn_risk:
+    summary: Get churn risk
+  crm_crm_api_confirm_matching_line:
+    summary: Confirm matching line
+  crm_crm_api_create_customer_invoice:
+    summary: Create customer invoice
+  crm_crm_api_create_mapping:
+    summary: Create mapping
+  crm_crm_api_create_mappings_bulk:
+    summary: Create mappings bulk
+  crm_crm_api_create_note:
+    summary: Create note
+  crm_crm_api_create_task:
+    summary: Create task
+  crm_crm_api_create_task_lane:
+    summary: Create task lane
+  crm_crm_api_crm_overview:
+    summary: Get crm overview
+  crm_crm_api_customer_breakdown:
+    summary: Get customer breakdown
+  crm_crm_api_customer_contact:
+    summary: Get customer contact
+  crm_crm_api_customer_import:
+    summary: Customer import
+  crm_crm_api_customer_import_template:
+    summary: Get customer import template
+  crm_crm_api_delete_mapping:
+    summary: Delete mapping
+  crm_crm_api_delete_note:
+    summary: Delete note
+  crm_crm_api_delete_task:
+    summary: Delete task
+  crm_crm_api_delete_task_lane:
+    summary: Delete task lane
+  crm_crm_api_excise_month:
+    summary: Get excise month
+  crm_crm_api_excise_months:
+    summary: Get excise months
+  crm_crm_api_get_contact_sync_settings:
+    summary: Get contact sync settings
+  crm_crm_api_get_customer:
+    summary: Get customer
+  crm_crm_api_get_customer_analytics:
+    summary: Get customer analytics
+  crm_crm_api_get_customer_invoice_defaults:
+    summary: Get customer invoice defaults
+  crm_crm_api_get_customer_invoices:
+    summary: Get customer invoices
+  crm_crm_api_get_customer_line_item_descriptions:
+    summary: Get customer line item descriptions
+  crm_crm_api_get_customer_line_item_pricing:
+    summary: Get customer line item pricing
+  crm_crm_api_get_invoice_pdf:
+    summary: Get invoice pdf
+  crm_crm_api_get_invoice_view_url:
+    summary: Get invoice view url
+  crm_crm_api_get_matching_candidates:
+    summary: Get matching candidates
+  crm_crm_api_get_matching_queue:
+    summary: Get matching queue
+  crm_crm_api_get_org_invoices:
+    summary: Get org invoices
+  crm_crm_api_get_org_line_item_descriptions:
+    summary: Get org line item descriptions
+  crm_crm_api_get_task:
+    summary: Get task
+  crm_crm_api_get_traceability_config:
+    summary: Get traceability config
+  crm_crm_api_list_customers:
+    summary: List customers
+  crm_crm_api_list_final_products:
+    summary: List final products
+  crm_crm_api_list_mappings:
+    summary: List mappings
+  crm_crm_api_list_task_lanes:
+    summary: List task lanes
+  crm_crm_api_list_tasks:
+    summary: List tasks
+  crm_crm_api_monthly_sales:
+    summary: Get monthly sales
+  crm_crm_api_rankings:
+    summary: Get rankings
+  crm_crm_api_reorder_task_lanes:
+    summary: Reorder task lanes
+  crm_crm_api_retry_customer_xero_sync:
+    summary: Retry customer xero sync
+  crm_crm_api_update_mapping:
+    summary: Update mapping
+  crm_crm_api_update_note:
+    summary: Update note
+  crm_crm_api_update_task:
+    summary: Update task
+  crm_crm_api_update_task_lane:
+    summary: Update task lane
+  crm_crm_api_update_traceability_config:
+    summary: Update traceability config
+  crm_crm_oauth_xero_disconnect:
+    summary: Xero disconnect
+  crm_crm_oauth_xero_status:
+    summary: Get xero status
+  tastings_cancel_tasting:
+    summary: Cancel tasting
+  tastings_choices:
+    summary: Get choices
+  tastings_create_tasting:
+    summary: Create tasting
+  tastings_dispatch_tasting:
+    summary: Dispatch tasting
+  tastings_finalise_tasting:
+    summary: Finalise tasting
+  tastings_get_tasting:
+    summary: Get tasting
+  tastings_list_tastings:
+    summary: List tastings
+  tastings_pool:
+    summary: Get pool
+  tastings_update_tasting:
+    summary: Update tasting

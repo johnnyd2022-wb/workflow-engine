@@ -1,0 +1,68 @@
+# OpenAPI overlay: the inventory domain. Stock on hand, lots, holds, sites, locations and stocktakes.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  core_create_core_supplier:
+    summary: Create core supplier
+  core_delete_core_supplier:
+    summary: Delete core supplier
+  core_import_core_suppliers_from_inventory:
+    summary: Import core suppliers from inventory
+  core_list_core_suppliers:
+    summary: List core suppliers
+  core_update_core_supplier:
+    summary: Update core supplier
+  go_live_get_go_live:
+    summary: Get go live
+  go_live_set_go_live_date:
+    summary: Set go live date
+  lot_holds_get_lot_holds:
+    summary: Get lot holds
+  lot_holds_place_lot_hold:
+    summary: Place lot hold
+  lot_holds_release_lot_hold:
+    summary: Release lot hold
+  site_transfers_detail:
+    summary: Get detail
+  site_transfers_dispatch:
+    summary: Dispatch
+  site_transfers_list_transfers:
+    summary: List transfers
+  site_transfers_options:
+    summary: Get options
+  site_transfers_receive:
+    summary: Receive
+  sites_configure_sites:
+    summary: Configure sites
+  sites_create_site:
+    summary: Create site
+  sites_list_sites:
+    summary: List sites
+  sites_site_position:
+    summary: Get site position
+  sites_update_site:
+    summary: Update site
+  stock_locations_create_location:
+    summary: Create location
+  stock_locations_list_locations:
+    summary: List locations
+  stock_locations_move_stock:
+    summary: Move stock
+  stocktake_complete_stocktake:
+    summary: Complete stocktake
+  stocktake_count_stocktake_line:
+    summary: Count stocktake line
+  stocktake_create_stocktake:
+    summary: Create stocktake
+  stocktake_get_stock_position:
+    summary: Get stock position
+  stocktake_get_stocktake:
+    summary: Get stocktake
+  stocktake_get_stocktake_reconciliation:
+    summary: Get stocktake reconciliation
+  stocktake_list_stocktakes:
+    summary: List stocktakes
+  stocktake_resolve_stocktake_line:
+    summary: Resolve stocktake line

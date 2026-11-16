@@ -1,0 +1,20 @@
+# OpenAPI overlay: the traceability domain. Tracing a lot back to its sources and forward to the customers it reached.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  recalls_acknowledged:
+    summary: Acknowledged
+  recalls_get_recall:
+    summary: Get recall
+  recalls_list_recalls:
+    summary: List recalls
+  recalls_notice_sent:
+    summary: Notice sent
+  recalls_open_recall:
+    summary: Open recall
+  recalls_quantities:
+    summary: Quantities
+  recalls_unreachable:
+    summary: Unreachable

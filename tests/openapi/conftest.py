@@ -10,6 +10,7 @@ import pytest
 
 from app.api.openapi import build_document
 from tests.mcp_oauth.conftest import flask_app, world  # noqa: F401  (fixtures re-used as they are)
+from tests.openapi.seeds import showcase_world  # noqa: F401
 
 
 @pytest.fixture(scope="module")

@@ -1,0 +1,124 @@
+# OpenAPI overlay: the compliance domain. Compliance records, checks, excise and the regulatory registers.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  compliant_compliant_api_add_excise_rate:
+    summary: Add excise rate
+  compliant_compliant_api_create_alcohol_product:
+    summary: Create alcohol product
+  compliant_compliant_api_create_record:
+    summary: Create record
+  compliant_compliant_api_create_report:
+    summary: Create report
+  compliant_compliant_api_download_np3_record_file:
+    summary: Download np3 record file
+  compliant_compliant_api_get_abv_rules:
+    summary: Get abv rules
+  compliant_compliant_api_get_report:
+    summary: Get report
+  compliant_compliant_api_list_alcohol_products:
+    summary: List alcohol products
+  compliant_compliant_api_list_excise_rates:
+    summary: List excise rates
+  compliant_compliant_api_list_records:
+    summary: List records
+  compliant_compliant_api_lodge_excise_period:
+    summary: Lodge excise period
+  compliant_compliant_api_np3_audit:
+    summary: Get np3 audit
+  compliant_compliant_api_overview:
+    summary: Get overview
+  compliant_compliant_api_save_excise_product:
+    summary: Save excise product
+  compliant_compliant_api_update_excise_settings:
+    summary: Update excise settings
+  compliant_compliant_api_update_np3_check_settings:
+    summary: Update np3 check settings
+  compliant_compliant_api_update_profile:
+    summary: Update profile
+  compliant_compliant_cca_movements_get_period_review:
+    summary: Get period review
+  compliant_compliant_cca_movements_get_register:
+    summary: Get register
+  compliant_compliant_cca_transfers_add_destination:
+    summary: Add destination
+  compliant_compliant_cca_transfers_get_destinations:
+    summary: Get destinations
+  compliant_compliant_cca_transfers_get_transfers:
+    summary: Get transfers
+  compliant_compliant_cca_transfers_record_transfer:
+    summary: Record transfer
+  compliant_compliant_cca_transfers_record_transfer_receipt:
+    summary: Record transfer receipt
+  compliant_compliant_cca_transfers_remove_transfer:
+    summary: Remove transfer
+  compliant_compliant_cca_transfers_search_sales:
+    summary: Search sales
+  compliant_compliant_cca_transfers_update_destination:
+    summary: Update destination
+  compliant_compliant_food_registrations_add_registration:
+    summary: Add registration
+  compliant_compliant_food_registrations_add_scope:
+    summary: Add scope
+  compliant_compliant_food_registrations_get_registrations:
+    summary: Get registrations
+  compliant_compliant_licensing_add_log_entry:
+    summary: Add log entry
+  compliant_compliant_licensing_create_licence:
+    summary: Create licence
+  compliant_compliant_licensing_create_manager:
+    summary: Create manager
+  compliant_compliant_licensing_end_licence:
+    summary: End licence
+  compliant_compliant_licensing_end_manager:
+    summary: End manager
+  compliant_compliant_licensing_get_licensing:
+    summary: Get licensing
+  compliant_compliant_licensing_licence_fee_paid:
+    summary: Licence fee paid
+  compliant_compliant_licensing_licence_renewed:
+    summary: Licence renewed
+  compliant_compliant_licensing_lodge_licence_renewal:
+    summary: Lodge licence renewal
+  compliant_compliant_licensing_lodge_manager_renewal:
+    summary: Lodge manager renewal
+  compliant_compliant_licensing_manager_renewed:
+    summary: Manager renewed
+  compliant_compliant_licensing_update_licence:
+    summary: Update licence
+  compliant_compliant_licensing_update_manager:
+    summary: Update manager
+  compliant_compliant_premises_add_coverage:
+    summary: Add coverage
+  compliant_compliant_premises_add_licence:
+    summary: Add licence
+  compliant_compliant_premises_get_premises:
+    summary: Get premises
+  compliant_compliant_tools_tools_catalogue:
+    summary: Get tools catalogue
+  compliant_compliant_tools_tools_solve:
+    summary: Tools solve
+  compliant_compliant_verification_complete_verification_action:
+    summary: Complete verification action
+  compliant_compliant_verification_get_verification_status:
+    summary: Get verification status
+  compliant_compliant_verification_record_verification:
+    summary: Record verification
+  compliant_compliant_wine_add_consignment:
+    summary: Add consignment
+  compliant_compliant_wine_add_eligibility:
+    summary: Add eligibility
+  compliant_compliant_wine_add_record:
+    summary: Add record
+  compliant_compliant_wine_approve_label:
+    summary: Approve label
+  compliant_compliant_wine_get_overview:
+    summary: Get overview
+  compliant_compliant_wine_lot_trace:
+    summary: Get lot trace
+  compliant_compliant_wine_report_problem:
+    summary: Report problem
+  compliant_compliant_wine_update_plan:
+    summary: Update plan

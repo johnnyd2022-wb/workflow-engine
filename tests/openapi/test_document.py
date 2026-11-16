@@ -110,7 +110,9 @@ def test_the_document_is_the_same_whatever_order_python_iterates_sets_in(full_do
 
 
 FORBIDDEN_IN_THE_DOCUMENT = {
-    "an internal host": re.compile(r"localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal|\.internal\b|\.local\b", re.I),
+    "an internal host": re.compile(
+        r"localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal|\.internal\b|\.local\b", re.I
+    ),
     "a private address": re.compile(r"\b(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d+\.\d+(?:\.\d+)?\b"),
     "one of our own tokens": re.compile(r"\bbz[acr]_[A-Za-z0-9_-]{8,}"),
     "a key or secret value": re.compile(r"-----BEGIN|AKIA[0-9A-Z]{12,}|sk-[A-Za-z0-9]{20,}|xox[bap]-"),

@@ -22,7 +22,11 @@ URL = "/api/openapi.json"
 
 
 def _endpoints(app) -> dict[str, str]:
-    return {rule.endpoint.replace(".", "_"): rule.endpoint for rule in app.url_map.iter_rules() if rule.rule.startswith("/api/")}
+    return {
+        rule.endpoint.replace(".", "_"): rule.endpoint
+        for rule in app.url_map.iter_rules()
+        if rule.rule.startswith("/api/")
+    }
 
 
 def _served(client, query="", **kwargs):
@@ -137,7 +141,9 @@ def test_ac38_a_token_with_audience_mcp_is_shown_only_mcp_get_operations_it_may_
     expected = {
         oid
         for oid, (_p, method, op) in by_id(full_doc).items()
-        if op["x-bize"]["mcp"] is True and method == "GET" and token_access(world.users[who], endpoints[oid], "GET") == "ok"
+        if op["x-bize"]["mcp"] is True
+        and method == "GET"
+        and token_access(world.users[who], endpoints[oid], "GET") == "ok"
     }
     assert set(shown) == expected
 
@@ -219,11 +225,7 @@ def test_ac38_a_narrowed_document_does_not_mention_what_the_caller_cannot_reach(
     visible operation's ``related_operations``."""
     served = _served(world.session("sales"))
     text = json.dumps(served)
-    hidden = [
-        (oid, path)
-        for oid, (path, _method, op) in by_id(full_doc).items()
-        if oid not in by_id(served)
-    ]
+    hidden = [(oid, path) for oid, (path, _method, op) in by_id(full_doc).items() if oid not in by_id(served)]
     assert hidden
     for oid, path in hidden:
         assert f'"{oid}"' not in text, oid

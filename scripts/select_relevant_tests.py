@@ -470,7 +470,9 @@ def main() -> int:
     )
     parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
     parser.add_argument("--fast-eligible", action="store_true", help="Exit 0 only for an approved ci::fast MR diff.")
-    parser.add_argument("--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements.")
+    parser.add_argument(
+        "--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements."
+    )
     args = parser.parse_args()
 
     if args.fast_eligible and not fast_requested():

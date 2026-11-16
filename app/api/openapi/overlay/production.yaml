@@ -1,0 +1,60 @@
+# OpenAPI overlay: the production domain. Workflows, steps, batches (executions), evidence and production tasks.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  core_amend_execution_step_record:
+    summary: Amend execution step record
+  core_assign_core_task_lane:
+    summary: Assign core task lane
+  core_create_core_task:
+    summary: Create core task
+  core_create_core_task_lane:
+    summary: Create core task lane
+  core_delete_core_task:
+    summary: Delete core task
+  core_delete_core_task_lane:
+    summary: Delete core task lane
+  core_get_task_configuration:
+    summary: Get task configuration
+  core_list_core_task_lanes:
+    summary: List core task lanes
+  core_list_core_tasks:
+    summary: List core tasks
+  core_reorder_core_task_lanes:
+    summary: Reorder core task lanes
+  core_save_task_configuration:
+    summary: Save task configuration
+  core_update_core_task:
+    summary: Update core task
+  core_update_core_task_lane:
+    summary: Update core task lane
+  operational_cases_operational_cases_api_create_from_finding:
+    summary: Create from finding
+  operational_cases_operational_cases_api_get_case:
+    summary: Get case
+  operational_cases_operational_cases_api_get_case_history_events:
+    summary: Get case history events
+  operational_cases_operational_cases_api_list_case_events:
+    summary: List case events
+  operational_cases_operational_cases_api_list_cases:
+    summary: List cases
+  operational_cases_operational_cases_api_patch_case:
+    summary: Patch case
+  operational_cases_operational_cases_api_refresh_source:
+    summary: Refresh source
+  operational_cases_operational_cases_api_source_status_batch:
+    summary: Source status batch
+  operational_cases_operational_cases_api_transition_case:
+    summary: Transition case
+  process_templates_process_templates_api_copy_process_template:
+    summary: Copy process template
+  process_templates_process_templates_api_get_process_template:
+    summary: Get process template
+  process_templates_process_templates_api_list_process_templates:
+    summary: List process templates
+  process_templates_process_templates_api_list_starter_packs:
+    summary: List starter packs
+  record_step_get_record_options:
+    summary: Get record options
