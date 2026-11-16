@@ -225,6 +225,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("mcp.update_settings", None, "users.manage"),
     ("mcp.list_grants", _READ, SIGNED_IN),  # your own; every grant in the organisation with users.manage
     ("mcp.revoke_grant", None, SIGNED_IN),  # your own; any in the organisation with users.manage
+    ("mcp_pages.ai_assistants_page", None, SIGNED_IN),  # admin controls render only with users.manage
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),

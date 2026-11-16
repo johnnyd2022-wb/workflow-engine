@@ -1,0 +1,96 @@
+{% extends "shared/base_spa.html" %}
+{# Settings -> AI assistants (public MCP 8.2e). Everything the admin controls is rendered only when
+   can_manage: the server never sends the switch or the roles to anyone else. #}
+{% block title %}AI assistants{% endblock %}
+{% block body_class %}ai-assistants-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Let people connect their own AI assistant to read this organisation's data">
+{% endblock %}
+
+{% block content %}
+{# Inside the content block: a boosted navigation swaps only #page-content. #}
+<link rel="stylesheet" href="{{ url_for('mcp_pages.static', filename='ai-assistants.css') }}">
+<div class="max-content workspace-overview ai-page" data-ai-root
+     data-can-manage="{{ 'true' if can_manage else 'false' }}"
+     data-user-id="{{ user_id }}" aria-busy="true">
+  <header class="workspace-header">
+    <div>
+      <h1>AI assistants</h1>
+      <p class="workspace-caption">Connect Claude, ChatGPT or another assistant to Biz-E. It signs in as the person who connects it and can only read what that person can already see. It can't change anything.</p>
+    </div>
+  </header>
+
+  {% if blocked %}
+  <div class="ai-note" role="status" data-ai-blocked>{{ blocked }}</div>
+  {% endif %}
+
+  <div class="ai-board">
+    {% if can_manage %}
+    <section class="workspace-card ai-card ai-access" aria-labelledby="ai-access-title">
+      <h2 id="ai-access-title">Access</h2>
+      <label class="ai-switch">
+        <input type="checkbox" role="switch" class="ai-switch__input" data-ai-switch disabled>
+        <span class="ai-switch__track" aria-hidden="true"></span>
+        <span class="ai-switch__label">Let people connect their own AI assistant (Claude, ChatGPT, …) to read this organisation's data</span>
+      </label>
+      <p class="ai-hint">Off until you turn it on. Turning it off stops every connected assistant straight away; they work again if you turn it back on.</p>
+
+      <fieldset class="ai-roles" data-ai-roles>
+        <legend>Who can connect one</legend>
+        <p class="ai-hint ai-roles__note">Ticked roles can connect their own assistant. It reads only what that person can see.</p>
+        <div class="ai-roles__list" data-ai-roles-list></div>
+        <p class="ai-warn" data-ai-roles-hint hidden>Tick at least one role. Until you do, nobody can connect an assistant.</p>
+      </fieldset>
+
+      <p class="ai-error" role="alert" data-ai-settings-error hidden></p>
+      <div class="ai-actions">
+        <button type="button" class="workspace-button workspace-button--primary" data-ai-save disabled>Save changes</button>
+        <span class="ai-status" role="status" data-ai-status></span>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="workspace-card ai-card ai-connect" aria-labelledby="ai-connect-title">
+      <h2 id="ai-connect-title">How to connect</h2>
+      <p class="ai-hint">In your assistant, add a custom connector (an MCP server) and paste this address. You'll be sent here to sign in and approve read-only access.</p>
+      <div class="ai-url">
+        <input type="text" readonly class="ai-url__input" value="{{ mcp_url }}" data-ai-url aria-label="Biz-E MCP address">
+        <button type="button" class="workspace-button" data-ai-copy>Copy</button>
+      </div>
+    </section>
+
+    <section class="workspace-card ai-card ai-grants" aria-labelledby="ai-grants-title">
+      <h2 id="ai-grants-title" tabindex="-1" data-ai-grants-title>{% if can_manage %}Connected apps{% else %}Your connections{% endif %}</h2>
+      <p class="ai-hint">{% if can_manage %}Every assistant someone in this organisation has connected. Revoking one signs it out straight away.{% else %}The assistants you have connected. Revoking one signs it out straight away.{% endif %}</p>
+
+      <p class="ai-muted" data-ai-loading>Loading…</p>
+      <div class="ai-error ai-error--block" role="alert" data-ai-grants-error hidden>
+        <span data-ai-grants-error-text>Couldn't load connected apps.</span>
+        <button type="button" class="workspace-button" data-ai-retry>Try again</button>
+      </div>
+      <ul class="ai-grant-list" data-ai-grants aria-label="{% if can_manage %}Connected apps{% else %}Your connections{% endif %}"></ul>
+      <div class="ai-empty" data-ai-empty hidden>
+        <p class="ai-empty__title">No assistants connected yet</p>
+        <p class="ai-muted">{% if can_manage %}When someone approves one, it appears here.{% else %}When you approve one, it appears here.{% endif %}</p>
+      </div>
+    </section>
+  </div>
+
+  <dialog class="ai-dialog" data-ai-dialog aria-labelledby="ai-dialog-title">
+    <form method="dialog" hx-boost="false" data-ai-dialog-form novalidate>
+      <h2 id="ai-dialog-title">Revoke access?</h2>
+      <p class="ai-dialog__body"><strong class="ai-dialog__name" data-ai-dialog-name></strong> will lose access to Biz-E straight away.</p>
+      <p class="ai-dialog__body ai-muted" data-ai-dialog-person hidden></p>
+      <p class="ai-dialog__body ai-muted">They can connect it again later if they want to.</p>
+      <p class="ai-error" role="alert" data-ai-dialog-error hidden></p>
+      <div class="ai-dialog__actions">
+        <button type="button" class="workspace-button" data-ai-dialog-cancel>Cancel</button>
+        <button type="submit" class="workspace-button ai-danger" data-ai-dialog-confirm>Revoke access</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('mcp_pages.static', filename='ai-assistants.js') }}" defer></script>
+</div>
+{% endblock %}
