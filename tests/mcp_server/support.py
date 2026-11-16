@@ -46,6 +46,13 @@ def make_config(**overrides) -> Config:
     return Config(**values)
 
 
+def _raw_path(request: httpx2.Request) -> str:
+    """The path as sent (still percent-encoded), so a test sees what a real server would."""
+    raw = request.url.raw_path
+    raw = raw.decode() if isinstance(raw, bytes) else raw
+    return raw.split("?", 1)[0]
+
+
 class FlaskTransport(httpx2.AsyncBaseTransport):
     """bize_mcp's HTTP client, pointed at the in-process Flask app (no cookies, like a real hop)."""
 
@@ -60,7 +67,7 @@ class FlaskTransport(httpx2.AsyncBaseTransport):
         query = query.decode() if isinstance(query, bytes) else query
         headers = [(k, v) for k, v in request.headers.items() if k.lower() != "content-length"]
         reply = self.client.open(
-            path=request.url.path,
+            path=_raw_path(request),
             query_string=query,
             method=request.method,
             headers=headers,
@@ -133,12 +140,15 @@ ME_ADMIN = {
 }
 
 
-def stub_app(routes: dict, *, me=None):
+def stub_app(routes: dict, *, me=None, grant_per_token: bool = False):
     """A StubTransport answering ``/api/core/mcp/me`` plus ``{path: response-or-callable}``."""
 
     def handler(request: httpx2.Request):
         if request.url.path == ME_PATH:
-            return json_response(200, me or ME_ADMIN)
+            body = me or ME_ADMIN
+            if grant_per_token:  # each token its own grant, as in the real app
+                body = {**body, "grant_id": "grant-" + request.headers.get("authorization", "")[-8:]}
+            return json_response(200, body)
         if request.url.path == CATALOGUE_PATH:
             return json_response(200, fixture_document())
         target = routes.get(request.url.path)

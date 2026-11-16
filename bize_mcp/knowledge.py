@@ -11,6 +11,7 @@ of topics and operations, and the same answer every time.
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from dataclasses import dataclass, field
@@ -25,8 +26,22 @@ _STOP = frozenset(
 _WORD = re.compile(r"[a-z0-9]+")
 
 
+MAX_QUERY_TOKENS = 12
+
+
 def tokens(text: str) -> list[str]:
     return [w for w in _WORD.findall(text.lower()) if w not in _STOP]
+
+
+def query_tokens(text: str) -> list[str]:
+    """The words of a search query, at most ``MAX_QUERY_TOKENS`` so one long query can't cost much."""
+    return tokens(text)[:MAX_QUERY_TOKENS]
+
+
+@functools.lru_cache(maxsize=8192)
+def _word_set(text: str) -> frozenset[str]:
+    """The words of a (static) document, worked out once."""
+    return frozenset(tokens(text))
 
 
 def token_match(a: str, b: str) -> bool:
@@ -45,7 +60,7 @@ def token_match(a: str, b: str) -> bool:
 
 
 def score_text(query: list[str], text: str, weight: float) -> float:
-    words = set(tokens(text))
+    words = _word_set(text)
     return weight * sum(1 for q in query if any(token_match(q, w) for w in words))
 
 

@@ -7,8 +7,9 @@ Supported::
     items[*].{id: id, n: name}   a projection into new objects (keys are plain names)
     "quoted field"            a field whose name needs quoting
 
-A path that finds nothing gives ``null`` (a missing field is never turned into 0 or ""). A projection
-drops the elements where the field is missing, like JMESPath. The parser is bounded (length and
+A path that finds nothing gives ``null`` (a missing field is never turned into 0 or ""). Unlike JMESPath,
+a projection keeps those nulls, so ``items[*].cost`` lines up with ``items[*].name`` by position and a
+missing cost can never be paired with the wrong lot. The parser is bounded (length and
 depth) so a model can't hand it something expensive.
 """
 
@@ -174,8 +175,7 @@ def _apply(steps: tuple, value: Any) -> Any:
             if not isinstance(value, list):
                 return None
             rest = steps[index + 1 :]
-            projected = [_apply(rest, item) if rest else item for item in value]
-            return [item for item in projected if item is not None]
+            return [_apply(rest, item) if rest else item for item in value]
     return value
 
 

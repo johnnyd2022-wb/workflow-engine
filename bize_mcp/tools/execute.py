@@ -26,13 +26,13 @@ import json
 import logging
 import re
 import time
-from collections import deque
 from typing import Any
 from urllib.parse import quote
 
 from bize_mcp.auth import token_key
 from bize_mcp.catalogue import Operation
 from bize_mcp.errors import ToolFailureError
+from bize_mcp.ratelimit import Window
 from bize_mcp.select import SelectError, compile_expression, evaluate
 from bize_mcp.shaping import MAX_ROWS, clip
 from bize_mcp.tools.base import Tool, ToolContext
@@ -78,27 +78,8 @@ INPUT = schema(
 )
 
 
-class _Window:
-    """A per-caller sliding window; in memory is enough because the server is one stateless process."""
-
-    def __init__(self, limit: int, seconds: float):
-        self.limit, self.seconds = limit, seconds
-        self._hits: dict[str, deque[float]] = {}
-
-    def hit(self, key: str, now: float) -> int | None:
-        """None when allowed, else the seconds to wait."""
-        hits = self._hits.setdefault(key, deque())
-        while hits and hits[0] <= now - self.seconds:
-            hits.popleft()
-        if len(hits) >= self.limit:
-            return max(1, int(hits[0] + self.seconds - now) + 1)
-        hits.append(now)
-        if len(self._hits) > 4096:
-            self._hits = {k: v for k, v in self._hits.items() if v and v[-1] > now - self.seconds}
-        return None
-
-
-_windows = _Window(EXECUTES_PER_MINUTE, 60.0)
+def new_window() -> Window:
+    return Window(EXECUTES_PER_MINUTE, 60.0)
 
 
 def _safe(text: str, limit: int = 80) -> str:
@@ -159,10 +140,13 @@ def _build(op: Operation, params: dict[str, Any]) -> tuple[str, list[tuple[str, 
     query: list[tuple[str, str]] = []
     declared = {p.name: p for p in op.params}
     given = dict(params)
-    limit = declared.get("limit")
-    if limit is not None and limit.where == "query":
-        wanted = given.get("limit")
-        given["limit"] = MAX_ROWS if not isinstance(wanted, int) or isinstance(wanted, bool) else min(wanted, MAX_ROWS)
+    for size_name in ("limit", "page_size"):  # a page is never bigger than the row cap, so no rows are cut off
+        size = declared.get(size_name)
+        if size is not None and size.where == "query":
+            wanted = given.get(size_name)
+            given[size_name] = (
+                MAX_ROWS if not isinstance(wanted, int) or isinstance(wanted, bool) else min(wanted, MAX_ROWS)
+            )
     for name, param in declared.items():
         if name not in given or given[name] is None:
             continue
@@ -220,6 +204,8 @@ def _fit(results: list[dict], notes: list[str]) -> None:
             del longest[max(1, len(longest) // 2) :]
         trimmed = True
     if trimmed:
+        for entry in results:
+            entry.pop("next_cursor", None)  # it would skip the rows left out
         notes.append("Output was over 256 KB, so some rows were left out. Narrow it with select or filters.")
 
 
@@ -259,7 +245,10 @@ async def _one(
         "data": clip(_cap_lists(data, "", notes)),
     }
     cursor = raw.get("next_cursor") if isinstance(raw, dict) else None
-    if cursor:
+    if cursor and notes:
+        # Rows were cut here, so the app's cursor would skip them. Better no cursor than a wrong one.
+        notes.append("No next_cursor is offered because some rows were left out: ask for fewer rows or filter.")
+    elif cursor:
         entry["next_cursor"] = cursor
         notes.append("More rows are available: pass next_cursor as the cursor parameter of the same operation.")
     if notes:
@@ -272,20 +261,22 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     ids = [c["id"] for c in calls]
     if len(set(ids)) != len(ids):
         raise ToolFailureError("Each call needs its own id.", kind="invalid_input")
-    wait = _windows.hit(token_key(ctx.token), time.monotonic())
-    if wait is not None:
-        raise ToolFailureError(
-            f"Too many execute calls this minute. Try again in {wait} seconds.",
-            kind="rate_limited",
-            retry_after_seconds=wait,
-        )
     started = time.monotonic()
     deadline = started + TOTAL_SECONDS
-    operations = await ctx.operations()
     results: list[dict[str, Any]] = []
     done: dict[str, Any] = {}
     failed: set[str] = set()
+    outcome = ""
     try:
+        # Keyed on the grant, not the token, so refreshing the access token doesn't reset the budget.
+        wait = ctx.execute_window.hit(ctx.identity.grant_id or token_key(ctx.token), started)
+        if wait is not None:
+            raise ToolFailureError(
+                f"Too many execute calls this minute. Try again in {wait} seconds.",
+                kind="rate_limited",
+                retry_after_seconds=wait,
+            )
+        operations = await ctx.operations()
         for call in calls:
             entry, raw = await _one(ctx, call, operations, done, failed, deadline)
             results.append(entry)
@@ -293,8 +284,11 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
                 done[call["id"]] = raw
             else:
                 failed.add(call["id"])
+    except ToolFailureError as error:
+        outcome = error.kind
+        raise
     finally:
-        _audit(ctx, calls, results, started)
+        _audit(ctx, calls, results, started, outcome)
     notes: list[str] = []
     _fit(results, notes)
     body: dict[str, Any] = {"results": results, "ok": all(r["ok"] for r in results)}
@@ -303,8 +297,8 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
-def _audit(ctx: ToolContext, calls: list[dict], results: list[dict], started: float) -> None:
-    statuses = [("ok" if r["ok"] else r["error"]["kind"]) for r in results]
+def _audit(ctx: ToolContext, calls: list[dict], results: list[dict], started: float, outcome: str = "") -> None:
+    statuses = [("ok" if r["ok"] else r["error"]["kind"]) for r in results] or [outcome or "refused"]
     audit.info(
         "mcp.execute user=%s org=%s client=%s grant=%s operations=%s statuses=%s param_names=%s duration_ms=%d",
         ctx.identity.user_id,

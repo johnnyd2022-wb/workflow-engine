@@ -27,8 +27,8 @@ DATA = {
         ("items[1].tags[0]", None),
         ("items[0].tags[1]", "y"),
         ("items[*].name", ["Gin", "Vodka", "No id"]),
-        ("items[*].id", ["a", "b"]),  # an element without the field is dropped, like JMESPath
-        ("items[*].qty", [0, 5]),  # zero is a value, not a missing field
+        ("items[*].id", ["a", "b", None]),  # kept as null, so positions line up with items[*].name
+        ("items[*].qty", [0, 5, None]),  # zero is a value, not a missing field
         (
             "items[*].{id: id, n: name}",
             [{"id": "a", "n": "Gin"}, {"id": "b", "n": "Vodka"}, {"id": None, "n": "No id"}],
@@ -37,7 +37,7 @@ DATA = {
         ('"odd key"', 7),
         ("items[9]", None),
         ("nothing.here", None),
-        ("items[*].cost", ["1.20"]),
+        ("items[*].cost", [None, "1.20", None]),
     ],
 )
 def test_the_supported_subset(expression, expected):

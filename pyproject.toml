@@ -55,6 +55,7 @@ dev = [
 # the SDK's own requirements, named here because `bize_mcp/` imports them directly.
 mcp = [
     "mcp==2.3.0",
+    "jsonschema>=4.20",
     "uvicorn==0.54.0",
     "starlette>=1.10.0",
     "httpx2>=2.16.0",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from bize_mcp.knowledge import score_text, tokens
+from bize_mcp.knowledge import query_tokens, score_text
 from bize_mcp.tools.base import Tool, ToolContext
 from bize_mcp.validation import schema
 
@@ -61,7 +61,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             "message": "Call discover with a question to find topics and operations, docs to read one, then execute.",
         }
 
-    query = tokens(query_text)
+    query = query_tokens(query_text)
     concepts: list[dict[str, Any]] = []
     related_ids: set[str] = set()
     if kind in {"concepts", "all"}:

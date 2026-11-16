@@ -194,6 +194,9 @@ RULES = (
             "tests/mcp_server/test_execute.py",
             "tests/mcp_server/test_isolation.py",
             "tests/mcp_server/test_protocol.py",
+            "tests/mcp_server/test_integration.py",
+            "tests/mcp_server/test_me_endpoint.py",
+            "tests/mcp_server/test_review_findings.py",
             "tests/mcp_server/test_security.py",
             "tests/mcp_server/test_select.py",
         ),
@@ -483,7 +486,9 @@ def main() -> int:
     )
     parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
     parser.add_argument("--fast-eligible", action="store_true", help="Exit 0 only for an approved ci::fast MR diff.")
-    parser.add_argument("--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements.")
+    parser.add_argument(
+        "--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements."
+    )
     args = parser.parse_args()
 
     if args.fast_eligible and not fast_requested():

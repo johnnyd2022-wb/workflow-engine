@@ -35,7 +35,7 @@ from bize_mcp.shaping import clip_text
 
 logger = logging.getLogger("bize_mcp.client")
 
-MAX_BODY_BYTES = 20 * 1024 * 1024
+MAX_BODY_BYTES = 4 * 1024 * 1024
 MAX_CONCURRENT_CALLS = 32
 Params = Iterable[tuple[str, str]] | dict[str, str] | None
 
@@ -92,7 +92,7 @@ class AppClient:
         except httpx2.TimeoutException:
             logger.warning("app_call outcome=timeout")
             raise ToolFailureError("Biz-E took too long to answer. Try again shortly.", kind="timeout") from None
-        except httpx2.HTTPError as error:
+        except (httpx2.HTTPError, ValueError) as error:
             logger.warning("app_call outcome=transport_error type=%s", type(error).__name__)
             raise ToolFailureError(PROBLEM, kind="upstream_error") from None
         logger.info("app_call status=%s ms=%d", response.status_code, (time.monotonic() - started) * 1000)

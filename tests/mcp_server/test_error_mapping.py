@@ -174,10 +174,7 @@ def test_ac28_the_121st_request_in_a_minute_on_one_grant_is_a_429_tool_error(wor
 
 
 def test_more_than_30_execute_calls_a_minute_for_one_caller_are_limited():
-    from bize_mcp.tools import execute
-
-    execute._windows = execute._Window(30, 60.0)
-    transport = stub_app({HOLDS: json_response(200, {"holds": []})})
+    transport = stub_app({HOLDS: json_response(200, {"holds": []})}, grant_per_token=True)
     with Mcp(transport) as mcp:
         results = [mcp.execute("bza_busy", {"id": "a", "operation_id": "list_open_holds"}) for _ in range(31)]
         other = mcp.execute("bza_calm", {"id": "a", "operation_id": "list_open_holds"})

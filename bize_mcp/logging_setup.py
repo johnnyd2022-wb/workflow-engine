@@ -14,7 +14,7 @@ import traceback
 
 REDACTED = "[redacted]"
 _OUR_TOKEN = re.compile(r"\bbz[acr]_[A-Za-z0-9_\-]+")
-_BEARER = re.compile(r"(?i)\bbearer\s+(?!\[redacted\])\S+")
+_BEARER = re.compile(r"(?i)\bbearer\s+(?!\[redacted\])[^\s\"',;}\]]+")
 
 
 def redact(text: str) -> str:
@@ -22,7 +22,25 @@ def redact(text: str) -> str:
     return _BEARER.sub(lambda m: f"{m.group(0).split()[0]} {REDACTED}", scrubbed)
 
 
+def redact_value(value):
+    """``value`` with every string (and key) in it redacted. Works on the object, never on its JSON text."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, list):
+        return [redact_value(item) for item in value]
+    if isinstance(value, dict):
+        return {redact(k) if isinstance(k, str) else k: redact_value(v) for k, v in value.items()}
+    return value
+
+
+def quiet_http_libraries() -> None:
+    """The HTTP client logs every request URL at INFO, query values included; parameters are logged by name only."""
+    for name in ("httpx2", "httpcore2", "httpcore2.http11", "httpcore2.connection"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def install_redaction() -> None:
+    quiet_http_libraries()
     previous = logging.getLogRecordFactory()
     if getattr(previous, "_bize_redacting", False):
         return

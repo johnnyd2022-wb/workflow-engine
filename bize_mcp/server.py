@@ -16,8 +16,9 @@ import contextlib
 import contextvars
 import json
 import logging
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -31,15 +32,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from bize_mcp.auth import IdentityCache
+from bize_mcp.auth import IdentityCache, token_key
 from bize_mcp.catalogue import Catalogue
 from bize_mcp.client import AppClient
-from bize_mcp.config import METADATA_PATH, Config
+from bize_mcp.config import METADATA_PATH, Config, ConfigError
 from bize_mcp.errors import ToolFailureError, UnauthorizedError
 from bize_mcp.knowledge import Knowledge
-from bize_mcp.logging_setup import configure_logging, install_redaction, redact
+from bize_mcp.logging_setup import configure_logging, install_redaction, redact, redact_value
+from bize_mcp.ratelimit import Window
 from bize_mcp.shaping import clip_text
 from bize_mcp.tools import TOOLS, ToolContext
+from bize_mcp.tools.execute import new_window
 from bize_mcp.validation import check_arguments
 
 logger = logging.getLogger("bize_mcp.server")
@@ -57,8 +60,11 @@ _current: contextvars.ContextVar[_RequestState | None] = contextvars.ContextVar(
 
 @dataclass
 class _RequestState:
-    token: str
+    token: str = field(repr=False)
     unauthorized: bool = False
+
+
+_TOKEN_SYNTAX = re.compile(r"[A-Za-z0-9\-._~+/]+=*")
 
 
 def _bearer(request_headers) -> str | None:
@@ -66,11 +72,14 @@ def _bearer(request_headers) -> str | None:
     if value[:7].lower() != "bearer ":
         return None
     token = value[7:].strip()
-    return token or None
+    # A bearer token is plain printable ASCII; anything else cannot be one of ours, so it is a 401.
+    return token if token and len(token) <= 512 and _TOKEN_SYNTAX.fullmatch(token) else None
 
 
 def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tuple[Server, IdentityCache]:
     identities = IdentityCache(client)
+    calls = Window(120, 60.0)  # every tool call, per caller: discover and docs are cheap, not free
+    executes = new_window()
     catalogue = Catalogue(client)
 
     def listed() -> list[types.Tool]:
@@ -110,7 +119,14 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
         try:
             arguments = check_arguments(tool.name, tool.input_schema, params.arguments)
             identity = await identities.identity_for(current.token)
-            tool_context = ToolContext(client, current.token, identity, catalogue, knowledge)
+            wait = calls.hit(identity.grant_id or token_key(current.token), time.monotonic())
+            if wait is not None:
+                raise ToolFailureError(
+                    f"Too many requests this minute. Try again in {wait} seconds.",
+                    kind="rate_limited",
+                    retry_after_seconds=wait,
+                )
+            tool_context = ToolContext(client, current.token, identity, catalogue, knowledge, executes)
             structured = await tool.handler(tool_context, arguments)
         except UnauthorizedError:
             current.unauthorized = True
@@ -137,8 +153,8 @@ def _scrub(structured: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     A token can only get here if the model typed it into an argument that is echoed back; this keeps
     "no token in any output" true whatever the input was.
     """
-    text = redact(json.dumps(structured, separators=(",", ":"), ensure_ascii=False))
-    return text, json.loads(text)
+    clean = redact_value(structured)
+    return json.dumps(clean, separators=(",", ":"), ensure_ascii=False), clean
 
 
 def _success(structured: dict[str, Any]) -> types.CallToolResult:
@@ -204,6 +220,8 @@ def create_app(
     install_redaction()
     client = AppClient(config, transport=transport)
     knowledge = knowledge or Knowledge.load(Path(config.knowledge_dir))
+    if not knowledge.topics:
+        raise ConfigError(f"No knowledge topics found in {config.knowledge_dir!r}: set BIZE_KNOWLEDGE_DIR.")
     mcp_server, _ = build_server(config, client, knowledge)
     manager = StreamableHTTPSessionManager(app=mcp_server, json_response=True, stateless=True)
     endpoint = McpEndpoint(config, manager)

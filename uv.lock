@@ -1741,6 +1741,7 @@ dev = [
 ]
 mcp = [
     { name = "httpx2" },
+    { name = "jsonschema" },
     { name = "mcp" },
     { name = "starlette" },
     { name = "uvicorn" },
@@ -1761,6 +1762,7 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=26.2.0" },
     { name = "httpx2", marker = "extra == 'mcp'", specifier = ">=2.16.0" },
     { name = "joserfc", specifier = ">=1.7.6" },
+    { name = "jsonschema", marker = "extra == 'mcp'", specifier = ">=4.20" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = "==2.3.0" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-flask", specifier = ">=0.48b0" },
