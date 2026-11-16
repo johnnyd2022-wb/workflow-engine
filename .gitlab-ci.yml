@@ -134,8 +134,8 @@ ruff:
     - uv sync --extra dev
     # Check-only: --fix / a plain `format` rewrite files inside the CI container and exit 0,
     # so the job could never fail on formatting and unformatted code reached main.
-    - uv run ruff check app/
-    - uv run ruff format --check app/
+    - uv run ruff check app/ bize_mcp/
+    - uv run ruff format --check app/ bize_mcp/
   only:
     - merge_requests
     - main
@@ -272,7 +272,7 @@ relevant_tests:
       # line. Normalise here, where a target is a path and cannot contain a space.
       tr ' ' '\n' < /tmp/relevant-pytest-targets | sed '/^$/d' > /tmp/relevant-pytest-targets.tmp && mv /tmp/relevant-pytest-targets.tmp /tmp/relevant-pytest-targets
     - *install_uv
-    - uv sync --extra dev
+    - uv sync --extra dev --extra mcp
     - |
       # Test impact analysis (docs/test-impact-analysis.md): replace the rules' full-suite
       # fallback with the tests that executed the changed lines in main's recorded run. Never
@@ -496,7 +496,7 @@ unit_tests:
   before_script:
     # Install dependencies
     - *install_uv
-    - uv sync --extra dev
+    - uv sync --extra dev --extra mcp
     # Install PostgreSQL client and curl for health checks
     - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq && test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
     # Node.js for tests/js/*.test.js (node --test); see tests/test_execution_shared_utils_js.py
@@ -540,7 +540,7 @@ semgrep:
   needs: []
   image: semgrep/semgrep:latest
   script:
-    - semgrep --config .semgrep/rules/ app/ --include="*.py" --include="*.js" --error
+    - semgrep --config .semgrep/rules/ app/ bize_mcp/ --include="*.py" --include="*.js" --error
   only:
     - merge_requests
     - main

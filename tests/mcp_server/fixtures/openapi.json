@@ -1,0 +1,133 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Biz-E API (test fixture)", "version": "1"},
+  "paths": {
+    "/api/core/inventory": {
+      "get": {
+        "operationId": "list_inventory",
+        "summary": "List inventory lots and the stock on hand",
+        "description": "Lots with their quantity, unit, supplier, expiry and quality hold. Quantity is what is physically present, not what is usable.",
+        "parameters": [
+          {"name": "type", "in": "query", "schema": {"type": "string", "enum": ["raw_material", "work_in_progress", "final_product"]}},
+          {"name": "site_id", "in": "query", "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 200}}
+        ],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object", "properties": {"inventory_items": {"type": "array"}, "has_more": {"type": "boolean"}, "next_cursor": {"type": ["string", "null"]}}}}}}},
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true,
+                   "concepts": ["inventory.availability"], "related_operations": ["get_stock_position", "trace_inventory_backward"],
+                   "example": {"params": {"type": "raw_material", "limit": 10}}}
+      },
+      "post": {
+        "operationId": "create_inventory_item",
+        "summary": "Add a lot",
+        "responses": {"201": {"description": "created"}},
+        "x-bize": {"permission": "inventory.adjust", "domain": "inventory", "kind": "record", "mcp": true}
+      }
+    },
+    "/api/core/inventory/trace-backward/{inventory_item_id}": {
+      "get": {
+        "operationId": "trace_inventory_backward",
+        "summary": "Trace a lot back to its source materials",
+        "parameters": [{"name": "inventory_item_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "inventory.view", "domain": "traceability", "kind": "calculation", "mcp": true,
+                   "concepts": ["traceability.back"], "related_operations": ["list_inventory"]}
+      }
+    },
+    "/api/core/stock-position": {
+      "get": {
+        "operationId": "get_stock_position",
+        "summary": "Stock position by place and batch, as at today",
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "calculation", "mcp": true, "concepts": ["inventory.availability"]}
+      }
+    },
+    "/api/core/holds": {
+      "get": {
+        "operationId": "list_open_holds",
+        "summary": "Lots on quality hold now",
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true}
+      }
+    },
+    "/api/core/processes": {
+      "get": {
+        "operationId": "list_processes",
+        "summary": "List workflows (products and their steps)",
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true}
+      }
+    },
+    "/api/core/processes/{process_id}": {
+      "get": {
+        "operationId": "get_process",
+        "summary": "One workflow with its steps",
+        "parameters": [{"name": "process_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true}
+      }
+    },
+    "/api/core/executions": {
+      "get": {
+        "operationId": "list_executions",
+        "summary": "List batches (executions of a workflow)",
+        "parameters": [
+          {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["pending", "in_progress", "completed", "failed", "cancelled"]}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 200}}
+        ],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true, "concepts": ["production.batches"]}
+      }
+    },
+    "/api/core/executions/{execution_id}": {
+      "get": {
+        "operationId": "get_execution",
+        "summary": "One batch with its steps",
+        "parameters": [{"name": "execution_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true}
+      }
+    },
+    "/api/core/costing/lots/{item_id}/cost": {
+      "get": {
+        "operationId": "get_lot_cost",
+        "summary": "Unit cost of a lot, with its cost status",
+        "description": "unit_cost is null while the cost is unknown; status says why.",
+        "parameters": [{"name": "item_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object", "properties": {"unit_cost": {"type": ["string", "null"]}, "status": {"type": "string"}}}}}}},
+        "x-bize": {"permission": "costs.view", "domain": "costing", "kind": "calculation", "mcp": true, "feature": "costing", "concepts": ["costing.status"]}
+      }
+    },
+    "/api/crm/invoices": {
+      "get": {
+        "operationId": "crm_list_invoices",
+        "summary": "List customer invoices",
+        "parameters": [
+          {"name": "kind", "in": "query", "schema": {"type": "string", "enum": ["all", "this_month", "outstanding"]}},
+          {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1}},
+          {"name": "page_size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+        ],
+        "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
+        "x-bize": {"permission": "sales.view", "domain": "sales", "kind": "list", "mcp": true, "feature": "crm", "concepts": ["sales.invoices"]}
+      }
+    },
+    "/api/org/users": {
+      "get": {
+        "operationId": "list_org_users",
+        "summary": "List the people in the organisation",
+        "responses": {"200": {"description": "ok"}},
+        "x-bize": {"permission": "users.manage", "domain": "people", "kind": "list", "mcp": true}
+      }
+    },
+    "/api/core/suppliers": {
+      "get": {
+        "operationId": "list_core_suppliers",
+        "summary": "List suppliers (not offered to assistants)",
+        "responses": {"200": {"description": "ok"}},
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": false}
+      }
+    }
+  }
+}

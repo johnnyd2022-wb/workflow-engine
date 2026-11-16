@@ -1266,10 +1266,10 @@ missing; never a silent $0.
   - [x] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
     bound to the MCP server), read-only rule in the access policy, per-org switch and role check.
     Walkthrough `docs/public-mcp-oauth.md`. (!719)
-  - [ ] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), three tools:
+  - [x] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), three tools:
     `discover` (business knowledge and API operations), `docs` (one concept or operation in
     full) and `execute` (up to five allowlisted, read-only API calls, composed declaratively;
-    no model-written code), all filtered to what the person may see.
+    no model-written code), all filtered to what the person may see. Guide `docs/public-mcp-server.md`. (!725)
   - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
     `mcp.biz-e.app` / `mcp-test.biz-e.app`.
   - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with

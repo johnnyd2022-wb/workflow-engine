@@ -178,3 +178,16 @@ and the factories, not the `tests/unit/<slug>/` shape in `new-feature`'s SKILL.m
   checks the Referer on HTTPS; `no-referrer` made every approval fail with "The referrer header is
   missing" (caught by `tests/e2e/test_mcp_oauth_consent.py`, not by the unit tests, which run with
   CSRF off).
+
+## 9. A server that only forwards a token must be tested against the real app (public MCP 8.2c)
+
+- **Drive `bize_mcp` against the Flask app, not a stub**, through a transport adapter
+  (`tests/mcp_server/support.py: FlaskTransport`). The access policy, tenant filter and the bearer
+  path are what make a call safe; a stub only proves the adapter calls what it was told to.
+- **The app's HTTP client must not keep state between callers.** `httpx` keeps cookies the app sets;
+  `bize_mcp/client.py` clears them after every response (`tests/mcp_server/test_security.py`).
+- **Anything a model can type is untrusted in a log line or a path.** Operation ids are sanitised before
+  they reach the `mcp.execute` event, and path values are encoded and refused if they hold `/`, `..` or
+  control characters.
+- **An absent optional dependency is a skip, not a failure.** The MCP tests `importorskip("mcp")`; CI's
+  `relevant_tests` and `unit_tests` jobs install `--extra mcp`, so they run there.

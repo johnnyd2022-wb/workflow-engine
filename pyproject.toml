@@ -54,6 +54,18 @@ dev = [
     "openapi-spec-validator==0.9.0",
     "jsonschema==4.26.0",
 ]
+# The public MCP server (`bize_mcp/`, roadmap 8.2c). Its own group so the main app image does
+# not carry the SDK or an ASGI stack: only the `mcp` Docker target installs it (8.2d), and the
+# tests need it alongside `dev` (`uv sync --extra dev --extra mcp`). `mcp` is pinned to an
+# exact release at least two weeks old; bump it deliberately, never by range. The rest are
+# the SDK's own requirements, named here because `bize_mcp/` imports them directly.
+mcp = [
+    "mcp==2.3.0",
+    "jsonschema>=4.20",
+    "uvicorn==0.54.0",
+    "starlette>=1.10.0",
+    "httpx2>=2.16.0",
+]
 
 # System Dependencies (not managed by uv):
 # - keepassxc: Required for local secrets management (includes keepassxc-cli)
