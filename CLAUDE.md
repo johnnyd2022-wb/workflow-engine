@@ -31,6 +31,10 @@ docker-compose -f docker-compose.test.yml up -d
 uv run pytest tests/ -v
 uv run pytest tests/test_executions.py -v   # single file
 
+# OpenAPI document (docs/openapi.json is generated: routes + policy table + app/api/openapi/overlay/*.yaml)
+uv run python scripts/check_openapi.py --write   # regenerate after adding or changing a route; CI fails if stale
+# A new /api/ route needs a docstring (or an overlay summary) or tests/openapi/test_coverage.py fails.
+
 # Database
 uv run workflow init-db          # create schema
 uv run alembic upgrade head      # run pending migrations

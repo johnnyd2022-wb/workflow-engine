@@ -34,6 +34,8 @@ dependencies = [
     "pypdf>=6.21.4",
     "authlib>=1.9.1,<2",
     "joserfc>=1.7.6",
+    # Public MCP 8.2f: the OpenAPI overlay files (app/api/openapi/overlay/*.yaml) are YAML. yaml.safe_load only.
+    "pyyaml==6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +49,10 @@ dev = [
     "pytest-cov>=5.0.0",
     # Runs the full suite across workers, each on its own test database (tests/xdist_db.py).
     "pytest-xdist>=3.6.0",
+    # Public MCP 8.2f: validate the generated OpenAPI 3.1 document, and real responses against its schemas.
+    # Exact pins, releases more than two weeks old (2026-05-20 and 2026-01-07).
+    "openapi-spec-validator==0.9.0",
+    "jsonschema==4.26.0",
 ]
 # The public MCP server (`bize_mcp/`, roadmap 8.2c). Its own group so the main app image does
 # not carry the SDK or an ASGI stack: only the `mcp` Docker target installs it (8.2d), and the

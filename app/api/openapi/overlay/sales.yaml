@@ -1,0 +1,255 @@
+# OpenAPI overlay: the sales domain. Customers, Xero invoices, sales analytics and returns.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  MonthlySales:
+    type: object
+    additionalProperties: false
+    required: [month, total, invoice_count]
+    properties:
+      month: {type: string, description: "YYYY-MM."}
+      total: {type: number, description: "Net sales for the month, credit notes taken off."}
+      invoice_count: {type: integer}
+  Invoice:
+    type: object
+    description: A Xero invoice (or credit) synced into Biz-E, with its line items.
+    additionalProperties: false
+    required: [id, xero_invoice_id, status, invoice_type, total, line_items]
+    properties:
+      id: {type: string, format: uuid}
+      xero_invoice_id: {type: [string, "null"]}
+      invoice_number: {type: [string, "null"]}
+      reference: {type: [string, "null"]}
+      status: {type: string, description: "Xero status, such as DRAFT, AUTHORISED or PAID."}
+      invoice_type: {type: string, description: "ACCREC is a sale to a customer."}
+      total: {type: [number, "null"]}
+      sub_total: {type: [number, "null"]}
+      total_tax: {type: [number, "null"]}
+      amount_due: {type: [number, "null"]}
+      amount_paid: {type: [number, "null"]}
+      currency_code: {type: [string, "null"]}
+      date: {type: [string, "null"]}
+      due_date: {type: [string, "null"]}
+      fully_paid_on_date: {type: [string, "null"]}
+      contact_id: {type: [string, "null"]}
+      contact_name: {type: [string, "null"]}
+      last_synced_at: {type: [string, "null"]}
+      line_items:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            id: {type: string, format: uuid}
+            description: {type: [string, "null"]}
+            item_code: {type: [string, "null"]}
+            quantity: {type: [number, "null"]}
+            unit_amount: {type: [number, "null"]}
+            line_amount: {type: [number, "null"]}
+            account_code: {type: [string, "null"]}
+            tax_type: {type: [string, "null"]}
+            discount_rate: {type: [number, "null"]}
+            tracking: {type: [array, object, "null"], additionalProperties: true}
+operations:
+  crm_crm_api_get_org_invoices:
+    summary: List sales invoices
+    description: >-
+      The organisation's Xero invoices with their line items, newest first, optionally only this month's or
+      only those still outstanding. Money here is Xero's, in its currency, as numbers. To find which stock a
+      sale took, use the to-sale trace on a lot. Only for organisations with sales (Xero) connected.
+    parameters:
+      - name: kind
+        in: query
+        description: all (default), this_month, or outstanding (unpaid).
+        schema: {type: string, enum: [all, this_month, outstanding]}
+      - name: page
+        in: query
+        description: Page number, from 1.
+        schema: {type: integer, minimum: 1}
+      - name: page_size
+        in: query
+        description: Invoices per page. Default 50.
+        schema: {type: integer, minimum: 1}
+    errors: [400]
+    response:
+      description: One page of invoices.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [invoices, total, page, page_size, kind]
+        properties:
+          invoices:
+            type: array
+            items: {$ref: "#/components/schemas/Invoice"}
+          total: {type: integer, description: "How many invoices match, over all pages."}
+          page: {type: integer}
+          page_size: {type: integer}
+          kind: {type: string}
+      example:
+        invoices:
+          - {id: 5a1c9e3f-7b2d-4f60-8e11-9d3b6a4c2f01, xero_invoice_id: "INV-0007", invoice_number: INV-0007, reference: null, status: PAID, invoice_type: ACCREC, total: 1150.0, sub_total: 1000.0, total_tax: 150.0, amount_due: 0.0, amount_paid: 1150.0, currency_code: NZD, date: "2026-10-28", due_date: "2026-11-20", fully_paid_on_date: "2026-11-05", contact_id: null, contact_name: Corner Bottle Store, last_synced_at: "2026-11-15T20:00:00+00:00", line_items: []}
+        total: 1
+        page: 1
+        page_size: 50
+        kind: all
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [sales.xero_invoices, sales.fifo_matching]
+      related_operations: [crm_crm_api_monthly_sales, core_trace_inventory_to_sale_graph, costing_margins_report]
+  crm_crm_api_monthly_sales:
+    summary: Net sales per month
+    description: >-
+      Net revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most
+      recent month first. Revenue is Xero's figure, in the organisation's currency. Credit notes can make a month
+      lower than its invoices. Only for organisations with sales (Xero) connected.
+    parameters:
+      - name: months
+        in: query
+        description: How many months back, 1 to 24. Default 12.
+        schema: {type: integer, minimum: 1, maximum: 24}
+    errors: [400]
+    response:
+      description: The months. `months` repeats `monthly_sales` for older clients.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [monthly_sales, months]
+        properties:
+          monthly_sales:
+            type: array
+            items: {$ref: "#/components/schemas/MonthlySales"}
+          months:
+            type: array
+            description: The same list as `monthly_sales`.
+            items: {$ref: "#/components/schemas/MonthlySales"}
+      example:
+        monthly_sales: [{month: "2026-10", total: 9900.0, invoice_count: 14}]
+        months: [{month: "2026-10", total: 9900.0, invoice_count: 14}]
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [sales.xero_invoices]
+      related_operations: [crm_crm_api_get_org_invoices, costing_margins_report]
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  crm_crm_api_assign_matching_line:
+    summary: Assign matching line
+  crm_crm_api_assign_task_lane:
+    summary: Assign task lane
+  crm_crm_api_authorise_invoice:
+    summary: Authorise invoice
+  crm_crm_api_churn_risk:
+    summary: Get churn risk
+  crm_crm_api_confirm_matching_line:
+    summary: Confirm matching line
+  crm_crm_api_create_customer_invoice:
+    summary: Create customer invoice
+  crm_crm_api_create_mapping:
+    summary: Create mapping
+  crm_crm_api_create_mappings_bulk:
+    summary: Create mappings bulk
+  crm_crm_api_create_note:
+    summary: Create note
+  crm_crm_api_create_task:
+    summary: Create task
+  crm_crm_api_create_task_lane:
+    summary: Create task lane
+  crm_crm_api_crm_overview:
+    summary: Get crm overview
+  crm_crm_api_customer_breakdown:
+    summary: Get customer breakdown
+  crm_crm_api_customer_contact:
+    summary: Get customer contact
+  crm_crm_api_customer_import:
+    summary: Customer import
+  crm_crm_api_customer_import_template:
+    summary: Get customer import template
+  crm_crm_api_delete_mapping:
+    summary: Delete mapping
+  crm_crm_api_delete_note:
+    summary: Delete note
+  crm_crm_api_delete_task:
+    summary: Delete task
+  crm_crm_api_delete_task_lane:
+    summary: Delete task lane
+  crm_crm_api_excise_month:
+    summary: Get excise month
+  crm_crm_api_excise_months:
+    summary: Get excise months
+  crm_crm_api_get_contact_sync_settings:
+    summary: Get contact sync settings
+  crm_crm_api_get_customer:
+    summary: Get customer
+  crm_crm_api_get_customer_analytics:
+    summary: Get customer analytics
+  crm_crm_api_get_customer_invoice_defaults:
+    summary: Get customer invoice defaults
+  crm_crm_api_get_customer_invoices:
+    summary: Get customer invoices
+  crm_crm_api_get_customer_line_item_descriptions:
+    summary: Get customer line item descriptions
+  crm_crm_api_get_customer_line_item_pricing:
+    summary: Get customer line item pricing
+  crm_crm_api_get_invoice_pdf:
+    summary: Get invoice pdf
+  crm_crm_api_get_invoice_view_url:
+    summary: Get invoice view url
+  crm_crm_api_get_matching_candidates:
+    summary: Get matching candidates
+  crm_crm_api_get_matching_queue:
+    summary: Get matching queue
+  crm_crm_api_get_org_line_item_descriptions:
+    summary: Get org line item descriptions
+  crm_crm_api_get_task:
+    summary: Get task
+  crm_crm_api_get_traceability_config:
+    summary: Get traceability config
+  crm_crm_api_list_customers:
+    summary: List customers
+  crm_crm_api_list_final_products:
+    summary: List final products
+  crm_crm_api_list_mappings:
+    summary: List mappings
+  crm_crm_api_list_task_lanes:
+    summary: List task lanes
+  crm_crm_api_list_tasks:
+    summary: List tasks
+  crm_crm_api_rankings:
+    summary: Get rankings
+  crm_crm_api_reorder_task_lanes:
+    summary: Reorder task lanes
+  crm_crm_api_retry_customer_xero_sync:
+    summary: Retry customer xero sync
+  crm_crm_api_update_mapping:
+    summary: Update mapping
+  crm_crm_api_update_note:
+    summary: Update note
+  crm_crm_api_update_task:
+    summary: Update task
+  crm_crm_api_update_task_lane:
+    summary: Update task lane
+  crm_crm_api_update_traceability_config:
+    summary: Update traceability config
+  crm_crm_oauth_xero_disconnect:
+    summary: Xero disconnect
+  crm_crm_oauth_xero_status:
+    summary: Get xero status
+  tastings_cancel_tasting:
+    summary: Cancel tasting
+  tastings_choices:
+    summary: Get choices
+  tastings_create_tasting:
+    summary: Create tasting
+  tastings_dispatch_tasting:
+    summary: Dispatch tasting
+  tastings_finalise_tasting:
+    summary: Finalise tasting
+  tastings_get_tasting:
+    summary: Get tasting
+  tastings_list_tastings:
+    summary: List tastings
+  tastings_pool:
+    summary: Get pool
+  tastings_update_tasting:
+    summary: Update tasting

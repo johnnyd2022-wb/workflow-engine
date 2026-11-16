@@ -161,9 +161,7 @@ def _ngs_purchase_event(
         "date": (governing_date - timedelta(days=3)).isoformat(),
         "supplier": "Southern Grain Spirits",
         "supplier_batch_number": None,
-        "expiry_date": wm.replay_expiry_date(
-            "Neutral grain spirit", governing_date - timedelta(days=3)
-        ).isoformat(),
+        "expiry_date": wm.replay_expiry_date("Neutral grain spirit", governing_date - timedelta(days=3)).isoformat(),
     }
     return _purchase_event(record)
 

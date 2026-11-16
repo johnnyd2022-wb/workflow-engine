@@ -1274,9 +1274,9 @@ missing; never a silent $0.
     `mcp.biz-e.app` / `mcp-test.biz-e.app`.
   - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
     revoke. (!720)
-  - [ ] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
+  - [x] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
     (every `/api/` route, its permission and domain), with `x-bize` business metadata and full,
-    tested schemas for the operations assistants can use. Served at `/api/openapi.json`.
+    tested schemas for the operations assistants can use. Served at `/api/openapi.json`. (!722)
   - [x] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
     models stock, batches, tracing, compliance, sales and cost, read by the model on demand. (!723)
   - [ ] h. **OAuth security check.** RFC 9700 best practice and the latest MCP authorization

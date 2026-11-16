@@ -1,0 +1,16 @@
+# OpenAPI overlay: the account domain. The organisation, people, exports and assistant access.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  data_export_download_records:
+    summary: Download records
+  mcp_get_settings:
+    summary: Get settings
+  mcp_list_grants:
+    summary: List grants
+  mcp_revoke_grant:
+    summary: Revoke grant
+  mcp_update_settings:
+    summary: Update settings
