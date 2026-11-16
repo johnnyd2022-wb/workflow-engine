@@ -15,11 +15,13 @@ deploy step is a `docker pull <sha>`, not a second build that could silently div
 ## The pipeline (all `main`-only, after CI's `test`/`security`/`migrations` stages pass)
 
 ```
-docker_build_publish          build+push $CI_REGISTRY_IMAGE/app:test-<sha> and :prod-<sha>
+docker_build_publish          build+push $CI_REGISTRY_IMAGE/app:test-<sha> and :prod-<sha>,
+        |                     and $CI_REGISTRY_IMAGE/mcp:test-<sha> and :prod-<sha>
+deploy_test                   pull :test-<sha>, run it as workflow-engine-test, then the MCP
+        |                     server from mcp:test-<sha> as workflow-engine-mcp-test
         |
-deploy_test                   pull :test-<sha>, run it as workflow-engine-test
-        |
-cd_e2e                        Playwright against the just-deployed container (E2E_BASE_URL)
+cd_e2e                        Playwright against the just-deployed container (E2E_BASE_URL),
+        |                     plus the MCP smoke test against the MCP container (E2E_MCP_URL)
         |
    pass ----------------------------------------- fail
         |                                           |
@@ -33,6 +35,16 @@ promote_test_stable                    rollback_test_on_failure
 browser has exercised the deployed container and passed. A broken candidate never gets
 promoted, so a failure can never leave `:test-stable` pointing at something broken — rollback
 is just "redeploy the tag that was never advanced."
+
+## The MCP server rides along, and cannot roll the app back
+
+`deploy_test_simple.sh <app-image> <mcp-image>` deploys the app, waits for it to be healthy, and only then
+runs `scripts/run_mcp.sh test` for the public MCP server (`bize_mcp`, spec `.agents/specs/public-mcp.md`
+"Deploy (8.2d)"). Exit codes: **3** = the new app never became healthy, so the job redeploys `:test-stable`;
+**4** = the app is healthy but the MCP server is not, so the job fails and the app is left alone. The
+rollback redeploys the app image only, so it never touches the MCP container. `mcp:test-<sha>` and
+`mcp:prod-<sha>` are the same bytes under two tags (there is one `mcp` target); there is no `mcp:test-stable`.
+Production has no CD: `scripts/run_prod.sh` runs `scripts/run_mcp.sh prod` itself after the app.
 
 ## Why one repository, not one tag
 

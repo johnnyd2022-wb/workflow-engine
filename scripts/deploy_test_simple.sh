@@ -5,10 +5,15 @@
 # Local dev (unchanged): ./scripts/deploy_test_simple.sh
 #   Builds the `test` target from Dockerfile.multi locally, same as before.
 #
-# CD (new): ./scripts/deploy_test_simple.sh <image-ref>
+# CD (new): ./scripts/deploy_test_simple.sh <image-ref> [<mcp-image-ref>]
 #   Pulls the given image (e.g. $CI_REGISTRY_IMAGE/app:test-<sha> or :test-stable)
 #   from the registry instead of building -- this is what makes CD deploy exactly
 #   the artifact CI already tested, not a fresh rebuild of whatever's on disk.
+#   With a second image (e.g. $CI_REGISTRY_IMAGE/mcp:test-<sha>) it also starts the public MCP
+#   server (scripts/run_mcp.sh) once the app is healthy.
+#
+# Exit codes: 0 up; 1 failed before the old app was touched; 3 the new app never became healthy
+# (CI rolls back to :test-stable); 4 the app is up but the MCP server is not (the app is left alone).
 set -euo pipefail
 
 export ENVIRONMENT=test
@@ -166,3 +171,34 @@ fi
 echo "✅ Test environment started on port 8001 and passed its health check"
 echo "View logs with: docker logs -f workflow-engine-test"
 echo "Browse to: https://test-workflow-engine.whistlebird.co.nz"
+
+# The public MCP server (bize_mcp, roadmap 8.2d) goes in only now that the app is healthy: it is
+# no use without the app, and a problem with it must never cost the app its place. From here a
+# failure exits 4 ("the app is up, the MCP server is not"). Only exit 3 makes the CI job roll the
+# app back, so an MCP failure fails the deploy without touching the app.
+#   CD:        ./scripts/deploy_test_simple.sh <app-image> <mcp-image>   pulls the MCP image
+#   rollback:  ./scripts/deploy_test_simple.sh <app-image>               leaves the MCP server as it is
+#   local dev: ./scripts/deploy_test_simple.sh                           builds the MCP image here
+MCP_IMAGE_REF="${2:-}"
+if [ -n "$IMAGE_REF" ] && [ -z "$MCP_IMAGE_REF" ]; then
+    echo "No MCP image given: leaving the MCP server as it is."
+    exit 0
+fi
+mcp_ok=1
+if [ -n "$IMAGE_REF" ]; then
+    echo "Pulling $MCP_IMAGE_REF from registry..."
+    docker pull "$MCP_IMAGE_REF" || mcp_ok=0
+    MCP_RUN_IMAGE="$MCP_IMAGE_REF"
+else
+    echo "Building the MCP image locally..."
+    docker build --target mcp -f Dockerfile.multi -t workflow-engine:mcp-test . || mcp_ok=0
+    MCP_RUN_IMAGE="workflow-engine:mcp-test"
+fi
+if [ "$mcp_ok" = 1 ]; then
+    MCP_IMAGE="$MCP_RUN_IMAGE" bash "$(dirname "${BASH_SOURCE[0]}")/run_mcp.sh" test || mcp_ok=0
+fi
+if [ "$mcp_ok" = 0 ]; then
+    echo "❌ The MCP server did not come up. The app above is running and was left alone."
+    exit 4
+fi
+echo "✅ MCP server up on 127.0.0.1:8030 (https://mcp-test.biz-e.app/mcp)"

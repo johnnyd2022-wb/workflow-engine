@@ -21,6 +21,10 @@ module "tunnel" {
     "admin-test.biz-e.app" = "https://host.docker.internal:8020" # test admin site (scripts/run_admin.sh)
     "dev.biz-e.app"        = "https://172.26.121.16:8005"        # local development
 
+    # The public MCP server (bize_mcp, scripts/run_mcp.sh): plain HTTP, published on loopback only.
+    "mcp-test.biz-e.app" = "http://host.docker.internal:8030" # test
+    "mcp.biz-e.app"      = "http://host.docker.internal:8031" # production
+
     "inventory.whistlebird.co.nz"      = "https://host.docker.internal:5000"
     "test-inventory.whistlebird.co.nz" = "https://host.docker.internal:5001"
     "access.whistlebird.co.nz"         = "rdp://host.docker.internal:3389"

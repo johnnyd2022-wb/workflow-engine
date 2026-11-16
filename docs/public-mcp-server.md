@@ -43,8 +43,42 @@ curl -s localhost:8030/.well-known/oauth-protected-resource
 curl -s -i -X POST localhost:8030/mcp          # 401 with resource_metadata
 ```
 
-`BIZE_KNOWLEDGE_DIR` (default `docs/knowledge`) points at the Markdown. The app is called over HTTP inside
-the container network, so every call carries `X-Forwarded-Proto: https`.
+`BIZE_KNOWLEDGE_DIR` (default `docs/knowledge`) points at the Markdown. Every call to the app carries
+`X-Forwarded-Proto: https`, so the app's HTTPS redirect never bounces a hop that is not TLS.
+
+## Deploying it (8.2d)
+
+The `mcp` target in `Dockerfile.multi` is the only image that carries the SDK (`uv sync --extra mcp`). It
+listens on 8030 and its health check is `/healthz`. `scripts/run_mcp.sh [test|prod]` starts it:
+
+| | test | prod |
+|---|---|---|
+| Container | `workflow-engine-mcp-test` | `workflow-engine-mcp` |
+| Published on | `127.0.0.1:8030` | `127.0.0.1:8031` |
+| Docker network | `workflow-observability` (the test app's) | `workflow-engine-prod` (the production app's) |
+| `BIZE_API_BASE_URL` | `https://workflow-engine-test:8001` | `https://workflow-engine-prod:8000` |
+| Public address (`https://…/mcp`) | `mcp-test.biz-e.app` | `mcp.biz-e.app` |
+
+* **No secrets.** The container is told three addresses and one TLS switch, nothing else. The addresses
+  come from the app's own `[mcp]` section (`app/config/<target>.ini`), never from the operator's shell, so
+  the resource the server advertises is the one the app binds tokens to.
+* **`BIZE_API_VERIFY_TLS=false`.** The app serves a self-signed certificate under a name that is not its
+  container's, so the call from this container to the app is not verified. That hop never leaves the private
+  Docker network between two containers on one host (the tunnel and the app's health checks skip
+  verification for the same reason). Everywhere else the default verifies.
+* **Candidate, health check, swap.** A candidate with no host port starts beside the running container and
+  must answer `/healthz?deep=1` (which also calls the app's `/healthcheck`, so a wrong address or TLS setting
+  fails the deploy). Then the running container is renamed and stopped, the new one takes the name and the
+  port and is checked again. A failure at either step leaves, or puts back, the previous container, and the
+  script exits non-zero.
+* **Deploy scripts.** `scripts/deploy_test_simple.sh` (CD: `<app-image> <mcp-image>`) and `scripts/run_prod.sh`
+  call it once the app is healthy. A failure exits 4 from the first and non-zero from the second, and never
+  rolls the app back.
+* **CI.** `docker_build_publish` pushes `mcp:test-<sha>` and `mcp:prod-<sha>` (the same bytes under two tags);
+  `deploy_test` runs the test container from the first; `cd_e2e` runs `tests/e2e/test_mcp_smoke.py` against it.
+* **Tunnel.** `terraform/cloudflare/main.tf` routes `mcp-test.biz-e.app` and `mcp.biz-e.app` to the two
+  loopback ports. The tunnel module puts the founders' Cloudflare Access application in front of every
+  `biz-e.app` hostname, so these two are founders-only until Access is changed for them.
 
 ## Testing
 

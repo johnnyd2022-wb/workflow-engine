@@ -8,3 +8,5 @@ terraform/
 .claude/
 tests/
 docs/
+# ...except what bize_mcp serves: the business-knowledge Markdown it reads at start-up.
+!docs/knowledge/

@@ -12,6 +12,8 @@
 #   4. backs the database up (including on first deploy) -- a failed backup stops the deploy
 #   5. runs migrations with the new image
 #   6. checks a candidate alongside the old app, then hands over the port with rollback
+#   7. once the app is healthy, starts the public MCP server from the same commit
+#      (scripts/run_mcp.sh prod). Its failure fails this script but never rolls the app back.
 #
 # The app listens on 127.0.0.1:${PROD_HOST_PORT} only; whatever fronts production (the
 # Cloudflare tunnel) connects to it there. Uploaded files live on named volumes, so a
@@ -80,3 +82,15 @@ APP_ARGS=("${SECRET_ENV[@]}"
     -v workflow-engine-prod-process-docs:/data/process_docs
 )
 deploy_app
+
+# The public MCP server (bize_mcp, roadmap 8.2d) goes in once the app is healthy, from the same
+# commit. deploy_app has committed by now, so nothing below can roll the app back: an MCP failure
+# only fails this script's final status. It receives no secrets (run_mcp.sh passes none).
+echo "== MCP server"
+mcp_status=0
+MCP_SOURCE_SHA="$source_sha" bash "$repo_root/scripts/run_mcp.sh" prod || mcp_status=$?
+if [ "$mcp_status" -ne 0 ]; then
+    echo "The app is up and was left as deployed, but the MCP server is not (exit $mcp_status)." >&2
+    echo "Fix the cause and run: scripts/run_mcp.sh prod" >&2
+    exit "$mcp_status"
+fi
