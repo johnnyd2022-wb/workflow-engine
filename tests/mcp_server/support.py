@@ -23,6 +23,19 @@ import httpx2  # noqa: E402
 
 from bize_mcp.config import Config  # noqa: E402
 from bize_mcp.server import create_app  # noqa: E402
+
+
+def run_coroutine(coro):
+    """Run ``coro`` to completion on a fresh thread with its own event loop, and return its result.
+
+    In CI the browser tests run in the same process and leave an event loop running on the test
+    thread, where ``asyncio.run`` refuses to start. A new thread has no running loop, so this works
+    whichever tests ran first.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 from tests.mcp_oauth.support import ISSUER, RESOURCE, bearer, unique_addr  # noqa: E402
 
 JSON_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}

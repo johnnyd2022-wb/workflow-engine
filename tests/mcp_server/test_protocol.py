@@ -10,7 +10,7 @@ import pytest
 
 from tests.mcp_oauth.support import ISSUER, RESOURCE
 from tests.mcp_server.conftest import token_for
-from tests.mcp_server.support import Mcp, StubTransport, json_response, make_config, stub_app
+from tests.mcp_server.support import Mcp, StubTransport, json_response, make_config, run_coroutine, stub_app
 
 METADATA_PATH = "/.well-known/oauth-protected-resource"
 
@@ -177,10 +177,9 @@ def test_an_sdk_client_can_list_and_call_tools(world, app_transport, admin_token
 
 def test_the_harness_works_while_another_event_loop_is_running_on_this_thread(world, app_transport, admin_token):
     """CI runs browser tests in the same process, which leave a loop running; this once broke every test here."""
-    import asyncio
 
     async def inside_a_running_loop():
         with Mcp(app_transport) as mcp:
             return mcp.discover(admin_token, "inventory").is_error
 
-    assert asyncio.run(inside_a_running_loop()) is False
+    assert run_coroutine(inside_a_running_loop()) is False
