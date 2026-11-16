@@ -782,6 +782,12 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
       docker build --target production -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA" .
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
+      # The public MCP server (8.2d): one target, so test and prod run the same bytes under two tags.
+      docker build --target mcp -f Dockerfile.multi \
+        -t "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA" \
+        -t "$CI_REGISTRY_IMAGE/mcp:prod-$CI_COMMIT_SHORT_SHA" .
+      docker push "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA"
+      docker push "$CI_REGISTRY_IMAGE/mcp:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
   except:
@@ -861,9 +867,11 @@ deploy_test:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     # Exit 3 = the new app started but never passed /healthcheck. The old app is gone by then,
     # and cd_e2e (which rollback_test_on_failure needs) won't run, so roll back here.
+    # Exit 4 = the app is healthy but the MCP server did not come up: the job fails, the app is left
+    # alone. The rollback below redeploys the app image only, so it never touches the MCP server.
     - |
       status=0
-      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
+      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA" || status=$?
       if [ "$status" -eq 3 ]; then
         echo "New app unhealthy -- rolling back to last known-good :test-stable"
         if ! ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"; then
@@ -919,6 +927,7 @@ cd_e2e:
         --env UV_VERSION="$UV_VERSION" \
         --env ENVIRONMENT=test \
         --env E2E_BASE_URL="https://workflow-engine-test:8001" \
+        --env E2E_MCP_URL="http://workflow-engine-mcp-test:8030" \
         --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
         --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
@@ -927,7 +936,7 @@ cd_e2e:
           python -m pip install --disable-pip-version-check "uv==${UV_VERSION}"
           uv sync --extra dev --locked
           uv run playwright install --with-deps chromium
-          uv run pytest -p no:cacheprovider tests/e2e/test_smoke.py -v
+          uv run pytest -p no:cacheprovider tests/e2e/test_smoke.py tests/e2e/test_mcp_smoke.py -v
         '
   needs: ["deploy_test"]
   only:

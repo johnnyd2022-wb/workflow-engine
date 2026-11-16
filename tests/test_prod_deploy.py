@@ -69,7 +69,8 @@ elif command == "docker":
         elif "pg_restore" in a:
             rc = int(scenario == "invalid_backup")
         elif "curl" in a:
-            rc = int(scenario == "candidate_health")
+            # run_mcp.sh probes /healthz inside the MCP container; the app's probe is /healthcheck.
+            rc = int(scenario == ("mcp_health" if any("/healthz" in x for x in a) else "candidate_health"))
     elif op == "run":
         if "--rm" in a:
             rc = int(scenario == "migration")
@@ -109,8 +110,12 @@ def deploy(tmp_path, request):
     repo = tmp_path / "checkout"
     repo.mkdir()
     (repo / "scripts").mkdir()
-    for name in ("run_prod.sh", "run_test.sh", "prod_db.sh", "deploy_common.sh"):
+    for name in ("run_prod.sh", "run_test.sh", "run_mcp.sh", "prod_db.sh", "deploy_common.sh"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
+    # run_mcp.sh reads the MCP server's public addresses from the app's own [mcp] section.
+    (repo / "app/config").mkdir(parents=True)
+    for name in ("test.ini", "prod.ini"):
+        shutil.copy2(ROOT / "app/config" / name, repo / "app/config" / name)
     (repo / "tracked").write_text("original")
     (repo / "Dockerfile.multi").write_text("FROM scratch\n")
     git(repo, "init", "-b", "main")
@@ -146,13 +151,14 @@ def deploy(tmp_path, request):
         # A failing health check polls until it gives up. At the real 60 tries, each a few
         # fake-docker calls, a busy CI runner hit the 30s timeout below.
         "DEPLOY_HEALTH_ATTEMPTS": "3",
+        "MCP_HEALTH_ATTEMPTS": "3",
     }
     # Exercise secret loading rather than inheriting the developer's session key.
     env.pop("FLASK_SECRET_KEY", None)
 
     class Deploy:
-        def run(self, scenario="ok", existing=True):
-            containers = {f"{app_name}-db": {"running": True, "image": "postgres:16"}}
+        def run(self, scenario="ok", existing=True, extra=None):
+            containers = {f"{app_name}-db": {"running": True, "image": "postgres:16"}, **(extra or {})}
             if existing:
                 containers[app_name] = {"running": True, "image": "old"}
             state.write_text(json.dumps({"calls": [], "containers": containers, "scenario": scenario}))
@@ -282,6 +288,54 @@ def test_first_deploy_failure_removes_failed_app(deploy):
     deploy.run("final_start", existing=False)
     assert deploy.result.returncode != 0
     assert set(deploy.state["containers"]) == {f"{deploy.app_name}-db"}
+
+
+def _mcp_runs(deploy):
+    return [c for c in deploy.calls if c[:2] == ["docker", "run"] and "workflow-engine-mcp" in " ".join(c)]
+
+
+def test_prod_starts_the_mcp_server_after_the_app_is_healthy(deploy):
+    """Public MCP 8.2d: the app is deployed and checked first; the MCP server is the last step."""
+    if deploy.kind != "prod":
+        pytest.skip("only run_prod.sh deploys the MCP server")
+    deploy.run()
+    assert deploy.result.returncode == 0, deploy.result.stderr
+    mcp = deploy.state["containers"]["workflow-engine-mcp"]
+    assert mcp["running"] and mcp["image"].startswith("workflow-engine:mcp-prod-")
+    calls = deploy.calls
+    app_live = next(i for i, c in enumerate(calls) if c[:2] == ["docker", "run"] and "127.0.0.1:8010:8000" in c)
+    first_mcp = next(
+        i for i, c in enumerate(calls) if c[:2] == ["docker", "run"] and "workflow-engine-mcp" in " ".join(c)
+    )
+    assert app_live < first_mcp
+    assert "127.0.0.1:8031:8030" in next(c for c in _mcp_runs(deploy) if "-p" in c)
+    # Built from the commit the app was built from, as a build of the `mcp` target.
+    builds = [c for c in calls if c[:2] == ["docker", "build"]]
+    assert [b[b.index("--target") + 1] for b in builds] == ["production", "mcp"]
+
+
+def test_an_mcp_failure_fails_the_deploy_but_never_rolls_the_app_back(deploy):
+    if deploy.kind != "prod":
+        pytest.skip("only run_prod.sh deploys the MCP server")
+    deploy.run("mcp_health")
+    assert deploy.result.returncode != 0
+    assert "the MCP server is not" in deploy.result.stderr
+    # The new app is serving, and the old app was not restored in its place.
+    app = deploy.state["containers"][deploy.app_name]
+    assert app["running"] and app["image"].startswith("workflow-engine:prod-")
+    assert "Restoring previous app" not in deploy.result.stderr
+    assert not any(c[:2] == ["docker", "rename"] and c[-1] == deploy.app_name for c in deploy.calls)
+    assert "workflow-engine-mcp" not in deploy.state["containers"]
+    assert not any("-candidate-" in n for n in deploy.state["containers"])
+
+
+def test_an_mcp_failure_keeps_the_previous_mcp_container_serving(deploy):
+    if deploy.kind != "prod":
+        pytest.skip("only run_prod.sh deploys the MCP server")
+    deploy.run("mcp_health", extra={"workflow-engine-mcp": {"running": True, "image": "old-mcp"}})
+    assert deploy.result.returncode != 0
+    assert deploy.state["containers"]["workflow-engine-mcp"] == {"running": True, "image": "old-mcp"}
+    assert deploy.state["containers"][deploy.app_name]["image"].startswith("workflow-engine:prod-")
 
 
 def test_deploy_lock_is_shared_across_worktrees(deploy):

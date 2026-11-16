@@ -4,6 +4,9 @@
 ``MCP_PUBLIC_URL``     the address assistants use for this server, e.g. ``https://mcp.biz-e.app/mcp``
 ``BIZE_ISSUER_URL``    the app's public address; it is the OAuth authorization server
 ``BIZE_KNOWLEDGE_DIR`` optional: the business-knowledge Markdown directory (default ``docs/knowledge``)
+``BIZE_API_VERIFY_TLS`` optional: ``false`` skips certificate verification on the call to the app. Only for
+                       the private Docker network scripts/run_mcp.sh deploys onto, where the app serves a
+                       self-signed certificate under a name it does not cover. Verified by default.
 """
 
 from __future__ import annotations
@@ -28,6 +31,16 @@ def _check_url(name: str, value: str) -> str:
     return value
 
 
+def _verify_tls(raw: str | None) -> bool:
+    """Verification stays on unless the value plainly says off; a typo is an error, never a silent opt-out."""
+    value = (raw or "").strip().lower()
+    if value in {"", "true", "1", "yes", "on"}:
+        return True
+    if value in {"false", "0", "no", "off"}:
+        return False
+    raise ConfigError("BIZE_API_VERIFY_TLS must be true or false")
+
+
 @dataclass(frozen=True)
 class Config:
     api_base_url: str
@@ -35,6 +48,7 @@ class Config:
     issuer_url: str
     request_timeout: float = 15.0
     knowledge_dir: str = "docs/knowledge"
+    verify_tls: bool = True
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "api_base_url", _check_url("api_base_url", self.api_base_url).rstrip("/"))
@@ -62,4 +76,5 @@ class Config:
             public_url=env["MCP_PUBLIC_URL"].strip(),
             issuer_url=env["BIZE_ISSUER_URL"].strip(),
             knowledge_dir=(env.get("BIZE_KNOWLEDGE_DIR") or "docs/knowledge").strip(),
+            verify_tls=_verify_tls(env.get("BIZE_API_VERIFY_TLS")),
         )

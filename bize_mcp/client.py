@@ -5,8 +5,8 @@ Rules this module keeps (each is pinned by a test):
 * the caller's token goes in the ``Authorization`` header of that one call, and nowhere else;
 * nothing is shared between callers: no cookies are stored (the app may set some), and a redirect is
   never followed, so a token can't be carried to another host;
-* ``X-Forwarded-Proto: https`` is always sent, because the app redirects plain HTTP to HTTPS and the
-  hop inside the container network is plain HTTP;
+* ``X-Forwarded-Proto: https`` is always sent, because the app redirects plain HTTP to HTTPS and a hop
+  that is not TLS (a local run, the test harness) would otherwise be bounced;
 * only ``GET`` exists here. The MVP reads; it never writes, and nothing is retried.
 
 The app's answers become the spec's tool errors in ``_raise_for``.
@@ -67,6 +67,7 @@ class AppClient:
         self._http = httpx2.AsyncClient(
             base_url=config.api_base_url,
             transport=transport,
+            verify=config.verify_tls,
             timeout=httpx2.Timeout(config.request_timeout, connect=5.0),
             follow_redirects=False,
             headers={"Accept": "application/json", "X-Forwarded-Proto": "https", "User-Agent": "bize-mcp"},
