@@ -140,3 +140,19 @@ def test_a_lot_with_no_cost_is_null_with_a_status_never_zero(world, real, admin_
 def test_the_crm_operations_follow_the_orgs_feature(world, real, admin_token):
     entry = real.execute(admin_token, call("i", "crm_crm_api_get_org_invoices", {"kind": "all"})).results[0]
     assert entry["ok"], entry
+
+
+def test_ac27_docs_topic_returns_the_real_markdown_with_its_frontmatter_fields(real, admin_token):
+    data = real.docs(admin_token, topic="inventory.availability").data
+    assert data["topic"] == "inventory.availability" and data["domain"] == "inventory"
+    assert data["markdown"].startswith("---\ntopic:")
+    assert "core_list_inventory" in data["related_operations"]
+    assert "inventory.holds" in data["related_topics"]
+
+
+def test_every_real_topic_can_be_read_through_docs(real, admin_token):
+    knowledge = Knowledge.load(KNOWLEDGE)
+    for name, topic in knowledge.topics.items():
+        if topic.features:  # feature-gated topics are tested through their feature
+            continue
+        assert not real.docs(admin_token, topic=name).is_error, name
