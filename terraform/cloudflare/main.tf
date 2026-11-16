@@ -22,6 +22,8 @@ module "tunnel" {
     "dev.biz-e.app"        = "https://172.26.121.16:8005"        # local development
 
     # The public MCP server (bize_mcp, scripts/run_mcp.sh): plain HTTP, published on loopback only.
+    # Founders-only behind Access like every biz-e.app host (founder, 17 Nov 2026). Hosted assistants
+    # need these hosts and the app's /oauth/* and /.well-known/* exempted before MCP goes public.
     "mcp-test.biz-e.app" = "http://host.docker.internal:8030" # test
     "mcp.biz-e.app"      = "http://host.docker.internal:8031" # production
 
