@@ -1279,7 +1279,7 @@ missing; never a silent $0.
     tested schemas for the operations assistants can use. Served at `/api/openapi.json`. (!722)
   - [x] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
     models stock, batches, tracing, compliance, sales and cost, read by the model on demand. (!723)
-  - [ ] h. **OAuth security check.** RFC 9700 best practice and the latest MCP authorization
+  - [x] h. **OAuth security check.** (!724) RFC 9700 best practice and the latest MCP authorization
     revision: `iss` on authorization responses (RFC 9207), Google and 2FA-enrolment return to
     consent, clickjacking headers, a written checklist.
   - Done when: a producer's admin turns it on, a staff member connects Claude from

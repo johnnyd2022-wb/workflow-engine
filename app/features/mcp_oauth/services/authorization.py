@@ -60,7 +60,8 @@ class RedirectError(Exception):
         self.state = state
 
     def location(self) -> str:
-        params = {"error": self.error, "error_description": self.description}
+        # RFC 9207: say which server answered, on errors as well as success (mix-up defence).
+        params = {"error": self.error, "error_description": self.description, "iss": config.mcp_issuer}
         if self.state is not None:
             params["state"] = self.state
         return append_query(self.redirect_uri, params)
@@ -236,7 +237,7 @@ def approve(db, user, req: AuthorizeRequest) -> str:
         user.id,
     )
     logger.info("mcp.grant_approved", grant_id=str(grant.id), client=req.client.client_id[:200])
-    params = {"code": raw}
+    params = {"code": raw, "iss": config.mcp_issuer}
     if req.state is not None:
         params["state"] = req.state
     return append_query(req.redirect_uri, params)

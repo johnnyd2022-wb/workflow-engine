@@ -37,7 +37,8 @@
           body:JSON.stringify({token:document.getElementById('code').value.trim()})});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Unable to verify code.');
-        window.location.href = '/dashboard';
+        // The server's own answer: an AI assistant's pending connection request, or nothing.
+        window.location.href = (typeof data.next === 'string' && data.next.indexOf('/oauth/authorize?') === 0) ? data.next : '/dashboard';
       } catch (err) { error.textContent = err.message; error.hidden = false; }
       finally { button.disabled = false; }
     });
