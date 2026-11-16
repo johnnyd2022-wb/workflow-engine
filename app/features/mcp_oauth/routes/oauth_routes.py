@@ -10,7 +10,7 @@ an ordinary CSRF-protected form.
 
 from __future__ import annotations
 
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request
 from flask_limiter.util import get_remote_address
@@ -19,7 +19,7 @@ from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.mcp_oauth import SUPPORTED_SCOPES
-from app.features.mcp_oauth.services import authorization, client_registry, token_service
+from app.features.mcp_oauth.services import authorization, client_registry, pending_authorization, token_service
 from app.features.mcp_oauth.services.client_registry import ClientError
 from app.features.mcp_oauth.services.token_service import TokenError
 from app.observability import get_logger
@@ -30,7 +30,6 @@ logger = get_logger(__name__)
 oauth_bp = Blueprint("oauth", __name__, template_folder="../frontend/templates")
 
 MAX_REGISTER_BYTES = 8 * 1024
-MAX_NEXT_LENGTH = 4096
 # These endpoints are called by browser-based MCP clients as well as servers. They carry no cookie
 # and trust no origin, so any origin may read the answer; the authorize page never gets this.
 _CORS_ENDPOINTS = frozenset({"oauth.metadata", "oauth.register", "oauth.token", "oauth.revoke"})
@@ -83,6 +82,7 @@ def metadata():
             "token_endpoint_auth_methods_supported": ["none"],
             "scopes_supported": list(SUPPORTED_SCOPES),
             "client_id_metadata_document_supported": True,
+            "authorization_response_iss_parameter_supported": True,  # RFC 9207
         }
     )
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -125,15 +125,14 @@ def _blocked_page(req, message: str):
 
 
 def _login_redirect():
-    """Send a signed-out visitor to the normal sign-in page, and back here afterwards.
+    """Send a signed-out visitor to the normal sign-in page; the request waits in their session.
 
-    ``next`` is built here from our own path and the request's query string, so it always starts
-    with ``/oauth/authorize?``: it cannot be turned into a redirect to another site.
+    There is no return address in the URL. After sign-in the app builds ``/oauth/authorize?...``
+    from the stored parameters (``pending_authorization``), so nothing here can be turned into a
+    redirect to another site.
     """
-    target = "/oauth/authorize?" + request.query_string.decode("latin-1")
-    if len(target) > MAX_NEXT_LENGTH:
-        return redirect("/?login=1")
-    return redirect("/?login=1&next=" + quote(target, safe=""))
+    pending_authorization.remember(request.args)
+    return redirect("/?login=1")
 
 
 # A signed-out visitor must reach this route: it sends them to sign in and back (the POST below
@@ -154,6 +153,7 @@ def authorize():
         return redirect(err.location())
     if g.current_user is None:
         return _login_redirect()
+    pending_authorization.clear()  # signed in: the request now travels in the consent form
     reason = authorization.consent_block_reason(db, g.current_user, req.client)
     if reason:
         logger.info("mcp.consent_blocked", client=req.client.client_id[:200], reason=reason[:40])

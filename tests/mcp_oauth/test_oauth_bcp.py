@@ -102,9 +102,7 @@ def test_ac41_iss_is_added_next_to_a_query_the_redirect_uri_already_has(world, d
     client = make_client(db, redirect_uris=["https://assistant.example.test/cb?tenant=a"])
     _v, challenge = pkce_pair()
     params = authorize_params(client.client_id, challenge, redirect_uri="https://assistant.example.test/cb?tenant=a")
-    resp = world.session("member").post(
-        "/oauth/authorize", data={**params, "decision": "deny", "access_level": "read"}
-    )
+    resp = world.session("member").post("/oauth/authorize", data={**params, "decision": "deny", "access_level": "read"})
     got = redirect_params(resp)
     assert got["tenant"] == "a" and got["iss"] == ISSUER
 
@@ -205,13 +203,17 @@ def _google_callback(browser, address, monkeypatch):
     q = parse_qs(urlsplit(started.location).query)
     claims = google_claims(address, nonce=q["nonce"][0])
     monkeypatch.setattr(
-        google_routes, "exchange_verified_identity", lambda nonce: validate_verified_claims(claims, GOOGLE_CLIENT_ID, nonce)
+        google_routes,
+        "exchange_verified_identity",
+        lambda nonce: validate_verified_claims(claims, GOOGLE_CLIENT_ID, nonce),
     )
     return browser.get("/auth/google/callback", query_string={"state": q["state"][0], "code": "mock-code"})
 
 
-def _gmail_user(world, db, **kw):
-    user = UserFactory(org_id=world.org.id, email=f"mcp-g-{time.time_ns()}@gmail.com", role=UserRole.MEMBER, **kw)
+def _gmail_user(world, db, secret=None):
+    user = UserFactory(org_id=world.org.id, email=f"mcp-g-{time.time_ns()}@gmail.com", role=UserRole.MEMBER)
+    if secret:
+        user.totp_secret, user.two_factor_enabled = secret, True
     db.commit()
     return user
 
@@ -230,7 +232,7 @@ def test_ac42_google_sign_in_returns_to_consent_for_the_same_request(world, db, 
 
 def test_ac42_google_sign_in_with_2fa_returns_to_consent_after_the_code(world, db, google, monkeypatch):
     secret = pyotp.random_base32()
-    user = _gmail_user(world, db, two_factor_enabled=True, totp_secret=secret)
+    user = _gmail_user(world, db, secret=secret)
     _params, url, _v = _request(world)
     browser = world.anon()
     browser.get(url)
@@ -256,13 +258,14 @@ def test_ac42_first_time_2fa_enrolment_returns_to_consent_for_the_same_request(w
     body = login.get_json()
     assert body["requires_2fa_enrollment"] is True
     assert "next" not in body  # held back: enrolment comes first
+    # The settings page reads this when it loads, while enrolment is still owed.
+    me = browser.get("/auth/me").get_json()["user"]
+    assert _same_request(me["return_to"], url)
     secret = browser.post("/auth/2fa/enroll").get_json()["secret"]
     totp = pyotp.TOTP(secret)
     now = int(time.time())
     enable = browser.post("/auth/2fa/enable", json={"token1": totp.at(now - 30), "token2": totp.at(now)})
     assert enable.status_code == 200, enable.get_json()
-    me = browser.get("/auth/me").get_json()["user"]
-    assert _same_request(me["return_to"], url)
     consent = browser.get(me["return_to"])
     assert consent.status_code == 200 and 'value="approve"' in consent.get_data(as_text=True)
 
@@ -293,7 +296,7 @@ def test_ac42_an_old_pending_request_is_not_returned(world):
     browser = world.anon()
     browser.get(url)
     with browser.session_transaction() as s:
-        s[pending_authorization.SESSION_KEY]["at"] = time.time() - 3600
+        s[pending_authorization.SESSION_KEY] = {**s[pending_authorization.SESSION_KEY], "at": time.time() - 3600}
     login = browser.post("/auth/login", json={"email": world.users["member"].email, "password": PASSWORD})
     assert "next" not in login.get_json()
 
@@ -369,7 +372,9 @@ def test_ac43_every_authorize_response_refuses_framing(world, db):
     session = world.session("member")
     _assert_not_framable(session.get(url))  # consent
     _assert_not_framable(session.post("/oauth/authorize", data={**params, "decision": "deny", "access_level": "read"}))
-    _assert_not_framable(world.session("member").get(authorize_url({**params, "redirect_uri": "https://x.example.test"})))
+    _assert_not_framable(
+        world.session("member").get(authorize_url({**params, "redirect_uri": "https://x.example.test"}))
+    )
     _assert_not_framable(world.session("member").get(authorize_url({**params, "response_type": "token"})))
     world.enable(enabled=False)
     _assert_not_framable(world.session("member").get(url))  # the blocked page
@@ -391,7 +396,10 @@ def test_bcp_the_consent_decision_answers_302_not_307(world):
     params, _url, _v = _request(world)
     session = world.session("member")
     for decision in ("approve", "deny"):
-        assert session.post("/oauth/authorize", data={**params, "decision": decision, "access_level": "read"}).status_code == 302
+        assert (
+            session.post("/oauth/authorize", data={**params, "decision": decision, "access_level": "read"}).status_code
+            == 302
+        )
 
 
 def test_bcp_implicit_and_password_grants_are_not_offered(world):
@@ -406,7 +414,9 @@ def test_bcp_implicit_and_password_grants_are_not_offered(world):
 def test_bcp_a_code_exchange_without_a_verifier_is_refused_and_every_code_has_a_challenge(world, db):
     params, _url, verifier = _request(world)
     session = world.session("member")
-    code = redirect_params(session.post("/oauth/authorize", data={**params, "decision": "approve", "access_level": "read"}))["code"]
+    code = redirect_params(
+        session.post("/oauth/authorize", data={**params, "decision": "approve", "access_level": "read"})
+    )["code"]
     resp = world.anon().post(
         "/oauth/token",
         data={

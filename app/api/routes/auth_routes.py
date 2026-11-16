@@ -29,6 +29,7 @@ from app.core.security.permissions import requires_auth
 from app.core.security.tenant_scope import unscoped
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
 from app.core.utils.log_action import log_action
+from app.features.mcp_oauth.services import pending_authorization
 from app.observability import get_logger, start_span, traced
 from app.ui.legal import TERMS_VERSION
 
@@ -170,6 +171,19 @@ def _reject_2fa_code(user_id, user_org_id):
     return jsonify({"error": "Invalid 2FA token or backup code"}), 401
 
 
+def _add_return_target(body: dict, must_enroll_2fa: bool = False) -> None:
+    """Add ``next``: the OAuth authorization request this sign-in was started for, if any.
+
+    Built from the session (``pending_authorization``), never from anything the browser sends now.
+    Held back while the person still has to enrol in 2FA; ``/auth/me`` hands it over after that.
+    """
+    if must_enroll_2fa:
+        return
+    target = pending_authorization.take_url()
+    if target:
+        body["next"] = target
+
+
 def rotate_session():
     """Rotate session ID to prevent session fixation attacks
 
@@ -178,7 +192,9 @@ def rotate_session():
     """
     # Store any non-auth session data we want to preserve
     # (Currently we don't preserve anything, but this is extensible)
-    preserved_data = {}
+    # A pending OAuth authorization request (public MCP 8.2h) is the one thing that must survive
+    # sign-in: it holds no credentials, only the request the person is signing in for.
+    preserved_data = pending_authorization.carry_over()
 
     # Clear the session (this invalidates the old session ID)
     session.clear()
@@ -575,17 +591,17 @@ def login():
                     user_id,
                 )
 
-                return jsonify(
-                    {
-                        "message": "Login successful",
-                        "user": {
-                            "id": str(user_id),
-                            "email": user_email,
-                            "role": user_role,
-                            "org_id": str(user_org_id),
-                        },
-                    }
-                ), 200
+                trusted_body = {
+                    "message": "Login successful",
+                    "user": {
+                        "id": str(user_id),
+                        "email": user_email,
+                        "role": user_role,
+                        "org_id": str(user_org_id),
+                    },
+                }
+                _add_return_target(trusted_body)
+                return jsonify(trusted_body), 200
 
             # No trusted device or expired - require 2FA
             # Do NOT log in yet — return partial auth state
@@ -645,6 +661,8 @@ def login():
         if must_enroll_2fa:
             body["requires_2fa_enrollment"] = True
             body["action"] = ENROLLMENT_PAGE
+        else:
+            _add_return_target(body)
         return jsonify(body), 200
 
     except ValueError:
@@ -816,6 +834,8 @@ def get_current_user():
         "two_factor_enabled": g.current_user.two_factor_enabled if g.current_user else False,
         "two_factor_required": two_factor_required(g.current_user),
         "two_factor_enrollment_required": enrollment_required(g.current_user),
+        # Where first-time 2FA enrolment goes next: the OAuth request the person signed in for.
+        "return_to": pending_authorization.peek_url() if enrollment_required(g.current_user) else None,
         "role_label": role_label_for(g.current_user) if g.current_user else None,
         "permissions": permission_list(g.current_user) if g.current_user else [],
         "access_expires_at": (
@@ -1049,6 +1069,8 @@ def verify_two_factor():
             "message": "Login successful",
             "user": {"id": str(user_id), "email": user_email, "role": user_role, "org_id": str(user_org_id)},
         }
+
+        _add_return_target(response_data)
 
         # Set trusted device cookie if device was remembered
         # Following Google/AWS/Azure patterns: HttpOnly, Secure, SameSite

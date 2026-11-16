@@ -21,7 +21,7 @@ def test_f1_a_signed_out_visitor_cannot_make_the_server_fetch_a_url(world, monke
     _v, challenge = pkce_pair()
     resp = world.anon().get(authorize_url(authorize_params("https://stranger.example.test/c.json", challenge)))
     assert resp.status_code == 302
-    assert resp.headers["Location"].startswith("/?login=1&next=")
+    assert resp.headers["Location"] == "/?login=1"
     assert spy.call_count == 0
 
 
