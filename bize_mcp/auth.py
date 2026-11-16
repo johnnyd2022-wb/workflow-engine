@@ -50,7 +50,9 @@ def _parse(body: object) -> Identity:
     user = data.get("user") if isinstance(data.get("user"), dict) else {}
     org = data.get("org") if isinstance(data.get("org"), dict) else {}
     return Identity(
-        permissions=frozenset(p for p in permissions if isinstance(p, str)) if isinstance(permissions, list) else frozenset(),
+        permissions=frozenset(p for p in permissions if isinstance(p, str))
+        if isinstance(permissions, list)
+        else frozenset(),
         user_name=user.get("name"),
         org_name=org.get("name"),
         role_label=data.get("role_label"),

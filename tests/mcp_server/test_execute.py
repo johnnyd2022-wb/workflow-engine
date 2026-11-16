@@ -12,7 +12,7 @@ import pytest
 
 from tests.factories import ExecutionFactory, InventoryItemFactory, ProcessFactory
 from tests.mcp_server.conftest import token_for
-from tests.mcp_server.support import ME_ADMIN, ME_PATH, Mcp, json_response, stub_app
+from tests.mcp_server.support import ME_PATH, Mcp, json_response, stub_app
 
 
 def call(call_id: str, operation_id: str, params: dict | None = None, select: str | None = None) -> dict:
@@ -42,8 +42,12 @@ def session_json(world, who: str, path: str):
 def test_ac26_two_calls_where_the_second_takes_an_id_from_the_first(world, mcp, admin_token):
     result = mcp.execute(
         admin_token,
-        call("find", "list_inventory", {"q": "Juniper"}),
-        call("trace", "trace_inventory_backward", {"inventory_item_id": {"$from": "find", "path": "inventory_items[0].id"}}),
+        call("find", "list_inventory", {"type": "raw_material"}),
+        call(
+            "trace",
+            "trace_inventory_backward",
+            {"inventory_item_id": {"$from": "find", "path": "inventory_items[0].id"}},
+        ),
     )
     assert not result.is_error, result.text
     assert [r["id"] for r in result.results] == ["find", "trace"]
@@ -56,8 +60,12 @@ def test_ac26_two_calls_where_the_second_takes_an_id_from_the_first(world, mcp, 
 def test_ac26_the_referenced_call_may_be_projected_down_and_the_reference_still_works(world, mcp, admin_token):
     result = mcp.execute(
         admin_token,
-        call("find", "list_inventory", {"q": "Juniper"}, select="inventory_items[*].name"),
-        call("trace", "trace_inventory_backward", {"inventory_item_id": {"$from": "find", "path": "inventory_items[0].id"}}),
+        call("find", "list_inventory", {"type": "raw_material"}, select="inventory_items[*].name"),
+        call(
+            "trace",
+            "trace_inventory_backward",
+            {"inventory_item_id": {"$from": "find", "path": "inventory_items[0].id"}},
+        ),
     )
     assert result.results[0]["data"] == ["Org A Juniper"]
     assert result.results[1]["ok"], "references read the full result, not the trimmed one"
@@ -102,7 +110,7 @@ def test_ac26_an_operation_the_caller_does_not_hold_is_not_found_with_no_request
 
 
 def test_ac26_an_undeclared_parameter_is_refused_and_never_passed_through(mcp, admin_token):
-    result = mcp.execute(admin_token, call("a", "list_inventory", {"q": "x", "org_id": str(uuid4())}))
+    result = mcp.execute(admin_token, call("a", "list_inventory", {"type": "raw_material", "org_id": str(uuid4())}))
     entry = result.results[0]
     assert entry["ok"] is False and entry["error"]["kind"] == "invalid_input"
     assert "org_id" in entry["error"]["message"]
@@ -123,7 +131,9 @@ def test_ac26_an_undeclared_parameter_is_refused_and_never_passed_through(mcp, a
         ("list_executions", {"status": ["completed"]}),
     ],
 )
-def test_ac26_params_are_validated_against_the_operations_schema_before_any_request(mcp, admin_token, operation, params):
+def test_ac26_params_are_validated_against_the_operations_schema_before_any_request(
+    mcp, admin_token, operation, params
+):
     entry = mcp.execute(admin_token, call("a", operation, params)).results[0]
     assert entry["ok"] is False and entry["error"]["kind"] == "invalid_input", entry
     assert [r for r in mcp.app_transport.requests if r.url.path not in {ME_PATH, "/api/openapi.json"}] == []
@@ -167,10 +177,15 @@ def test_ac26_a_list_the_app_returns_whole_is_cut_to_50_rows_with_a_note():
 
 def test_ac26_output_over_256_kb_is_truncated_with_a_note():
     big = [{"id": str(i), "text": "x" * 1500} for i in range(50)]
-    routes = {f"/api/core/holds": json_response(200, {"holds": big}), "/api/core/processes": json_response(200, {"processes": big})}
+    routes = {
+        "/api/core/holds": json_response(200, {"holds": big}),
+        "/api/core/processes": json_response(200, {"processes": big}),
+    }
     transport = stub_app(routes)
     with Mcp(transport) as mcp:
-        calls = [call(f"c{i}", "list_open_holds") for i in range(3)] + [call(f"p{i}", "list_processes") for i in range(2)]
+        calls = [call(f"c{i}", "list_open_holds") for i in range(3)] + [
+            call(f"p{i}", "list_processes") for i in range(2)
+        ]
         result = mcp.execute("bza_x", *calls)
         assert not result.is_error, result.text
     assert len(result.text.encode()) <= 256 * 1024 + 2048
@@ -179,10 +194,10 @@ def test_ac26_output_over_256_kb_is_truncated_with_a_note():
 
 
 def test_select_trims_the_result(world, mcp, admin_token):
-    seed_lots(world, 3, prefix="Orris Root", inventory_type="raw_material")
+    seed_lots(world, 3, prefix="Orris Root", inventory_type="final_product")
     entry = mcp.execute(
         admin_token,
-        call("a", "list_inventory", {"q": "orris"}, select="inventory_items[*].{name: name, qty: quantity}"),
+        call("a", "list_inventory", {"type": "final_product"}, select="inventory_items[*].{name: name, qty: quantity}"),
     ).results[0]
     assert sorted(r["name"] for r in entry["data"]) == ["Orris Root 000", "Orris Root 001", "Orris Root 002"]
     assert set(entry["data"][0]) == {"name", "qty"}
@@ -216,7 +231,7 @@ def test_a_failed_call_stops_what_depends_on_it_but_not_the_rest(world, mcp, adm
 def test_bad_references_are_errors_not_guesses(world, mcp, admin_token, reference):
     result = mcp.execute(
         admin_token,
-        call("first", "list_inventory", {"q": "Juniper"}),
+        call("first", "list_inventory", {"type": "raw_material"}),
         call("second", "get_execution", {"execution_id": reference}),
         call("later", "list_open_holds"),
     )
@@ -225,10 +240,14 @@ def test_bad_references_are_errors_not_guesses(world, mcp, admin_token, referenc
 
 
 def test_the_app_is_asked_for_real_data_and_org_b_never_appears(world, mcp, admin_token):
-    result = mcp.execute(admin_token, call("a", "list_inventory"), call("b", "list_inventory", {"q": "Secret"}))
+    result = mcp.execute(
+        admin_token, call("a", "list_inventory"), call("b", "list_inventory", {"type": "raw_material"})
+    )
+    assert result.results[0]["data"]["inventory_items"], "the caller's own lots are there"
     assert "Org B Secret Botanical" not in result.text
-    assert result.results[1]["data"]["inventory_items"] == []
-    other = mcp.execute(admin_token, call("t", "trace_inventory_backward", {"inventory_item_id": str(world.other_item.id)}))
+    other = mcp.execute(
+        admin_token, call("t", "trace_inventory_backward", {"inventory_item_id": str(world.other_item.id)})
+    )
     assert other.results[0]["error"]["message"] == "Not found"
 
 
@@ -275,7 +294,9 @@ def test_ac27_a_lot_with_no_cost_returns_null_with_a_status_never_zero(costing_w
     data = entry["data"]
     assert data["unit_cost"] is None
     assert data["status"] and data["status"] != "actual"
-    assert '"unit_cost":null' in mcp.execute(admin_token, call("c", "get_lot_cost", {"item_id": str(world.item.id)})).text
+    assert (
+        '"unit_cost":null' in mcp.execute(admin_token, call("c", "get_lot_cost", {"item_id": str(world.item.id)})).text
+    )
 
 
 def test_ac27_a_priced_lot_shows_its_price(costing_world, mcp, admin_token):

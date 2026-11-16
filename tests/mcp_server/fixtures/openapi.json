@@ -10,14 +10,13 @@
         "parameters": [
           {"name": "type", "in": "query", "schema": {"type": "string", "enum": ["raw_material", "work_in_progress", "final_product"]}},
           {"name": "site_id", "in": "query", "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}},
-          {"name": "q", "in": "query", "schema": {"type": "string", "maxLength": 100}, "description": "Name or supplier contains"},
           {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 50}},
           {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 200}}
         ],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object", "properties": {"inventory_items": {"type": "array"}, "has_more": {"type": "boolean"}, "next_cursor": {"type": ["string", "null"]}}}}}}},
         "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true,
                    "concepts": ["inventory.availability"], "related_operations": ["get_stock_position", "trace_inventory_backward"],
-                   "example": {"params": {"q": "juniper", "limit": 10}}}
+                   "example": {"params": {"type": "raw_material", "limit": 10}}}
       },
       "post": {
         "operationId": "create_inventory_item",

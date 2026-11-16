@@ -16,7 +16,7 @@ from uuid import UUID
 
 import jsonschema
 
-from bize_mcp.errors import ToolFailure
+from bize_mcp.errors import ToolFailureError
 
 UUID_PATTERN = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -61,13 +61,13 @@ def _message(error: jsonschema.ValidationError) -> str:
 
 
 def check_arguments(tool_name: str, tool_schema: dict[str, Any], arguments: Any) -> dict[str, Any]:
-    """The arguments if they fit the schema, else a ``ToolFailure`` saying which field is wrong."""
+    """The arguments if they fit the schema, else a ``ToolFailureError`` saying which field is wrong."""
     if arguments is None:
         arguments = {}
     validator = jsonschema.Draft202012Validator(tool_schema)
     errors = sorted(validator.iter_errors(arguments), key=lambda e: [str(p) for p in e.absolute_path])
     if errors:
-        raise ToolFailure(f"Invalid input for {tool_name}: {_message(errors[0])}.", kind="invalid_input")
+        raise ToolFailureError(f"Invalid input for {tool_name}: {_message(errors[0])}.", kind="invalid_input")
     return dict(arguments)
 
 
@@ -76,13 +76,15 @@ def uuid_segment(value: str, name: str) -> str:
     try:
         return str(UUID(value))
     except (ValueError, AttributeError, TypeError):
-        raise ToolFailure(f"Invalid input: {name} must be an id like 3f2b8c1e-....", kind="invalid_input") from None
+        raise ToolFailureError(
+            f"Invalid input: {name} must be an id like 3f2b8c1e-....", kind="invalid_input"
+        ) from None
 
 
 def key_segment(value: str, name: str) -> str:
     """A product key as one encoded path segment (colons kept, so ``name:gin`` stays readable)."""
     if not re.fullmatch(KEY_PATTERN, value) or value in _BAD_KEY:
-        raise ToolFailure(f"Invalid input: {name} is not a valid product key.", kind="invalid_input")
+        raise ToolFailureError(f"Invalid input: {name} is not a valid product key.", kind="invalid_input")
     return quote(value, safe=":")
 
 
@@ -90,4 +92,4 @@ def iso_date(value: str, name: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise ToolFailure(f"Invalid input: {name} must be a date like 2026-10-31.", kind="invalid_input") from None
+        raise ToolFailureError(f"Invalid input: {name} must be a date like 2026-10-31.", kind="invalid_input") from None

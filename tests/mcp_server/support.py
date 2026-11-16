@@ -8,7 +8,6 @@ in production). Nothing here talks to a socket. Tokens are minted with 8.2b's ``
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -195,19 +194,36 @@ class Mcp:
 
     def __enter__(self):
         self._runner = asyncio.Runner()
-        self._stack = contextlib.AsyncExitStack()
-        self._runner.run(self._open())
+        self._runner.run(self._start())
         return self
 
-    async def _open(self):
-        await self._stack.enter_async_context(self.app.router.lifespan_context(self.app))
-        self.http = await self._stack.enter_async_context(
-            httpx2.AsyncClient(transport=httpx2.ASGITransport(app=self.app), base_url="https://mcp.test")
-        )
+    async def _start(self):
+        # The app's lifespan (anyio cancel scopes) must be entered and left by one task, so it gets its own.
+        self._ready, self._stop = asyncio.Event(), asyncio.Event()
+        self._lifespan = asyncio.get_running_loop().create_task(self._serve())
+        await self._ready.wait()
+        if self._lifespan.done():
+            self._lifespan.result()
+
+    async def _serve(self):
+        try:
+            async with self.app.router.lifespan_context(self.app):
+                self.http = httpx2.AsyncClient(
+                    transport=httpx2.ASGITransport(app=self.app), base_url="https://mcp.test"
+                )
+                self._ready.set()
+                await self._stop.wait()
+                await self.http.aclose()
+        finally:
+            self._ready.set()
+
+    async def _finish(self):
+        self._stop.set()
+        await self._lifespan
 
     def __exit__(self, *exc):
         try:
-            self._runner.run(self._stack.aclose())
+            self._runner.run(self._finish())
         finally:
             self._runner.close()
 

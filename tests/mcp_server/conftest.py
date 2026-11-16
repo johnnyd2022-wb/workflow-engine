@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Fixtures for the public-MCP 8.2c tests: the 8.2b two-organisation world plus a bize_mcp harness.
 
 The directory needs the optional ``mcp`` dependency group (``uv sync --extra dev --extra mcp``).

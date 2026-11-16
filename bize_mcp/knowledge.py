@@ -116,9 +116,8 @@ class Knowledge:
             text = path.read_text(encoding="utf-8")
             meta, body = parse_frontmatter(text)
             if path.stem == "overview":
-                overview = body
-                if not meta.get("topic"):
-                    continue
+                overview = body  # the overview is returned for an empty query, not listed as a topic
+                continue
             name = meta.get("topic")
             if not isinstance(name, str) or not name:
                 logger.warning("knowledge_file_skipped file=%s reason=no_topic", path.name)
@@ -144,7 +143,9 @@ class Knowledge:
         topic = self.topics.get(name)
         return topic if topic is not None and topic.available_to(features) else None
 
-    def search(self, query: list[str], features: frozenset[str] | None, domain: str | None) -> list[tuple[float, Topic]]:
+    def search(
+        self, query: list[str], features: frozenset[str] | None, domain: str | None
+    ) -> list[tuple[float, Topic]]:
         scored = []
         for topic in self.visible(features):
             if domain and topic.domain != domain:

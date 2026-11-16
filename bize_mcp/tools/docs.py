@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from bize_mcp.catalogue import Operation
-from bize_mcp.errors import ToolFailure
+from bize_mcp.errors import ToolFailureError
 from bize_mcp.shaping import clip
 from bize_mcp.tools.base import Tool, ToolContext
 from bize_mcp.validation import schema
@@ -22,7 +22,11 @@ DESCRIPTION = (
 
 INPUT = schema(
     {
-        "topic": {"type": "string", "maxLength": 120, "description": "A topic from discover, e.g. inventory.availability."},
+        "topic": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "A topic from discover, e.g. inventory.availability.",
+        },
         "operation_id": {"type": "string", "maxLength": 120, "description": "An operation_id from discover."},
     }
 )
@@ -52,13 +56,13 @@ def _operation_doc(op: Operation, allowed: dict[str, Operation], topics: set[str
 async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     topic_name, operation_id = args.get("topic"), args.get("operation_id")
     if bool(topic_name) == bool(operation_id):
-        raise ToolFailure("Give exactly one of topic or operation_id.", kind="invalid_input")
+        raise ToolFailureError("Give exactly one of topic or operation_id.", kind="invalid_input")
     allowed = await ctx.operations()
     features = ctx.identity.features
     if topic_name:
         topic = ctx.knowledge.get(topic_name, features)
         if topic is None:
-            raise ToolFailure("Not found", kind="not_found")
+            raise ToolFailureError("Not found", kind="not_found")
         return clip(
             {
                 "topic": topic.topic,
@@ -74,7 +78,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         )
     op = allowed.get(operation_id)
     if op is None:
-        raise ToolFailure("Not found", kind="not_found")
+        raise ToolFailureError("Not found", kind="not_found")
     return clip(_operation_doc(op, allowed, set(ctx.knowledge.topics)), MAX_DOC_TEXT)
 
 

@@ -96,6 +96,24 @@ def _resolve(document: dict, node: Any, depth: int = 0) -> Any:
     return node if node is not None else {}
 
 
+def deref(document: dict, node: Any, depth: int = 0, seen: tuple[str, ...] = ()) -> Any:
+    """``node`` with every local ``$ref`` replaced by what it points at, so a model reads one schema.
+
+    Bounded: a reference already being expanded (a cycle) or one nested more than 6 deep is left as
+    ``{"$ref": ...}``.
+    """
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            if ref in seen or depth > 6 or not ref.startswith("#/"):
+                return {"$ref": ref}
+            return deref(document, _resolve(document, node), depth + 1, (*seen, ref))
+        return {key: deref(document, value, depth, seen) for key, value in node.items()}
+    if isinstance(node, list):
+        return [deref(document, item, depth, seen) for item in node]
+    return node
+
+
 def _permissions(value: Any) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
@@ -111,7 +129,16 @@ def _response_schema(document: dict, operation: dict) -> dict | None:
     ok = _resolve(document, responses.get("200") or responses.get("default") or {})
     content = _resolve(document, ok.get("content", {}).get("application/json", {})) if isinstance(ok, dict) else {}
     schema = content.get("schema") if isinstance(content, dict) else None
-    return _resolve(document, schema) if schema else None
+    return deref(document, schema) if schema else None
+
+
+def _response_example(document: dict, operation: dict) -> Any:
+    responses = operation.get("responses")
+    if not isinstance(responses, dict):
+        return None
+    ok = _resolve(document, responses.get("200") or {})
+    content = _resolve(document, ok.get("content", {}).get("application/json", {})) if isinstance(ok, dict) else {}
+    return content.get("example") if isinstance(content, dict) else None
 
 
 def parse(document: Any) -> dict[str, Operation]:
@@ -145,7 +172,7 @@ def parse(document: Any) -> dict[str, Operation]:
                         name=raw["name"],
                         where=raw["in"],
                         required=bool(raw.get("required")) or raw["in"] == "path",
-                        schema=_resolve(document, raw.get("schema") or {}),
+                        schema=deref(document, raw.get("schema") or {}),
                         description=str(raw.get("description") or ""),
                     )
                 )
@@ -163,7 +190,7 @@ def parse(document: Any) -> dict[str, Operation]:
                 feature=extension.get("feature") if isinstance(extension.get("feature"), str) else None,
                 concepts=tuple(c for c in extension.get("concepts", []) if isinstance(c, str)),
                 related_operations=tuple(c for c in extension.get("related_operations", []) if isinstance(c, str)),
-                example=extension.get("example", entry.get("x-example")),
+                example=extension.get("example", _response_example(document, entry)),
                 params=tuple(params),
                 response_schema=_response_schema(document, entry),
                 raw=entry,

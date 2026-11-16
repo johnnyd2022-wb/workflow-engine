@@ -29,7 +29,10 @@ DATA = {
         ("items[*].name", ["Gin", "Vodka", "No id"]),
         ("items[*].id", ["a", "b"]),  # an element without the field is dropped, like JMESPath
         ("items[*].qty", [0, 5]),  # zero is a value, not a missing field
-        ("items[*].{id: id, n: name}", [{"id": "a", "n": "Gin"}, {"id": "b", "n": "Vodka"}, {"id": None, "n": "No id"}]),
+        (
+            "items[*].{id: id, n: name}",
+            [{"id": "a", "n": "Gin"}, {"id": "b", "n": "Vodka"}, {"id": None, "n": "No id"}],
+        ),
         ("meta.{c: count, nxt: next}", {"c": 3, "nxt": None}),
         ('"odd key"', 7),
         ("items[9]", None),

@@ -146,7 +146,6 @@ def test_config_rejects_non_http_urls(field):
 
 def test_an_sdk_client_can_list_and_call_tools(world, app_transport, admin_token):
     """The official client, over the ASGI app, with only a bearer header: initialize, list, call."""
-    import asyncio
 
     from mcp.client import Client
     from mcp.client.streamable_http import streamable_http_client
@@ -162,7 +161,10 @@ def test_an_sdk_client_can_list_and_call_tools(world, app_transport, admin_token
         async with http:
             async with Client(streamable_http_client("https://mcp.test/mcp", http_client=http)) as client:
                 listed = await client.list_tools()
-                called = await client.call_tool("search_inventory", {"query": "Juniper"})
+                called = await client.call_tool(
+                    "execute",
+                    {"calls": [{"id": "a", "operation_id": "list_inventory", "params": {"type": "raw_material"}}]},
+                )
                 return listed, called
 
     with Mcp(app_transport) as mcp:
@@ -170,4 +172,4 @@ def test_an_sdk_client_can_list_and_call_tools(world, app_transport, admin_token
         listed, called = mcp.run(drive(mcp))
     assert {tool.name for tool in listed.tools} == ALL_TOOLS
     assert not called.is_error
-    assert any("Juniper" in str(row) for row in called.structured_content["rows"])
+    assert "Org A Juniper" in str(called.structured_content["results"][0]["data"])

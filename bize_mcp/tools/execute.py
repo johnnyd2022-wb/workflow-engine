@@ -32,7 +32,7 @@ from urllib.parse import quote
 
 from bize_mcp.auth import token_key
 from bize_mcp.catalogue import Operation
-from bize_mcp.errors import ToolFailure, Unauthorized
+from bize_mcp.errors import ToolFailureError
 from bize_mcp.select import SelectError, compile_expression, evaluate
 from bize_mcp.shaping import MAX_ROWS, clip
 from bize_mcp.tools.base import Tool, ToolContext
@@ -107,7 +107,12 @@ def _safe(text: str, limit: int = 80) -> str:
 
 
 def _error(call: dict, kind: str, message: str, **extra: Any) -> dict[str, Any]:
-    return {"id": call["id"], "operation_id": call["operation_id"], "ok": False, "error": {"kind": kind, "message": message, **extra}}
+    return {
+        "id": call["id"],
+        "operation_id": call["operation_id"],
+        "ok": False,
+        "error": {"kind": kind, "message": message, **extra},
+    }
 
 
 def _resolve_references(params: dict[str, Any], done: dict[str, Any], failed: set[str]) -> dict[str, Any]:
@@ -116,21 +121,25 @@ def _resolve_references(params: dict[str, Any], done: dict[str, Any], failed: se
     for name, value in params.items():
         if isinstance(value, dict) and "$from" in value:
             if set(value) - {"$from", "path"} or not isinstance(value["$from"], str):
-                raise ToolFailure(f"{name}: a reference looks like {{\"$from\": \"<id>\", \"path\": \"...\"}}.", kind="invalid_input")
+                raise ToolFailureError(
+                    f'{name}: a reference looks like {{"$from": "<id>", "path": "..."}}.', kind="invalid_input"
+                )
             source = value["$from"]
             if source in failed:
-                raise ToolFailure(f"{name}: the call it needs ({source}) did not succeed.", kind="dependency_failed")
+                raise ToolFailureError(
+                    f"{name}: the call it needs ({source}) did not succeed.", kind="dependency_failed"
+                )
             if source not in done:
-                raise ToolFailure(f"{name}: {source} is not an earlier call.", kind="invalid_input")
+                raise ToolFailureError(f"{name}: {source} is not an earlier call.", kind="invalid_input")
             path = value.get("path")
             try:
                 found = evaluate(compile_expression(path, allow_hash=False), done[source]) if path else done[source]
             except SelectError as error:
-                raise ToolFailure(f"{name}: {error}", kind="invalid_input") from None
+                raise ToolFailureError(f"{name}: {error}", kind="invalid_input") from None
             if found is None:
-                raise ToolFailure(f"{name}: nothing was found at that path in {source}.", kind="dependency_failed")
+                raise ToolFailureError(f"{name}: nothing was found at that path in {source}.", kind="dependency_failed")
             if isinstance(found, (dict, list)):
-                raise ToolFailure(f"{name}: the path must lead to a single value.", kind="invalid_input")
+                raise ToolFailureError(f"{name}: the path must lead to a single value.", kind="invalid_input")
             resolved[name] = found
         else:
             resolved[name] = value
@@ -140,7 +149,7 @@ def _resolve_references(params: dict[str, Any], done: dict[str, Any], failed: se
 def _segment(name: str, value: Any) -> str:
     text = str(value)
     if isinstance(value, bool) or not text or text in {".", ".."} or _BAD_SEGMENT.search(text) or len(text) > 200:
-        raise ToolFailure(f"Invalid input: {name} is not a valid value for the URL.", kind="invalid_input")
+        raise ToolFailureError(f"Invalid input: {name} is not a valid value for the URL.", kind="invalid_input")
     return quote(text, safe=":")
 
 
@@ -164,7 +173,7 @@ def _build(op: Operation, params: dict[str, Any]) -> tuple[str, list[tuple[str, 
             for item in value if isinstance(value, list) else [value]:
                 query.append((name, "true" if item is True else "false" if item is False else str(item)))
     if "{" in path:
-        raise ToolFailure("Invalid input: a path parameter is missing.", kind="invalid_input")
+        raise ToolFailureError("Invalid input: a path parameter is missing.", kind="invalid_input")
     return path, query
 
 
@@ -193,6 +202,7 @@ def _longest_list(value: Any, found: list | None = None) -> list | None:
 
 def _fit(results: list[dict], notes: list[str]) -> None:
     """Shrink ``results`` in place until the output is under the byte limit."""
+
     def size() -> int:
         return len(json.dumps(results, separators=(",", ":")))
 
@@ -213,7 +223,9 @@ def _fit(results: list[dict], notes: list[str]) -> None:
         notes.append("Output was over 256 KB, so some rows were left out. Narrow it with select or filters.")
 
 
-async def _one(ctx: ToolContext, call: dict, operations: dict[str, Operation], done: dict, failed: set, deadline: float):
+async def _one(
+    ctx: ToolContext, call: dict, operations: dict[str, Operation], done: dict, failed: set, deadline: float
+):
     operation = operations.get(call["operation_id"])
     if operation is None:
         return _error(call, "not_found", "Not found"), None
@@ -226,7 +238,7 @@ async def _one(ctx: ToolContext, call: dict, operations: dict[str, Operation], d
         expression = compile_expression(call["select"]) if call.get("select") else None
     except SelectError as error:
         return _error(call, "invalid_input", str(error)), None
-    except ToolFailure as error:
+    except ToolFailureError as error:
         return _error(call, error.kind, error.message), None
     try:
         raw = await asyncio.wait_for(
@@ -235,7 +247,7 @@ async def _one(ctx: ToolContext, call: dict, operations: dict[str, Operation], d
         )
     except TimeoutError:
         return _error(call, "timeout", "Biz-E took too long to answer this call."), None
-    except ToolFailure as error:
+    except ToolFailureError as error:
         extra = {"retry_after_seconds": error.retry_after_seconds} if error.kind == "rate_limited" else {}
         return _error(call, error.kind, error.message, **extra), None
     notes: list[str] = []
@@ -259,11 +271,13 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     calls = args["calls"]
     ids = [c["id"] for c in calls]
     if len(set(ids)) != len(ids):
-        raise ToolFailure("Each call needs its own id.", kind="invalid_input")
+        raise ToolFailureError("Each call needs its own id.", kind="invalid_input")
     wait = _windows.hit(token_key(ctx.token), time.monotonic())
     if wait is not None:
-        raise ToolFailure(
-            f"Too many execute calls this minute. Try again in {wait} seconds.", kind="rate_limited", retry_after_seconds=wait
+        raise ToolFailureError(
+            f"Too many execute calls this minute. Try again in {wait} seconds.",
+            kind="rate_limited",
+            retry_after_seconds=wait,
         )
     started = time.monotonic()
     deadline = started + TOTAL_SECONDS

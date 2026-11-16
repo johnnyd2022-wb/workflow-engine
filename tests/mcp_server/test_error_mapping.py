@@ -41,7 +41,9 @@ def test_ac28_a_revoked_token_makes_the_mcp_response_a_401(world, mcp, admin_tok
     world.db.query(OAuthToken).filter(OAuthToken.org_id == world.org.id).update({"revoked_at": datetime.now(UTC)})
     world.db.commit()
     response = mcp.rpc(
-        admin_token, "tools/call", {"name": "execute", "arguments": {"calls": [{"id": "a", "operation_id": "list_open_holds"}]}}
+        admin_token,
+        "tools/call",
+        {"name": "execute", "arguments": {"calls": [{"id": "a", "operation_id": "list_open_holds"}]}},
     )
     assert response.status_code == 401
     challenge = response.headers["www-authenticate"]
@@ -68,7 +70,9 @@ def test_ac28_an_app_401_on_a_call_is_an_http_401_not_a_tool_error():
     with Mcp(StubTransport(handler)) as mcp:
         assert mcp.tools("bza_x")
         response = mcp.rpc(
-            "bza_x", "tools/call", {"name": "execute", "arguments": {"calls": [{"id": "a", "operation_id": "list_open_holds"}]}}
+            "bza_x",
+            "tools/call",
+            {"name": "execute", "arguments": {"calls": [{"id": "a", "operation_id": "list_open_holds"}]}},
         )
     assert response.status_code == 401
     assert RESOURCE_METADATA in response.headers["www-authenticate"]
@@ -79,12 +83,17 @@ def test_ac28_an_app_401_on_a_call_is_an_http_401_not_a_tool_error():
 
 def test_ac28_turning_the_org_off_gives_a_plain_error(world, mcp, admin_token):
     world.enable(False)
-    for result in (mcp.execute(admin_token, {"id": "a", "operation_id": "list_open_holds"}), mcp.discover(admin_token, "x")):
+    for result in (
+        mcp.execute(admin_token, {"id": "a", "operation_id": "list_open_holds"}),
+        mcp.discover(admin_token, "x"),
+    ):
         assert result.is_error
         assert "AI assistant access" in result.text
         assert "mcp_not_allowed" not in result.text and "403" not in result.text
     world.enable(True)
-    assert mcp.execute(admin_token, {"id": "a", "operation_id": "list_open_holds"}).results[0]["ok"], "same token works again"
+    assert mcp.execute(admin_token, {"id": "a", "operation_id": "list_open_holds"}).results[0]["ok"], (
+        "same token works again"
+    )
 
 
 def test_ac28_an_unticked_role_gives_the_same_plain_error(world, mcp):
@@ -124,13 +133,17 @@ def test_ac28_the_real_app_refuses_a_role_the_catalogue_did_not_hide(world, mcp)
 
 
 def test_ac28_a_missing_record_is_not_found(world, mcp, admin_token):
-    entry = mcp.execute(admin_token, {"id": "a", "operation_id": "get_execution", "params": {"execution_id": str(uuid4())}}).results[0]
+    entry = mcp.execute(
+        admin_token, {"id": "a", "operation_id": "get_execution", "params": {"execution_id": str(uuid4())}}
+    ).results[0]
     assert entry["error"] == {"kind": "not_found", "message": "Not found"}
 
 
 def test_ac28_a_404_on_an_operation_with_no_id_means_not_available_for_the_org():
     _, entry = run_holds(stub_app({HOLDS: json_response(404, {"error": "Not found"})}))
-    assert entry["error"]["kind"] == "not_available" and "Not available for your organisation" in entry["error"]["message"]
+    assert (
+        entry["error"]["kind"] == "not_available" and "Not available for your organisation" in entry["error"]["message"]
+    )
 
 
 # ----------------------------------------------------------------------------------------- 429
@@ -153,7 +166,7 @@ def test_ac28_the_121st_request_in_a_minute_on_one_grant_is_a_429_tool_error(wor
     from app.features.mcp_oauth.services import rate_limit
 
     grant_id = world.db.query(OAuthGrant).filter(OAuthGrant.org_id == world.org.id).first().id
-    for _ in range(118):  # the identity and catalogue lookups below make two more; the holds call is the 121st
+    for _ in range(119):  # the identity lookup makes the 120th request; the holds call is the 121st
         rate_limit.hit_bearer(grant_id)
     entry = mcp.execute(admin_token, {"id": "a", "operation_id": "list_open_holds"}).results[0]
     assert entry["ok"] is False and entry["error"]["kind"] == "rate_limited"

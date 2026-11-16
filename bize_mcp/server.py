@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -34,9 +35,9 @@ from bize_mcp.auth import IdentityCache
 from bize_mcp.catalogue import Catalogue
 from bize_mcp.client import AppClient
 from bize_mcp.config import METADATA_PATH, Config
-from bize_mcp.errors import ToolFailure, Unauthorized
+from bize_mcp.errors import ToolFailureError, UnauthorizedError
 from bize_mcp.knowledge import Knowledge
-from bize_mcp.logging_setup import configure_logging, install_redaction
+from bize_mcp.logging_setup import configure_logging, install_redaction, redact
 from bize_mcp.shaping import clip_text
 from bize_mcp.tools import TOOLS, ToolContext
 from bize_mcp.validation import check_arguments
@@ -93,10 +94,10 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
         current = state()
         try:
             await identities.identity_for(current.token)  # a bad token is a 401 here, not at the first call
-        except Unauthorized:
+        except UnauthorizedError:
             current.unauthorized = True
             return types.ListToolsResult(tools=[])
-        except ToolFailure as failure:
+        except ToolFailureError as failure:
             raise MCPError(types.INVALID_REQUEST, failure.message) from None
         return types.ListToolsResult(tools=listed())
 
@@ -111,10 +112,10 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
             identity = await identities.identity_for(current.token)
             tool_context = ToolContext(client, current.token, identity, catalogue, knowledge)
             structured = await tool.handler(tool_context, arguments)
-        except Unauthorized:
+        except UnauthorizedError:
             current.unauthorized = True
             return _failure("Your Biz-E sign-in is no longer valid.", {"error": {"kind": "unauthorized"}})
-        except ToolFailure as failure:
+        except ToolFailureError as failure:
             logger.info("tool_call tool=%s outcome=%s", tool.name, failure.kind)
             return _failure(failure.message, failure.as_data())
         logger.info("tool_call tool=%s outcome=ok ms=%d", tool.name, (time.monotonic() - started) * 1000)
@@ -130,16 +131,31 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
     return server, identities
 
 
-def _success(structured: dict[str, Any]) -> types.CallToolResult:
-    import json
+def _scrub(structured: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The result as JSON text and as an object, with anything shaped like a token removed.
 
-    text = json.dumps(structured, separators=(",", ":"), ensure_ascii=False)
-    return types.CallToolResult(content=[types.TextContent(type="text", text=text)], structured_content=structured)
+    A token can only get here if the model typed it into an argument that is echoed back; this keeps
+    "no token in any output" true whatever the input was.
+    """
+    text = redact(json.dumps(structured, separators=(",", ":"), ensure_ascii=False))
+    return text, json.loads(text)
+
+
+def _success(structured: dict[str, Any]) -> types.CallToolResult:
+    text, data = _scrub(structured)
+    # ``execute`` reports ``ok: false`` when any of its calls failed: the results are still all there.
+    failed = data.get("ok") is False
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=text)], structured_content=data, is_error=failed
+    )
 
 
 def _failure(message: str, data: dict[str, Any]) -> types.CallToolResult:
+    _, data = _scrub(data)
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=clip_text(message, 500))], structured_content=data, is_error=True
+        content=[types.TextContent(type="text", text=redact(clip_text(message, 500)))],
+        structured_content=data,
+        is_error=True,
     )
 
 
@@ -158,7 +174,9 @@ class McpEndpoint:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
         token = _bearer(headers)
         if token is None:
-            await JSONResponse({"error": "unauthorized"}, status_code=401, headers=self.challenge())(scope, receive, send)
+            await JSONResponse({"error": "unauthorized"}, status_code=401, headers=self.challenge())(
+                scope, receive, send
+            )
             return
         current = _RequestState(token)
         reset = _current.set(current)
@@ -180,7 +198,9 @@ class McpEndpoint:
             _current.reset(reset)
 
 
-def create_app(config: Config, *, transport: httpx2.AsyncBaseTransport | None = None, knowledge: Knowledge | None = None):
+def create_app(
+    config: Config, *, transport: httpx2.AsyncBaseTransport | None = None, knowledge: Knowledge | None = None
+):
     install_redaction()
     client = AppClient(config, transport=transport)
     knowledge = knowledge or Knowledge.load(Path(config.knowledge_dir))

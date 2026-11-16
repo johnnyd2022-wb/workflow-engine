@@ -36,7 +36,7 @@ def test_the_token_is_forwarded_only_in_the_authorization_header(world, mcp, adm
     mcp.docs(admin_token, operation_id="list_inventory")
     mcp.execute(
         admin_token,
-        one("list_inventory", {"q": "Juniper"}, "a"),
+        one("list_inventory", {"type": "raw_material"}, "a"),
         one("list_open_holds", call_id="b"),
         one("get_execution", {"execution_id": str(uuid4())}, "c"),
     )
@@ -115,21 +115,28 @@ def test_ac27a_no_token_in_any_output_or_log_line_over_a_full_session(caplog):
 
 def test_ac27a_each_execute_writes_one_audit_event_with_the_operation_ids_and_no_values(caplog):
     caplog.set_level(logging.INFO, logger="bize_mcp.audit")
-    transport = stub_app({HOLDS: json_response(200, {"holds": []}), "/api/core/processes": json_response(200, {"processes": []})})
+    transport = stub_app(
+        {HOLDS: json_response(200, {"holds": []}), "/api/core/processes": json_response(200, {"processes": []})}
+    )
     with Mcp(transport) as mcp:
         mcp.execute(
             TOKEN,
             one("list_open_holds", call_id="a"),
             one("list_processes", call_id="b"),
         )
-        mcp.execute(TOKEN, one("list_inventory", {"q": "my secret recipe"}))
+        mcp.execute(TOKEN, one("list_inventory", {"cursor": "my secret recipe"}))
     events = [r.getMessage() for r in caplog.records if r.name == "bize_mcp.audit"]
     assert len(events) == 2
     assert events[0].startswith("mcp.execute ")
     assert "operations=list_open_holds,list_processes" in events[0]
-    assert "user=u1" in events[0] and "org=o1" in events[0] and "client=client-1" in events[0] and "grant=grant-1" in events[0]
+    assert (
+        "user=u1" in events[0]
+        and "org=o1" in events[0]
+        and "client=client-1" in events[0]
+        and "grant=grant-1" in events[0]
+    )
     assert "statuses=ok,ok" in events[0] and "duration_ms=" in events[0]
-    assert "param_names=q" in events[1]
+    assert "param_names=cursor" in events[1]
     assert "my secret recipe" not in "\n".join(events)
 
 
@@ -218,10 +225,10 @@ def test_query_values_are_sent_as_query_parameters_and_only_declared_ones():
         return base.handler(request)
 
     with Mcp(StubTransport(handler)) as mcp:
-        mcp.execute(TOKEN, one("list_inventory", {"q": "a&limit=1000&cursor=x#y"}))
+        mcp.execute(TOKEN, one("list_inventory", {"cursor": "a&limit=1000&x#y"}))
     assert len(seen) == 1
     params = dict(seen[0].url.params.multi_items())
-    assert params == {"q": "a&limit=1000&cursor=x#y", "limit": "50"}
+    assert params == {"cursor": "a&limit=1000&x#y", "limit": "50"}
     assert seen[0].url.path == "/api/core/inventory"
 
 

@@ -159,6 +159,8 @@ HTTP Request
   A request may carry `Authorization: Bearer bza_…` instead of a session: `tenant_context` resolves it, and
   `access_policy.token_access` limits it to GET/HEAD on routes whose rule names a view permission
   (`READ_PERMISSIONS`). Spec `.agents/specs/public-mcp.md`.
+  The assistant-facing server is a separate package, `bize_mcp/` (three tools: `discover`, `docs`, `execute`; its
+  SDK is the optional `mcp` extra: `uv sync --extra dev --extra mcp`), documented in `docs/public-mcp-server.md`.
 
 `/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 

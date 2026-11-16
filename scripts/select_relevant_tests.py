@@ -185,6 +185,19 @@ RULES = (
         ("app/features/process_templates/**",),
         ("tests/test_process_templates.py", "tests/test_process_design.py"),
     ),
+    Rule(
+        "Public MCP server",
+        ("bize_mcp/**", "docs/knowledge/**"),
+        (
+            "tests/mcp_server/test_discover_docs.py",
+            "tests/mcp_server/test_error_mapping.py",
+            "tests/mcp_server/test_execute.py",
+            "tests/mcp_server/test_isolation.py",
+            "tests/mcp_server/test_protocol.py",
+            "tests/mcp_server/test_security.py",
+            "tests/mcp_server/test_select.py",
+        ),
+    ),
     Rule("Demo data product", ("app/features/demo_data/**",), ("tests/test_demo_data.py",)),
     Rule(
         "Observability",

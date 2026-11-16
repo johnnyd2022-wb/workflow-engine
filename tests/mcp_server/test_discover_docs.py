@@ -133,14 +133,14 @@ def test_ac27_docs_operation_returns_its_schema_and_related_operations(mcp, admi
     data = result.data
     assert data["operation_id"] == "list_inventory" and data["method"] == "GET"
     names = {p["name"]: p for p in data["parameters"]}
-    assert {"type", "site_id", "q", "limit", "cursor"} == set(names)
+    assert {"type", "site_id", "limit", "cursor"} == set(names)
     assert names["type"]["schema"]["enum"] == ["raw_material", "work_in_progress", "final_product"]
     assert names["limit"]["schema"]["maximum"] == 50
     assert data["response_schema"]["type"] == "object"
     assert data["concepts"] == ["inventory.availability"]
     assert data["concept_topics"] == ["inventory.availability"]
     assert data["related_operations"] == ["get_stock_position", "trace_inventory_backward"]
-    assert data["example"] == {"params": {"q": "juniper", "limit": 10}}
+    assert data["example"] == {"params": {"type": "raw_material", "limit": 10}}
     assert "path" not in data, "the model works with operation ids, never routes"
 
 
