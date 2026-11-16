@@ -1277,7 +1277,7 @@ missing; never a silent $0.
   - [ ] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
     (every `/api/` route, its permission and domain), with `x-bize` business metadata and full,
     tested schemas for the operations assistants can use. Served at `/api/openapi.json`.
-  - [ ] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
+  - [x] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
     models stock, batches, tracing, compliance, sales and cost, read by the model on demand.
   - [ ] h. **OAuth security check.** RFC 9700 best practice and the latest MCP authorization
     revision: `iss` on authorization responses (RFC 9207), Google and 2FA-enrolment return to
