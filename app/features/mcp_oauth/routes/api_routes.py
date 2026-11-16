@@ -30,6 +30,24 @@ def _can_manage_people() -> bool:
     return has_permission(g.current_user, "users.manage")
 
 
+def _enabled_features() -> list[str]:
+    """The optional products this organisation has (what an assistant should expect to find)."""
+    from flask import current_app
+
+    from app.core.security.entitlements import org_has_feature
+
+    available = current_app.extensions.get("product_availability", {})
+    db = db_session()
+    found = []
+    if available.get("crm"):
+        found.append("crm")
+    if available.get("compliant") and org_has_feature(db, g.current_org_id, "compliant"):
+        found.append("compliant")
+    if org_has_feature(db, g.current_org_id, "costing"):
+        found.append("costing")
+    return found
+
+
 @mcp_bp.get("/me")
 @requires_auth
 def get_me():
@@ -42,7 +60,10 @@ def get_me():
             "org": {"id": str(g.current_org_id), "name": g.org_name},
             "role_label": role_label_for(user),
             "permissions": sorted(permissions_for(user) & READ_PERMISSIONS),
+            "features": _enabled_features(),
             "scope": g.mcp_scope if g.auth_via == "mcp" else None,
+            "client_id": g.mcp_client_id if g.auth_via == "mcp" else None,
+            "grant_id": str(g.mcp_grant_id) if g.auth_via == "mcp" else None,
             "auth": g.auth_via,
         }
     )

@@ -22,9 +22,9 @@ def token_for(world: World, who: str = "admin", *, user=None) -> str:
 
 @pytest.fixture
 def app_transport(world):
-    from tests.mcp_server.support import FlaskTransport
+    from tests.mcp_server.support import CatalogueTransport, FlaskTransport
 
-    return FlaskTransport(world.app)
+    return CatalogueTransport(FlaskTransport(world.app))
 
 
 @pytest.fixture
