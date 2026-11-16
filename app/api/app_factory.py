@@ -226,10 +226,11 @@ def create_app():
 
     # Public MCP 8.2b: the app is the OAuth authorization server for AI assistants, and serves the
     # org's switch and connected-apps API. Always mounted; each org is off until an admin turns it on.
-    from app.features.mcp_oauth.routes import mcp_bp, oauth_bp
+    from app.features.mcp_oauth.routes import mcp_bp, oauth_bp, pages_bp
 
     app.register_blueprint(oauth_bp)
     app.register_blueprint(mcp_bp)
+    app.register_blueprint(pages_bp)  # 8.2e: Settings -> AI assistants
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
