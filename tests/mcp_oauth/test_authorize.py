@@ -137,8 +137,7 @@ def test_ac5_signed_out_authorize_lands_on_login_and_returns_to_consent_after_pa
     parsed = urlparse(location)
     assert parsed.path == "/"
     query = parse_qs(parsed.query)
-    assert query["login"] == ["1"]
-    assert query["next"] == [original]  # the whole request, so consent sees the same parameters
+    assert query == {"login": ["1"]}  # 8.2h: the request waits in the session, never in the URL
 
     landing = _landing_page(location)
     assert landing.status_code == 200
@@ -150,19 +149,12 @@ def test_ac5_signed_out_authorize_lands_on_login_and_returns_to_consent_after_pa
     verified = browser.post("/auth/verify-2fa", json={"token": pyotp.TOTP(secret).now()})
     assert verified.status_code == 200
 
-    consent = browser.get(query["next"][0])
+    assert verified.get_json()["next"].startswith("/oauth/authorize?")
+    consent = browser.get(verified.get_json()["next"])
     assert consent.status_code == 200
     html = consent.get_data(as_text=True)
     assert 'value="approve"' in html
     assert world.client_row.client_name in html
-
-
-def test_ac5_the_landing_page_only_follows_a_next_that_stays_on_oauth_authorize(world):
-    """The landing script's guard, checked as text: next is only used when it starts with
-    /oauth/authorize? (a path on this site), so the sign-in page is not an open redirect."""
-    html = _landing_page("/").get_data(as_text=True)
-    assert "/oauth/authorize?" in html
-    assert "postLoginTarget" in html
 
 
 # --- AC6 ----------------------------------------------------------------------------------------
