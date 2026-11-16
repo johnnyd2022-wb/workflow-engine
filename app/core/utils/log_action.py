@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from flask import g
+from flask import g, has_app_context
 
 from app.core.db import SessionLocal
 from app.core.db.repositories.audit_repo import AuditRepository
@@ -25,12 +25,14 @@ def log_action(
     Automatically extracts org_id and user_id from Flask g if not provided.
     Note: Uses a separate session to avoid interfering with the request session.
     """
-    # Get org_id and user_id from Flask g if not provided
-    if org_id is None and hasattr(g, "current_org_id") and g.current_org_id:
-        org_id = g.current_org_id
+    # Get org_id and user_id from Flask g if not provided. Outside a request (the CLI) there is
+    # no app context and touching `g` raises, so only read it when one exists.
+    if has_app_context():
+        if org_id is None and hasattr(g, "current_org_id") and g.current_org_id:
+            org_id = g.current_org_id
 
-    if user_id is None and hasattr(g, "current_user") and g.current_user:
-        user_id = g.current_user.id
+        if user_id is None and hasattr(g, "current_user") and g.current_user:
+            user_id = g.current_user.id
 
     # Only log if we have an org_id
     if not org_id:
