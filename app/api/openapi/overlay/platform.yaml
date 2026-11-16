@@ -1,0 +1,21 @@
+# OpenAPI overlay: the platform domain. The dashboard, the change feed and the cross-cutting findings.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  core_list_system_findings:
+    summary: List the findings that need attention
+    description: >-
+      Banner-ready findings, such as expired stock or a missing record, for the banner on the Production
+      overview. Served from a per-organisation cache that is refreshed after any change to stock, batches
+      or workflows.
+  core_reset_demo_db_route:
+    summary: Reset the demo organisation's data
+    description: >-
+      Replaces the demo organisation's data with a fresh demo set. It does nothing for any other
+      organisation, and it is only available in the local and test environments.
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  core_get_dashboard_summary:
+    summary: Get dashboard summary
+  getting_started_get_getting_started:
+    summary: Get getting started

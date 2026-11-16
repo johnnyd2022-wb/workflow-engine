@@ -1,0 +1,58 @@
+# OpenAPI overlay: the contracts domain. Contract manufacturing: customers, orders, materials and dispatches.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+operations:
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  contracts_create_customer:
+    summary: Create customer
+  contracts_create_line:
+    summary: Create line
+  contracts_create_order:
+    summary: Create order
+  contracts_dispatch_order:
+    summary: Dispatch order
+  contracts_get_order:
+    summary: Get order
+  contracts_link_batch:
+    summary: Link batch
+  contracts_list_customers:
+    summary: List customers
+  contracts_list_dispatches:
+    summary: List dispatches
+  contracts_list_materials:
+    summary: List materials
+  contracts_list_orders:
+    summary: List orders
+  contracts_portal_issue_invite:
+    summary: Portal issue invite
+  contracts_portal_list_people:
+    summary: Get portal list people
+  contracts_portal_publish_order:
+    summary: Portal publish order
+  contracts_portal_request_approval:
+    summary: Portal request approval
+  contracts_portal_revoke_document:
+    summary: Portal revoke document
+  contracts_portal_revoke_invite:
+    summary: Portal revoke invite
+  contracts_portal_revoke_person:
+    summary: Portal revoke person
+  contracts_portal_send_message:
+    summary: Portal send message
+  contracts_portal_unpublish_order:
+    summary: Portal unpublish order
+  contracts_portal_upload_document:
+    summary: Portal upload document
+  contracts_receive_customer_material:
+    summary: Receive customer material
+  contracts_record_dispatch_receipt:
+    summary: Record dispatch receipt
+  contracts_unlink_batch:
+    summary: Unlink batch
+  contracts_update_customer:
+    summary: Update customer
+  contracts_update_line:
+    summary: Update line
+  contracts_update_order:
+    summary: Update order

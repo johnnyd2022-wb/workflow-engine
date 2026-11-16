@@ -565,6 +565,7 @@ ENDPOINT_COVERAGE = {
     ("oauth.revoke", "POST"): "blocked",
     ("mcp.get_me", "GET"): "blocked",
     ("mcp.get_settings", "GET"): "blocked",
+    ("openapi.get_openapi", "GET"): "blocked",
     ("mcp.update_settings", "PUT"): "blocked",
     ("mcp.list_grants", "GET"): "blocked",
     ("mcp.revoke_grant", "POST"): "blocked",
