@@ -26,9 +26,11 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 KNOWLEDGE_DIR = REPO / "docs" / "knowledge"
 OPENAPI_JSON = REPO / "docs" / "openapi.json"
-OVERLAY_DIR = REPO / "app" / "api" / "openapi" / "overlay"
 
 # The first set, by domain (spec §"Business knowledge", "First set"). Topic id = <domain>.<topic>.
+# `planning` is not in the spec's list: the planner's cover and batches are layer-3 operations the spec
+# names, and 8.2f's overlay already tags them with these two concepts.
+SPEC_DOMAINS = {"inventory", "production", "traceability", "compliance", "sales", "costing"}
 FIRST_SET = {
     "inventory": [
         "lots",
@@ -54,6 +56,7 @@ FIRST_SET = {
         "xero_bridge",
         "overheads",
     ],
+    "planning": ["stock_cover", "planned_batches"],
 }
 FIRST_SET_IDS = sorted(f"{domain}.{name}" for domain, names in FIRST_SET.items() for name in names)
 ALL_IDS = ["overview", *FIRST_SET_IDS]
@@ -149,6 +152,12 @@ def _all_operations() -> dict[str, str]:
     return found
 
 
+@functools.cache
+def _openapi_operations() -> list[dict]:
+    paths = json.loads(OPENAPI_JSON.read_text(encoding="utf-8")).get("paths", {})
+    return [op for item in paths.values() for op in item.values() if isinstance(op, dict) and "operationId" in op]
+
+
 def _words(text: str) -> int:
     return len(re.findall(r"[A-Za-z0-9'’-]+", text))
 
@@ -162,7 +171,7 @@ def test_ac40_first_set_topics_exist():
 
 
 def test_ac40_first_set_covers_every_spec_domain():
-    assert set(FIRST_SET) == {"inventory", "production", "traceability", "compliance", "sales", "costing"}
+    assert set(FIRST_SET) == SPEC_DOMAINS | {"planning"}
 
 
 def test_ac40_the_knowledge_dir_holds_only_markdown_topics():
@@ -273,15 +282,33 @@ def test_ac40_the_overview_reaches_every_domain():
     assert {t.split(".")[0] for t in data["related_topics"]} == set(FIRST_SET)
 
 
-@pytest.mark.skipif(not OVERLAY_DIR.is_dir(), reason="no OpenAPI overlay yet (8.2f has not merged)")
-def test_ac40_every_overlay_concept_has_a_topic():
-    concepts: set[str] = set()
-    for overlay in sorted(OVERLAY_DIR.glob("*.yaml")):
-        concepts |= set(re.findall(r"^\s*-\s*([a-z]+\.[a-z][a-z0-9_]*)\s*$", overlay.read_text(), flags=re.M))
-        for listed in re.findall(r"concepts:\s*\[([^\]]*)\]", overlay.read_text()):
-            concepts |= {c.strip().strip("'\"") for c in listed.split(",") if c.strip()}
+_NO_OPENAPI = "docs/openapi.json is not on this branch yet (8.2f, MR !722): checked against the app's URL map instead"
+
+
+@pytest.mark.skipif(not OPENAPI_JSON.is_file(), reason=_NO_OPENAPI)
+def test_ac40_every_x_bize_concept_has_a_topic():
+    concepts = {c for op in _openapi_operations() for c in op.get("x-bize", {}).get("concepts", [])}
+    assert concepts, "the OpenAPI document tags no operation with a concept"
     topics = {p.stem for p in KNOWLEDGE_DIR.glob("*.md")}
-    assert sorted(c for c in concepts if TOPIC_ID.match(c) and c not in topics) == []
+    assert sorted(concepts - topics) == []
+
+
+@pytest.mark.skipif(not OPENAPI_JSON.is_file(), reason=_NO_OPENAPI)
+@pytest.mark.parametrize("topic", FIRST_SET_IDS)
+def test_ac40_related_operations_are_ones_an_assistant_may_run(topic):
+    """Pointing an assistant at an operation its allowlist refuses would only waste its calls."""
+    data, _ = _load(topic)
+    allowed = {op["operationId"] for op in _openapi_operations() if op.get("x-bize", {}).get("mcp")}
+    assert sorted(set(data["related_operations"]) - allowed) == []
+
+
+@pytest.mark.skipif(not OPENAPI_JSON.is_file(), reason=_NO_OPENAPI)
+@pytest.mark.parametrize("topic", FIRST_SET_IDS)
+def test_ac40_a_topic_lists_the_operations_that_are_tagged_with_it(topic):
+    """The OpenAPI document says which operations belong to a concept; the topic must list them."""
+    data, _ = _load(topic)
+    tagged = {op["operationId"] for op in _openapi_operations() if topic in op.get("x-bize", {}).get("concepts", [])}
+    assert sorted(tagged - set(data["related_operations"])) == []
 
 
 # --- what must never be in these docs ----------------------------------------------------------------------
