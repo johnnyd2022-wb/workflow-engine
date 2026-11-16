@@ -155,16 +155,24 @@ def parse_authorize(db, args) -> AuthorizeRequest:
     )
 
 
-def consent_block_reason(db, user, client: OAuthClient) -> str | None:
-    """Why this person may not approve an assistant right now, or ``None`` when they may."""
+def connect_block_reason(db, user) -> str | None:
+    """Why this person cannot connect any assistant right now (the org's switch, their role), else ``None``.
+
+    The consent page and the Settings page say the same thing, so they share this.
+    """
     org_id = user.org_id
-    if client.disabled_at is not None:
-        return MESSAGE_CLIENT_DISABLED
     if not SettingsRepository(db).is_enabled(org_id):
         return MESSAGE_ORG_OFF
     if not is_allowed_for(db, org_id, user):
         return MESSAGE_ROLE
     return None
+
+
+def consent_block_reason(db, user, client: OAuthClient) -> str | None:
+    """Why this person may not approve an assistant right now, or ``None`` when they may."""
+    if client.disabled_at is not None:
+        return MESSAGE_CLIENT_DISABLED
+    return connect_block_reason(db, user)
 
 
 def readable_summary(user) -> list[str]:

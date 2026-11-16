@@ -1272,8 +1272,8 @@ missing; never a silent $0.
     no model-written code), all filtered to what the person may see.
   - [ ] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
     `mcp.biz-e.app` / `mcp-test.biz-e.app`.
-  - [ ] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
-    revoke.
+  - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
+    revoke. (!720)
   - [ ] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
     (every `/api/` route, its permission and domain), with `x-bize` business metadata and full,
     tested schemas for the operations assistants can use. Served at `/api/openapi.json`.
