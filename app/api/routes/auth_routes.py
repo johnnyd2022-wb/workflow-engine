@@ -257,6 +257,7 @@ def signup():
         auth_service = AuthService(db)
         session_data = auth_service.generate_session(user)
         rotate_session()
+        pending_authorization.clear()  # a new account is not signing in for an assistant's request
         session.update(session_data)
 
         # Extract values before any potential session issues

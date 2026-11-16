@@ -340,6 +340,14 @@ def test_ac42_a_request_too_big_for_a_cookie_is_not_stored(world):
         assert pending_authorization.SESSION_KEY not in s
 
 
+def test_ac42_the_size_cap_counts_the_escaped_bytes_of_non_ascii_text(world):
+    browser = world.anon()
+    _params, url, _v = _request(world, state="é" * 400)  # 400 characters, about 2.4 KB once escaped
+    browser.get(url)
+    with browser.session_transaction() as s:
+        assert pending_authorization.SESSION_KEY not in s
+
+
 def test_ac42_one_browsers_pending_request_is_not_another_browsers(world):
     _params, url, _v = _request(world)
     first, second = world.anon(), world.anon()

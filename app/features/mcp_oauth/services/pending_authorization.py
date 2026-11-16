@@ -9,6 +9,7 @@ The endpoint then validates the request from scratch, so nothing stored here is 
 
 from __future__ import annotations
 
+import json
 import time
 from urllib.parse import urlencode
 
@@ -17,8 +18,10 @@ from flask import session
 SESSION_KEY = "mcp_pending_authorization"
 AUTHORIZE_PATH = "/oauth/authorize"
 MAX_AGE_SECONDS = 15 * 60
-# The session is a signed cookie (about 4 KB). A real request is a few hundred characters.
-MAX_TOTAL_LENGTH = 2048
+# The session is a signed cookie (about 4 KB). A real request is a few hundred characters. The cap is
+# on the JSON the session stores (non-ASCII text is escaped to 6 bytes a character there), not on the
+# character count, so it is measured the way the cookie will be written.
+MAX_JSON_LENGTH = 1800
 MAX_PAIRS = 12
 PARAM_NAMES = frozenset(
     {
@@ -48,16 +51,15 @@ def _clean(stored, now: float | None = None):
         return None
     if (now or time.time()) - at > MAX_AGE_SECONDS or not isinstance(pairs, list) or not 0 < len(pairs) <= MAX_PAIRS:
         return None
-    clean, total = [], 0
+    clean = []
     for pair in pairs:
         if not isinstance(pair, list | tuple) or len(pair) != 2:
             return None
         name, value = pair
         if name not in PARAM_NAMES or not isinstance(value, str):
             return None
-        total += len(name) + len(value)
         clean.append((name, value))
-    return clean if total <= MAX_TOTAL_LENGTH else None
+    return clean if len(json.dumps(clean)) <= MAX_JSON_LENGTH else None
 
 
 def remember(args) -> bool:
