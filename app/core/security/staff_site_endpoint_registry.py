@@ -569,4 +569,6 @@ ENDPOINT_COVERAGE = {
     ("mcp.update_settings", "PUT"): "blocked",
     ("mcp.list_grants", "GET"): "blocked",
     ("mcp.revoke_grant", "POST"): "blocked",
+    ("mcp_pages.ai_assistants_page", "GET"): "blocked",
+    ("mcp_pages.static", "GET"): "blocked",
 }

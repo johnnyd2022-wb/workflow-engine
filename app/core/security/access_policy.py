@@ -229,6 +229,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # The OpenAPI document (8.2f): every signed-in user and token may fetch it; the route narrows it to
     # the operations that caller's own permissions reach, so it names nothing they could not call.
     ("openapi.get_openapi", _READ, SIGNED_IN),
+    ("mcp_pages.ai_assistants_page", None, SIGNED_IN),  # admin controls render only with users.manage
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),

@@ -167,6 +167,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core/people", "settings", "people", "People and roles", None, None),
     Page("/core/sites", "settings", "sites", "Sites", None, None),
     Page("/core/integrations", "settings", "integrations", "Integrations", None, None),
+    Page("/core/ai-assistants", "settings", "ai-assistants", "AI assistants", None, None),
     Page("/crm/configuration", "sales", "configuration", "Sales settings", None, "crm"),
     Page("/core/notifications", "settings", "notifications", "Notifications", None, None),
     Page("/core/tasks/configuration", "settings", "section-settings", "Task settings", None, None),
@@ -260,6 +261,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         # Only where the deployment and the organisation's plan allow multiple sites (GL-P07).
         Tab("sites", "Sites", "/core/sites", ("settings.manage",), when="multi_site"),
         Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
+        # Public MCP 8.2e: everyone sees their own connections; only users.manage gets the switch.
+        Tab("ai-assistants", "AI assistants", "/core/ai-assistants"),
         Tab("section-settings", "Task settings", "/core/tasks/configuration", ("production.view",)),
     ),
 }
