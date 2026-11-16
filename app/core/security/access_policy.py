@@ -184,9 +184,10 @@ ANY_WORKSPACE = ("production.view", "inventory.view", "sales.view", "compliance.
 # whatever the person's role, and the rule needs no edit as routes are added: a new route is
 # unreachable by a token until its POLICY rule names a view permission.
 READ_PERMISSIONS = frozenset({"production.view", "inventory.view", "sales.view", "compliance.view", "costs.view"})
-# Signed-in-only routes a token may also read: they return the token user's own identity and
-# nothing of the organisation's data. Keep this list as short as it is.
-MCP_TOKEN_ENDPOINTS = frozenset({"mcp.get_me"})
+# Signed-in-only routes a token may also read: they return the token user's own identity, or the
+# description of the API narrowed to what that person may read (8.2f), and nothing of the
+# organisation's data. Keep this list as short as it is.
+MCP_TOKEN_ENDPOINTS = frozenset({"mcp.get_me", "openapi.get_openapi"})
 
 # (endpoint glob, methods or None for all, requirement). First match wins, so specific
 # rules come before the broad ones under them. A requirement is PUBLIC, SIGNED_IN, a
@@ -225,6 +226,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("mcp.update_settings", None, "users.manage"),
     ("mcp.list_grants", _READ, SIGNED_IN),  # your own; every grant in the organisation with users.manage
     ("mcp.revoke_grant", None, SIGNED_IN),  # your own; any in the organisation with users.manage
+    # The OpenAPI document (8.2f): every signed-in user and token may fetch it; the route narrows it to
+    # the operations that caller's own permissions reach, so it names nothing they could not call.
+    ("openapi.get_openapi", _READ, SIGNED_IN),
     ("mcp_pages.ai_assistants_page", None, SIGNED_IN),  # admin controls render only with users.manage
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
@@ -493,6 +497,24 @@ def allows(user, endpoint: str, method: str) -> bool:
 _TOKEN_METHODS = frozenset({"GET", "HEAD"})
 
 
+def token_scope_includes(endpoint: str, method: str) -> bool:
+    """Whether the ``bize.read`` scope reaches this route at all, whoever the person is.
+
+    True for GET/HEAD on a public route, on the few signed-in routes in ``MCP_TOKEN_ENDPOINTS``, and
+    on a route whose rule names a view permission. The OpenAPI document reads this to say which
+    operations take a token; ``token_access`` reads it to enforce the same thing.
+    """
+    if method.upper() not in _TOKEN_METHODS:
+        return False
+    requirement = requirement_for(endpoint, method)
+    if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
+        return True
+    if requirement in (DENY, PORTAL_SIGNED_IN, SIGNED_IN):
+        return False
+    required = requirement if isinstance(requirement, tuple) else (requirement,)
+    return bool(READ_PERMISSIONS.intersection(required))
+
+
 def token_access(user, endpoint: str, method: str) -> str:
     """How a request authenticated with an assistant token fares against the policy.
 
@@ -501,17 +523,13 @@ def token_access(user, endpoint: str, method: str) -> str:
     (``users.manage``, ``settings.manage``, signed-in-only pages, anything unclassified).
     ``"denied"``: a view route the person's own role does not hold.
     """
-    if method.upper() not in _TOKEN_METHODS:
+    if not token_scope_includes(endpoint, method):
         return "out_of_scope"
     requirement = requirement_for(endpoint, method)
     if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
         return "ok"
-    if requirement in (DENY, PORTAL_SIGNED_IN, SIGNED_IN):
-        return "out_of_scope"
     required = requirement if isinstance(requirement, tuple) else (requirement,)
     readable = READ_PERMISSIONS.intersection(required)
-    if not readable:
-        return "out_of_scope"
     return "ok" if has_permission(user, *readable) else "denied"
 
 

@@ -232,6 +232,11 @@ def create_app():
     app.register_blueprint(mcp_bp)
     app.register_blueprint(pages_bp)  # 8.2e: Settings -> AI assistants
 
+    # Public MCP 8.2f: the API's own OpenAPI 3.1 description, narrowed to what each caller may reach.
+    from app.api.openapi.routes import openapi_bp
+
+    app.register_blueprint(openapi_bp)
+
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).

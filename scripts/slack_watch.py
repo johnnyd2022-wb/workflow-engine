@@ -191,8 +191,7 @@ def slack_call(token: str, method: str, params: dict, post: bool = False) -> dic
                 )
             if err == "not_in_channel":
                 raise RuntimeError(
-                    f"slack {method} failed: not_in_channel. "
-                    "Invite the bot to the channel with /invite @claude2."
+                    f"slack {method} failed: not_in_channel. Invite the bot to the channel with /invite @claude2."
                 )
             raise RuntimeError(f"slack {method} failed: {err}")
         return data
@@ -330,9 +329,7 @@ def collect_work(token: str, cfg: dict, state: dict) -> list[dict]:
     return work
 
 
-def fetch_transcript(
-    token: str, channel: str, thread_ts: str, own_posts: list[str] | None = None
-) -> tuple[str, str]:
+def fetch_transcript(token: str, channel: str, thread_ts: str, own_posts: list[str] | None = None) -> tuple[str, str]:
     """Render a thread as plain text. Returns (transcript, newest_ts).
 
     `own_posts` lists timestamps this watcher produced, and it is required rather
@@ -710,9 +707,7 @@ def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: b
     timeout = cfg.get("agent_timeout", 300)
 
     def invoke(session_args: list[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            cmd + session_args, cwd=str(REPO), capture_output=True, text=True, timeout=timeout
-        )
+        return subprocess.run(cmd + session_args, cwd=str(REPO), capture_output=True, text=True, timeout=timeout)
 
     # Session IDs are derived from the thread, so they outlive this script's state
     # file. Deleting state (a normal recovery step) would otherwise make every
@@ -991,9 +986,7 @@ def reconcile_held_threads(cfg: dict, state: dict) -> None:
 def handle(cfg: dict, state: dict, token: str, item: dict, dry_run: bool) -> None:
     channel, thread_ts = item["channel"], item["thread_ts"]
     known_meta = state["threads"].get(thread_ts, {})
-    transcript, newest_ts = fetch_transcript(
-        token, channel, thread_ts, known_meta.get("own_posts")
-    )
+    transcript, newest_ts = fetch_transcript(token, channel, thread_ts, known_meta.get("own_posts"))
     first = item["trigger"] == "new"
 
     if dry_run:
@@ -1044,9 +1037,7 @@ def handle(cfg: dict, state: dict, token: str, item: dict, dry_run: bool) -> Non
     # that is indistinguishable from "nobody messaged me".
     posted = False
     try:
-        check = slack_call(
-            token, "conversations.replies", {"channel": channel, "ts": thread_ts, "limit": 20}
-        )
+        check = slack_call(token, "conversations.replies", {"channel": channel, "ts": thread_ts, "limit": 20})
         seen = [float(m["ts"]) for m in check.get("messages", [])]
         fresh_posts = [m["ts"] for m in check.get("messages", []) if float(m["ts"]) > float(newest_ts)]
         posted = bool(fresh_posts)

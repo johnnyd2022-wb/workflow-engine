@@ -223,6 +223,24 @@ feature_index_routes:
     - main
   allow_failure: false
 
+# Public MCP 8.2f: docs/openapi.json is the committed copy of the OpenAPI document the app generates
+# from its routes, its policy table and app/api/openapi/overlay/. Fail when it is stale so a route or
+# overlay change shows up in review as a diff of the document. Regenerate with
+# `uv run python scripts/check_openapi.py --write`. The test environment mounts every product area.
+openapi_current:
+  stage: test
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
+  variables:
+    ENVIRONMENT: test
+  script:
+    - *install_uv
+    - uv sync --extra dev
+    - uv run python scripts/check_openapi.py
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Deterministic, path-aware MR test gate. The selector emits every chosen test and the
 # source rule that chose it, so this is inspectable rather than an opaque heuristic.
 # New/unmapped application paths deliberately fall back to tests/, while docs-only MRs
