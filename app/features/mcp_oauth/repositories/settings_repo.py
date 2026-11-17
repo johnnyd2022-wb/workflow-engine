@@ -22,6 +22,11 @@ class SettingsRepository:
         row = self.get(org_id)
         return bool(row is not None and row.enabled)
 
+    def allows_unverified_clients(self, org_id: UUID) -> bool:
+        """False unless an admin has opted in: verified clients only by default (design review S3)."""
+        row = self.get(org_id)
+        return bool(row is not None and row.allow_unverified_clients)
+
     def allowed_role_keys(self, org_id: UUID) -> list[str]:
         rows = self.db.query(McpAllowedRole.role_key).filter(McpAllowedRole.org_id == org_id).all()
         return sorted(r[0] for r in rows)
@@ -40,12 +45,24 @@ class SettingsRepository:
     def custom_roles(self, org_id: UUID) -> list[OrgRole]:
         return self.db.query(OrgRole).filter(OrgRole.org_id == org_id).order_by(OrgRole.name).all()
 
-    def save(self, org_id: UUID, enabled: bool, role_keys: list[str], user_id: UUID | None, now: datetime) -> None:
+    def save(
+        self,
+        org_id: UUID,
+        enabled: bool,
+        role_keys: list[str],
+        user_id: UUID | None,
+        now: datetime,
+        *,
+        allow_unverified_clients: bool | None = None,
+    ) -> None:
+        """``allow_unverified_clients=None`` keeps the current value (false for a new row)."""
         row = self.get(org_id)
         if row is None:
-            row = McpOrgSettings(org_id=org_id)
+            row = McpOrgSettings(org_id=org_id, allow_unverified_clients=False)
             self.db.add(row)
         row.enabled = enabled
+        if allow_unverified_clients is not None:
+            row.allow_unverified_clients = allow_unverified_clients
         row.updated_by_user_id = user_id
         row.updated_at = now
         self.db.query(McpAllowedRole).filter(McpAllowedRole.org_id == org_id).delete(synchronize_session=False)

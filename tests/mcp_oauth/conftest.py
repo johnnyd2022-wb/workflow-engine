@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import or_
 
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User, UserRole
@@ -107,5 +108,9 @@ def world(db, flask_app):
         yield w
     db.rollback()
     purge_orgs(db, org_ids)
-    db.query(OAuthClient).filter(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%")).delete(synchronize_session=False)
+    # make_client ids start with test-client-; a client on the verified list is renamed (e.g. to
+    # "Claude"), so the name prefix alone would miss it.
+    db.query(OAuthClient).filter(
+        or_(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%"), OAuthClient.client_id.like("test-client-%"))
+    ).delete(synchronize_session=False)
     db.commit()

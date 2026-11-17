@@ -1,7 +1,9 @@
 """OAuth clients: dynamic registration (RFC 7591) and client ID metadata documents.
 
-Two ways a client exists, both open (founder decision Q3) and both labelled "Unverified app" until
-Biz-E staff mark them verified:
+Two ways a client exists, both open (founder decision Q3). Either is *verified* only when it matches
+an entry in ``verified_clients`` by its redirect URIs (and metadata URL), never by its name; any
+other client is labelled "Unverified app" and is refused unless its organisation allows unverified
+apps (design review S3):
 
 * **Dynamic registration**: ``POST /oauth/register`` with a name and 1-5 redirect URIs.
 * **Client ID metadata document**: the ``client_id`` is an ``https://`` URL; the app fetches that
@@ -31,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.features.mcp_oauth.models import OAuthClient
 from app.features.mcp_oauth.models.oauth_client import REGISTRATION_DCR, REGISTRATION_METADATA_URL
+from app.features.mcp_oauth.services import verified_clients
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -125,7 +128,8 @@ def _subset(payload: dict, key: str, allowed: tuple[str, ...]) -> list[str]:
 
 
 def register_dcr(db, payload) -> tuple[OAuthClient, dict]:
-    """Create an unverified client. Returns the row and the RFC 7591 response body."""
+    """Create a client, verified only if it matches the verified list. Returns the row and the
+    RFC 7591 response body (whose ``client_name`` is the list's name for a verified client)."""
     if not isinstance(payload, dict):
         raise ClientError("invalid_client_metadata", "Send a JSON object")
     name = clean_client_name(payload.get("client_name"))
@@ -141,6 +145,7 @@ def register_dcr(db, payload) -> tuple[OAuthClient, dict]:
         registration=REGISTRATION_DCR,
         verified=False,
     )
+    verified_clients.sync(row)
     db.add(row)
     db.commit()
     return row, {
@@ -338,9 +343,9 @@ def lookup_client(db, client_id, *, now: datetime | None = None) -> OAuthClient:
     if not client_id.startswith("https://"):
         if row is None:
             raise unknown
-        return row
+        return _synced(db, row)
     if row is not None and (row.registration != REGISTRATION_METADATA_URL or _fresh(row, now)):
-        return row
+        return _synced(db, row)
     db.commit()  # do not hold a transaction (and its pooled connection) open across the network call
     document = fetch_client_metadata(client_id)  # raises when the URL is refused or unreachable
     if row is None:
@@ -362,6 +367,15 @@ def lookup_client(db, client_id, *, now: datetime | None = None) -> OAuthClient:
         row.client_name = document["client_name"]
         row.redirect_uris = document["redirect_uris"]
         row.metadata_fetched_at = now
+    verified_clients.sync(row)
     db.commit()
-    logger.info("mcp.client_metadata_fetched", client_id=client_id)
+    logger.info("mcp.client_metadata_fetched", client_id=client_id, verified=bool(row.verified))
+    return row
+
+
+def _synced(db, row: OAuthClient) -> OAuthClient:
+    """``row`` with its verified flag brought in line with the verified list (committed if it moved)."""
+    if verified_clients.sync(row):
+        db.commit()
+        logger.info("mcp.client_verification_synced", client_id=row.client_id[:200], verified=bool(row.verified))
     return row

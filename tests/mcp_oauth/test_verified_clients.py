@@ -292,3 +292,18 @@ def test_s3_only_users_manage_can_change_the_setting(world):
         json={"enabled": True, "allowed_roles": [], "allow_unverified_clients": True},
     )
     assert resp.status_code == 403
+
+
+# --- the settings page --------------------------------------------------------------------------
+
+
+def test_s3_the_settings_page_gives_an_admin_the_unverified_apps_toggle_and_its_confirm(world):
+    html = world.session("admin").get("/core/ai-assistants").get_data(as_text=True)
+    assert "data-ai-unverified" in html
+    assert "Allow apps Biz-E hasn&#39;t verified" in html or "Allow apps Biz-E hasn't verified" in html
+    assert "data-ai-unverified-dialog" in html
+
+
+def test_s3_a_member_gets_no_unverified_apps_toggle(world):
+    html = world.session("member").get("/core/ai-assistants").get_data(as_text=True)
+    assert "data-ai-unverified" not in html

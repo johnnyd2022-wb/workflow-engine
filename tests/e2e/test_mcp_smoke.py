@@ -68,7 +68,8 @@ def connected(mcp_url, fresh_user, db):
     # The token's audience is the resource the *deployed* server advertises, so a mismatch between the
     # server's configuration and the app's shows up as the 401 the test below asserts against.
     resource = requests.get(f"{mcp_url}{METADATA_PATH}", timeout=10).json()["resource"]
-    db.add(McpOrgSettings(org_id=org_id, enabled=True))
+    # make_client's test client is not on the verified list, so allow unverified apps (S3).
+    db.add(McpOrgSettings(org_id=org_id, enabled=True, allow_unverified_clients=True))
     db.add(McpAllowedRole(org_id=org_id, role_key=f"builtin:{UserRole.MEMBER.value}"))
     db.commit()
     client = make_client(db, name="MCPTEST e2e smoke")

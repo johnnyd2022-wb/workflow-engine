@@ -26,7 +26,7 @@ from app.features.mcp_oauth.repositories.grant_repo import GrantRepository
 from app.features.mcp_oauth.repositories.settings_repo import SettingsRepository
 from app.features.mcp_oauth.services import client_registry
 from app.features.mcp_oauth.services.client_registry import ClientError
-from app.features.mcp_oauth.services.settings_service import is_allowed_for
+from app.features.mcp_oauth.services.settings_service import client_is_allowed, is_allowed_for
 from app.features.mcp_oauth.services.tokens import CODE_PREFIX, CODE_TTL, hash_token, is_valid_challenge, new_token
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -38,6 +38,10 @@ MAX_STATE_LENGTH = 1024
 MESSAGE_ORG_OFF = "Your organisation hasn't turned on AI assistant access. An admin can turn it on in Settings."
 MESSAGE_ROLE = "Your role can't use AI assistant access. Ask an admin."
 MESSAGE_CLIENT_DISABLED = "This app has been switched off by Biz-E and can't connect."
+MESSAGE_UNVERIFIED = (
+    "Your organisation only allows apps Biz-E has verified, and this app isn't one. "
+    "An admin can change this in Settings."
+)
 
 
 class PageError(Exception):
@@ -172,7 +176,10 @@ def consent_block_reason(db, user, client: OAuthClient) -> str | None:
     """Why this person may not approve an assistant right now, or ``None`` when they may."""
     if client.disabled_at is not None:
         return MESSAGE_CLIENT_DISABLED
-    return connect_block_reason(db, user)
+    reason = connect_block_reason(db, user)
+    if reason is None and not client_is_allowed(db, user.org_id, client):
+        return MESSAGE_UNVERIFIED
+    return reason
 
 
 def readable_summary(user) -> list[str]:
