@@ -84,6 +84,7 @@ measurement or a decision before it counts as a defect.
     - Impact: the same month differs by 15%+ between Sales and margins; both are `x-bize.kind: calculation`.
     - Fix: one revenue function in `sales_sources` (ex-GST, base currency) used by both; if the invoiced
       total is wanted, name it `invoiced_inc_gst`.
+    - Status: fixed in !738 (one ex-GST, base-currency rule in `sales_sources` for monthly, daily, customer and Home totals; old figure kept as `invoiced_inc_gst`; foreign currency counted in `not_converted`).
 - **X2. Incorrect cost of sales: margins and the bridge disagree for one month.** Confirmed in the spec, not traced in code.
     - Problem: margins date a sale by invoice date at today's lot cost; the bridge dates movements by
       `created_at` before the cutoff at closing cost, then freezes them.
@@ -128,6 +129,7 @@ measurement or a decision before it counts as a defect.
     - Problem: `app/features/costing/margins.py:170` discards `_unmapped` from `sale_lines`.
     - Impact: margins revenue is below Xero's by an unshown amount.
     - Fix: return an `unmapped` total (revenue, line count) beside the product rows.
+    - Status: fixed in !738 (margins return `unmapped: {revenue, lines, not_converted}` beside the rows).
 - **A2. Past figures move without a marker.** Confirmed in the spec.
     - Problem: cost is computed on read; a late purchase or setting change moves last quarter's margin. Only stock value has a frozen close.
     - Impact: numbers copied out through MCP later disagree with the app.

@@ -33,7 +33,7 @@
       <div class="workspace-card__header">
         <div>
           <h2 id="analytics-sales-title">Monthly sales</h2>
-          <p class="workspace-caption">Total invoice value per month (paid and authorised).</p>
+          <p class="workspace-caption">Invoice revenue per month, ex GST: paid and authorised invoices, credit notes taken off.</p>
         </div>
         <div class="sales-analytics__total" x-show="!loadingSales && salesData.length > 0" x-cloak>
           <strong x-text="formatCurrency(totalSales)"></strong>
@@ -377,7 +377,8 @@ function crmAnalytics() {
       try {
         const data = await CRMAPI.getMonthlySales(this.monthsBack);
         // The API returns the newest month first; the chart reads left to right.
-        this.salesData = (data.months || []).slice().sort((a, b) => String(a.month).localeCompare(String(b.month)));
+        // Money arrives as Decimal strings (ex GST); the chart and the period total add numbers.
+        this.salesData = (data.months || []).map((m) => ({ ...m, total: Number(m.total || 0) })).sort((a, b) => String(a.month).localeCompare(String(b.month)));
       } catch (e) {
         this.error = e.message || 'Failed to load sales data.';
       } finally {

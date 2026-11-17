@@ -86,9 +86,19 @@ def test_full_sync_imports_and_idempotently_upserts_credit_notes_lines_and_statu
         .first()
     )
     assert first.product_mapping_id == mapping.id
-    assert db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id, XeroCreditNote.status == "VOIDED").count() == 1
-    assert db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id, XeroCreditNote.status == "DELETED").count() == 1
-    assert db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id, XeroCreditNote.allocated_invoice_ids == ["invoice-origin"]).count() == 4
+    assert (
+        db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id, XeroCreditNote.status == "VOIDED").count() == 1
+    )
+    assert (
+        db.query(XeroCreditNote).filter(XeroCreditNote.org_id == org.id, XeroCreditNote.status == "DELETED").count()
+        == 1
+    )
+    assert (
+        db.query(XeroCreditNote)
+        .filter(XeroCreditNote.org_id == org.id, XeroCreditNote.allocated_invoice_ids == ["invoice-origin"])
+        .count()
+        == 4
+    )
 
     first.no_return_note = "Customer kept the goods"
     first.no_return_by_user_id = user.id
@@ -113,6 +123,8 @@ def test_overview_period_and_monthly_revenue_subtract_authorised_partial_and_ful
                 invoice_type="ACCREC",
                 status="AUTHORISED",
                 date=month,
+                sub_total=Decimal("100"),
+                total_tax=Decimal("0"),
                 total=Decimal("100"),
             ),
             XeroInvoice(
@@ -122,6 +134,8 @@ def test_overview_period_and_monthly_revenue_subtract_authorised_partial_and_ful
                 invoice_type="ACCREC",
                 status="PAID",
                 date=month,
+                sub_total=Decimal("100"),
+                total_tax=Decimal("0"),
                 total=Decimal("100"),
             ),
             XeroCreditNote(
@@ -132,6 +146,7 @@ def test_overview_period_and_monthly_revenue_subtract_authorised_partial_and_ful
                 date=month,
                 total=Decimal("25"),
                 currency="NZD",
+                raw_fields={"sub_total": "25", "total_tax": "0"},
             ),
             XeroCreditNote(
                 org_id=org.id,
@@ -141,6 +156,7 @@ def test_overview_period_and_monthly_revenue_subtract_authorised_partial_and_ful
                 date=month,
                 total=Decimal("100"),
                 currency="NZD",
+                raw_fields={"sub_total": "100", "total_tax": "0"},
             ),
             XeroCreditNote(
                 org_id=org.id,
@@ -150,20 +166,19 @@ def test_overview_period_and_monthly_revenue_subtract_authorised_partial_and_ful
                 date=month,
                 total=Decimal("100"),
                 currency="NZD",
+                raw_fields={"sub_total": "100", "total_tax": "0"},
             ),
         ]
     )
     db.commit()
 
     repo = XeroInvoiceRepository(db)
-    assert repo.sales_totals_for_period(org.id, date(2026, 10, 1), date(2026, 11, 1)) == {
-        "total": 75.0,
-        "invoice_count": 2,
-    }
-    assert repo.monthly_sales_totals(org.id, months=1) == [{"month": "2026-10", "total": 75.0, "invoice_count": 2}]
-    assert repo.daily_sales_totals_for_period(org.id, date(2026, 10, 1), date(2026, 11, 1)) == [
-        {"day": "2026-10-08", "total": 75.0, "invoice_count": 2}
-    ]
+    period = repo.sales_totals_for_period(org.id, date(2026, 10, 1), date(2026, 11, 1))
+    assert (period["total"], period["invoice_count"]) == (Decimal("75"), 2)
+    (month_row,) = repo.monthly_sales_totals(org.id, months=1)
+    assert (month_row["month"], month_row["total"], month_row["invoice_count"]) == ("2026-10", "75.00", 2)
+    (day_row,) = repo.daily_sales_totals_for_period(org.id, date(2026, 10, 1), date(2026, 11, 1))
+    assert (day_row["day"], day_row["total"], day_row["invoice_count"]) == ("2026-10-08", "75.00", 2)
 
 
 def test_pending_return_list_dismissal_is_audited_and_tenant_scoped(db, org, user, app_client):

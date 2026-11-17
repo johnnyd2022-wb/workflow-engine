@@ -1132,8 +1132,12 @@ class CRMService:
             if month_start.month == 12
             else month_start.replace(month=month_start.month + 1)
         )
-        current = self.invoice_repo.sales_totals_for_period(org_id, month_start, next_start)["total"]
-        previous = self.invoice_repo.sales_totals_for_period(org_id, previous_start, month_start)["total"]
+        # Ex GST in the base currency (X1); a float here because Home does arithmetic on it.
+        by_month = self.invoice_repo.monthly_revenue_between(org_id, previous_start, next_start)
+        current, previous = (
+            float(by_month[key].revenue) if key in by_month else 0.0
+            for key in (month_start.strftime("%Y-%m"), previous_start.strftime("%Y-%m"))
+        )
         return {
             "current_month_revenue": current,
             "outstanding_receivables": self.invoice_repo.outstanding_receivables(org_id)["total"],
@@ -1159,8 +1163,9 @@ class CRMService:
             else current_month_start.replace(month=current_month_start.month + 1)
         )
 
-        current_month = self.invoice_repo.sales_totals_for_period(org_id, current_month_start, next_month_start)
-        previous_month = self.invoice_repo.sales_totals_for_period(org_id, previous_month_start, current_month_start)
+        by_month = self.invoice_repo.monthly_revenue_between(org_id, previous_month_start, next_month_start)
+        current_month = by_month.get(current_month_start.strftime("%Y-%m"))
+        previous_month = by_month.get(previous_month_start.strftime("%Y-%m"))
         outstanding = self.invoice_repo.outstanding_receivables(org_id)
         monthly_trend = sorted(
             self.invoice_repo.monthly_sales_totals(org_id, months=6), key=lambda row: row["month"] or ""
@@ -1189,14 +1194,16 @@ class CRMService:
             "cancelled": sum(1 for task in tasks if task.status == "cancelled"),
         }
 
-        previous_total = previous_month["total"]
+        # Ex GST in the base currency (X1); floats because Home and the dashboard do arithmetic on them.
+        current_total = float(current_month.revenue) if current_month else 0.0
+        previous_total = float(previous_month.revenue) if previous_month else 0.0
         revenue_vs_last_month_pct = None
         if previous_total:
-            revenue_vs_last_month_pct = round(((current_month["total"] - previous_total) / previous_total) * 100, 1)
+            revenue_vs_last_month_pct = round(((current_total - previous_total) / previous_total) * 100, 1)
 
         return {
-            "current_month_revenue": current_month["total"],
-            "current_month_invoice_count": current_month["invoice_count"],
+            "current_month_revenue": current_total,
+            "current_month_invoice_count": current_month.invoice_count if current_month else 0,
             "outstanding_receivables": outstanding["total"],
             "outstanding_invoice_count": outstanding["invoice_count"],
             "revenue_vs_last_month_pct": revenue_vs_last_month_pct,

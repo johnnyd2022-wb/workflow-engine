@@ -52,6 +52,8 @@ def test_home_sales_totals_and_tasks_are_live_isolated_and_constant_query_count(
                 status=status,
                 invoice_type=kind,
                 date=day,
+                sub_total=amount,  # no GST on these, so ex-GST revenue is the total
+                total_tax=0,
                 total=amount,
                 amount_due=due,
             )
@@ -97,7 +99,8 @@ def test_home_sales_totals_and_tasks_are_live_isolated_and_constant_query_count(
     event.listen(db.bind, "before_cursor_execute", capture)
     try:
         summary = service.get_dashboard_overview(own_id)
-        assert len(statements) == 6, "Two periods each add one credit-note aggregate"
+        # Base currency, both months' invoices, both months' credit notes, receivables, tasks (X1).
+        assert len(statements) == 5, "Two months are one invoice read and one credit-note read"
         assert sum("LEFT OUTER JOIN xero_contacts" in statement for statement in statements) == 1, (
             "Customer names must be joined, not loaded once per task"
         )
@@ -111,7 +114,7 @@ def test_home_sales_totals_and_tasks_are_live_isolated_and_constant_query_count(
         assert {t["due_date"] for t in tasks} == {None, today.isoformat()}
         # A later request must see committed/current data without a response cache.
         invoice = db.query(XeroInvoice).filter(XeroInvoice.org_id == own_id, XeroInvoice.total == 300).one()
-        invoice.total = 400
+        invoice.total = invoice.sub_total = 400
         db.flush()
         assert service.get_dashboard_overview(own_id)["current_month_revenue"] == 600
     finally:

@@ -6,11 +6,27 @@ schemas:
   MonthlySales:
     type: object
     additionalProperties: false
-    required: [month, total, invoice_count]
+    required: [month, total, invoiced_inc_gst, invoice_count, currency, not_converted, ex_gst_unknown]
     properties:
       month: {type: string, description: "YYYY-MM."}
-      total: {type: number, description: "Net sales for the month, credit notes taken off."}
+      total:
+        type: string
+        description: >-
+          Invoice revenue for the month as a Decimal string: ex GST, in the base currency, every invoice line
+          (freight and other charges included), credit notes taken off ex GST.
+      invoiced_inc_gst:
+        type: string
+        description: >-
+          Xero's invoice totals less credit-note totals, GST included and every currency added unconverted. The
+          old figure, kept for anything that wanted it; not revenue.
       invoice_count: {type: integer}
+      currency: {type: string, description: "The base currency `total` is in."}
+      not_converted:
+        type: integer
+        description: Invoices and credit notes in another currency, left out of `total` (never added unconverted).
+      ex_gst_unknown:
+        type: integer
+        description: Invoices and credit notes with no sub-total or tax figure, left out of `total`.
   Invoice:
     type: object
     description: A Xero invoice (or credit) synced into Biz-E, with its line items.
@@ -99,11 +115,14 @@ operations:
       concepts: [sales.xero_invoices, sales.fifo_matching]
       related_operations: [crm_crm_api_monthly_sales, core_trace_inventory_to_sale_graph, costing_margins_report]
   crm_crm_api_monthly_sales:
-    summary: Net sales per month
+    summary: Invoice revenue per month, ex GST
     description: >-
-      Net revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most
-      recent month first. Revenue is Xero's figure, in the organisation's currency. Credit notes can make a month
-      lower than its invoices. Only for organisations with sales (Xero) connected.
+      Invoice revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most
+      recent month first. Revenue (`total`) is ex GST, in the organisation's base currency, and counts every
+      invoice line, freight and other charges included. Foreign-currency invoices are counted in `not_converted`
+      and never added. This is invoice revenue, not product revenue: margins count only lines mapped to a
+      product (the rest is their `unmapped` total), so the two differ by design; don't compare them. Credit
+      notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.
     parameters:
       - name: months
         in: query
@@ -125,8 +144,10 @@ operations:
             description: The same list as `monthly_sales`.
             items: {$ref: "#/components/schemas/MonthlySales"}
       example:
-        monthly_sales: [{month: "2026-10", total: 9900.0, invoice_count: 14}]
-        months: [{month: "2026-10", total: 9900.0, invoice_count: 14}]
+        monthly_sales:
+          - {month: "2026-10", total: "9900.00", invoiced_inc_gst: "11385.00", invoice_count: 14, currency: NZD, not_converted: 0, ex_gst_unknown: 0}
+        months:
+          - {month: "2026-10", total: "9900.00", invoiced_inc_gst: "11385.00", invoice_count: 14, currency: NZD, not_converted: 0, ex_gst_unknown: 0}
     x-bize:
       kind: calculation
       mcp: true
