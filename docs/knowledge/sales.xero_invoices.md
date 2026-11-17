@@ -35,7 +35,7 @@ Both are ex GST, in the base currency, by one rule: an invoice's sub-total (or t
 - **Invoice revenue** (`crm_crm_api_monthly_sales`, `total`): every line of every invoice, freight and other charges included, credit notes taken off.
 - **Product revenue** (`costing_margins_report`, each row's `revenue`): only lines mapped to a product. Lines that map to nothing are totalled in the report's `unmapped`.
 
-So for a month, invoice revenue is roughly product revenue plus `unmapped.revenue`. Do not compare the two as if one were wrong.
+They will not reconcile exactly: invoice revenue takes whole credit notes off, margins take off only credit lines mapped to a product, and a line with no quantity is in invoice revenue but in neither margins' rows nor `unmapped`. Do not compare the two as if one were wrong.
 
 ## Authoritative operations
 
