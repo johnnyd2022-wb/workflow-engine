@@ -301,6 +301,8 @@
       });
       els.unverifiedCancel.addEventListener('click', function () { els.unverifiedDialog.close(); });
       els.unverifiedDialog.addEventListener('click', function (event) {
+        // Only a click on the backdrop itself (a keyboard "click" on a button reports 0,0).
+        if (event.target !== els.unverifiedDialog) return;
         var r = els.unverifiedDialog.getBoundingClientRect();
         var outside = event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
         if (outside) els.unverifiedDialog.close();

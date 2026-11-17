@@ -52,7 +52,10 @@ def world(fresh_user, db):
     w.admin, w.member, w.org_id = admin, member, org_id
 
     def connect(user_id: str, name: str, verified: bool = False):
-        client = make_client(db, name=f"MCPTEST {name}", verified=verified)
+        # Verified comes from the code list (design review S3), so a verified client uses Claude's
+        # documented callback rather than just a flag on the row.
+        redirect = ["https://claude.ai/api/mcp/auth_callback"] if verified else None
+        client = make_client(db, name=f"MCPTEST {name}", verified=verified, redirect_uris=redirect)
         clients.append(client)
         user = db.get(User, UUID(user_id))
         grant, _access, _refresh = mint_grant(db, user, client)

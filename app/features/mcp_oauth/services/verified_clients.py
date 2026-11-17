@@ -18,6 +18,7 @@ the same way; a client that cannot be cited stays unverified (the org can still 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from app.features.mcp_oauth.models.oauth_client import REGISTRATION_DCR, REGISTRATION_METADATA_URL
 
@@ -64,6 +65,27 @@ def match(client_id: str, registration: str, redirect_uris) -> VerifiedClient | 
             continue
         return entry
     return None
+
+
+def vendor_near_miss(redirect_uris) -> str | None:
+    """The listed vendor host an *unverified* client's redirect URIs point at, else ``None``.
+
+    For logging only: a vendor that starts registering a new callback shows up here before people
+    report "Claude can't connect", so the list can be updated (with a citation).
+    """
+    hosts = {urlsplit(uri).hostname for entry in VERIFIED_CLIENTS for uri in entry.redirect_uris}
+    for uri in redirect_uris or ():
+        host = urlsplit(uri).hostname if isinstance(uri, str) else None
+        if host in hosts:
+            return host
+    return None
+
+
+def is_verified(row) -> bool:
+    """What ``sync`` would set ``row.verified`` to, without changing the row."""
+    if row.registration not in (REGISTRATION_DCR, REGISTRATION_METADATA_URL):
+        return bool(row.verified)
+    return match(row.client_id, row.registration, row.redirect_uris) is not None
 
 
 def sync(row) -> bool:

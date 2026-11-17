@@ -307,3 +307,28 @@ def test_s3_the_settings_page_gives_an_admin_the_unverified_apps_toggle_and_its_
 def test_s3_a_member_gets_no_unverified_apps_toggle(world):
     html = world.session("member").get("/core/ai-assistants").get_data(as_text=True)
     assert "data-ai-unverified" not in html
+
+
+# --- review follow-ups ---------------------------------------------------------------------------
+
+
+def test_s3_the_grants_list_reads_verified_from_the_code_list_without_writing(world, db):
+    # Flagged verified in the database but on no list entry: the Settings list says unverified, and
+    # the GET leaves the row as it was.
+    world.client_row.verified = True
+    db.commit()
+    mint_grant(db, world.users["member"], world.client_row)
+    grants = world.session("admin").get("/api/core/mcp/grants").get_json()["grants"]
+    assert [g["verified"] for g in grants] == [False]
+    db.expire_all()
+    assert db.get(OAuthClient, world.client_row.id).verified is True
+
+
+def test_s3_an_unverified_client_on_a_vendor_host_is_logged_as_a_near_miss(world, created_clients, monkeypatch):
+    from app.features.mcp_oauth.services import client_registry as registry
+
+    seen = []
+    monkeypatch.setattr(registry.logger, "warning", lambda event, **kw: seen.append((event, kw)))
+    _register(world, created_clients, "Claude", ["https://claude.ai/api/mcp/other_callback"])
+    assert seen and seen[0][0] == "mcp.client_verification_near_miss"
+    assert seen[0][1]["vendor_host"] == "claude.ai"

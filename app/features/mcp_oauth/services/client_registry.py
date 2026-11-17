@@ -146,6 +146,7 @@ def register_dcr(db, payload) -> tuple[OAuthClient, dict]:
         verified=False,
     )
     verified_clients.sync(row)
+    _log_near_miss(row)
     db.add(row)
     db.commit()
     return row, {
@@ -368,9 +369,16 @@ def lookup_client(db, client_id, *, now: datetime | None = None) -> OAuthClient:
         row.redirect_uris = document["redirect_uris"]
         row.metadata_fetched_at = now
     verified_clients.sync(row)
+    _log_near_miss(row)
     db.commit()
     logger.info("mcp.client_metadata_fetched", client_id=client_id, verified=bool(row.verified))
     return row
+
+
+def _log_near_miss(row: OAuthClient) -> None:
+    host = None if row.verified else verified_clients.vendor_near_miss(row.redirect_uris)
+    if host:
+        logger.warning("mcp.client_verification_near_miss", vendor_host=host, redirect_uris=len(row.redirect_uris))
 
 
 def _synced(db, row: OAuthClient) -> OAuthClient:

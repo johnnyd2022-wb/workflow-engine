@@ -11,6 +11,7 @@ from app.core.security.access_policy import ROLE_LABELS
 from app.core.utils.log_action import log_action
 from app.features.mcp_oauth.repositories.grant_repo import GrantRepository
 from app.features.mcp_oauth.repositories.settings_repo import SettingsRepository
+from app.features.mcp_oauth.services import verified_clients
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -136,7 +137,8 @@ def list_grants(db, org_id: UUID, *, viewer_id: UUID, can_manage: bool) -> list[
         {
             "id": str(grant.id),
             "client_name": client.client_name,
-            "verified": bool(client.verified),
+            # The code list decides, read here without writing (a GET never writes).
+            "verified": verified_clients.is_verified(client),
             "user": _person(user),
             "scope": grant.scope,
             "created_at": grant.created_at.isoformat() if grant.created_at else None,
