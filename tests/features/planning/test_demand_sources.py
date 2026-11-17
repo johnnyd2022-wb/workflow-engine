@@ -603,6 +603,90 @@ def test_seasonality_needs_a_year_of_that_products_own_sales(db, demand_world, s
     assert rows["Old Gin"]["seasonality_factor"] is not None
 
 
+def test_the_season_compares_last_years_next_weeks_with_last_years_same_trailing_weeks():
+    """Design review P1. An average year of 100 a week, 150 a week October to December and 80 a
+    week January to March: on 31 December the 12 weeks just sold ran at 150, and last year the
+    next 12 weeks sold 80 against 150 in the 12 before them, so the forecast is 80 a week. The
+    trailing average is already at this season's level; scaling it by last year's annual average
+    (150 x 80/100 = 120) counted the season twice."""
+    today = date(2026, 12, 31)
+
+    def week(weeks_ago, units):  # one sale inside the week that ended `weeks_ago` weeks ago
+        return (today - timedelta(weeks=weeks_ago) + timedelta(days=3), Decimal(units))
+
+    sales = [week(k, 150) for k in range(1, 13)]  # Oct-Dec this year
+    sales += [week(k, 80) for k in range(41, 53)]  # last year's Jan-Mar: the next 12 weeks, a year ago
+    sales += [week(k, 87) for k in range(13, 40)] + [week(40, 91)]  # Apr-Sep: the year averages 100
+    sales += [week(k, 150) for k in range(53, 65)]  # last year's Oct-Dec: the same trailing weeks
+    assert sum(units for sold_on, units in sales if sold_on >= today - forecast_service.YEAR) == 5200
+    rate, factor, note = forecast_service.weekly_rate(sales, today=today, weeks=12, has_year=True)[:3]
+    assert rate.quantize(Decimal("0.01")) == Decimal("80.00")
+    assert factor.quantize(Decimal("0.01")) == Decimal("0.53")
+    assert note == "Last year the next 12 weeks sold 53% of the 12 weeks before them"
+
+
+def _batch(db, org_id, output_id, quantity, ready_in_days, status="planned"):
+    """A live batch of `quantity` ready in `ready_in_days`, for a forecast demand (so not on order)."""
+    demand = PlanningDemand(
+        org_id=org_id,
+        reference="Stock target: Gin",
+        source_output_id=output_id,
+        quantity=Decimal(1),  # one batch; its quantity is set below
+        unit="bottles",
+        due_date=TODAY + timedelta(days=ready_in_days),
+        priority=0,
+        source="forecast",
+        source_ref=f"forecast:{uuid4()}",
+    )
+    db.add(demand)
+    db.flush()
+    (batch,) = batch_service.plan_demand(db, org_id, demand.id, {}, today=TODAY)[0]
+    batch.quantity = Decimal(quantity)
+    batch.status = status
+    batch.theoretical_ready_date = TODAY + timedelta(days=ready_in_days)
+    db.flush()
+    return batch
+
+
+def test_a_batch_ready_later_does_not_hide_a_stock_out_before_it_arrives(db, demand_world, sales):
+    """Design review P2: 30 on hand selling 10 a week, and a 100-bottle batch ready in 8 weeks.
+    It runs out in week 3; adding the batch to today's stock said week 13."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 100, 56)
+    _stock(db, org_id, output_id, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["weekly_rate"], row["on_hand"], row["planned"]) == ("10", "30", "100")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=21)).isoformat()
+
+
+def test_a_blocked_batch_is_reported_but_not_counted_as_stock(db, demand_world, sales):
+    """Design review P2: a blocked batch can't start, so it isn't supply; it is shown on its own."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 500, 7, status="blocked")
+    _stock(db, org_id, output_id, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["planned"], row["blocked"], row["available"]) == ("0", "500", "30")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=21)).isoformat()
+    assert row["blocked_note"] == "500 bottles in blocked batches aren't counted until they can start"
+    assert row["sentence"].endswith(row["blocked_note"] + ".")
+
+
+def test_a_new_product_is_rated_over_the_weeks_since_its_first_sale(db, demand_world, sales):
+    """Design review P3: first sold 3 weeks ago at 30 a week, on a 12-week window, it sells 30 a
+    week, not 90 / 12 = 7.5."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 30) for k in range(3)]}, {org_id: TODAY - timedelta(days=15)})
+    (row,) = _cover(db, org_id)["products"]
+    assert row["weekly_rate"] == "30"
+    assert row["rate_weeks"] == 3
+    assert row["rate_note"] == "First sold 3 weeks ago, so the rate is over those 3 weeks, not 12"
+
+
 def _two_sites(db, org_id):
     org = db.get(Organisation, org_id)
     # The plan includes multiple sites, and the business has switched them on (flushed only:
