@@ -138,13 +138,13 @@ def test_ac38_a_token_with_audience_mcp_is_shown_only_mcp_get_operations_it_may_
     for oid, (_path, method, op) in shown.items():
         assert method == "GET", oid
         assert op["x-bize"]["mcp"] is True, oid
-        assert token_access(world.users[who], endpoints[oid], "GET") == "ok", oid
+        assert token_access(world.users[who], endpoints[oid], "GET", mcp=True) == "ok", oid
     expected = {
         oid
         for oid, (_p, method, op) in by_id(full_doc).items()
         if op["x-bize"]["mcp"] is True
         and method == "GET"
-        and token_access(world.users[who], endpoints[oid], "GET") == "ok"
+        and token_access(world.users[who], endpoints[oid], "GET", mcp=True) == "ok"
     }
     assert set(shown) == expected
 
@@ -167,13 +167,13 @@ def test_ac38_a_token_without_an_audience_is_shown_every_read_operation_it_may_c
     client, headers = _token_client(world, who)
     doc = _served(client, headers=headers)
     endpoints = _endpoints(world.app)
-    for oid, (_path, method, _op) in by_id(doc).items():
+    for oid, (_path, method, op) in by_id(doc).items():
         assert method == "GET", oid
-        assert token_access(world.users[who], endpoints[oid], "GET") == "ok", oid
+        assert token_access(world.users[who], endpoints[oid], "GET", mcp=op["x-bize"]["mcp"]) == "ok", oid
     all_reads = {
         oid
-        for oid, (_p, method, _op) in by_id(full_doc).items()
-        if method == "GET" and token_access(world.users[who], endpoints[oid], "GET") == "ok"
+        for oid, (_p, method, op) in by_id(full_doc).items()
+        if method == "GET" and token_access(world.users[who], endpoints[oid], "GET", mcp=op["x-bize"]["mcp"]) == "ok"
     }
     assert set(by_id(doc)) == all_reads
     assert "openapi_get_openapi" in by_id(doc)

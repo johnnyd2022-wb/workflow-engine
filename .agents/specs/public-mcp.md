@@ -143,11 +143,21 @@ In `tenant_context`, only when the request has **no session user** and has
    minute.
 5. `setup_access_policy` gains one rule, applied only when `g.auth_via == "mcp"`:
    - the method must be `GET` or `HEAD`;
+   - the route's OpenAPI operation must be marked `x-bize.mcp: true` in the overlay
+     (`app/api/openapi/overlay/*.yaml`). That is the same allowlist the MCP catalogue is built
+     from, read once at app start (`document.mcp_operations` → `app.extensions["mcp_operations"]`)
+     and keyed by endpoint, URL rule and method, the way the generator resolves an operation.
+     Deny by default: a route with no overlay entry, or `mcp: false`, is out of scope (design
+     review S1);
    - the endpoint's requirement must be one of `READ_PERMISSIONS = {production.view,
      inventory.view, sales.view, compliance.view, costs.view}`;
-   - the user must hold it, which the existing check already enforces.
+   - the user must hold it, which the existing check already enforces;
+   - the operation's `x-bize.feature` must be on for the org. The product's own blueprint gate
+     already answers `404` when it is not (`costing` and `compliant` check the subscription,
+     `crm` is not mounted at all), so the token rule does not check it a second time.
 
-   `PUBLIC` endpoints are allowed. Anything else returns
+   `PUBLIC` endpoints and `MCP_TOKEN_ENDPOINTS` (`/api/core/mcp/me`, `/api/openapi.json`) are
+   allowed. Anything else returns
    `403 {"error":"insufficient_scope"}` with `WWW-Authenticate: Bearer error="insufficient_scope",
    scope="bize.read"`. `users.manage` and `settings.manage` endpoints are therefore never
    reachable by a token, whatever the role.

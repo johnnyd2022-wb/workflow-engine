@@ -38,6 +38,7 @@ measurement or a decision before it counts as a defect.
       stock snapshot CSV. Audience binding protects nothing because the app accepts the token from any caller.
     - Fix: enforce `x-bize.mcp` in `token_scope_includes` (deny by default), and accept `bza_` tokens
       only from the MCP container (a service credential or network rule).
+    - Status: fixed in !735 (the token rule now requires `x-bize.mcp`, read once from the overlay; deny by default. Accepting tokens only from the MCP container is DR-S1B.)
 - **S2. Security: read-only bypass, because some GET routes write irreversible state.** Confirmed in code.
     - Problem: `GET /api/core/costing/stock-value` (in the MCP catalogue) takes and commits the
       month-end snapshot for an org with no Xero (`app/features/costing/routes.py:675`), which is then

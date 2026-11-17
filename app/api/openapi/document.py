@@ -27,8 +27,8 @@ INFO_DESCRIPTION = """\
 The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.
 
 **Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token
-(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches GET operations
-only. Every operation lists the schemes that work for it under `security`.
+(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches only the GET
+operations marked `x-bize.mcp`, plus this document and `/api/core/mcp/me`. Every operation lists the schemes that work for it under `security`.
 
 **Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list
 meaning "any of these". `signed_in` means any signed-in person, `public` anyone. This document shows a
@@ -73,7 +73,9 @@ _SECURITY_SCHEMES = {
     "bearerToken": {
         "type": "http",
         "scheme": "bearer",
-        "description": "An AI assistant's access token. Read-only: GET operations a person's role may read.",
+        "description": (
+            "An AI assistant's access token. Read-only: the x-bize.mcp GET operations a person's role may read."
+        ),
     },
 }
 
@@ -86,11 +88,11 @@ class BuiltDocument:
     endpoints: dict[str, tuple[str, str]]
 
 
-def _security(op: Operation) -> list[dict]:
+def _security(op: Operation, mcp: bool) -> list[dict]:
     if op.requirement == PUBLIC:
         return []
     schemes = [{"sessionCookie": []}]
-    if token_scope_includes(op.endpoint, op.method):
+    if token_scope_includes(op.endpoint, op.method, mcp=mcp):
         schemes.append({"bearerToken": []})
     return schemes
 
@@ -147,7 +149,7 @@ def _operation(op: Operation, entry: dict) -> dict:
         "tags": [over.get("domain", op.domain)],
         "parameters": _parameters(op, entry),
         "responses": _responses(op, entry),
-        "security": _security(op),
+        "security": _security(op, bool(over.get("mcp", False))),
     }
     description = entry.get("description") or op.description
     if description:
@@ -251,12 +253,30 @@ def build_document(app, overlay: Overlay | None = None) -> dict:
     return build(app, overlay).document
 
 
+def mcp_operations(app, overlay: Overlay | None = None) -> frozenset[tuple[str, str, str]]:
+    """(endpoint, Flask rule, method) of every operation the overlay marks ``x-bize.mcp: true``.
+
+    The app's token rule reads this (``access_policy.in_mcp_catalogue``), so the allowlist the MCP
+    server plans from and the one the app enforces are the same overlay flags. Operations are
+    resolved exactly as ``build`` resolves them, from ``collect_operations``. The rule is part of
+    the key because an operation is one method on one URL rule: a second rule added to a catalogue
+    endpoint is not in the catalogue until the overlay says so.
+    """
+    overlay = overlay or get_overlay()
+    return frozenset(
+        (op.endpoint, op.rule, op.method)
+        for op in collect_operations(app)
+        if overlay.operations.get(op.operation_id, {}).get("x-bize", {}).get("mcp") is True
+    )
+
+
 def narrow(built: BuiltDocument, user, *, via_token: bool = False, audience: str | None = None) -> dict:
     """The document as ``user`` may see it.
 
     A session sees what its role may call. A token (``via_token``), or anyone asking for
-    ``audience="mcp"``, sees what an assistant token of that person could call: GET operations whose
-    view permission they hold, and with ``audience="mcp"`` only those marked ``x-bize.mcp``.
+    ``audience="mcp"``, sees what an assistant token of that person could call: the GET operations
+    marked ``x-bize.mcp`` whose view permission they hold, plus (without ``audience="mcp"``) the
+    token's own identity and this document.
     """
     document = copy.deepcopy(built.document)
     as_token = via_token or audience == "mcp"
@@ -266,9 +286,10 @@ def narrow(built: BuiltDocument, user, *, via_token: bool = False, audience: str
         for method in list(item):
             op = item[method]
             endpoint, http_method = built.endpoints[op["operationId"]]
-            reachable = (
-                token_access(user, endpoint, http_method) == "ok" if as_token else allows(user, endpoint, http_method)
-            )
+            if as_token:
+                reachable = token_access(user, endpoint, http_method, mcp=op["x-bize"]["mcp"] is True) == "ok"
+            else:
+                reachable = allows(user, endpoint, http_method)
             if audience == "mcp":
                 reachable = reachable and op["x-bize"]["mcp"] is True
             if reachable:
