@@ -35,7 +35,7 @@ module "tunnel" {
   # 17 Nov 2026). Each still has its own sign-in: MCP and the OAuth token/registration endpoints
   # are bearer- or PKCE-protected and rate limited. /oauth/authorize (the approve screen) opens in
   # the person's browser, so it stays founders-only for now. Test only; production gets the same
-  # when MCP goes public.
+  # when MCP goes public. (Re-planned after main moved on before the first apply.)
   public_paths = [
     "mcp-test.biz-e.app/mcp",
     "mcp-test.biz-e.app/.well-known/*",
