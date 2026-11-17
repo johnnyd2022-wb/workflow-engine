@@ -138,6 +138,38 @@ def test_ac41_flows_are_written_with_the_feature_off(db, flask_app):  # noqa: F8
         purge(db, org)
 
 
+def test_ac41_reconciliation_flow_is_written_with_the_feature_off(db, flask_app):  # noqa: F811
+    """AC41 names every live hook, not only create / consume / produce / add: reconciling an
+    output into an untracked lot also writes its flow when the org has no costing feature."""
+    org = new_org(db, grant=False)
+    client = user_client(db, flask_app, org)
+    try:
+        spirit = lot(db, org.id, "Spirit", 6, "L")
+        untracked = lot(
+            db,
+            org.id,
+            "Gin Base",
+            10,
+            "L",
+            inventory_type="work_in_progress",
+            extra_data={"untracked": True, "remaining_balance_to_reconcile": "10"},
+        )
+        execution, (step,) = workflow(db, org.id, [[{"name": "Gin Base", "unit": "L"}]])
+        complete(
+            client,
+            execution,
+            step,
+            [(spirit, 6, "L")],
+            [{"name": "Gin Base", "quantity": 6, "unit": "L", "untracked_item_id": str(untracked.id)}],
+        )
+        (reconciled,) = flows(db, org.id, untracked.id, kind="reconciled_in")
+        assert (reconciled.direction, D(str(reconciled.quantity))) == ("in", D("6"))
+        assert reconciled.source_key == f"reconcile:{step.id}:{untracked.id}:0"
+        assert (reconciled.execution_id, reconciled.execution_step_id) == (execution.id, step.id)
+    finally:
+        purge(db, org)
+
+
 # --- AC52: output identity ------------------------------------------------------------
 
 
@@ -309,6 +341,193 @@ def test_ac37_backfill_is_org_scoped(world, db):
         purge(db, other)
 
 
+def test_created_kind_prefers_transfer_over_production_provenance():
+    """Spec: a transfer destination copies production provenance, so it is `transfer_in` even
+    though it also names a source step. Live hooks and the backfill both classify through this."""
+    from types import SimpleNamespace
+
+    from app.features.costing.flows import created_kind
+
+    step_id, receipt_id = uuid4(), uuid4()
+    both = SimpleNamespace(transfer_receipt_id=receipt_id, source_execution_step_id=step_id)
+    assert created_kind(both) == "transfer_in"
+    assert created_kind(SimpleNamespace(transfer_receipt_id=None, source_execution_step_id=step_id)) == "produced"
+    assert created_kind(SimpleNamespace(transfer_receipt_id=None, source_execution_step_id=None)) == "created"
+
+
+def test_ac37_backfill_fills_only_the_gaps_and_leaves_live_rows_alone(world, db):
+    """A live row and a reconstructed one share a key space: the backfill rebuilds what is missing
+    and never rewrites what a live hook already recorded (spec: "neither can duplicate the other")."""
+    from app.core.utils.time import utc_now
+    from app.features.costing.backfill import backfill_flows
+    from app.features.costing.models import CostFlow
+
+    org, _ = world
+    item = lot(db, org.id, "Mixed", 2, "kg")
+    InventoryRepository(db).add_quantity_to_inventory_item(item.id, org.id, "3")
+    db.commit()
+    (live_added,) = flows(db, org.id, item.id, kind="added")
+    live_added_id, live_added_reason = live_added.id, live_added.write_reason
+    (live_created,) = flows(db, org.id, item.id, kind="created")
+    db.query(CostFlow).filter(CostFlow.id == live_created.id).delete()
+    db.commit()
+
+    started = utc_now()
+    assert backfill_flows(db, org.id)["inserted"] == 1
+    db.commit()
+    by_kind = {r.kind: r for r in flows(db, org.id, item.id)}
+    created = by_kind["created"]
+    assert (created.reconstructed, created.write_reason, D(str(created.quantity))) == (True, "backfill", D("2"))
+    assert created.created_at >= started, "reconstructed rows are stamped when the backfill ran"
+    added = by_kind["added"]
+    assert (added.id, added.reconstructed, added.write_reason) == (live_added_id, False, live_added_reason)
+
+
+def test_ac37_live_write_after_backfill_cannot_record_the_same_movement_twice(world, db):
+    from app.features.costing.backfill import backfill_flows
+    from app.features.costing.flows import FlowConflictError, create_key, insert_flow
+
+    org, _ = world
+    item = lot(db, org.id, "Twice", 4, "kg")
+    _wipe_flows(db, org.id)
+    backfill_flows(db, org.id)
+    db.commit()
+    (rebuilt,) = flows(db, org.id, item.id)
+    rebuilt_id = rebuilt.id
+    with pytest.raises(FlowConflictError):
+        insert_flow(
+            db,
+            org_id=org.id,
+            inventory_item_id=item.id,
+            direction="in",
+            kind="created",
+            quantity=Decimal("4"),
+            source_key=create_key(item.id),
+            write_reason="test",
+        )
+    db.rollback()
+    (still,) = flows(db, org.id, item.id)
+    assert (still.id, still.reconstructed) == (rebuilt_id, True)
+
+
+def test_ac37_backfill_does_not_turn_a_manual_correction_into_an_added_flow(world, db):
+    """Only `add_quantity_to_inventory_item` writes an `added` flow live. A recount that raises a lot
+    also emits a quantity_adjusted event with a positive delta, but under another reason."""
+    from app.features.costing.backfill import backfill_flows
+
+    org, _ = world
+    item = lot(db, org.id, "Recounted", 2, "kg")
+    InventoryRepository(db).set_inventory_item_quantity(item.id, org.id, "5")
+    db.commit()
+    assert _shape(flows(db, org.id, item.id)) == [("created", D("2"))], "the live hook ignores a recount"
+    _wipe_flows(db, org.id)
+    backfill_flows(db, org.id)
+    db.commit()
+    assert _shape(flows(db, org.id, item.id)) == [("created", D("2"))]
+
+
+def test_ac37_backfill_sums_each_lot_across_inputs_in_the_lots_own_unit(world, db):
+    from app.features.costing.backfill import backfill_flows
+
+    org, client = world
+    juniper = lot(db, org.id, "Juniper", 1, "kg")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "bottles"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(juniper, 300, "g"), (juniper, 200, "g")],
+        [{"name": "Gin", "quantity": 20, "unit": "bottles"}],
+    )
+    (live,) = flows(db, org.id, juniper.id, kind="consumed")
+    live_key, live_quantity = live.source_key, D(str(live.quantity))
+    _wipe_flows(db, org.id)
+    backfill_flows(db, org.id)
+    db.commit()
+    (rebuilt,) = flows(db, org.id, juniper.id, kind="consumed")
+    assert (rebuilt.source_key, D(str(rebuilt.quantity)), rebuilt.reconstructed) == (live_key, D("0.5"), True)
+    assert live_quantity == D("0.5"), "the live hook and the backfill agree"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        pytest.param({"inventory_item_id": "not-a-uuid"}, id="malformed-lot-id"),
+        pytest.param({"unit": "bottles"}, id="unit-that-cannot-convert"),
+        pytest.param({"quantity": "0"}, id="zero-quantity"),
+        pytest.param({"quantity": "plenty"}, id="non-numeric-quantity"),
+        pytest.param(None, id="lot-since-deleted"),
+    ],
+)
+def test_ac37_backfill_skips_and_counts_an_input_it_cannot_cost(world, db, tamper):
+    """Spec: an input whose lot no longer exists, or whose unit can't convert, is skipped and
+    counted in the command's output; the step's other inputs are still reconstructed."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.features.costing.backfill import backfill_flows
+
+    org, client = world
+    kept = lot(db, org.id, "Kept", 2, "kg")
+    doomed = lot(db, org.id, "Doomed", 1, "kg")
+    kept_id, doomed_id = kept.id, doomed.id
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    complete(
+        client, execution, step, [(kept, 2, "kg"), (doomed, 1, "kg")], [{"name": "Gin", "quantity": 3, "unit": "L"}]
+    )
+    assert len(flows(db, org.id, doomed_id, kind="consumed")) == 1, "control: live recorded both inputs"
+
+    if tamper is None:
+        db.delete(db.get(InventoryItem, doomed_id))
+    else:
+        row = db.get(ExecutionStep, step.id)
+        inputs = [dict(entry) for entry in row.actual_inputs]
+        (target,) = [entry for entry in inputs if entry["inventory_item_id"] == str(doomed_id)]
+        target.update(tamper)
+        row.actual_inputs = inputs
+        flag_modified(row, "actual_inputs")
+    db.commit()
+    _wipe_flows(db, org.id)
+
+    result = backfill_flows(db, org.id)
+    db.commit()
+    assert result["skipped_inputs"] == 1
+    consumed = [r for r in _all_flows(db, org.id) if r.kind == "consumed"]
+    assert [(r.inventory_item_id, D(str(r.quantity))) for r in consumed] == [(kept_id, D("2"))]
+
+
+def test_ac37_backfill_does_not_reconstruct_historical_reconciliations(world, db):
+    """Spec: their untracked lots stay unknown and are listed as missing inputs."""
+    from app.features.costing.backfill import backfill_flows
+
+    org, client = world
+    spirit = lot(db, org.id, "Spirit", 6, "L")
+    untracked = lot(
+        db,
+        org.id,
+        "Gin Base",
+        10,
+        "L",
+        inventory_type="work_in_progress",
+        extra_data={"untracked": True, "remaining_balance_to_reconcile": "10"},
+    )
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin Base", "unit": "L"}]])
+    complete(
+        client,
+        execution,
+        step,
+        [(spirit, 6, "L")],
+        [{"name": "Gin Base", "quantity": 6, "unit": "L", "untracked_item_id": str(untracked.id)}],
+    )
+    assert len(flows(db, org.id, untracked.id, kind="reconciled_in")) == 1, "control: live recorded it"
+    _wipe_flows(db, org.id)
+    backfill_flows(db, org.id)
+    db.commit()
+    assert [r for r in _all_flows(db, org.id) if r.kind == "reconciled_in"] == []
+    assert _shape(flows(db, org.id, untracked.id)) == [("created", D("10"))]
+    assert _shape(flows(db, org.id, spirit.id)) == [("consumed", D("6")), ("created", D("6"))]
+
+
 def test_ac36_flows_cascade_when_a_lot_is_deleted(world, db):
     org, _ = world
     item = lot(db, org.id, "Temporary", 1, "kg")
@@ -380,6 +599,109 @@ def test_flow_kinds_are_constrained(world, db):
     with pytest.raises(IntegrityError):
         db.flush()
     db.rollback()
+
+
+# --- cost_flows schema: each CHECK / FK is a database rule, so each gets a row that breaks only it ------
+
+
+def _schema_flow(db, org, item, step=None, **overrides):
+    """A row the schema accepts, unless ``overrides`` break it. With ``step`` it names a real
+    execution and step, so the composite FKs hold and only the rule under test can fire."""
+    from app.features.costing.models import CostFlow
+
+    fields = dict(
+        org_id=org.id,
+        inventory_item_id=item.id,
+        direction="in",
+        kind="created",
+        quantity=Decimal("1"),
+        source_key=f"schema:{uuid4()}",
+        write_reason="test",
+        reconstructed=False,
+    )
+    if step is not None:
+        fields.update(execution_id=step.execution_id, execution_step_id=step.id, step_number=step.step_number)
+    fields.update(overrides)
+    return CostFlow(**fields)
+
+
+def _assert_rejected(db, row, constraint):
+    from sqlalchemy.exc import IntegrityError
+
+    db.add(row)
+    # Quoted, so "fk_cost_flows_execution" cannot also match "fk_cost_flows_execution_step".
+    with pytest.raises(IntegrityError, match=f'"{constraint}"'):
+        db.flush()
+    db.rollback()
+
+
+_INFLOW_KINDS = ["created", "added", "produced", "transfer_in", "reconciled_in"]
+_EXECUTION_KINDS = [("produced", "in"), ("reconciled_in", "in"), ("consumed", "out")]
+
+
+def test_cost_flow_schema_accepts_a_valid_row_of_every_kind(world, db):
+    """Control for the rejection tests below: the helper's rows are valid until deliberately broken."""
+    org, _ = world
+    item = lot(db, org.id, "Control", 1, "kg")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    for kind in _INFLOW_KINDS:
+        db.add(_schema_flow(db, org, item, step, direction="in", kind=kind))
+    db.add(_schema_flow(db, org, item, step, direction="out", kind="consumed"))
+    db.add(_schema_flow(db, org, item, None, direction="in", kind="created"))  # no execution needed
+    db.flush()
+    db.rollback()
+
+
+@pytest.mark.parametrize(
+    ("direction", "kind"),
+    [("out", kind) for kind in _INFLOW_KINDS] + [("in", "consumed")],
+    ids=lambda value: str(value),
+)
+def test_cost_flow_direction_must_match_its_kind(world, db, direction, kind):
+    org, _ = world
+    item = lot(db, org.id, "Directed", 1, "kg")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    # a full execution reference, so only the direction/kind rule can reject it
+    _assert_rejected(db, _schema_flow(db, org, item, step, direction=direction, kind=kind), "ck_cost_flows_kind")
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        pytest.param(("execution_id", "execution_step_id"), id="no-execution"),
+        pytest.param(("execution_step_id",), id="no-step"),
+        pytest.param(("step_number",), id="no-step-number"),
+    ],
+)
+@pytest.mark.parametrize(("kind", "direction"), _EXECUTION_KINDS)
+def test_cost_flow_execution_kinds_must_name_execution_step_and_number(world, db, kind, direction, missing):
+    org, _ = world
+    item = lot(db, org.id, "Anchored", 1, "kg")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    row = _schema_flow(db, org, item, step, direction=direction, kind=kind, **{name: None for name in missing})
+    _assert_rejected(db, row, "ck_cost_flows_execution_kinds")
+
+
+def test_cost_flow_step_needs_its_execution(world, db):
+    """A kind that doesn't require execution fields can still not name a step without its execution."""
+    org, _ = world
+    item = lot(db, org.id, "Orphan Step", 1, "kg")
+    execution, (step,) = workflow(db, org.id, [[{"name": "Gin", "unit": "L"}]])
+    row = _schema_flow(db, org, item, step, direction="in", kind="created", execution_id=None, step_number=None)
+    _assert_rejected(db, row, "ck_cost_flows_step_needs_execution")
+
+
+def test_cost_flow_execution_must_belong_to_the_same_org(world, db):
+    """The composite (org_id, execution_id) key: another org's execution is unrepresentable."""
+    org, _ = world
+    other = new_org(db)
+    try:
+        item = lot(db, org.id, "Mine", 1, "kg")
+        theirs, _steps = workflow(db, other.id, [[{"name": "Gin", "unit": "L"}]])
+        row = _schema_flow(db, org, item, None, direction="in", kind="created", execution_id=theirs.id)
+        _assert_rejected(db, row, "fk_cost_flows_execution")
+    finally:
+        purge(db, other)
 
 
 def test_ac36_failed_step_completion_leaves_no_consumed_flow(world, db):
