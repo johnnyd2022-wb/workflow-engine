@@ -26,7 +26,7 @@ from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings, OAuthC
 from app.features.mcp_oauth.services import rate_limit
 from tests.costing_helpers import login, lot, new_org, price
 from tests.factories import UserFactory
-from tests.mcp_oauth.support import TEST_NAME_PREFIX, bearer, make_client, mint_grant, unique_addr
+from tests.mcp_oauth.support import bearer, make_client, mint_grant, unique_addr
 from tests.openapi.seeds import SEEDS
 from tests.org_purge import purge_orgs
 
@@ -65,6 +65,7 @@ def assistant_org(db, flask_app):
     db.add(McpAllowedRole(org_id=org.id, role_key="builtin:admin"))
     db.commit()
     client_row = make_client(db)
+    client_pk = client_row.id
     _grant, access, _refresh = mint_grant(db, admin, client_row)
     with flask_app.app_context():
         yield {
@@ -75,7 +76,7 @@ def assistant_org(db, flask_app):
         }
     db.rollback()
     purge_orgs(db, [org_id])
-    db.query(OAuthClient).filter(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%")).delete(synchronize_session=False)
+    db.query(OAuthClient).filter(OAuthClient.id == client_pk).delete(synchronize_session=False)  # only ours
     db.commit()
 
 
