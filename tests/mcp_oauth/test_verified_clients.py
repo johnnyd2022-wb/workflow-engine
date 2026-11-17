@@ -70,7 +70,7 @@ def _approve(session, params):
 
 def _row(db, client_id) -> OAuthClient:
     db.expire_all()
-    return db.query(OAuthClient).filter_by(client_id=client_id).one()
+    return db.query(OAuthClient).filter(OAuthClient.client_id == client_id).one()  # global table
 
 
 # --- the impostor (the finding itself) ----------------------------------------------------------
