@@ -253,16 +253,18 @@ def build_document(app, overlay: Overlay | None = None) -> dict:
     return build(app, overlay).document
 
 
-def mcp_operations(app, overlay: Overlay | None = None) -> frozenset[tuple[str, str]]:
-    """(endpoint, method) of every operation the overlay marks ``x-bize.mcp: true``.
+def mcp_operations(app, overlay: Overlay | None = None) -> frozenset[tuple[str, str, str]]:
+    """(endpoint, Flask rule, method) of every operation the overlay marks ``x-bize.mcp: true``.
 
     The app's token rule reads this (``access_policy.in_mcp_catalogue``), so the allowlist the MCP
     server plans from and the one the app enforces are the same overlay flags. Operations are
-    resolved exactly as ``build`` resolves them, from ``collect_operations``.
+    resolved exactly as ``build`` resolves them, from ``collect_operations``. The rule is part of
+    the key because an operation is one method on one URL rule: a second rule added to a catalogue
+    endpoint is not in the catalogue until the overlay says so.
     """
     overlay = overlay or get_overlay()
     return frozenset(
-        (op.endpoint, op.method)
+        (op.endpoint, op.rule, op.method)
         for op in collect_operations(app)
         if overlay.operations.get(op.operation_id, {}).get("x-bize", {}).get("mcp") is True
     )

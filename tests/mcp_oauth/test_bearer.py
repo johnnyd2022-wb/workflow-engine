@@ -195,13 +195,13 @@ def test_ac13_every_get_route_without_a_read_permission_is_refused_for_an_admin_
     client = _full_app_client()
     refused = 0
     wrong = []
-    for endpoint, url in _get_routes_without_arguments():
+    for endpoint, url in _get_routes_without_arguments():  # no arguments, so the URL is the rule
         requirement = requirement_for(endpoint, "GET")
         if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
             continue
         required = set(requirement if isinstance(requirement, tuple) else (requirement,))
         resp = client.get(url, headers=bearer(access))
-        if not (required & READ_PERMISSIONS and in_mcp_catalogue(world.app, endpoint, "GET")):
+        if not (required & READ_PERMISSIONS and in_mcp_catalogue(world.app, endpoint, url, "GET")):
             refused += 1
             if resp.status_code != 403 or (resp.get_json(silent=True) or {}).get("error") != "insufficient_scope":
                 wrong.append((endpoint, url, resp.status_code))

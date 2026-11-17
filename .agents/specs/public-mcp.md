@@ -146,8 +146,9 @@ In `tenant_context`, only when the request has **no session user** and has
    - the route's OpenAPI operation must be marked `x-bize.mcp: true` in the overlay
      (`app/api/openapi/overlay/*.yaml`). That is the same allowlist the MCP catalogue is built
      from, read once at app start (`document.mcp_operations` → `app.extensions["mcp_operations"]`)
-     and resolved endpoint+method → operation exactly as the generator does. Deny by default: a
-     route with no overlay entry, or `mcp: false`, is out of scope (design review S1);
+     and keyed by endpoint, URL rule and method, the way the generator resolves an operation.
+     Deny by default: a route with no overlay entry, or `mcp: false`, is out of scope (design
+     review S1);
    - the endpoint's requirement must be one of `READ_PERMISSIONS = {production.view,
      inventory.view, sales.view, compliance.view, costs.view}`;
    - the user must hold it, which the existing check already enforces;

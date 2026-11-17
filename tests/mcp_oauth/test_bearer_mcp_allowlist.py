@@ -117,15 +117,30 @@ def test_s1_a_catalogue_operation_of_a_product_the_org_lacks_is_not_served_to_a_
 def test_s1_the_app_allowlist_is_the_overlays_mcp_flags(world):
     """One source of truth: the app's allowlist is exactly the document's ``x-bize.mcp`` operations."""
     from app.api.openapi.document import build
+    from app.api.openapi.generator import collect_operations
 
     built = build(world.app)
-    flagged = {
-        built.endpoints[op["operationId"]]
-        for item in built.document["paths"].values()
-        for op in item.values()
-        if op["x-bize"]["mcp"] is True
-    }
+    rules = {op.operation_id: op.rule for op in collect_operations(world.app)}
+    flagged = set()
+    for item in built.document["paths"].values():
+        for op in item.values():
+            if op["x-bize"]["mcp"] is True:
+                endpoint, method = built.endpoints[op["operationId"]]
+                flagged.add((endpoint, rules[op["operationId"]], method))
+    assert flagged
     assert set(world.app.extensions["mcp_operations"]) == flagged
+
+
+def test_s1_a_second_rule_on_a_catalogue_endpoint_is_not_in_the_catalogue(world):
+    """The allowlist names the URL rule, not just the endpoint: a route added later to a catalogue
+    view is out of scope for a token until the overlay marks it."""
+    from app.core.security.access_policy import in_mcp_catalogue
+
+    assert in_mcp_catalogue(world.app, "core.list_inventory", "/api/core/inventory", "GET")
+    assert in_mcp_catalogue(world.app, "core.list_inventory", "/api/core/inventory", "HEAD")
+    assert not in_mcp_catalogue(world.app, "core.list_inventory", "/api/core/inventory-alias", "GET")
+    assert not in_mcp_catalogue(world.app, "core.list_inventory", None, "GET")
+    assert not in_mcp_catalogue(world.app, "core.list_inventory", "/api/core/inventory", "POST")
 
 
 def test_s1_the_mcp_audience_document_is_still_served_to_a_token(world, admin_token):

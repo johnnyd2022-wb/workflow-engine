@@ -537,15 +537,16 @@ def token_access(user, endpoint: str, method: str, *, mcp: bool) -> str:
     return "ok" if has_permission(user, *readable) else "denied"
 
 
-def in_mcp_catalogue(app, endpoint: str, method: str) -> bool:
-    """Whether ``endpoint`` and ``method`` are an ``x-bize.mcp`` operation of ``app``.
+def in_mcp_catalogue(app, endpoint: str, rule: str | None, method: str) -> bool:
+    """Whether this endpoint, URL rule and method are an ``x-bize.mcp`` operation of ``app``.
 
     The set is built once at app start (``app.extensions["mcp_operations"]``, from the OpenAPI
     overlay). An app without one has an empty catalogue, so tokens reach nothing but the
     always-allowed routes. HEAD is answered as GET, as the OpenAPI document describes it.
     """
     method = method.upper()
-    return (endpoint, "GET" if method == "HEAD" else method) in app.extensions.get("mcp_operations", frozenset())
+    key = (endpoint, rule, "GET" if method == "HEAD" else method)
+    return key in app.extensions.get("mcp_operations", frozenset())
 
 
 def setup_access_policy(app) -> None:
@@ -569,7 +570,8 @@ def setup_access_policy(app) -> None:
             session.modified = True
             return jsonify({"error": "Your access to this organisation has ended.", "code": "access_expired"}), 401
         if getattr(g, "auth_via", None) == "mcp":
-            mcp = in_mcp_catalogue(current_app, endpoint, request.method)
+            rule = request.url_rule.rule if request.url_rule is not None else None
+            mcp = in_mcp_catalogue(current_app, endpoint, rule, request.method)
             verdict = token_access(user, endpoint, request.method, mcp=mcp)
             if verdict == "out_of_scope":
                 logger.warning("mcp.out_of_scope", endpoint=endpoint, method=request.method, user_id=str(user.id))
