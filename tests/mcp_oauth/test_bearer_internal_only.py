@@ -14,8 +14,8 @@ import configparser
 from pathlib import Path
 
 import pytest
-from structlog.testing import capture_logs
 
+from app.api.middleware import tenant_context
 from app.features.mcp_oauth.services import bearer_auth
 from app.utils.config_loader import config
 from tests.mcp_oauth.support import bearer, mint_grant
@@ -39,6 +39,28 @@ def _token(world, who="member"):
     return access
 
 
+class _LogSpy:
+    """Records what tenant_context logs. structlog caches loggers on first use, so capture_logs()
+    misses them once another test has logged; replacing the module's LOGGER does not."""
+
+    def __init__(self, real):
+        self.real = real
+        self.events: list[dict] = []
+
+    def __getattr__(self, level):
+        def record(event, **kwargs):
+            self.events.append({"event": event, "level": level, **kwargs})
+            return getattr(self.real, level)(event, **kwargs)
+
+        return record
+
+
+def _spy_logs(monkeypatch) -> _LogSpy:
+    spy = _LogSpy(tenant_context.LOGGER)
+    monkeypatch.setattr(tenant_context, "LOGGER", spy)
+    return spy
+
+
 def _count_lookups(monkeypatch) -> list:
     calls = []
     real = bearer_auth.authenticate
@@ -56,16 +78,16 @@ def test_s1b_a_token_arriving_through_cloudflare_is_refused_before_lookup(world,
     _internal_only(monkeypatch, True)
     access = _token(world)
     lookups = _count_lookups(monkeypatch)
-    with capture_logs() as logs:
-        resp = world.anon().get("/api/core/inventory", headers={**bearer(access), **edge})
+    logs = _spy_logs(monkeypatch)
+    resp = world.anon().get("/api/core/inventory", headers={**bearer(access), **edge})
     assert resp.status_code == 401, resp.get_data(as_text=True)[:300]
     assert resp.get_json() == {"error": "invalid_token"}
     assert resp.headers.get("WWW-Authenticate") == WWW_INVALID
     assert lookups == [], "the token must not be looked up when it came through the edge"
     assert "Org A Juniper" not in resp.get_data(as_text=True)
-    assert any(entry.get("event") == "mcp.bearer_from_edge" for entry in logs), logs
+    assert any(entry["event"] == "mcp.bearer_from_edge" for entry in logs.events), logs.events
     # The log line never carries the token.
-    assert access not in repr(logs)
+    assert access not in repr(logs.events)
 
 
 def test_s1b_a_garbage_token_through_cloudflare_gets_the_same_answer(world, monkeypatch):
