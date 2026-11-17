@@ -41,7 +41,7 @@ Never assume that all physically present stock is usable.
 
 ## Authoritative operations
 
-- Product-level "how long will it last": `planning_get_stock_cover`. Its `available` is stock on hand (as defined above, per site and owner) plus the output of live planned batches, less open demand that is not a forecast.
+- Product-level "how long will it last": `planning_get_stock_cover`. Its `available` is stock on hand (as defined above, per site and owner) plus the output of live batches that are not blocked, less open demand that is not a forecast. Its run-out date counts each batch only from its ready date.
 - Where stock physically is, by place and batch: `stocktake_get_stock_position`. It lists what is recorded as there, including held and not-yet-ready lots. It is a position, not availability.
 - Why one lot cannot be used: `core_list_inventory`, `lot_holds_get_lot_holds` and `core_list_output_ready_date`.
 

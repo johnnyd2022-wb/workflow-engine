@@ -119,6 +119,8 @@ class DemandPosition:
 class Plan:
     positions: tuple[DemandPosition, ...]
     batches: tuple[PlannedBatch, ...]
+    # Supply left once every demand has taken its share (planned surplus included).
+    remaining: tuple[Supply, ...] = ()
 
 
 def build_plan(
@@ -220,4 +222,53 @@ def build_plan(
         positions.append(
             DemandPosition(demand.demand_id, supplied, needed, planned, needed if rule is None else Decimal(0))
         )
-    return Plan(tuple(positions), tuple(batches))
+    remaining = tuple(
+        Supply(supply.supply_id, supply.key, left, supply.ready_date, supply.expiry_date)
+        for supply, left in available
+        if left > 0
+    )
+    return Plan(tuple(positions), tuple(batches), remaining)
+
+
+def days_until_out(supplies: tuple[Supply, ...], weekly: Decimal, *, today: date) -> Decimal:
+    """How many days steady use of ``weekly`` a week lasts, drawing on each supply only from its
+    ready date and only until its expiry date (inclusive), first-expiring first: the same rules
+    ``build_plan`` nets demand by. Stops at the first moment nothing is left, even if a later
+    supply would restock it. 0 means nothing is available today."""
+    if not isinstance(weekly, Decimal) or not weekly.is_finite() or weekly <= 0:
+        raise ValueError("Weekly use must be a positive finite Decimal")
+    for supply in supplies:
+        _quantity(supply.quantity)
+
+    def offset(day: date) -> int:
+        return max((day - today).days, 0)
+
+    # Each lot as the days of use it holds (one division, as quantity * 7 / weekly), so steady use
+    # takes exactly one day a day and whole-day answers stay whole.
+    pending = sorted(supplies, key=lambda row: (row.ready_date, row.supply_id))
+    pool: list[list] = []  # [days of use left, day it stops being usable (None: never), id]
+    events = sorted(
+        {offset(row.ready_date) for row in supplies}
+        | {offset(row.expiry_date) + 1 for row in supplies if row.expiry_date is not None}
+    )
+    now = 0
+    for event in events:
+        need = Decimal(event - now)
+        for lot in sorted(pool, key=lambda lot: (lot[1] is None, lot[1] or 0, lot[2])):
+            used = min(need, lot[0])
+            lot[0] -= used
+            need -= used
+        if not need.is_finite():
+            raise ValueError("Supply must be finite")
+        if need > 0:
+            return event - need
+        now = event
+        pool = [lot for lot in pool if lot[0] > 0 and (lot[1] is None or lot[1] > event)]
+        while pending and offset(pending[0].ready_date) <= event:
+            supply = pending.pop(0)
+            expires = None if supply.expiry_date is None else offset(supply.expiry_date) + 1
+            if supply.quantity > 0 and (expires is None or expires > event):
+                pool.append([supply.quantity * 7 / weekly, expires, supply.supply_id])
+        if not pool:
+            return Decimal(now)
+    return now + sum((lot[0] for lot in pool), Decimal(0))

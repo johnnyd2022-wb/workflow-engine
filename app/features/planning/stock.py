@@ -118,9 +118,15 @@ def planned_output(
     today: date,
     exclude_demand_ids=(),
     sources=("manual", "contract", "forecast"),
+    blocked: bool | None = None,
 ):
     """Live batches of this output at this site: not started yet, or started and still being
-    made (their output isn't in stock yet). Each is a supply on its ready date."""
+    made (their output isn't in stock yet). Each is a supply on its ready date.
+
+    ``blocked`` narrows to blocked batches only (True) or leaves them out (False): stock cover
+    doesn't count a batch that can't start. Netting (None) plans against every live batch."""
+    waiting = {None: ("blocked", "planned"), True: ("blocked",), False: ("planned",)}[blocked]
+    started = (PlanningBatch.status == "started") & Execution.status.in_(LIVE_EXECUTION)
     rows = (
         db.query(PlanningBatch, PlanningDemand)
         .join(
@@ -133,10 +139,7 @@ def planned_output(
             PlanningBatch.source_output_id == output_id,
             PlanningBatch.unit == unit,
             PlanningBatch.site_id.is_(None) if site is None else PlanningBatch.site_id == site.id,
-            or_(
-                PlanningBatch.status.in_(("blocked", "planned")),
-                (PlanningBatch.status == "started") & Execution.status.in_(LIVE_EXECUTION),
-            ),
+            PlanningBatch.status.in_(waiting) if blocked else or_(PlanningBatch.status.in_(waiting), started),
             PlanningDemand.source.in_(sources),
             PlanningDemand.status == "open",
         )

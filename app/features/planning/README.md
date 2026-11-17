@@ -36,7 +36,14 @@ Demand is processed by due date, then descending priority, then stable demand ID
 Eligible supply is consumed first-expiring first, and only once. Expiry is inclusive
 of the expiry date. Overdue orders use today's date for eligibility so yesterday's
 expired stock cannot fulfil them. Manufactured surplus can cover a later demand
-only after the planned batch's ready date.
+only after the planned batch's ready date. `Plan.remaining` is the supply left
+once every demand has taken its share.
+
+`days_until_out` applies the same supply rules to steady use: given a weekly
+rate, it draws each supply only from its ready date and only through its expiry
+date, first-expiring first, and returns the first moment nothing is left. Stock
+cover (`forecast_service.cover_row`) nets open orders with `build_plan`, then
+walks what remains with `days_until_out`; blocked batches are not supply there.
 
 Workflow timing uses dependencies rather than summing parallel branches. Include
 expected work, waiting and configured output readiness in the supplied timings;
