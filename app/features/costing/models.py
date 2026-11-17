@@ -431,10 +431,14 @@ MOVEMENT_KINDS = (
 
 
 class StockValueSnapshot(TenantScoped, Base):
-    """What the stock was worth at a cutoff, held fixed (live-cogs 8.1g, "8.1g build contract").
+    """What the stock was worth at a cutoff (live-cogs 8.1g, "8.1g build contract").
 
-    Written once. Nothing here is ever updated: a closed month's figures don't move, and later
-    cost changes are shown beside it as "changes since close".
+    The quantities (its lines' ``quantity`` and ``quantity_basis``) are frozen when it is taken. A
+    month-end snapshot's valuation is ``provisional`` until the month is closed (design review L1):
+    reads re-price the frozen quantities with today's costs and write nothing. Closing writes the
+    valuation once; from then on nothing here is updated, and later cost changes are shown beside it
+    as "changes since close". A manual snapshot is closed when taken, unless an earlier month is still
+    provisional: then it closes with that month.
     """
 
     __tablename__ = "stock_value_snapshots"
@@ -452,7 +456,14 @@ class StockValueSnapshot(TenantScoped, Base):
             name="fk_stock_value_snapshots_previous",
             ondelete="SET NULL (previous_snapshot_id)",
         ),
+        ForeignKeyConstraint(
+            ["org_id", "closed_by_user_id"],
+            ["users.org_id", "users.id"],
+            name="fk_stock_value_snapshots_closed_by",
+            ondelete="SET NULL (closed_by_user_id)",
+        ),
         CheckConstraint("kind IN ('month_end','manual')", name="ck_stock_value_snapshots_kind"),
+        CheckConstraint("status IN ('provisional','closed')", name="ck_stock_value_snapshots_status"),
         CheckConstraint("trigger IN ('xero_sync','costing_read','manual')", name="ck_stock_value_snapshots_trigger"),
         CheckConstraint("quantity_basis IN ('exact','reconstructed')", name="ck_stock_value_snapshots_basis"),
         Index(
@@ -487,6 +498,10 @@ class StockValueSnapshot(TenantScoped, Base):
     partial_lots = Column(Integer, nullable=False, default=0)
     lot_count = Column(Integer, nullable=False, default=0)
     purchases_value = Column(Numeric(18, 4), nullable=True)  # B for the window since the previous snapshot
+    # provisional: valued on read from the frozen quantities; closed: the stored valuation is final
+    status = Column(String(12), nullable=False, default="closed", server_default="closed")
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    closed_by_user_id = Column(UUID(as_uuid=True), nullable=True)  # None: it closed itself
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 

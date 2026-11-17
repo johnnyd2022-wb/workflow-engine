@@ -1854,6 +1854,10 @@ no timezone setting). A month-end snapshot's `cutoff_at` is 00:00 NZ on the day 
   `in_production_value`, `wip_value`, `finished_value`, `actual_value`, `estimated_value`,
   `partial_value` (floors of partly-costed lots), `unknown_lots`, `partial_lots`, `lot_count`, and
   `purchases_value` (B, below). Unique `(org_id, as_of_date)` where `kind = 'month_end'`.
+  Migration `costing_stock_002` (design review L1) adds `status` (`provisional` | `closed`),
+  `closed_at` and `closed_by_user_id` (null with `status closed` = it closed itself). Rows that
+  existed before it are `closed`, `closed_at = taken_at`: nothing that existed moves. Its downgrade
+  refuses while any snapshot is provisional.
 - `stock_value_lines`: per snapshot a `lot` line (item id, kept but nullable; name, unit, batch,
   `category` raw / wip / finished, `quantity`, `unit_cost` (null unless actual or estimated),
   `known_unit_cost` (the floor), `value` (quantity × floor; **null** when unknown), `status`) or an
@@ -1880,18 +1884,39 @@ allocations before it.
   with no connected Xero, on a costing read of `GET /stock-value`, take a `month_end` snapshot for
   every completed NZ month after the latest one (at most 12, oldest first); with none yet, only the
   most recent completed month; never an empty first snapshot. Idempotent (advisory lock + unique
-  index); a failure is logged and never fails the sync or the read.
+  index); a failure is logged and never fails the sync or the read. An assistant's token never
+  takes or closes one (design review S2).
 - **Manual** (`POST /stock-value/snapshot`, `costs.manage`): `cutoff_at = taken_at`; at most 20 a day.
 - **As at the cutoff, not at the moment taken.** Quantities are the current quantity with every
   `inventory_item.quantity_adjusted` / `consumed` / `updated` event, wastage movement and lot
-  creation at or after the cutoff reversed (the arithmetic of `stock_integrity`). Costs are those
-  known when the snapshot is taken.
-- **Held fixed.** Lines, totals and movements are never updated. `changes_since_close` (detail
-  read) re-prices the stored quantities with today's costs and compares purchases recorded now
-  against `purchases_value`; it never alters the snapshot.
+  creation at or after the cutoff reversed (the arithmetic of `stock_integrity`), and are frozen
+  when the snapshot is taken.
+- **Provisional until closed (design review L1).** Most of a month's bills and card spend are
+  recorded in the days after it ends, so a `month_end` snapshot freezes its quantities at once but
+  its valuation is `provisional`: every read re-prices the frozen quantities with today's costs and
+  works out B and the movements since the snapshot before it again, writing nothing. A manual
+  snapshot is `closed` when taken, unless the snapshot before it is still provisional: then it is
+  provisional too, and closes with that month. Closed snapshots are always a prefix in cutoff order.
+- **Closing.** `POST /stock-value/snapshots/<id>/close` (`costs.manage`, `Idempotency-Key`, CSRF)
+  writes the valuation once, exactly as taking a closed snapshot does (lines' costs and values,
+  totals, movements, `purchases_value`), sets `closed_at` / `closed_by_user_id`, writes an
+  `audit_logs` row (`stock_value_month_closed`) and closes any manual snapshot waiting on it. 409 if
+  it is already closed, or if the snapshot before it is still provisional (close oldest first). It
+  also closes itself: the first Xero sync, or costing read by a person (never a token), on or after
+  `[costing] auto_close_day` (default 20; 1–28) of the next NZ month closes every month that is due,
+  oldest first. A read on the 19th doesn't.
+- **Held fixed once closed.** A closed snapshot's lines, totals and movements are never updated.
+  `changes_since_close` (detail read) re-prices the stored quantities with today's costs and
+  compares purchases recorded now against `purchases_value`; it never alters the snapshot. It is
+  `null` for a provisional snapshot, which already reads at today's costs.
+- Snapshot reads carry `status`, `provisional`, `closes_on` (a provisional month end's close day),
+  `closed_at` and `closed_automatically`.
 - CSV export: category, item, batch, quantity, unit, unit cost, value, status; unknown cost cells
   are blank; per-category subtotals and a total with "N lots have no cost" when incomplete; cells
-  that begin `= + - @` are escaped.
+  that begin `= + - @` are escaped. A provisional snapshot's file is valued at today's costs and its
+  first row says `Provisional — not closed`.
+- **ASSUMPTION (design review L1):** the 20th is when a small producer's bills and card spend for the
+  previous month are in; an org that closes earlier uses the button. Closed months can't be reopened.
 
 ### Xero bridge (`GET /bridge?from=<snapshot>&to=<snapshot>`, default the latest two)
 
@@ -1904,11 +1929,13 @@ rate limit); the roll-forward is still returned. A token's costing read never ta
 
 - **A** = Σ Xero P&L (`get_profit_and_loss(from, to)`) for accounts whose treatment is `stock`.
   **B** = Σ active and orphaned purchase allocations on lines dated in the period in those accounts
-  (`document_date`; refunds negative), as recorded when the closing snapshot was taken.
+  (`document_date`; refunds negative), as recorded when the closing snapshot was closed (as
+  recorded now while it is provisional).
 - **Tie-out:** `A − B` = every stock-account line in the period with an open, skipped, partly
   recorded or not-stock amount, listed line by line (`open_amount + not_stock_amount`), plus
   **other entries in Xero (journals)** = A − Σ synced stock-account lines in the period (any sign).
-- **Roll-forward (stored, fixed):** `S0 + B − S1 = cost that left stock`, shown as `cogs` (sales,
+- **Roll-forward (stored and fixed once closed; worked out on read while provisional, with
+  `provisional: true` on the response):** `S0 + B − S1 = cost that left stock`, shown as `cogs` (sales,
   FIFO-matched lots at closing cost), `wastage`, `samples` (tasting dispatch), `variance`
   (corrections, plus any decrease no ledger entry explains), `production_loss`, `estimate_changes`
   and `other` (moves between locations, and `rounding`). `estimate_changes` = `revaluation` (stock
@@ -1976,4 +2003,14 @@ Mystery 5 kg with no cost; Gin (finished) 12 bottles typed price $120; Mash (wip
 - **AC147 (e2e, 375×800 and desktop)** The Costs page shows "Stock value", a total with its split, a
   Take a snapshot button for managers only, a snapshot list and the bridge; an unknown lot never
   reads $0; no sideways scroll at 375px.
+- **AC147a (design review L1; `tests/test_costing_month_close.py`)** A purchase dated in the month
+  and recorded on the 3rd of the next changes the provisional month's value, lines, B and the bridge
+  (`provisional: true`), and its CSV's first row is `Provisional — not closed`; after the month is
+  closed the same purchase changes nothing (AC143) and shows in `changes_since_close`; a read on the
+  19th leaves it provisional, a read on the 20th closes it (`closed_automatically`), a token read
+  never does; closing a month while the one before is provisional is 409, as is closing it twice;
+  `costs.view` can't close; another org's snapshot is 404; the migration marks existing snapshots
+  closed and its downgrade refuses while one is provisional. The Costs page says "Provisional until
+  you close it (closes itself on 20 Nov)" and offers managers a Close month button with a bottom
+  sheet saying what closing means.
 

@@ -755,12 +755,13 @@ class XeroSyncService:
         return self.db.query(model).filter(model.org_id == org_id).with_for_update().one()
 
     def _take_month_end_snapshots(self, org_id: UUID) -> None:
-        """Live-cogs 8.1g: the first sync after a month ends closes its stock value. Never fails the sync."""
+        """Live-cogs 8.1g: the first sync after a month ends takes its (provisional) month-end stock
+        value; the first on or after the close day closes it (design review L1). Never fails the sync."""
         from app.features.costing import stock_value
 
         try:
             with self.db.begin_nested():
-                stock_value.ensure_month_end_snapshots(self.db, org_id, trigger="xero_sync")
+                stock_value.month_end_upkeep(self.db, org_id, trigger="xero_sync")
         except Exception as e:  # noqa: BLE001 - a snapshot must never fail a sync
             logger.exception("month_end_snapshot_failed", org_id=str(org_id), error_type=type(e).__name__)
 
