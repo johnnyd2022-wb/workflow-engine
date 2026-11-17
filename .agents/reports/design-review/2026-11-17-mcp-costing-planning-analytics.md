@@ -47,6 +47,7 @@ measurement or a decision before it counts as a defect.
     - Impact: a read-only assistant can perform an irreversible month close and spend the org's Xero rate limit.
     - Fix: no snapshot on a token request; a test that runs every token-reachable GET against a
       session that fails on flush. L1 removes the write from the read path entirely.
+    - Status: fixed in !734 (a token read takes no month-end snapshot and the bridge skips Xero's P&L; invoice-defaults no longer asks Xero; a guard runs every token-reachable GET and fails on any write or Xero call)
 - **S3. Security: consent cannot tell a real client from an impostor (authorization).** Confirmed in code.
     - Problem: every client is created with `verified=False`
       (`app/features/mcp_oauth/services/client_registry.py:142`, `:354`) and nothing sets it true;

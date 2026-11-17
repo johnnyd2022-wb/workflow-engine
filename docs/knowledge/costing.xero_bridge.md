@@ -25,7 +25,7 @@ It sits beside Xero's duty accounts against Biz-E's duty, and Xero's overhead ac
 
 ## How the records relate
 
-The bridge reads stored snapshots (costing.stock_value), so it exists only from the second snapshot on. Its Xero state is `ok`, `not_connected`, `needs_reconnect` or `failed`.
+The bridge reads stored snapshots (costing.stock_value), so it exists only from the second snapshot on. Its Xero state is `ok`, `not_connected`, `needs_reconnect` or `failed`, or `not_available_to_assistants` when an assistant's token asks: an assistant never triggers the live Xero report, and gets the roll-forward only.
 
 ## Authoritative operations
 

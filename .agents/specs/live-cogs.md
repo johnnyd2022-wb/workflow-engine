@@ -1898,7 +1898,9 @@ allocations before it.
 Only between two snapshots, so only from the first snapshot on. Period = the day after
 `from.as_of_date` to `to.as_of_date`. `xero.state` is `not_connected` (200; the stock roll-forward
 below is still returned), `needs_reconnect` (token lacks `accounting.reports.profitandloss.read`,
-now in `XERO_SCOPES`), `failed` (a ref, no internals) or `ok`.
+now in `XERO_SCOPES`), `failed` (a ref, no internals) or `ok`. On an assistant's read-only token it is
+`not_available_to_assistants` and no P&L call is made (design review S2: each call spends the org's Xero
+rate limit); the roll-forward is still returned. A token's costing read never takes the month-end snapshot.
 
 - **A** = Σ Xero P&L (`get_profit_and_loss(from, to)`) for accounts whose treatment is `stock`.
   **B** = Σ active and orphaned purchase allocations on lines dated in the period in those accounts
