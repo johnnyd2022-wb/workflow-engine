@@ -163,6 +163,36 @@ def test_phone_shows_sources_stock_cover_and_plans_a_suggestion(browser, app_url
 MAIN, CELLAR = "aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000002"
 
 
+def test_phone_cover_row_says_how_the_rate_was_taken_and_what_is_blocked(browser, app_url, workspace_user):
+    """Design review P2/P3: a new product's rate note and a blocked batch's note show on the row."""
+    context, page = _page(browser, app_url, workspace_user, 390)
+    body = _cover()
+    body["products"][1].update(
+        rate_weeks=3,
+        rate_note="First sold 3 weeks ago, so the rate is over those 3 weeks, not 12",
+        blocked="240",
+        blocked_note="240 L in blocked batches aren't counted until they can start",
+    )
+    try:
+        page.route("**/api/core/planner/demands", lambda route: route.fulfill(json=_demands()))
+        page.route(
+            "**/api/core/planner/demand/sync",
+            lambda route: route.fulfill(json={"changes": {}, "held": [], "unmapped": []}),
+        )
+        page.route("**/api/core/planner/cover*", lambda route: route.fulfill(json=body))
+        page.goto("/core/planner")
+        cover = page.locator("[data-cover-list] .planner-cover-row")
+        expect(cover).to_have_count(2)
+        expect(cover.nth(1).locator(".planner-row__what")).to_contain_text("First sold 3 weeks ago")
+        expect(cover.nth(1).locator(".planner-row__note")).to_have_text(
+            "240 L in blocked batches aren't counted until they can start."
+        )
+        expect(cover.nth(0).locator(".planner-row__note")).to_have_count(0)  # nothing blocked, no note
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    finally:
+        context.close()
+
+
 def test_phone_site_picker_drives_cover_targets_and_plan(browser, app_url, workspace_user):
     """With several sites, stock cover, a target and Plan are all for the site chosen."""
     context, page = _page(browser, app_url, workspace_user, 390)
