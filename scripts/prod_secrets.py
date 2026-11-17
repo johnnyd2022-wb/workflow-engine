@@ -114,6 +114,13 @@ SECRETS = (
         shape=_GOOGLE_SECRET,
     ),
     Secret(
+        f"{GROUP}/VALKEY_PASSWORD_PROD",
+        "VALKEY_PASSWORD",
+        _random_token,
+        "Password of valkey-prod, the shared rate-limit store (scripts/run_valkey.sh). Set when that container "
+        "is first created; changing it means recreating the container (docs/production-deploy.md).",
+    ),
+    Secret(
         f"{GROUP}/ADMIN_FLASK_SECRET_KEY_PROD",
         "ADMIN_FLASK_SECRET_KEY",
         _random_token,

@@ -74,6 +74,9 @@ _TEXT_RULES = (
         re.compile(r"([?&](?:token|code|invite|key|secret|password|state)=)[^&#\s\"']*", re.IGNORECASE),
         r"\1[REDACTED]",
     ),
+    # Credentials inside a URL (redis://:password@valkey-prod:6379/0, postgresql://user:pw@host/db),
+    # wherever one turns up. Before the email rule, which would otherwise eat half of it.
+    (re.compile(r"(\b[A-Za-z][A-Za-z0-9+.\-]*://)[^/@\s\"']*:[^/@\s\"']*@"), r"\1[REDACTED]@"),
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[EMAIL]"),
     # Public MCP 8.2b: an assistant's access token, refresh token or authorization code
     # (bza_/bzr_/bzc_ then 32 random bytes as base64url) must never reach a log, wherever it

@@ -11,7 +11,7 @@ Rules:
 import hmac
 from uuid import UUID, uuid4
 
-from flask import abort, g, jsonify, request, session
+from flask import abort, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 
 from app.core.db import db_session
@@ -59,10 +59,12 @@ def _authenticate_bearer(raw_token: str):
     """Resolve an assistant's bearer token into the request's user and organisation (spec "Bearer
     path"). Returns a response to send instead of running the route, or ``None`` on success."""
     from app.features.mcp_oauth.services.bearer_auth import BearerRejectedError, authenticate
+    from app.features.mcp_oauth.services.rate_limit import calculation_endpoints
 
     db = db_session()
     try:
-        principal = authenticate(db, raw_token)
+        calculation = request.endpoint in calculation_endpoints(current_app)
+        principal = authenticate(db, raw_token, calculation=calculation)
     except BearerRejectedError as rejected:
         LOGGER.info("mcp.bearer_rejected", reason=rejected.reason, status=rejected.status)
         return _json_response(rejected.status, {"error": rejected.error}, rejected.headers)

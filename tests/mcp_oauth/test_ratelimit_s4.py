@@ -45,7 +45,10 @@ def test_s4_the_settings_api_refuses_to_turn_mcp_on_without_a_shared_store(world
         "/api/core/mcp/settings", json={"enabled": True, "allowed_roles": ["builtin:admin"]}
     )
     assert resp.status_code == 409, resp.get_json()
-    assert "rate-limit store" in resp.get_json()["error"]
+    message = resp.get_json()["error"]
+    assert "can't be switched on" in message
+    # The organisation's admin can't run scripts: the operator detail stays out of their message.
+    assert "VALKEY" not in message and "run_valkey" not in message and "worker" not in message
     assert _enabled(db, world.org.id) is False
 
 
@@ -63,7 +66,7 @@ def test_s4_the_cli_refuses_to_turn_mcp_on_without_a_shared_store(world, db, two
     org_id = world.org.id  # the CLI closes the shared session
     result = CliRunner().invoke(cli, ["mcp", "enable", "--org-id", str(org_id), "--roles", "admin"])
     assert result.exit_code != 0
-    assert "rate-limit store" in result.output
+    assert "rate-limit store" in result.output and "run_valkey.sh" in result.output
     assert _enabled(db, org_id) is False
 
 

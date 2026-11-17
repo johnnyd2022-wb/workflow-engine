@@ -1,4 +1,5 @@
-"""Configuration, from the environment only. No database credentials, no app secrets.
+"""Configuration, from the environment only. No database credentials, no app secrets: its one secret is
+the password of the shared rate-limit store, and only when that store is used.
 
 ``BIZE_API_BASE_URL``  where the app is, from this container (an internal address in production)
 ``MCP_PUBLIC_URL``     the address assistants use for this server, e.g. ``https://mcp.biz-e.app/mcp``
@@ -7,13 +8,16 @@
 ``BIZE_API_VERIFY_TLS`` optional: ``false`` skips certificate verification on the call to the app. Only for
                        the private Docker network scripts/run_mcp.sh deploys onto, where the app serves a
                        self-signed certificate under a name it does not cover. Verified by default.
+``BIZE_RATELIMIT_URI`` optional: ``redis://<host>:<port>/<db>`` of the shared Valkey (design review S4). Set,
+                       the per-caller windows are counted there, so every process shares them; unset, in
+                       this process. It carries no password: that is ``VALKEY_PASSWORD``, required with it.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 METADATA_PATH = "/.well-known/oauth-protected-resource"
@@ -41,6 +45,18 @@ def _verify_tls(raw: str | None) -> bool:
     raise ConfigError("BIZE_API_VERIFY_TLS must be true or false")
 
 
+def _ratelimit_uri(raw: str | None) -> str | None:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    parts = urlsplit(value)
+    if parts.scheme != "redis" or not parts.hostname:
+        raise ConfigError("BIZE_RATELIMIT_URI must be redis://<host>:<port>/<db>")
+    if parts.username or parts.password:
+        raise ConfigError("BIZE_RATELIMIT_URI must not carry a password; set VALKEY_PASSWORD instead")
+    return value
+
+
 @dataclass(frozen=True)
 class Config:
     api_base_url: str
@@ -49,6 +65,8 @@ class Config:
     request_timeout: float = 15.0
     knowledge_dir: str = "docs/knowledge"
     verify_tls: bool = True
+    ratelimit_uri: str | None = None
+    ratelimit_password: str = field(default="", repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "api_base_url", _check_url("api_base_url", self.api_base_url).rstrip("/"))
@@ -71,10 +89,16 @@ class Config:
         missing = [name for name in ENV_VARS if not (env.get(name) or "").strip()]
         if missing:
             raise ConfigError("Missing environment variables: " + ", ".join(missing))
+        ratelimit_uri = _ratelimit_uri(env.get("BIZE_RATELIMIT_URI"))
+        password = (env.get("VALKEY_PASSWORD") or "").strip()
+        if ratelimit_uri and not password:
+            raise ConfigError("BIZE_RATELIMIT_URI is set but VALKEY_PASSWORD is not")
         return cls(
             api_base_url=env["BIZE_API_BASE_URL"].strip(),
             public_url=env["MCP_PUBLIC_URL"].strip(),
             issuer_url=env["BIZE_ISSUER_URL"].strip(),
             knowledge_dir=(env.get("BIZE_KNOWLEDGE_DIR") or "docs/knowledge").strip(),
             verify_tls=_verify_tls(env.get("BIZE_API_VERIFY_TLS")),
+            ratelimit_uri=ratelimit_uri,
+            ratelimit_password=password,
         )

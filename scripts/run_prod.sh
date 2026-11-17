@@ -8,7 +8,8 @@
 #   0. requires clean tracked files at freshly fetched origin/main and takes a deploy lock
 #   1. loads production secrets from KeePassXC (scripts/prod_secrets.py); never from a file
 #   2. builds the `production` image from an archive of that commit
-#   3. makes sure the database container is up (scripts/prod_db.sh)
+#   3. makes sure the database container is up (scripts/prod_db.sh), and the shared rate-limit store
+#      (scripts/run_valkey.sh prod: valkey-prod, design review S4)
 #   4. backs the database up (including on first deploy) -- a failed backup stops the deploy
 #   5. runs migrations with the new image
 #   6. checks a candidate alongside the old app, then hands over the port with rollback
@@ -49,7 +50,7 @@ secret_exports="$(python3 scripts/prod_secrets.py export)"
 eval "$secret_exports"
 unset secret_exports
 for name in POSTGRES_PASSWORD FLASK_SECRET_KEY BACKUP_CODE_ENCRYPTION_KEY XERO_TOKEN_ENCRYPTION_KEY \
-    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET VALKEY_PASSWORD; do
     [ -n "${!name:-}" ] || { echo "Missing $name." >&2; exit 1; }
     export "${name?}"
 done
@@ -67,6 +68,10 @@ check_checkout "$source_sha"
 
 echo "== Database"
 scripts/prod_db.sh up
+
+# The shared rate-limit store (design review S4), on the same network, before the app needs it.
+echo "== Valkey"
+bash scripts/run_valkey.sh prod
 backup_file="$(scripts/prod_db.sh backup)"
 echo "Backup: $backup_file"
 
@@ -77,7 +82,7 @@ echo "== App"
 docker volume create workflow-engine-prod-evidence >/dev/null
 docker volume create workflow-engine-prod-process-docs >/dev/null
 
-APP_ARGS=("${SECRET_ENV[@]}"
+APP_ARGS=("${SECRET_ENV[@]}" -e VALKEY_PASSWORD
     -v workflow-engine-prod-evidence:/data/evidence
     -v workflow-engine-prod-process-docs:/data/process_docs
 )
@@ -85,12 +90,12 @@ deploy_app
 
 # The public MCP server (bize_mcp, roadmap 8.2d) goes in once the app is healthy, from the same
 # commit. deploy_app has committed by now, so nothing below can roll the app back: an MCP failure
-# only fails this script's final status. It receives no secrets (run_mcp.sh passes none).
+# only fails this script's final status. Its one secret is VALKEY_PASSWORD, for its rate-limit windows.
 echo "== MCP server"
 mcp_status=0
 MCP_SOURCE_SHA="$source_sha" bash "$repo_root/scripts/run_mcp.sh" prod || mcp_status=$?
 if [ "$mcp_status" -ne 0 ]; then
     echo "The app is up and was left as deployed, but the MCP server is not (exit $mcp_status)." >&2
-    echo "Fix the cause and run: scripts/run_mcp.sh prod" >&2
+    echo "Fix the cause and run: scripts/run_mcp.sh prod (it reads VALKEY_PASSWORD from KeePassXC)" >&2
     exit "$mcp_status"
 fi

@@ -73,6 +73,15 @@ echo "Backup: $backup_file"
 # The shared development/test database must already be running. Never recreate,
 # downgrade, restore, or change its schema to a branch's head as deployment recovery.
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
+# The shared rate-limit store (design review S4), as in deploy_test_simple.sh: optional for test.
+resolve_valkey_password test
+if [ -n "$VALKEY_PASSWORD" ]; then
+    echo "== Valkey"
+    bash scripts/run_valkey.sh test
+    APP_ARGS+=(-e VALKEY_PASSWORD)
+else
+    echo "Note: no VALKEY_PASSWORD; rate limits stay per worker and MCP cannot be switched on."
+fi
 echo "== Migrations"
 docker run --rm --network "$NETWORK" "${APP_ARGS[@]}" "$IMAGE" uv run alembic upgrade head
 

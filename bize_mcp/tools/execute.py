@@ -78,8 +78,8 @@ INPUT = schema(
 )
 
 
-def new_window() -> Window:
-    return Window(EXECUTES_PER_MINUTE, 60.0)
+def new_window(store=None) -> Window:
+    return Window(EXECUTES_PER_MINUTE, 60.0, store=store, name="execute")
 
 
 def _safe(text: str, limit: int = 80) -> str:

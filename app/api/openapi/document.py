@@ -49,8 +49,9 @@ _RESPONSES = {
     "Unauthorized": {"description": "Not signed in, or the access token is invalid, expired or revoked."},
     "Forbidden": {"description": "Signed in, but the person's role does not hold the required permission."},
     "NotFound": {"description": "No such record in this organisation."},
+    "Conflict": {"description": "Not possible in the current state; the error says why and what to do."},
 }
-_ERROR_RESPONSES = {400: "BadRequest", 401: "Unauthorized", 403: "Forbidden", 404: "NotFound"}
+_ERROR_RESPONSES = {400: "BadRequest", 401: "Unauthorized", 403: "Forbidden", 404: "NotFound", 409: "Conflict"}
 
 _ERROR_SCHEMA = {
     "type": "object",

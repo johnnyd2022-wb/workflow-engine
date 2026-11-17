@@ -39,7 +39,7 @@ from bize_mcp.config import METADATA_PATH, Config, ConfigError
 from bize_mcp.errors import ToolFailureError, UnauthorizedError
 from bize_mcp.knowledge import Knowledge
 from bize_mcp.logging_setup import configure_logging, install_redaction, redact, redact_value
-from bize_mcp.ratelimit import Window
+from bize_mcp.ratelimit import SharedStore, Window
 from bize_mcp.shaping import clip_text
 from bize_mcp.tools import TOOLS, ToolContext
 from bize_mcp.tools.execute import new_window
@@ -78,8 +78,9 @@ def _bearer(request_headers) -> str | None:
 
 def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tuple[Server, IdentityCache]:
     identities = IdentityCache(client)
-    calls = Window(120, 60.0)  # every tool call, per caller: discover and docs are cheap, not free
-    executes = new_window()
+    store = SharedStore.from_config(config)  # None: count in this process (design review S4)
+    calls = Window(120, 60.0, store=store, name="calls")  # every tool call, per caller: cheap, not free
+    executes = new_window(store)
     catalogue = Catalogue(client)
 
     def listed() -> list[types.Tool]:

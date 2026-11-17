@@ -10,8 +10,10 @@
 #   prod     workflow-engine-mcp        127.0.0.1:8031   workflow-engine-prod    https://workflow-engine-prod:8000
 #
 # It listens on loopback only; the Cloudflare tunnel connects to it there (terraform/cloudflare).
-# It holds no database credentials and no app secrets, so none are passed: the three addresses
-# below and one TLS switch are its whole environment. The addresses come from the app's own
+# It holds no database credentials and no app secrets. Its environment is the three addresses below,
+# one TLS switch and, for its rate-limit windows (design review S4), the shared Valkey's address
+# (BIZE_RATELIMIT_URI, no password in it) and that Valkey's password (VALKEY_PASSWORD, passed by
+# name): its one secret. Production requires it; test uses it when it can find it. The addresses come from the app's own
 # [mcp] section (app/config/<target>.ini), never from the caller's shell, so the resource the
 # server advertises is always the one the app binds tokens to.
 #
@@ -55,6 +57,7 @@ prod)
     API_BASE_URL=https://workflow-engine-prod:8000
     ;;
 esac
+VALKEY_URI="redis://valkey-$TARGET:6379/0" # scripts/run_valkey.sh's container on the same network
 MCP_PORT=8030 # what the image listens on
 
 # ini_value FILE SECTION KEY -> the value of KEY in [SECTION], or nothing.
@@ -81,6 +84,16 @@ ISSUER_URL="$(ini_value "$config_file" mcp issuer)"
     echo "$config_file needs an [mcp] section with issuer and resource." >&2
     exit 1
 }
+
+resolve_valkey_password "$TARGET"
+if [ -z "$VALKEY_PASSWORD" ]; then
+    if [ "$TARGET" = prod ]; then
+        echo "No VALKEY_PASSWORD: the production MCP server needs the shared rate-limit store." >&2
+        exit 1
+    fi
+    echo "Note: no VALKEY_PASSWORD, so this MCP server counts its rate limits in its own process."
+    VALKEY_URI=""
+fi
 
 DEPLOY_ENV="mcp-$TARGET"
 DEPLOY_NAME="The $TARGET MCP server deploy"
@@ -111,7 +124,8 @@ else
     [ -n "${MCP_SOURCE_SHA:-}" ] || check_checkout "$source_sha"
 fi
 
-# Everything the container is told. No secret belongs here; run_mcp.sh's tests pin that.
+# Everything the container is told. The only secret is VALKEY_PASSWORD, passed by name so its value
+# never reaches a command line; run_mcp.sh's tests pin that.
 # BIZE_API_VERIFY_TLS=false: the app serves a self-signed certificate (as every origin does here;
 # the tunnel and the health checks skip verification too) under a name it does not cover, and
 # this hop never leaves the private Docker network between two containers on this host.
@@ -124,6 +138,9 @@ RUN_ARGS=(
     -e "BIZE_ISSUER_URL=$ISSUER_URL"
     -e "BIZE_API_VERIFY_TLS=false"
 )
+if [ -n "$VALKEY_URI" ]; then
+    RUN_ARGS+=(-e "BIZE_RATELIMIT_URI=$VALKEY_URI" -e VALKEY_PASSWORD)
+fi
 
 candidate_created=0
 old_moved=0

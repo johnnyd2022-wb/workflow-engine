@@ -38,7 +38,7 @@ elif command == "python3":
     else:
         out = "\n".join("export " + k + "=fixture-only" for k in (
             "POSTGRES_PASSWORD", "FLASK_SECRET_KEY", "BACKUP_CODE_ENCRYPTION_KEY",
-            "XERO_TOKEN_ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"))
+            "XERO_TOKEN_ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "VALKEY_PASSWORD"))
 elif command == "curl":
     app = s["containers"].get(app_name, {})
     rc = int(not app.get("running") or (scenario == "final_health" and app.get("image") != "old"))
@@ -68,6 +68,8 @@ elif command == "docker":
             rc = int(scenario == "backup")
         elif "pg_restore" in a:
             rc = int(scenario == "invalid_backup")
+        elif "valkey-cli" in a:
+            out = "PONG"  # scripts/run_valkey.sh's readiness probe
         elif "curl" in a:
             # run_mcp.sh probes /healthz inside the MCP container; the app's probe is /healthcheck.
             rc = int(scenario == ("mcp_health" if any("/healthz" in x for x in a) else "candidate_health"))
@@ -110,7 +112,7 @@ def deploy(tmp_path, request):
     repo = tmp_path / "checkout"
     repo.mkdir()
     (repo / "scripts").mkdir()
-    for name in ("run_prod.sh", "run_test.sh", "run_mcp.sh", "prod_db.sh", "deploy_common.sh"):
+    for name in ("run_prod.sh", "run_test.sh", "run_mcp.sh", "run_valkey.sh", "prod_db.sh", "deploy_common.sh"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     # run_mcp.sh reads the MCP server's public addresses from the app's own [mcp] section.
     (repo / "app/config").mkdir(parents=True)
@@ -147,6 +149,7 @@ def deploy(tmp_path, request):
         "GOOGLE_CLIENT_ID": "fixture-client",
         "GOOGLE_CLIENT_SECRET": "fixture-only",
         "POSTGRES_PASSWORD_TEST": "fixture-only",
+        "VALKEY_PASSWORD_TEST": "fixture-only",
         "POSTHOG_PROJECT_API_KEY": "fixture-token",
         # A failing health check polls until it gives up. At the real 60 tries, each a few
         # fake-docker calls, a busy CI runner hit the 30s timeout below.
@@ -157,8 +160,10 @@ def deploy(tmp_path, request):
     env.pop("FLASK_SECRET_KEY", None)
 
     class Deploy:
-        def run(self, scenario="ok", existing=True, extra=None):
+        def run(self, scenario="ok", existing=True, extra=None, valkey=True):
             containers = {f"{app_name}-db": {"running": True, "image": "postgres:16"}, **(extra or {})}
+            if valkey:  # the shared rate-limit store already runs beside the app (design review S4)
+                containers[f"valkey-{kind}"] = {"running": True, "image": "valkey/valkey"}
             if existing:
                 containers[app_name] = {"running": True, "image": "old"}
             state.write_text(json.dumps({"calls": [], "containers": containers, "scenario": scenario}))
@@ -287,7 +292,7 @@ def test_success_backs_up_then_migrates_and_checks_candidate_before_stopping(dep
 def test_first_deploy_failure_removes_failed_app(deploy):
     deploy.run("final_start", existing=False)
     assert deploy.result.returncode != 0
-    assert set(deploy.state["containers"]) == {f"{deploy.app_name}-db"}
+    assert set(deploy.state["containers"]) == {f"{deploy.app_name}-db", f"valkey-{deploy.kind}"}
 
 
 def _mcp_runs(deploy):
@@ -416,3 +421,22 @@ def test_admin_site_builds_from_the_commit_without_untracked_files(admin):
     assert state["build_snapshot_clean"]
     assert not Path(state["build_context"]).exists()
     assert (repo / "untracked").exists()
+
+
+def test_s4_valkey_is_up_before_the_app_and_the_app_gets_its_password_by_name(deploy):
+    """Design review S4: the shared rate-limit store starts before migrations and the app candidate."""
+    deploy.run(valkey=False)
+    assert deploy.result.returncode == 0, deploy.result.stderr
+    calls = deploy.calls
+    valkey_name = f"valkey-{deploy.kind}"
+    runs = [i for i, c in enumerate(calls) if c[:2] == ["docker", "run"]]
+    valkey_run = next(i for i in runs if valkey_name in calls[i])
+    assert "-p" not in calls[valkey_run] and "--publish" not in calls[valkey_run]
+    assert all(i > valkey_run for i in runs if i != valkey_run), "Valkey first, then migrations and the app"
+    app_runs = [
+        calls[i]
+        for i in runs
+        if "--name" in calls[i] and calls[i][calls[i].index("--name") + 1].startswith(deploy.app_name)
+    ]
+    assert app_runs and all("VALKEY_PASSWORD" in c for c in app_runs)
+    assert not any("VALKEY_PASSWORD=" in x for c in calls for x in c), "passed by name, never by value"

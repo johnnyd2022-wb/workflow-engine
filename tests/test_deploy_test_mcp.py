@@ -23,7 +23,7 @@ def _exe(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
 
-def _deploy(tmp_path, *args, app_healthy=True, mcp_healthy=True, mcp_pull_ok=True):
+def _deploy(tmp_path, *args, app_healthy=True, mcp_healthy=True, mcp_pull_ok=True, valkey_password=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
@@ -35,6 +35,7 @@ def _deploy(tmp_path, *args, app_healthy=True, mcp_healthy=True, mcp_pull_ok=Tru
         '  logs) echo "boot log line" ;;\n'
         f'  pull) case "$2" in *mcp*) {"exit 0" if mcp_pull_ok else "exit 1"} ;; esac ;;\n'
         '  exec) case "$*" in\n'
+        "    *valkey-cli*) echo PONG; exit 0 ;;\n"
         f"    *healthz*) {'exit 0' if mcp_healthy else 'exit 1'} ;;\n"
         f"    *) {'exit 0' if app_healthy else 'exit 1'} ;;\n"
         "  esac ;;\n"
@@ -54,6 +55,8 @@ def _deploy(tmp_path, *args, app_healthy=True, mcp_healthy=True, mcp_pull_ok=Tru
         "MCP_HEALTH_INTERVAL": "0",
         "HOME": str(tmp_path),
     }
+    if valkey_password is not None:
+        env["VALKEY_PASSWORD_TEST"] = valkey_password  # how CD supplies it: a protected CI/CD variable
     argv = ["bash", str(SCRIPT), *args]
     out = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
     log = calls.read_text().splitlines() if calls.exists() else []
@@ -117,3 +120,29 @@ def test_an_unhealthy_app_exits_3_and_never_reaches_the_mcp_step(tmp_path):
     out, log = _deploy(tmp_path, APP_REF, MCP_REF, app_healthy=False)
     assert out.returncode == 3
     assert not any("mcp" in line for line in log)
+
+
+# --- design review S4: the shared rate-limit store ----------------------------------------------
+
+VALKEY_CANARY = "canary-test-valkey-password"
+
+
+def test_s4_valkey_is_checked_before_the_old_app_is_touched_and_passed_by_name(tmp_path):
+    out, log = _deploy(tmp_path, APP_REF, MCP_REF, valkey_password=VALKEY_CANARY)
+    assert out.returncode == 0, out.stdout + out.stderr
+    ping = next(i for i, line in enumerate(log) if "valkey-cli" in line and "valkey-test" in line)
+    stop = next(i for i, line in enumerate(log) if line.startswith("docker stop"))
+    assert ping < stop, "a Valkey that will not come up must stop the deploy before the app is replaced"
+    app_run = next(line for line in log if line.startswith("docker run -d --name workflow-engine-test "))
+    assert "-e VALKEY_PASSWORD " in app_run
+    mcp_run = [line for line in log if line.startswith("docker run") and "workflow-engine-mcp-test" in line][-1]
+    assert "BIZE_RATELIMIT_URI=redis://valkey-test:6379/0" in mcp_run and "-e VALKEY_PASSWORD" in mcp_run
+    assert not any(VALKEY_CANARY in line for line in log)
+    assert VALKEY_CANARY not in out.stdout + out.stderr
+
+
+def test_s4_without_a_valkey_password_the_deploy_warns_and_the_mcp_server_counts_alone(tmp_path):
+    out, log = _deploy(tmp_path, APP_REF, MCP_REF)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "No VALKEY_PASSWORD" in out.stdout
+    assert not any("valkey" in line for line in log)

@@ -34,6 +34,28 @@ completing an item.
 
   Completed: —. Evidence: —.
 
+- [ ] **GL-002 — Give production its shared rate-limit store (Valkey) before any org turns MCP on.**
+
+  Production runs two gunicorn workers. Without a shared store every rate limit (sign-in
+  brute force, 120 MCP requests a minute per grant, 10 client registrations an hour) is per
+  worker, so twice as loose (design review S4). The store is the `valkey-prod` container that
+  `scripts/run_valkey.sh prod` starts on the `workflow-engine-prod` network, with no published
+  port. Founder steps, in [production deploy](production-deploy.md#shared-rate-limit-store-valkey):
+
+  1. `python3 scripts/prod_secrets.py init` creates the KeePassXC entry
+     `workflow-engine/VALKEY_PASSWORD_PROD` (it never overwrites one); `check` shows it present.
+  2. Test: add the KeePassXC entry `workflow-engine/VALKEY_PASSWORD_TEST`, and the same value as a
+     protected, masked CI/CD variable `VALKEY_PASSWORD_TEST` (the `deploy_test` job reads it).
+  3. Deploy production (`scripts/run_prod.sh`): it creates `valkey-prod` on the first run, then
+     leaves it alone. Until step 1 is done, the production deploy stops at "Missing VALKEY_PASSWORD."
+
+  Verify: `python3 scripts/preflight.py` with `ENVIRONMENT=prod` reports `valkey-prod healthy`; the
+  app's start-up log has `ratelimit.store` with `shared=true` and no `ratelimit.no_shared_store`
+  error; `workflow mcp enable` succeeds (it refuses, with a 409 from the settings page, while there
+  is no store).
+
+  Completed: —. Evidence: —.
+
 ## From the go-live assessment (!570)
 
 The findings from `docs/nz-alcohol-go-live-assessment-2026-10-25.md`, as one list to work through. Each item is marked:

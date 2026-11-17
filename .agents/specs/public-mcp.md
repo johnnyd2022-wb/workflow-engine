@@ -193,7 +193,9 @@ In `tenant_context`, only when the request has **no session user** and has
   HTTP at `/mcp`, served by uvicorn. It is stateless and keeps no session state between requests.
 - Config is environment only: `BIZE_API_BASE_URL` (the app, internal address),
   `MCP_PUBLIC_URL` (the resource) and `BIZE_ISSUER_URL`. It holds no DB credentials and no
-  app secrets.
+  app secrets. Its one secret is `VALKEY_PASSWORD`, the password of the shared rate-limit store,
+  with `BIZE_RATELIMIT_URI` (`redis://valkey-<env>:6379/0`, no password in it) naming that store
+  (design review S4). Without them its rate-limit windows are counted in its own process.
 - `GET /.well-known/oauth-protected-resource` (RFC 9728) returns `{"resource": MCP_PUBLIC_URL,
   "authorization_servers": [BIZE_ISSUER_URL], "scopes_supported": ["bize.read"],
   "bearer_methods_supported": ["header"]}`.
@@ -391,8 +393,9 @@ catalogue, by the app's own tests and by anyone integrating.
   | Network | test app's | prod app's |
   | `BIZE_API_BASE_URL` | app container name and port | app container name and port |
 
-  It does a candidate → health check → swap, and keeps the previous container on failure. No
-  secrets are passed.
+  It does a candidate → health check → swap, and keeps the previous container on failure. The
+  only secret passed is `VALKEY_PASSWORD` (by name, never on a command line), for the shared
+  rate-limit store; production requires it (design review S4).
 - `scripts/deploy_test_simple.sh` and `scripts/run_prod.sh` call `run_mcp.sh` after the app is
   healthy. An MCP failure fails the script's final status but never rolls back the app.
 - CI:

@@ -116,10 +116,10 @@ def _worker(cfg: Config) -> Flask:
     limiter = Limiter(key_func=lambda: app.config["CALLER"])
     app.config["CALLER"] = "unset"
 
-    @app.post("/auth/login")
-    @limiter.limit("3 per minute")
-    def login():
+    def login():  # a stand-in for /auth/login: one limited view, nothing else
         return jsonify({"ok": True})
+
+    app.add_url_rule("/auth/login", "login", limiter.limit("3 per minute")(login), methods=["POST"])
 
     configure_ratelimit(app, limiter, cfg)
     return app
@@ -193,3 +193,11 @@ def test_s4_with_valkey_the_121st_bearer_request_is_refused_on_any_worker(valkey
     results = _hit_from_two_workers(valkey_uri, uuid.uuid4())
     assert results[:-1] == [None] * (len(results) - 1)
     assert isinstance(results[-1], int) and results[-1] >= 1
+
+
+def test_s4_a_store_uri_with_its_password_never_reaches_a_log():
+    from app.observability.logging_config import scrub_text
+
+    line = "connecting to redis://:Sup3r-s3cret@valkey-prod:6379/0 failed"
+    assert "Sup3r-s3cret" not in scrub_text(line)
+    assert "valkey-prod:6379" in scrub_text(line)

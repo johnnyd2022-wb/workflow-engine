@@ -14,3 +14,5 @@ operations:
     summary: Revoke grant
   mcp_update_settings:
     summary: Update settings
+    # 409: switching assistants on with more than one worker and no shared rate-limit store (design review S4).
+    errors: [400, 409]
