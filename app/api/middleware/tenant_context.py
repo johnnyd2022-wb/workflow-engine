@@ -74,7 +74,7 @@ def _authenticate_bearer(raw_token: str):
     if config.mcp_bearer_internal_only and _came_through_edge():
         # A token is only good from the MCP server. Refused before it is looked up, so the edge
         # can't be used to probe which tokens exist; the answer is the same as for a bad token.
-        LOGGER.warning("mcp.bearer_from_edge", path=request.path, method=request.method)
+        LOGGER.info("mcp.bearer_from_edge", path=request.path, method=request.method)
         return _json_response(401, {"error": "invalid_token"}, {"WWW-Authenticate": WWW_INVALID_TOKEN})
 
     db = db_session()

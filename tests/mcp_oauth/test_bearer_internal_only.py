@@ -101,6 +101,17 @@ def test_s1b_a_garbage_token_through_cloudflare_gets_the_same_answer(world, monk
     assert lookups == []
 
 
+def test_s1b_a_refresh_token_through_cloudflare_is_refused_before_lookup(world, monkeypatch):
+    # parse_bearer hands bzr_/bzc_ values to the bearer path too; the edge rule covers every prefix.
+    _internal_only(monkeypatch, True)
+    _grant, _access, refresh = mint_grant(world.db, world.users["member"], world.client_row)
+    lookups = _count_lookups(monkeypatch)
+    resp = world.anon().get("/api/core/inventory", headers={**bearer(refresh), "CF-Ray": "8a1b2c3d4e5f6a7b-AKL"})
+    assert resp.status_code == 401
+    assert resp.get_json() == {"error": "invalid_token"}
+    assert lookups == []
+
+
 def test_s1b_a_token_from_the_private_network_works_as_today(world, monkeypatch):
     _internal_only(monkeypatch, True)
     access = _token(world)
