@@ -38,6 +38,7 @@ measurement or a decision before it counts as a defect.
       stock snapshot CSV. Audience binding protects nothing because the app accepts the token from any caller.
     - Fix: enforce `x-bize.mcp` in `token_scope_includes` (deny by default), and accept `bza_` tokens
       only from the MCP container (a service credential or network rule).
+    - Status (part 1, allowlist): fixed in !735 (the token rule now requires `x-bize.mcp`, read once from the overlay; deny by default. Accepting tokens only from the MCP container is DR-S1B.)
     - Status (part 2, network rule): fixed in !737 (`[mcp] bearer_internal_only`: a bearer request carrying `CF-Connecting-IP`/`CF-Ray` is refused 401 before lookup in test and prod; the allowlist half is !735)
 - **S2. Security: read-only bypass, because some GET routes write irreversible state.** Confirmed in code.
     - Problem: `GET /api/core/costing/stock-value` (in the MCP catalogue) takes and commits the
@@ -47,6 +48,7 @@ measurement or a decision before it counts as a defect.
     - Impact: a read-only assistant can perform an irreversible month close and spend the org's Xero rate limit.
     - Fix: no snapshot on a token request; a test that runs every token-reachable GET against a
       session that fails on flush. L1 removes the write from the read path entirely.
+    - Status: fixed in !734 (a token read takes no month-end snapshot and the bridge skips Xero's P&L; invoice-defaults no longer asks Xero; a guard runs every token-reachable GET and fails on any write or Xero call)
 - **S3. Security: consent cannot tell a real client from an impostor (authorization).** Confirmed in code.
     - Problem: every client is created with `verified=False`
       (`app/features/mcp_oauth/services/client_registry.py:142`, `:354`) and nothing sets it true;
@@ -83,6 +85,7 @@ measurement or a decision before it counts as a defect.
     - Impact: the same month differs by 15%+ between Sales and margins; both are `x-bize.kind: calculation`.
     - Fix: one revenue function in `sales_sources` (ex-GST, base currency) used by both; if the invoiced
       total is wanted, name it `invoiced_inc_gst`.
+    - Status: fixed in !738 (one ex-GST, base-currency rule in `sales_sources` for monthly, daily, customer and Home totals; old figure kept as `invoiced_inc_gst`; foreign currency counted in `not_converted`).
 - **X2. Incorrect cost of sales: margins and the bridge disagree for one month.** Confirmed in the spec, not traced in code.
     - Problem: margins date a sale by invoice date at today's lot cost; the bridge dates movements by
       `created_at` before the cutoff at closing cost, then freezes them.
@@ -127,6 +130,7 @@ measurement or a decision before it counts as a defect.
     - Problem: `app/features/costing/margins.py:170` discards `_unmapped` from `sale_lines`.
     - Impact: margins revenue is below Xero's by an unshown amount.
     - Fix: return an `unmapped` total (revenue, line count) beside the product rows.
+    - Status: fixed in !738 (margins return `unmapped: {revenue, lines, not_converted}` beside the rows).
 - **A2. Past figures move without a marker.** Confirmed in the spec.
     - Problem: cost is computed on read; a late purchase or setting change moves last quarter's margin. Only stock value has a frozen close.
     - Impact: numbers copied out through MCP later disagree with the app.

@@ -275,6 +275,19 @@ def _make_fernet(key_str: str):
     return Fernet(base64.urlsafe_b64encode(key))
 
 
+def _month_row(month, total, invoice_count, *, invoiced_inc_gst=None):
+    """A monthly-sales row: revenue ex GST in the base currency, as Decimal strings (design review X1)."""
+    return {
+        "month": month,
+        "total": total,
+        "invoiced_inc_gst": total if invoiced_inc_gst is None else invoiced_inc_gst,
+        "invoice_count": invoice_count,
+        "currency": "NZD",
+        "not_converted": 0,
+        "ex_gst_unknown": 0,
+    }
+
+
 class TestTokenEncryption:
     def test_round_trip(self):
         f = _make_fernet("test-secret-key-for-unit-testing")
@@ -1552,6 +1565,9 @@ class TestCRMAnalyticsAPI:
             invoice_type=invoice_type,
             status=status,
             date=on,
+            # Xero's shape: no GST on these lines, so the sub-total is the total.
+            sub_total=sum((Decimal(str(amount)) for _, _, amount in lines), Decimal("0")),
+            total_tax=Decimal("0"),
             total=sum((Decimal(str(amount)) for _, _, amount in lines), Decimal("0")),
         )
         db.add(invoice)
@@ -1848,9 +1864,9 @@ class TestCRMAnalyticsAPI:
         body = json.loads(app_client.get("/api/crm/analytics/monthly-sales?months=24").data)
 
         assert body["monthly_sales"] == [
-            {"month": "2025-03", "total": 300.0, "invoice_count": 1},
-            {"month": "2025-02", "total": 200.0, "invoice_count": 1},
-            {"month": "2025-01", "total": 150.0, "invoice_count": 2},
+            _month_row("2025-03", "300.00", 1),
+            _month_row("2025-02", "200.00", 1),
+            _month_row("2025-01", "150.00", 2),
         ]
         assert body["months"] == body["monthly_sales"]
 
@@ -1917,8 +1933,8 @@ class TestCRMAnalyticsAPI:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["monthly_sales"] == [
-            {"month": "2025-01", "total": 300.0, "invoice_count": 1},
-            {"month": "2025-03", "total": 200.0, "invoice_count": 1},
+            _month_row("2025-01", "300.00", 1),
+            _month_row("2025-03", "200.00", 1),
         ]
         assert data["total_revenue"] == 500.0
         assert data["total_invoices"] == 2
@@ -1937,7 +1953,7 @@ class TestCRMAnalyticsAPI:
             self._customer_analytics(app_client, contact, start_date="2025-02-01", end_date="2025-03-31").data
         )
 
-        assert data["monthly_sales"] == [{"month": "2025-03", "total": 200.0, "invoice_count": 1}]
+        assert data["monthly_sales"] == [_month_row("2025-03", "200.00", 1)]
         assert data["total_revenue"] == 200.0
         assert [p["total_revenue"] for p in data["top_products"]] == [200.0]
 

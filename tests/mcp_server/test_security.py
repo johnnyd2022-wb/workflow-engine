@@ -157,6 +157,35 @@ def test_the_log_filter_redacts_anything_shaped_like_one_of_our_tokens():
     assert "secret" not in redact("Authorization: Bearer secret-opaque-value")
 
 
+def _record_through_the_redacting_factory(name, msg, args):
+    from bize_mcp.logging_setup import install_redaction
+
+    previous = logging.getLogRecordFactory()
+    install_redaction()
+    try:
+        return logging.getLogRecordFactory()(name, logging.INFO, __file__, 1, msg, args, None)
+    finally:
+        logging.setLogRecordFactory(previous)
+
+
+def test_uvicorn_access_lines_still_format_and_are_redacted():
+    """uvicorn's AccessFormatter unpacks record.args; flattening them broke every access line (17 Nov 2026)."""
+    from uvicorn.logging import AccessFormatter
+
+    record = _record_through_the_redacting_factory(
+        "uvicorn.access", '%s - "%s %s HTTP/%s" %d', ("172.18.0.1:49040", "POST", f"/mcp?t={TOKEN}", "1.1", 200)
+    )
+    line = AccessFormatter(fmt="%(levelprefix)s %(message)s", use_colors=False).format(record)
+    assert '"POST /mcp?t=[redacted] HTTP/1.1" 200' in line
+    assert TOKEN not in line
+
+
+def test_a_token_split_between_template_and_arguments_is_still_redacted():
+    record = _record_through_the_redacting_factory("x", "Authorization: Bearer %s", ("secret-opaque-value",))
+    assert "secret" not in record.getMessage()
+    assert record.getMessage() == "Authorization: Bearer [redacted]"
+
+
 # ------------------------------------------------------------------------- arguments can't steer
 
 

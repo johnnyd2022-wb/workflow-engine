@@ -280,32 +280,94 @@ class XeroInvoiceRepository:
         counter = Counter(days)
         return counter.most_common(1)[0][0]
 
-    def sales_totals_for_period(self, org_id: UUID, start_date: date, end_date: date) -> dict:
-        row = (
+    def _revenue_by(self, org_id: UUID, key, *filters, credits: bool = True, credit_filters=()) -> dict:
+        """Invoice revenue per ``key(date)`` through the one rule in ``sales_sources`` (X1): ex GST,
+        base currency, credit notes taken off. Authorised and paid sales invoices (ACCREC) only."""
+        from app.features.crm.services.sales_sources import RevenueTotal, base_currency
+
+        currency = base_currency(self.db, org_id)
+        buckets: dict = {}
+
+        def bucket(day):
+            k = key(day)
+            if k not in buckets:
+                buckets[k] = RevenueTotal(currency=currency)
+            return buckets[k]
+
+        invoices = (
             self.db.query(
-                func.sum(XeroInvoice.total).label("total"),
-                func.count(XeroInvoice.id).label("invoice_count"),
+                XeroInvoice.date,
+                XeroInvoice.sub_total,
+                XeroInvoice.total,
+                XeroInvoice.total_tax,
+                XeroInvoice.currency_code,
             )
             .filter(
                 XeroInvoice.org_id == org_id,
                 XeroInvoice.invoice_type == "ACCREC",
                 XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
-                XeroInvoice.date >= start_date,
-                XeroInvoice.date < end_date,
+                XeroInvoice.date.isnot(None),
+                *filters,
             )
-            .one()
+            .all()
         )
-        credit_total = (
-            self.db.query(func.coalesce(func.sum(XeroCreditNote.total), 0))
+        notes = (
+            self.db.query(XeroCreditNote.date, XeroCreditNote.total, XeroCreditNote.currency, XeroCreditNote.raw_fields)
             .filter(
                 XeroCreditNote.org_id == org_id,
                 XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
-                XeroCreditNote.date >= start_date,
-                XeroCreditNote.date < end_date,
+                XeroCreditNote.date.isnot(None),
+                *credit_filters,
             )
-            .scalar()
+            .all()
+            if credits
+            else []
         )
-        return {"total": float(row.total or 0) - float(credit_total or 0), "invoice_count": row.invoice_count or 0}
+        for row in invoices:
+            bucket(row.date).add(
+                sub_total=row.sub_total, total=row.total, total_tax=row.total_tax, currency=row.currency_code
+            )
+        if notes:
+            for note in notes:
+                raw = note.raw_fields or {}
+                bucket(note.date).add(
+                    sub_total=raw.get("sub_total"),
+                    total=note.total,
+                    total_tax=raw.get("total_tax"),
+                    currency=note.currency,
+                    credit=True,
+                )
+        return buckets
+
+    def sales_totals_for_period(self, org_id: UUID, start_date: date, end_date: date) -> dict:
+        """Invoice revenue in [start, end): ``total`` ex GST in the base currency, as a Decimal."""
+        from app.features.crm.services.sales_sources import RevenueTotal, base_currency
+
+        buckets = self._revenue_by(
+            org_id,
+            lambda _day: "period",
+            XeroInvoice.date >= start_date,
+            XeroInvoice.date < end_date,
+            credit_filters=(XeroCreditNote.date >= start_date, XeroCreditNote.date < end_date),
+        )
+        period = buckets.get("period") or RevenueTotal(currency=base_currency(self.db, org_id))
+        return {
+            "total": period.revenue,
+            "invoiced_inc_gst": period.invoiced_inc_gst,
+            "invoice_count": period.invoice_count,
+            "not_converted": period.not_converted,
+        }
+
+    def monthly_revenue_between(self, org_id: UUID, start_date: date, end_date: date) -> dict:
+        """``{"YYYY-MM": RevenueTotal}`` for [start, end) in one pass: Home and the Sales overview
+        compare this month with last without a query pair per month."""
+        return self._revenue_by(
+            org_id,
+            lambda day: day.strftime("%Y-%m"),
+            XeroInvoice.date >= start_date,
+            XeroInvoice.date < end_date,
+            credit_filters=(XeroCreditNote.date >= start_date, XeroCreditNote.date < end_date),
+        )
 
     def outstanding_receivables(self, org_id: UUID) -> dict:
         row = (
@@ -389,89 +451,20 @@ class XeroInvoiceRepository:
         }
 
     def monthly_sales_totals(self, org_id: UUID, months: int = 12) -> list[dict]:
-        """Return monthly net revenue for AUTHORISED/PAID invoices and credit notes."""
-        rows = (
-            self.db.query(
-                func.date_trunc("month", XeroInvoice.date).label("month"),
-                func.sum(XeroInvoice.total).label("total"),
-                func.count(XeroInvoice.id).label("invoice_count"),
-            )
-            .filter(
-                XeroInvoice.org_id == org_id,
-                XeroInvoice.invoice_type == "ACCREC",
-                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
-                XeroInvoice.date.isnot(None),
-            )
-            .group_by(func.date_trunc("month", XeroInvoice.date))
-            .order_by(func.date_trunc("month", XeroInvoice.date).desc())
-            .all()
-        )
-        totals = {
-            row.month.strftime("%Y-%m"): {"total": float(row.total or 0), "invoice_count": row.invoice_count}
-            for row in rows
-            if row.month
-        }
-        credits = (
-            self.db.query(
-                func.date_trunc("month", XeroCreditNote.date).label("month"),
-                func.sum(XeroCreditNote.total).label("total"),
-            )
-            .filter(
-                XeroCreditNote.org_id == org_id,
-                XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
-                XeroCreditNote.date.isnot(None),
-            )
-            .group_by(func.date_trunc("month", XeroCreditNote.date))
-            .all()
-        )
-        for row in credits:
-            if row.month:
-                key = row.month.strftime("%Y-%m")
-                totals.setdefault(key, {"total": 0.0, "invoice_count": 0})["total"] -= float(row.total or 0)
-        return [{"month": month, **values} for month, values in sorted(totals.items(), reverse=True)[:months]]
+        """Monthly invoice revenue (ex GST, base currency, credit notes off), newest month first."""
+        buckets = self._revenue_by(org_id, lambda day: day.strftime("%Y-%m"))
+        return [{"month": month, **buckets[month].as_json()} for month in sorted(buckets, reverse=True)[:months]]
 
     def daily_sales_totals_for_period(self, org_id: UUID, start_date: date, end_date: date) -> list[dict]:
-        """Return daily sales totals for AUTHORISED/PAID invoices (ACCREC only)."""
-        rows = (
-            self.db.query(
-                XeroInvoice.date.label("day"),
-                func.sum(XeroInvoice.total).label("total"),
-                func.count(XeroInvoice.id).label("invoice_count"),
-            )
-            .filter(
-                XeroInvoice.org_id == org_id,
-                XeroInvoice.invoice_type == "ACCREC",
-                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
-                XeroInvoice.date.isnot(None),
-                XeroInvoice.date >= start_date,
-                XeroInvoice.date < end_date,
-            )
-            .group_by(XeroInvoice.date)
-            .order_by(XeroInvoice.date.asc())
-            .all()
+        """Daily invoice revenue in [start, end), by the same rule as ``monthly_sales_totals``."""
+        buckets = self._revenue_by(
+            org_id,
+            lambda day: day.isoformat(),
+            XeroInvoice.date >= start_date,
+            XeroInvoice.date < end_date,
+            credit_filters=(XeroCreditNote.date >= start_date, XeroCreditNote.date < end_date),
         )
-        totals = {
-            row.day.isoformat(): {"total": float(row.total or 0), "invoice_count": int(row.invoice_count or 0)}
-            for row in rows
-            if row.day
-        }
-        credits = (
-            self.db.query(XeroCreditNote.date, func.sum(XeroCreditNote.total).label("total"))
-            .filter(
-                XeroCreditNote.org_id == org_id,
-                XeroCreditNote.status.in_(["AUTHORISED", "PAID"]),
-                XeroCreditNote.date >= start_date,
-                XeroCreditNote.date < end_date,
-            )
-            .group_by(XeroCreditNote.date)
-            .all()
-        )
-        for row in credits:
-            if row.date:
-                totals.setdefault(row.date.isoformat(), {"total": 0.0, "invoice_count": 0})["total"] -= float(
-                    row.total or 0
-                )
-        return [{"day": day, **values} for day, values in sorted(totals.items())]
+        return [{"day": day, **buckets[day].as_json()} for day in sorted(buckets)]
 
     def monthly_sales_totals_for_contact(
         self,
@@ -480,34 +473,15 @@ class XeroInvoiceRepository:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> list[dict]:
-        q = self.db.query(
-            func.date_trunc("month", XeroInvoice.date).label("month"),
-            func.sum(XeroInvoice.total).label("total"),
-            func.count(XeroInvoice.id).label("invoice_count"),
-        ).filter(
-            XeroInvoice.org_id == org_id,
-            XeroInvoice.contact_id == contact_id,
-            XeroInvoice.invoice_type == "ACCREC",
-            XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
-            XeroInvoice.date.isnot(None),
-        )
+        """One customer's monthly invoice revenue, oldest first, by the same rule. Credit notes carry
+        no contact id here, so (as before) they are not taken off a customer's months."""
+        filters = [XeroInvoice.contact_id == contact_id]
         if start_date:
-            q = q.filter(XeroInvoice.date >= start_date)
+            filters.append(XeroInvoice.date >= start_date)
         if end_date:
-            q = q.filter(XeroInvoice.date < end_date)
-        rows = (
-            q.group_by(func.date_trunc("month", XeroInvoice.date))
-            .order_by(func.date_trunc("month", XeroInvoice.date).asc())
-            .all()
-        )
-        return [
-            {
-                "month": row.month.strftime("%Y-%m") if row.month else None,
-                "total": float(row.total or 0),
-                "invoice_count": row.invoice_count,
-            }
-            for row in rows
-        ]
+            filters.append(XeroInvoice.date < end_date)
+        buckets = self._revenue_by(org_id, lambda day: day.strftime("%Y-%m"), *filters, credits=False)
+        return [{"month": month, **buckets[month].as_json()} for month in sorted(buckets)]
 
     def top_products_for_contact(
         self,

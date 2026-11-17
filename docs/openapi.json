@@ -672,22 +672,42 @@
       "MonthlySales": {
         "additionalProperties": false,
         "properties": {
+          "currency": {
+            "description": "The base currency `total` is in.",
+            "type": "string"
+          },
+          "ex_gst_unknown": {
+            "description": "Invoices and credit notes with no sub-total or tax figure, left out of `total`.",
+            "type": "integer"
+          },
           "invoice_count": {
             "type": "integer"
+          },
+          "invoiced_inc_gst": {
+            "description": "Xero's invoice totals less credit-note totals, GST included and every currency added unconverted. The old figure, kept for anything that wanted it; not revenue.",
+            "type": "string"
           },
           "month": {
             "description": "YYYY-MM.",
             "type": "string"
           },
+          "not_converted": {
+            "description": "Invoices and credit notes in another currency, left out of `total` (never added unconverted).",
+            "type": "integer"
+          },
           "total": {
-            "description": "Net sales for the month, credit notes taken off.",
-            "type": "number"
+            "description": "Invoice revenue for the month as a Decimal string: ex GST, in the base currency, every invoice line (freight and other charges included), credit notes taken off ex GST.",
+            "type": "string"
           }
         },
         "required": [
           "month",
           "total",
-          "invoice_count"
+          "invoiced_inc_gst",
+          "invoice_count",
+          "currency",
+          "not_converted",
+          "ex_gst_unknown"
         ],
         "type": "object"
       },
@@ -1038,7 +1058,7 @@
     },
     "securitySchemes": {
       "bearerToken": {
-        "description": "An AI assistant's access token. Read-only: GET operations a person's role may read.",
+        "description": "An AI assistant's access token. Read-only: the x-bize.mcp GET operations a person's role may read.",
         "scheme": "bearer",
         "type": "http"
       },
@@ -1051,7 +1071,7 @@
     }
   },
   "info": {
-    "description": "The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.\n\n**Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token\n(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches GET operations\nonly. Every operation lists the schemes that work for it under `security`.\n\n**Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list\nmeaning \"any of these\". `signed_in` means any signed-in person, `public` anyone. This document shows a\ncaller only the operations their own permissions reach.\n\n**Reading the `x-bize` fields.** `domain` groups operations; `feature` is set when the operation exists\nonly for an organisation that has that product area (`crm`, `compliant`, `costing`); `kind` is `record`, `list` or\n`calculation` (a figure Biz-E computes authoritatively, which should be read, not recomputed);\n`mcp` marks the operations an assistant may call; `concepts` name the business-knowledge topics that\nexplain the fields; `related_operations` are the operations usually read next. `schema_status` is\n`documented` when the response is described and `skeleton` when only the summary and permission are.\n\n**Costs.** A cost that is not known is `null` beside a status that says why. It is never `0`.\n",
+    "description": "The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.\n\n**Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token\n(`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches only the GET\noperations marked `x-bize.mcp`, plus this document and `/api/core/mcp/me`. Every operation lists the schemes that work for it under `security`.\n\n**Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list\nmeaning \"any of these\". `signed_in` means any signed-in person, `public` anyone. This document shows a\ncaller only the operations their own permissions reach.\n\n**Reading the `x-bize` fields.** `domain` groups operations; `feature` is set when the operation exists\nonly for an organisation that has that product area (`crm`, `compliant`, `costing`); `kind` is `record`, `list` or\n`calculation` (a figure Biz-E computes authoritatively, which should be read, not recomputed);\n`mcp` marks the operations an assistant may call; `concepts` name the business-knowledge topics that\nexplain the fields; `related_operations` are the operations usually read next. `schema_status` is\n`documented` when the response is described and `skeleton` when only the summary and permission are.\n\n**Costs.** A cost that is not known is `null` beside a status that says why. It is never `0`.\n",
     "summary": "Production, stock, traceability, compliance, sales and cost for a small producer.",
     "title": "Biz-E API",
     "version": "1.0.0"
@@ -1076,9 +1096,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List alcohol products",
@@ -1144,9 +1161,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Return module-contributed workflow extensions in Core's generic contract.",
@@ -1183,9 +1197,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Search selectable Core proof without exposing another tenant's records.",
@@ -1219,9 +1230,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get registrations",
@@ -1319,9 +1327,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get licensing",
@@ -1832,9 +1837,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "One download for an inspector: licences, managers, checks, training and the log.",
@@ -1868,9 +1870,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get np3 audit",
@@ -1946,9 +1945,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Return the one check a user chose to inspect in full.",
@@ -2125,9 +2121,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Download np3 record file",
@@ -2161,9 +2154,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get abv rules",
@@ -2261,9 +2251,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get destinations",
@@ -2403,9 +2390,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get transfers",
@@ -2470,9 +2454,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Search sales",
@@ -2760,9 +2741,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "The built-in Customs guide: product types, their excise items and today's rates.",
@@ -2796,9 +2774,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get register",
@@ -2832,9 +2807,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get period review",
@@ -3311,9 +3283,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Final outputs of every workflow, with their excise setup (pack volume, tariff item).",
@@ -3378,9 +3347,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List excise rates",
@@ -3478,9 +3444,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get premises",
@@ -3514,9 +3477,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get overview",
@@ -3742,9 +3702,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get report",
@@ -3778,9 +3735,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get tools catalogue",
@@ -3862,9 +3816,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get verification status",
@@ -4004,9 +3955,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "The step the regulations give for an outcome, with the next due date it implies.",
@@ -4040,9 +3988,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get overview",
@@ -4193,9 +4138,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get lot trace",
@@ -4360,9 +4302,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List cases",
@@ -4436,9 +4375,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Read-only detail shell, reachable even when the org's subscription is off (see operational_cases_bp's before_request gate, which explicitly bypasses this path).",
@@ -4480,9 +4416,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get case history events",
@@ -4556,9 +4489,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get case",
@@ -4639,9 +4569,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List case events",
@@ -4757,9 +4684,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Events for this org with seq > `since`, oldest first.",
@@ -4829,9 +4753,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List customers",
@@ -4988,9 +4909,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List materials",
@@ -5209,9 +5127,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List orders",
@@ -5287,9 +5202,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get order",
@@ -5375,9 +5287,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List dispatches",
@@ -5971,9 +5880,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get accounts",
@@ -6049,9 +5955,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get bridge",
@@ -6411,7 +6314,7 @@
     },
     "/api/core/costing/margins": {
       "get": {
-        "description": "Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403. A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the last six months. At most a fixed number of months at a time.",
+        "description": "Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue is product revenue: ex GST, in the base currency, from sale lines mapped to a product only; lines that map to no product (freight, other charges, unmapped items) are totalled in `unmapped`, never in a row. So this is not the same figure as monthly sales (invoice revenue, every line): don't compare the two. A foreign-currency sale's revenue is null, never converted. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403. A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the last six months. At most a fixed number of months at a time.",
         "operationId": "costing_margins_report",
         "parameters": [
           {
@@ -6456,12 +6359,18 @@
                       "units": "220"
                     }
                   ],
-                  "to": "2026-11"
+                  "to": "2026-11",
+                  "unmapped": {
+                    "lines": 7,
+                    "not_converted": 0,
+                    "revenue": "350.00"
+                  }
                 },
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
                     "currency": {
+                      "description": "The base currency every amount is in.",
                       "type": "string"
                     },
                     "from": {
@@ -6523,6 +6432,7 @@
                             "type": "string"
                           },
                           "revenue": {
+                            "description": "Product revenue, ex GST, base currency.",
                             "type": [
                               "string",
                               "null"
@@ -6547,13 +6457,38 @@
                     },
                     "to": {
                       "type": "string"
+                    },
+                    "unmapped": {
+                      "additionalProperties": false,
+                      "description": "Sale lines in the period that map to no product, left out of the rows. Revenue is ex GST in the base currency, a Decimal string; null when a line's ex-GST amount can't be told. Foreign-currency lines are counted in not_converted and not added.",
+                      "properties": {
+                        "lines": {
+                          "type": "integer"
+                        },
+                        "not_converted": {
+                          "type": "integer"
+                        },
+                        "revenue": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "revenue",
+                        "lines",
+                        "not_converted"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
                     "from",
                     "to",
                     "currency",
-                    "rows"
+                    "rows",
+                    "unmapped"
                   ],
                   "type": "object"
                 }
@@ -6621,9 +6556,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List materials",
@@ -6666,9 +6598,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get material history",
@@ -6735,9 +6664,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List overhead rates",
@@ -6884,9 +6810,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List purchases",
@@ -7037,9 +6960,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get purchase candidates",
@@ -7708,9 +7628,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List rules",
@@ -7857,9 +7774,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get settings",
@@ -8217,9 +8131,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List stock snapshots",
@@ -8262,9 +8173,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get stock snapshot",
@@ -8307,9 +8215,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Export stock snapshot",
@@ -8376,9 +8281,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "All entity events for the org, newest-first, with optional date/type filtering.",
@@ -8429,9 +8331,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Full event timeline for a single entity, ordered chronologically.",
@@ -8482,9 +8381,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Rich computed summary for a single entity card detail view.",
@@ -8517,9 +8413,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Return evidence upload limits (single source of truth for frontend).",
@@ -8552,9 +8445,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List evidence for an execution (query param: execution_id).",
@@ -8670,9 +8560,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Stream evidence file; verify org ownership.",
@@ -8706,9 +8593,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get unique execution metadata values for search/tracing.",
@@ -9248,9 +9132,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Single round-trip: execution (with steps + evidence) and full process definition.",
@@ -9347,9 +9228,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get go live",
@@ -9622,9 +9500,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "One org-scoped payload for the /core hub's above-the-fold Overview.",
@@ -9852,9 +9727,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Look up product-level data by barcode. Returns exists and canonical name/unit/supplier for prefilling.",
@@ -10169,9 +10041,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List raw materials with zero quantity for recall/traceability purposes.",
@@ -10205,9 +10074,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List custom output expiry findings (expired or near-expiry outputs).",
@@ -10782,9 +10648,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List inventory items flagged as untracked (reconciliation required).",
@@ -10817,9 +10680,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List wastage records for sourcemap/trace. Optional ?inventory_item_id= for single item.",
@@ -11359,9 +11219,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get summary metrics for the dashboard",
@@ -11605,9 +11462,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get capacity",
@@ -11965,9 +11819,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get demands",
@@ -12114,9 +11965,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get material assessment",
@@ -12179,9 +12027,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "When could a new order for n be ready?",
@@ -12246,9 +12091,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "What the planner changed by itself in the last two weeks, newest first.",
@@ -12313,9 +12155,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get planning workflows",
@@ -12390,9 +12229,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Return process doc upload limits for frontend.",
@@ -12539,9 +12375,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Stream SOP file; verify org ownership. Read-only for any authenticated user.",
@@ -12583,9 +12416,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List all SOP documents for a step (for execution modal). Read-only for any authenticated user.",
@@ -13319,9 +13149,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List recalls",
@@ -13397,9 +13224,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "The case page asks this when a case is a recall.",
@@ -13445,9 +13269,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get recall",
@@ -13553,9 +13374,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "The customer's notice, drafted for a person to send. Biz-E never sends it.",
@@ -13813,9 +13631,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List transfers",
@@ -13878,9 +13693,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get options",
@@ -13922,9 +13734,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get detail",
@@ -13998,9 +13807,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List sites",
@@ -14067,9 +13873,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "For site pickers and the site lens: any member who records or reads stock or batches.",
@@ -14188,9 +13991,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get site position",
@@ -14224,9 +14024,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Lightweight paginated index of all traceable entities.",
@@ -14292,9 +14089,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List locations",
@@ -14511,9 +14305,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List stocktakes",
@@ -14585,9 +14376,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get stocktake",
@@ -14881,9 +14669,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List core suppliers",
@@ -15059,9 +14844,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List the findings that need attention",
@@ -15099,9 +14881,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List core tasks",
@@ -15164,9 +14943,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get task configuration",
@@ -15229,9 +15005,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List core task lanes",
@@ -15527,9 +15300,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get churn risk",
@@ -15563,9 +15333,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer breakdown",
@@ -15599,9 +15366,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer contact",
@@ -15619,7 +15383,7 @@
     },
     "/api/crm/analytics/monthly-sales": {
       "get": {
-        "description": "Net revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most recent month first. Revenue is Xero's figure, in the organisation's currency. Credit notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.",
+        "description": "Invoice revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most recent month first. Revenue (`total`) is ex GST, in the organisation's base currency, and counts every invoice line, freight and other charges included. Foreign-currency invoices are counted in `not_converted` and never added. This is invoice revenue, not product revenue: margins count only lines mapped to a product (the rest is their `unmapped` total), so the two differ by design; don't compare them. Credit notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.",
         "operationId": "crm_crm_api_monthly_sales",
         "parameters": [
           {
@@ -15640,16 +15404,24 @@
                 "example": {
                   "monthly_sales": [
                     {
+                      "currency": "NZD",
+                      "ex_gst_unknown": 0,
                       "invoice_count": 14,
+                      "invoiced_inc_gst": "11385.00",
                       "month": "2026-10",
-                      "total": 9900.0
+                      "not_converted": 0,
+                      "total": "9900.00"
                     }
                   ],
                   "months": [
                     {
+                      "currency": "NZD",
+                      "ex_gst_unknown": 0,
                       "invoice_count": 14,
+                      "invoiced_inc_gst": "11385.00",
                       "month": "2026-10",
-                      "total": 9900.0
+                      "not_converted": 0,
+                      "total": "9900.00"
                     }
                   ]
                 },
@@ -15698,7 +15470,7 @@
             "bearerToken": []
           }
         ],
-        "summary": "Net sales per month",
+        "summary": "Invoice revenue per month, ex GST",
         "tags": [
           "sales"
         ],
@@ -15737,9 +15509,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Mapped product units by customer/store for an inclusive invoice-date window.",
@@ -15773,9 +15542,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get rankings",
@@ -15809,9 +15575,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get contact sync settings",
@@ -15926,9 +15689,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List customers",
@@ -16026,9 +15786,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer import template",
@@ -16071,9 +15828,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer",
@@ -16156,9 +15910,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer analytics",
@@ -16201,9 +15952,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer invoice defaults",
@@ -16246,9 +15994,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer invoices",
@@ -16331,9 +16076,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer line item descriptions",
@@ -16376,9 +16118,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get customer line item pricing",
@@ -16538,9 +16277,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get excise month",
@@ -16574,9 +16310,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get excise months",
@@ -16610,9 +16343,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List final products",
@@ -16844,9 +16574,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get invoice pdf",
@@ -16889,9 +16616,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Resolve every labelled stock lot allocated to one tenant's invoice.",
@@ -16934,9 +16658,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get invoice view url",
@@ -16979,9 +16700,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "the sale lines on an invoice that goods could come back from.",
@@ -17015,9 +16733,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get org line item descriptions",
@@ -17051,9 +16766,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get matching queue",
@@ -17120,9 +16832,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get matching candidates",
@@ -17304,9 +17013,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get crm overview",
@@ -17340,9 +17046,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List mappings",
@@ -17522,9 +17225,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "goods customers sent back, newest first.",
@@ -17589,9 +17289,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Mapped credit-note lines that still need a physical-return decision.",
@@ -17625,9 +17322,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "the stock areas a return can be received into, and whether each is in bond.",
@@ -17661,9 +17355,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List tasks",
@@ -17728,9 +17419,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List task lanes",
@@ -17959,9 +17647,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get task",
@@ -18077,9 +17762,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "List tastings",
@@ -18144,9 +17826,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get choices",
@@ -18180,9 +17859,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get pool",
@@ -18225,9 +17901,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get tasting",
@@ -18436,9 +18109,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Xero lines that may be bottles sold at this tasting or event, to link when closing it.",
@@ -18472,9 +18142,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get traceability config",
@@ -18605,9 +18272,6 @@
         "security": [
           {
             "sessionCookie": []
-          },
-          {
-            "bearerToken": []
           }
         ],
         "summary": "Get xero status",

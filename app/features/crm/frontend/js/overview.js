@@ -515,7 +515,7 @@ function crmOverview() {
     },
 
     widgetSubtitle(widget) {
-      if (widget.type === 'sales_trend') return 'Invoiced revenue by month';
+      if (widget.type === 'sales_trend') return 'Invoice revenue by month, ex GST';
       if (widget.type === 'task_board') return '';
       if (widget.type === 'top_products') return 'Grouped by mapped product; expand to see Xero items';
       if (widget.type === 'top_customers') return 'By total invoiced revenue';
