@@ -161,8 +161,9 @@ HTTP Request
   (`app/features/mcp_oauth/`, always mounted; each org is off until an admin turns it on —
   `uv run workflow mcp enable --org-id <id> --roles admin,member` until the Settings page lands).
   A request may carry `Authorization: Bearer bza_…` instead of a session: `tenant_context` resolves it, and
-  `access_policy.token_access` limits it to GET/HEAD on routes whose rule names a view permission
-  (`READ_PERMISSIONS`). Spec `.agents/specs/public-mcp.md`.
+  `access_policy.token_access` limits it to GET/HEAD on routes whose OpenAPI operation is marked
+  `x-bize.mcp: true` in `app/api/openapi/overlay/` and whose rule names a view permission
+  (`READ_PERMISSIONS`); a route with no overlay entry is out of scope. Spec `.agents/specs/public-mcp.md`.
   The assistant-facing server is a separate package, `bize_mcp/` (three tools: `discover`, `docs`, `execute`; its
   SDK is the optional `mcp` extra: `uv sync --extra dev --extra mcp`), documented in `docs/public-mcp-server.md`.
 

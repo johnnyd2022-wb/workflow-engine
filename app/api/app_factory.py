@@ -506,6 +506,11 @@ def create_app():
     from app.core.security.staff_site_policy import setup_staff_site_policy
 
     setup_staff_site_policy(app)
+    # Design review S1: the token rule enforces the MCP catalogue. Built once, after every
+    # blueprint is registered, from the same overlay flags the OpenAPI document publishes.
+    from app.api.openapi.document import mcp_operations
+
+    app.extensions["mcp_operations"] = mcp_operations(app)
     setup_access_policy(app)
     from app.features.sites.routes import install_site_request_validation
 

@@ -53,7 +53,8 @@ def test_ac11_the_token_user_and_org_drive_the_response(world):
 def test_ac11_a_token_reaches_exactly_what_its_roles_session_reaches_on_reads(world, who):
     _g, access, _r = _token_for(world, who)
     session = world.session(who)
-    for path in ("/api/core/inventory", "/api/core/processes", "/api/core/executions", "/api/crm/customers"):
+    # Routes in the MCP catalogue (x-bize.mcp): outside it a token is out of scope (design review S1).
+    for path in ("/api/core/inventory", "/api/core/processes", "/api/core/executions", "/api/crm/invoices"):
         want = session.get(path).status_code
         got = _get(world, path, access).status_code
         assert got == want, (who, path, got, want)
@@ -184,9 +185,10 @@ def _get_routes_without_arguments():
 
 
 def test_ac13_every_get_route_without_a_read_permission_is_refused_for_an_admin_token(world, monkeypatch):
-    """Walk the live URL map: where the policy names no view permission (and the route is not public
-    or the token's own identity), an admin's read token gets 403 insufficient_scope."""
-    from app.core.security.access_policy import MCP_TOKEN_ENDPOINTS, READ_PERMISSIONS
+    """Walk the live URL map: where the policy names no view permission, or the route is not in the
+    MCP catalogue (design review S1), and the route is not public or the token's own identity, an
+    admin's read token gets 403 insufficient_scope."""
+    from app.core.security.access_policy import MCP_TOKEN_ENDPOINTS, READ_PERMISSIONS, in_mcp_catalogue
 
     monkeypatch.setattr(rate_limit, "BEARER_REQUESTS_PER_MINUTE", 10_000_000)
     _g, access, _r = _token_for(world, "admin")
@@ -199,7 +201,7 @@ def test_ac13_every_get_route_without_a_read_permission_is_refused_for_an_admin_
             continue
         required = set(requirement if isinstance(requirement, tuple) else (requirement,))
         resp = client.get(url, headers=bearer(access))
-        if not required & READ_PERMISSIONS:
+        if not (required & READ_PERMISSIONS and in_mcp_catalogue(world.app, endpoint, "GET")):
             refused += 1
             if resp.status_code != 403 or (resp.get_json(silent=True) or {}).get("error") != "insufficient_scope":
                 wrong.append((endpoint, url, resp.status_code))
@@ -237,11 +239,12 @@ def test_ac13_data_export_download_is_403_for_a_token(world):
 @pytest.mark.parametrize(
     "who,path",
     [
-        ("sales", "/api/core/costing/settings"),  # costs.view: sales has none
+        # Catalogue routes (x-bize.mcp), so the refusal is the role's, not the scope's.
+        ("sales", "/api/core/costing/margins"),  # costs.view: sales has none
         ("sales", "/api/core/processes"),  # production.view
         ("sales", "/api/core/executions"),
-        ("production", "/api/crm/customers"),  # sales.view
-        ("auditor", "/api/core/costing/settings"),
+        ("production", "/api/crm/invoices"),  # sales.view
+        ("auditor", "/api/core/costing/margins"),
     ],
 )
 def test_ac14_a_token_on_a_read_route_its_role_lacks_is_403(world, who, path):
