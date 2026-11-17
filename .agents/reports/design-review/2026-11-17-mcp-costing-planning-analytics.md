@@ -57,6 +57,7 @@ measurement or a decision before it counts as a defect.
       off-by-default limit this but don't close it.
     - Fix: seed verified records for known clients by metadata URL or redirect URIs; an org setting,
       default on, allowing verified clients only.
+    - Status: fixed in !740 (a cited verified list in code matched by redirect URIs and metadata URL, never by name; orgs allow verified apps only unless an admin opts in; consent blocked and bearer 403 for unverified clients)
 - **S4. Security: rate limits are per worker, so brute-force limits are doubled.** Confirmed in code; production config not checked.
     - Problem: gunicorn runs `WEB_CONCURRENCY=2` by default and the limiter keeps counts in process
       memory unless `[ratelimit] storage_uri` is set; the templates leave it commented out.
