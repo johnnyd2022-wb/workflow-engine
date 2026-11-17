@@ -24,10 +24,11 @@ from app.core.db.models.user import UserRole
 from app.core.security.access_policy import token_scope_includes
 from app.features.mcp_oauth.models import McpAllowedRole, McpOrgSettings, OAuthClient
 from app.features.mcp_oauth.services import rate_limit
-from tests.costing_helpers import login, lot, new_org, price, purge
+from tests.costing_helpers import login, lot, new_org, price
 from tests.factories import UserFactory
 from tests.mcp_oauth.support import TEST_NAME_PREFIX, bearer, make_client, mint_grant, unique_addr
 from tests.openapi.seeds import SEEDS
+from tests.org_purge import purge_orgs
 
 API = "/api/core/costing"
 FIXED_UUID = "00000000-0000-4000-8000-000000000000"
@@ -58,6 +59,7 @@ def _client(app):
 def assistant_org(db, flask_app):
     """An org with costing, assistants on for admins, and an admin with a session and a read token."""
     org = new_org(db)
+    org_id = org.id
     admin = UserFactory(org_id=org.id, email=f"drs2-{org.id.hex[:8]}@example.test", role=UserRole.ADMIN)
     db.add(McpOrgSettings(org_id=org.id, enabled=True))
     db.add(McpAllowedRole(org_id=org.id, role_key="builtin:admin"))
@@ -71,7 +73,8 @@ def assistant_org(db, flask_app):
             "headers": bearer(access),
             "session": login(flask_app, admin.email),
         }
-    purge(db, org)
+    db.rollback()
+    purge_orgs(db, [org_id])
     db.query(OAuthClient).filter(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%")).delete(synchronize_session=False)
     db.commit()
 
@@ -143,10 +146,24 @@ def test_s2_a_token_read_of_the_bridge_makes_no_xero_call(assistant_org, db, mon
 
 # --- (3) every token-reachable GET writes nothing ------------------------------------------------
 
-# The only writes a token request may make, each named with why. The bearer path stamps the grant's
-# ``last_used_at`` (``GrantRepository.touch_last_used``, at most once a minute) so Settings can show
-# when an assistant last connected. Nothing else: not a snapshot, not a cache row, not a log row.
-ALLOWED_WRITES = (re.compile(r"^UPDATE oauth_grants SET last_used_at=", re.IGNORECASE),)
+# The only writes a token request may make, each named with why. Nothing else: no snapshot, no record.
+#
+# 1. The bearer path itself: it stamps the grant's ``last_used_at`` (``GrantRepository.touch_last_used``,
+#    at most once a minute) so Settings can show when an assistant last connected.
+# 2. ``system_findings_cache``: a derived read-through cache of the expired-materials / stock-integrity
+#    checks (``app/features/compliance_checks/system_findings_cache.py``). It holds no record of its own,
+#    is invalidated by any stock or batch change and rewritten nightly; skipping the write would re-run a
+#    ~1.3s DAG check on every assistant call instead.
+# 3. ``audit_logs`` rows whose action is ``download_*``: an append-only note that someone downloaded a
+#    document (the licensing pack for an inspector). Recording who read it is the point of the log.
+ALLOWED_WRITES = (
+    (re.compile(r"^UPDATE oauth_grants SET last_used_at=", re.IGNORECASE), None),
+    (re.compile(r"^INSERT INTO system_findings_cache\b", re.IGNORECASE), None),
+    (
+        re.compile(r"^INSERT INTO audit_logs\b", re.IGNORECASE),
+        lambda params: isinstance(params, dict) and str(params.get("action", "")).startswith("download_"),
+    ),
+)
 _WRITE = re.compile(r"^\s*(?:WITH\b.*?\b)?(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b", re.IGNORECASE | re.DOTALL)
 
 
@@ -204,8 +221,12 @@ def _url(world, oid, path, op):
 def _recording_writes():
     seen: list[str] = []
 
-    def before(_conn, _cursor, statement, _params, _context, _many):
-        if _WRITE.match(statement) and not any(rule.match(statement.strip()) for rule in ALLOWED_WRITES):
+    def allowed(statement, params):
+        text = statement.strip()
+        return any(rule.match(text) and (check is None or check(params)) for rule, check in ALLOWED_WRITES)
+
+    def before(_conn, _cursor, statement, params, _context, _many):
+        if _WRITE.match(statement) and not allowed(statement, params):
             seen.append(" ".join(statement.split())[:200])
 
     event.listen(engine, "before_cursor_execute", before)
@@ -233,14 +254,22 @@ def test_s2_the_guard_covers_the_token_reachable_reads():
     assert {"costing_get_stock_value", "costing_get_bridge", "core_list_inventory"} <= oids
 
 
-def test_s2_the_recorder_sees_a_write_and_lets_the_bearer_stamp_through(db):
+def test_s2_the_recorder_sees_a_write_and_lets_only_the_named_allowances_through(db):
     from sqlalchemy import text
 
     with _recording_writes() as seen:
         db.execute(text("UPDATE oauth_grants SET last_used_at=now() WHERE false"))
         db.execute(text("UPDATE organisations SET name=name WHERE false"))
+        db.execute(text("DELETE FROM system_findings_cache WHERE false"))  # only its upsert is allowed
+        audit = text("INSERT INTO audit_logs (id, action) SELECT gen_random_uuid(), :action WHERE false")
+        db.execute(audit, {"action": "download_licensing_pack"})  # a download note: allowed
+        db.execute(audit, {"action": "update_licence"})  # any other audit row is a write
     db.rollback()
-    assert seen == ["UPDATE organisations SET name=name WHERE false"]
+    assert [s.split(" WHERE")[0] for s in seen] == [
+        "UPDATE organisations SET name=name",
+        "DELETE FROM system_findings_cache",
+        "INSERT INTO audit_logs (id, action) SELECT gen_random_uuid(), %(action)s",
+    ]
 
 
 @pytest.mark.parametrize("oid,path,op", TOKEN_GETS, ids=[oid for oid, _p, _o in TOKEN_GETS])

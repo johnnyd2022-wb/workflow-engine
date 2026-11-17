@@ -291,8 +291,15 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
 
 
 def build_bridge(
-    db: Session, org_id: UUID, opening: StockValueSnapshot | None, closing: StockValueSnapshot | None
+    db: Session,
+    org_id: UUID,
+    opening: StockValueSnapshot | None,
+    closing: StockValueSnapshot | None,
+    *,
+    xero_allowed: bool = True,
 ) -> dict:
+    """``xero_allowed=False`` (an assistant's token) skips the live P&L call: ``xero.state`` is
+    ``not_available_to_assistants`` and the roll-forward is returned as it is without Xero."""
     if opening is None or closing is None:
         return {"state": "needs_snapshots", "snapshots": len(stock_value.list_snapshots(db, org_id))}
     if opening.cutoff_at >= closing.cutoff_at:
@@ -312,6 +319,8 @@ def build_bridge(
     xero_total_duty = xero_total_overhead = None
     if start > end:
         body["xero"] = {"state": "same_day"}
+    elif not xero_allowed:
+        body["xero"] = {"state": "not_available_to_assistants"}
     else:
         fetched = _fetch_profit_and_loss(db, org_id, start, end)
         body["xero"] = {k: v for k, v in fetched.items() if k != "rows"}

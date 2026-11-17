@@ -665,10 +665,15 @@ def readiness_detail(key):
 
 def _auto_month_ends(org):
     """The first costing read after a month ends closes it, for an org with no Xero (a Xero org's
-    first sync does). Never fails the read."""
+    first sync does). Never fails the read.
+
+    A person's read only: an assistant's read-only token (``g.auth_via == "mcp"``) never closes a
+    month, because the snapshot is held fixed once taken (design review S2)."""
     from app.features.costing import stock_value
     from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 
+    if getattr(g, "auth_via", None) == "mcp":
+        return []
     try:
         if XeroTenantRepository(db_session).get_connected(org) is not None:
             return []
@@ -754,7 +759,10 @@ def get_bridge():
     else:
         latest = stock_value.list_snapshots(db_session, org)[:2]
         closing, opening = (latest[0], latest[1]) if len(latest) == 2 else (None, None)
-    return jsonify(bridge.build_bridge(db_session, org, opening, closing))
+    # An assistant's token gets the roll-forward but not the live Xero tie-out: each one is a call on
+    # the org's Xero rate limit (design review S2).
+    xero_allowed = getattr(g, "auth_via", None) != "mcp"
+    return jsonify(bridge.build_bridge(db_session, org, opening, closing, xero_allowed=xero_allowed))
 
 
 # --- 8.1d: the Purchases page -----------------------------------------------------------------------
