@@ -129,6 +129,16 @@ authlib's grant model fights the composite keys. Either way, behaviour is exactl
 In `tenant_context`, only when the request has **no session user** and has
 `Authorization: Bearer bza_…`:
 
+0. **Private network only** (design review S1). A token's audience is the MCP server, so the
+   app accepts it only from the MCP container, which calls the app by its container address on
+   the shared Docker network (`scripts/run_mcp.sh`: `BIZE_API_BASE_URL=https://workflow-engine-<env>:<port>`),
+   never through Cloudflare. With `[mcp] bearer_internal_only = true` (test and prod; false in
+   local), a bearer request carrying `CF-Connecting-IP` or `CF-Ray` (headers Cloudflare sets on
+   every request it forwards, which a client cannot strip through the edge) is refused **before
+   the token is looked up**: `401 {"error":"invalid_token"}` with the same `WWW-Authenticate` as a
+   bad token, logged as `mcp.bearer_from_edge` (path and method, never the token). So a token
+   holder can't skip the MCP server's row caps, rate limit and audit by calling the public app.
+   No shared secret: the MCP container stays secret-free. Session requests are unaffected.
 1. Hash it, then look up an unrevoked, unexpired access token whose grant is unrevoked. The
    token's `resource` must equal the configured MCP resource (audience binding). Otherwise:
    `401` JSON `{"error":"invalid_token"}` with `WWW-Authenticate: Bearer error="invalid_token"`.

@@ -91,3 +91,7 @@ redirect_uri = https://biz-e.app/auth/google/callback
 # is bound to it, and a token for any other audience is refused.
 issuer = https://biz-e.app
 resource = https://mcp.biz-e.app/mcp
+# bearer_internal_only: accept an assistant's token only from the MCP container on the private
+# Docker network. A bearer request that came through Cloudflare (CF-Connecting-IP / CF-Ray) is
+# refused 401 before the token is looked up (design review S1).
+bearer_internal_only = true
