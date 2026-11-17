@@ -299,13 +299,17 @@ class CRMService:
             item_code=item_code,
         )
 
-    def suggest_invoice_due_date(self, contact_id: UUID, org_id: UUID, invoice_date) -> date | None:
+    def suggest_invoice_due_date(
+        self, contact_id: UUID, org_id: UUID, invoice_date, *, fetch_from_xero: bool = True
+    ) -> date | None:
+        """``fetch_from_xero=False`` (an assistant's read-only token) uses only the terms already
+        stored: no Xero call, and nothing saved back (design review S2)."""
         contact = self.contact_repo.get_by_id(contact_id, org_id)
         if not contact:
             self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
             raise ValueError("Customer not found")
         terms = contact.payment_terms
-        if not terms and contact.xero_contact_id:
+        if not terms and contact.xero_contact_id and fetch_from_xero:
             try:
                 from app.features.crm.services.xero_api_client import XeroAPIClient
 
