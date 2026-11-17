@@ -220,7 +220,10 @@ operations:
     summary: Margin per product per month
     description: >-
       Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue
-      is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403.
+      is product revenue: ex GST, in the base currency, from sale lines mapped to a product only; lines that map
+      to no product (freight, other charges, unmapped items) are totalled in `unmapped`, never in a row. So this
+      is not the same figure as monthly sales (invoice revenue, every line): don't compare the two. A
+      foreign-currency sale's revenue is null, never converted. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403.
       A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the
       last six months. At most a fixed number of months at a time.
     parameters:
@@ -238,11 +241,23 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [from, to, currency, rows]
+        required: [from, to, currency, rows, unmapped]
         properties:
           from: {type: string}
           to: {type: string}
-          currency: {type: string}
+          currency: {type: string, description: "The base currency every amount is in."}
+          unmapped:
+            type: object
+            description: >-
+              Sale lines in the period that map to no product, left out of the rows. Revenue is ex GST in the base
+              currency, a Decimal string; null when a line's ex-GST amount can't be told. Foreign-currency lines
+              are counted in not_converted and not added.
+            additionalProperties: false
+            required: [revenue, lines, not_converted]
+            properties:
+              revenue: {type: [string, "null"]}
+              lines: {type: integer}
+              not_converted: {type: integer}
           rows:
             type: array
             items:
@@ -253,7 +268,7 @@ operations:
                 product: {type: string}
                 month: {type: string, description: "YYYY-MM."}
                 units: {type: string}
-                revenue: {type: [string, "null"]}
+                revenue: {type: [string, "null"], description: "Product revenue, ex GST, base currency."}
                 cost: {type: [string, "null"]}
                 cost_status: {type: string}
                 duty: {type: [string, "null"]}
@@ -268,6 +283,7 @@ operations:
         currency: NZD
         rows:
           - {product: Dry Gin, month: "2026-10", units: "220", revenue: "9900.00", cost: null, cost_status: unknown, duty: null, duty_tracked: false, margin: null, margin_percent: null, average_cost_per_unit: null, lines: []}
+        unmapped: {revenue: "350.00", lines: 7, not_converted: 0}
     x-bize:
       kind: calculation
       mcp: true

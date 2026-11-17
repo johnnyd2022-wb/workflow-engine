@@ -161,13 +161,12 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
     """Months in [start, end] (each a first-of-month). Rows newest month first."""
     from app.features.compliant.modules.nz_alcohol import excise
     from app.features.compliant.service import nz_alcohol_active
-    from app.features.costing.models import CostingSettings
+    from app.features.crm.services.sales_sources import base_currency as org_base_currency
     from app.features.crm.services.sales_sources import sale_lines
 
     duty_on = nz_alcohol_active(db, org_id)
-    settings = db.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
-    base_currency = (settings.base_currency if settings and settings.base_currency else "NZD").upper()
-    lines, _unmapped = sale_lines(db, org_id, start, next_month(end))
+    base_currency = org_base_currency(db, org_id)
+    lines, unmapped = sale_lines(db, org_id, start, next_month(end))
     credits = _credits(db, org_id, start, next_month(end))
     costs = _Costs(
         db,
@@ -326,7 +325,29 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
                 "lines": row.lines,
             }
         )
-    return {"from": start.strftime("%Y-%m"), "to": end.strftime("%Y-%m"), "currency": base_currency, "rows": out}
+    return {
+        "from": start.strftime("%Y-%m"),
+        "to": end.strftime("%Y-%m"),
+        "currency": base_currency,
+        "rows": out,
+        "unmapped": _unmapped_total(unmapped, base_currency),
+    }
+
+
+def _unmapped_total(unmapped, base_currency: str) -> dict:
+    """Sale lines in the period that map to no product (A1): margins leave them out of the rows, so
+    their ex-GST revenue is shown here, never silently dropped. Foreign-currency lines are counted in
+    ``not_converted``, not added; revenue is None when any base-currency line's ex GST can't be told."""
+    revenue: Decimal | None = ZERO
+    not_converted = 0
+    for line in unmapped:
+        if line.currency and line.currency.upper() != base_currency:
+            not_converted += 1
+        elif line.revenue is None or revenue is None:
+            revenue = None
+        else:
+            revenue += line.revenue
+    return {"revenue": _m(revenue), "lines": len(unmapped), "not_converted": not_converted}
 
 
 def _credits(db: Session, org_id: UUID, start: date, end: date) -> list[dict]:

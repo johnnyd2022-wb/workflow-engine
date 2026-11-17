@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Protocol
 from uuid import UUID
 
@@ -41,6 +41,9 @@ class UnmappedLine:
     reference: str
     description: str
     quantity: Decimal | None
+    # Ex GST in the invoice's currency, by the same rule as SaleLine.revenue; None when it can't be told.
+    revenue: Decimal | None = None
+    currency: str | None = None
 
 
 class SalesSource(Protocol):
@@ -173,6 +176,8 @@ class XeroSalesSource:
                             reference,
                             (line.description or line.item_code or "").strip()[:200],
                             quantity,
+                            revenue=_ex_gst(line, inclusive),
+                            currency=invoice.currency_code,
                         )
                     )
                     continue
@@ -230,6 +235,74 @@ def _ex_gst(line, inclusive: bool | None) -> Decimal | None:
         tax = _decimal(line.tax_amount)
         return None if tax is None else amount - tax
     return amount
+
+
+def base_currency(session: Session, org_id: UUID) -> str:
+    """The currency revenue is reported in: the org's costing base currency, NZD by default."""
+    from app.features.costing.models import CostingSettings
+
+    settings = session.query(CostingSettings).filter(CostingSettings.org_id == org_id).one_or_none()
+    return (settings.base_currency if settings and settings.base_currency else "NZD").upper()
+
+
+def document_revenue(sub_total, total, total_tax) -> Decimal | None:
+    """Ex-GST revenue of a whole invoice or credit note, in its own currency.
+
+    Xero's sub-total is ex tax whichever way the lines were entered, and it equals the sum of
+    ``_ex_gst`` over the lines under either ``_tax_inclusive`` reading (inclusive: Σ(amount − tax) =
+    total − tax; exclusive: Σ amount = sub-total). Without a sub-total, total less its tax; with
+    neither, None (never the GST-inclusive total passed off as revenue)."""
+    sub = _decimal(sub_total)
+    if sub is not None:
+        return sub
+    gross, tax = _decimal(total), _decimal(total_tax)
+    return None if gross is None or tax is None else gross - tax
+
+
+def money(value: Decimal) -> str:
+    return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):f}"
+
+
+@dataclass
+class RevenueTotal:
+    """Invoice revenue for a period (live-cogs X1): ex GST, base currency, credit notes taken off.
+
+    Includes every line of an invoice (freight, other charges), unlike margins, which count only
+    lines mapped to a product. A foreign-currency document is never added unconverted: it is counted
+    in ``not_converted``. One whose ex-GST amount can't be told is counted in ``ex_gst_unknown``."""
+
+    currency: str
+    revenue: Decimal = Decimal("0")
+    invoiced_inc_gst: Decimal = Decimal("0")  # the old figure: Xero totals, every currency
+    invoice_count: int = 0
+    not_converted: int = 0
+    ex_gst_unknown: int = 0
+
+    def add(self, *, sub_total, total, total_tax, currency, credit: bool = False) -> None:
+        sign = -1 if credit else 1
+        if not credit:
+            self.invoice_count += 1
+        gross = _decimal(total)
+        if gross is not None:
+            self.invoiced_inc_gst += sign * gross
+        if currency and currency.upper() != self.currency:
+            self.not_converted += 1
+            return
+        value = document_revenue(sub_total, total, total_tax)
+        if value is None:
+            self.ex_gst_unknown += 1
+            return
+        self.revenue += sign * value
+
+    def as_json(self) -> dict:
+        return {
+            "total": money(self.revenue),
+            "invoiced_inc_gst": money(self.invoiced_inc_gst),
+            "invoice_count": self.invoice_count,
+            "currency": self.currency,
+            "not_converted": self.not_converted,
+            "ex_gst_unknown": self.ex_gst_unknown,
+        }
 
 
 SALES_SOURCES: dict[str, SalesSource] = {"xero": XeroSalesSource()}
