@@ -28,7 +28,7 @@ The Biz-E JSON API: production, stock, traceability, compliance, sales and cost.
 
 **Signing in.** A browser session uses the `session` cookie. An AI assistant uses an access token
 (`Authorization: Bearer bza_...`) with the read-only scope `bize.read`, which reaches only the GET
-operations marked `x-bize.mcp`. Every operation lists the schemes that work for it under `security`.
+operations marked `x-bize.mcp`, plus this document and `/api/core/mcp/me`. Every operation lists the schemes that work for it under `security`.
 
 **Who may call what.** `x-bize.permission` is the permission the route requires: one name, or a list
 meaning "any of these". `signed_in` means any signed-in person, `public` anyone. This document shows a

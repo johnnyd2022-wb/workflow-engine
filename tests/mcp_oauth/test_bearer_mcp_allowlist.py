@@ -129,6 +129,15 @@ def test_s1_the_app_allowlist_is_the_overlays_mcp_flags(world):
                 flagged.add((endpoint, rules[op["operationId"]], method))
     assert flagged
     assert set(world.app.extensions["mcp_operations"]) == flagged
+    # ...and those are exactly the operations the overlay files mark, by name.
+    from app.api.openapi.overlay import get_overlay
+
+    marked = {
+        name for name, entry in get_overlay().operations.items() if (entry.get("x-bize") or {}).get("mcp") is True
+    }
+    assert marked == {
+        op["operationId"] for i in built.document["paths"].values() for op in i.values() if op["x-bize"]["mcp"]
+    }
 
 
 def test_s1_a_second_rule_on_a_catalogue_endpoint_is_not_in_the_catalogue(world):
