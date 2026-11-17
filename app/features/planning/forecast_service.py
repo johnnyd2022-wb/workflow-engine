@@ -4,22 +4,24 @@ Per workflow output:
 - **Rate**: units sold per week over a window (default 12 weeks, 4 to 52), from every
   connected sales source. A sale counts for an output only through its product mapping's
   workflow output, never by name. An output first sold inside the window is rated over the
-  whole weeks since that first sale (at least 2), and the row says so.
+  whole weeks since that first sale, counting the week it was made in (at least 2), and the
+  row says so.
 - **Seasonality**: with a year of that output's own sales, the rate is scaled by how last
-  year's next N weeks compared with last year's same trailing N weeks, or the whole weeks of
-  those it was already selling in, at least 2 (clamped to x0.25..x4).
+  year's next N weeks compared with last year's same trailing N weeks, or as many of those
+  weeks as it was already selling in, counted the same way (at least 2; clamped to x0.25..x4).
   The trailing rate is already at this season's level, so only the change ahead is applied.
   With less history there's no adjustment, and the row says so.
 - **Available**: stock on hand (stock.on_hand) + output of live batches that aren't blocked,
-  less open demand that isn't itself a forecast (a planned order takes its stock first).
-  Blocked batches are listed on their own and never counted.
-- **Runs out on**: open orders are netted first (engine.build_plan), then the daily rate is
-  drawn from what's left, each batch only from its ready date (engine.days_until_out). The
-  first day nothing is left, even if a later batch restocks it.
+  less open demand that isn't itself a forecast. A total, regardless of when each arrives or
+  is due: the run-out date is what accounts for timing.
+  Blocked batches are listed on their own and not counted as stock.
+- **Runs out on**: engine.days_until_out draws the daily rate from stock and each batch only
+  from its ready date (and each lot only until its expiry), and takes each open order whole on
+  its due date. The first day nothing is left, even if a later batch restocks it.
 - **Suggestion** (only with a stock target): enough to keep `weeks_of_cover` after the batch
   is made, counting only supply ready by then (a blocked batch counts here: it is already
-  planned and needs unblocking, not repeating), rounded up to whole batches, planned by
-  runs-out minus the workflow's elapsed days.
+  planned and needs unblocking, not repeating) less every open order, rounded up to whole
+  batches, planned by runs-out minus the workflow's elapsed days.
 
 Anything unknown stays unknown, with the reason (no sales source, product not mapped, no batch
 size set), never a guess.
@@ -37,9 +39,9 @@ from uuid import UUID
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning.batch_models import PlanningWorkflowSetting
 from app.features.planning.demand_service import output_catalog
-from app.features.planning.engine import Demand, build_plan, days_until_out
+from app.features.planning.engine import days_until_out
 from app.features.planning.models import PlanningDemand, PlanningStockTarget
-from app.features.planning.stock import on_hand, planned_output, stock_key
+from app.features.planning.stock import on_hand, planned_output
 
 DEFAULT_WINDOW_WEEKS = 12
 MIN_WINDOW_WEEKS, MAX_WINDOW_WEEKS = 4, 52
@@ -135,14 +137,19 @@ def weekly_rate(sales, *, today: date, weeks: int, has_year: bool, first_sale: d
     rate_weeks = weeks
     rate_note = None
     if first_sale is not None and first_sale > today - timedelta(weeks=weeks):
-        rate_weeks = min(weeks, max(MIN_RATE_WEEKS, math.ceil((today - first_sale).days / 7)))
-        if rate_weeks < weeks:
+        days = (today - first_sale).days
+        since = math.ceil(days / 7)  # whole weeks, counting the week of its first sale
+        rate_weeks = min(weeks, max(MIN_RATE_WEEKS, since))
+        if since < MIN_RATE_WEEKS:
+            rate_note = f"First sold {days} day{'s' if days != 1 else ''} ago, so the rate is over the {MIN_RATE_WEEKS}-week minimum, not {weeks} weeks"
+        elif rate_weeks < weeks:
             rate_note = f"First sold {rate_weeks} weeks ago, so the rate is over those {rate_weeks} weeks, not {weeks}"
     base = _units(sales, today - timedelta(weeks=weeks), today) / rate_weeks
     if not has_year:
         return base, None, "Less than 12 months of its sales, so no seasonal adjustment", rate_weeks, rate_note
     year_ago = today - YEAR
-    # Last year's trailing weeks: only the whole weeks after its first sale, at least MIN_RATE_WEEKS.
+    # Last year's trailing weeks: the whole weeks since its first sale (counting the week of that
+    # sale, as the rate does), at least MIN_RATE_WEEKS.
     before_weeks = weeks
     if first_sale is not None and first_sale > year_ago - timedelta(weeks=weeks):
         before_weeks = math.ceil((year_ago - first_sale).days / 7)
@@ -214,17 +221,12 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
     )
     ordered = sum((row.quantity for row in open_demand), Decimal(0))
     available = on_hand_qty + planned_qty - ordered
-    # A planned order takes its stock first, netted the planner's way (due order, by ready date);
-    # what's left, and what the orders still lack, is what sales draw on.
-    key = stock_key(output_id, unit, site)
+    # Each open order takes its quantity on its due date (today if overdue); sales draw daily.
     orders = tuple(
-        Demand(str(row.id), key, Decimal(row.quantity), row.due_date, row.priority or 0)
+        (row.due_date, Decimal(row.quantity))
         for row in open_demand
         if Decimal(row.quantity).is_finite() and Decimal(row.quantity) > 0
     )
-    netted = build_plan(orders, (*stock, *batches), (), today=today)
-    left = netted.remaining
-    short = sum((row.shortfall for row in netted.positions), Decimal(0))
 
     rate = factor = None
     rate_weeks = None
@@ -245,10 +247,10 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
     runs_out = None
     lasts_beyond = False
     if rate is not None:
-        if short > 0 or not any(row.ready_date <= today for row in left):
-            runs_out = today
-        elif rate > 0:
-            days = math.floor(days_until_out(left, rate, today=today))
+        if rate == 0:
+            runs_out = today if available <= 0 else None
+        else:
+            days = math.floor(days_until_out((*stock, *batches), rate, today=today, withdrawals=orders))
             # Past the horizon there's no date worth showing (and far enough out, no date at all).
             runs_out = today + timedelta(days=days) if days <= RUNOUT_HORIZON_DAYS else None
             lasts_beyond = days > RUNOUT_HORIZON_DAYS
@@ -268,9 +270,11 @@ def cover_row(db, org_id, output, site, history: SalesHistory, *, today: date, w
         horizon = target_weeks * 7 + elapsed_days
         # What to plan counts a blocked batch as already planned (it needs unblocking, not a
         # second batch: the planner nets against it too), and only supply ready within the cover.
-        planned = build_plan(orders, (*stock, *batches, *blocked), (), today=today)
-        ready = sum((row.quantity for row in planned.remaining if (row.ready_date - today).days <= horizon), Decimal(0))
-        need = rate * horizon / 7 - ready + sum((row.shortfall for row in planned.positions), Decimal(0))
+        ready = sum(
+            (row.quantity for row in (*stock, *batches, *blocked) if (row.ready_date - today).days <= horizon),
+            Decimal(0),
+        )
+        need = rate * horizon / 7 - ready + ordered
         if need > 0:
             count = int((need / batch_quantity).to_integral_value(rounding=ROUND_CEILING))
             due = runs_out or today

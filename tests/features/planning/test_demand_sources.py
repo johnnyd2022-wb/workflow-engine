@@ -142,15 +142,21 @@ def test_days_until_out_draws_each_supply_from_its_ready_date_until_it_expires()
         days_until_out((now,), Decimal(0), today=TODAY)
 
 
-def test_build_plan_returns_the_supply_left_after_netting():
+def test_days_until_out_takes_each_order_on_its_due_date():
+    from app.features.planning.engine import days_until_out
+
     key = StockKey("gin", "bottles")
-    plan = build_plan(
-        (Demand("order", key, Decimal(40), TODAY + timedelta(days=3)),),
-        (Supply("lot", key, Decimal(30), TODAY), Supply("batch", key, Decimal(100), TODAY + timedelta(days=2))),
-        (),
-        today=TODAY,
-    )
-    assert [(row.supply_id, row.quantity) for row in plan.remaining] == [("batch", Decimal(90))]
+    stock = (Supply("lot", key, Decimal(100), TODAY), Supply("batch", key, Decimal(100), TODAY + timedelta(days=20)))
+    # 10 a week; the order for 100 on day 30 doesn't take today's stock early (design review P2
+    # follow-up): 200 - 100 lasts 140 days less the 70 days the order's 100 is worth.
+    order = ((TODAY + timedelta(days=30), Decimal(100)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=order) == 70
+    # An overdue order bigger than today's stock: out today, though a batch is coming.
+    overdue = ((TODAY - timedelta(days=2), Decimal(150)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=overdue) == 0
+    # An order due before the batch it needs: out on its due date.
+    early = ((TODAY + timedelta(days=5), Decimal(150)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=early) == 5
 
 
 def test_a_demand_covered_by_stock_on_hand_plans_no_batches(db, demand_world):
@@ -715,6 +721,20 @@ def test_a_batch_ready_later_does_not_hide_a_stock_out_before_it_arrives(db, dem
     assert row["runs_out_on"] == (TODAY + timedelta(days=21)).isoformat()
 
 
+def test_an_order_due_after_a_batch_arrives_does_not_take_todays_stock(db, demand_world, sales):
+    """Review of the P2 fix: 100 on hand, 100 ready on day 20, an order for 100 due on day 30,
+    selling 10 a week. Sales and the order are both met until day 70, not out today."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 100, 20)
+    _stock(db, org_id, output_id, 100)
+    _demand(db, org_id, output_id, 100, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["on_hand"], row["planned"], row["ordered"]) == ("100", "100", "100")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=70)).isoformat()
+
+
 def test_a_blocked_batch_is_reported_but_not_counted_as_stock(db, demand_world, sales):
     """Design review P2: a blocked batch can't start, so it isn't supply; it is shown on its own."""
     org_id, output_id, _ = _setup(db, demand_world)
@@ -743,6 +763,11 @@ def test_a_new_product_is_rated_over_the_weeks_since_its_first_sale(db, demand_w
     assert row["weekly_rate"] == "30"
     assert row["rate_weeks"] == 3
     assert row["rate_note"] == "First sold 3 weeks ago, so the rate is over those 3 weeks, not 12"
+    # First sold 3 days ago: the 2-week minimum, and the note says so rather than "2 weeks ago".
+    sales({org_id: [_sale(3, 30)]}, {org_id: TODAY - timedelta(days=3)})
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["weekly_rate"], row["rate_weeks"]) == ("15", 2)
+    assert row["rate_note"] == "First sold 3 days ago, so the rate is over the 2-week minimum, not 12 weeks"
 
 
 def _two_sites(db, org_id):
