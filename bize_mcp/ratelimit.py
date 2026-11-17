@@ -5,11 +5,13 @@ would start a fresh budget, so with ``BIZE_RATELIMIT_URI`` set the windows are c
 instead, with the server's own clock (``TIME``), so every process sees one window.
 
 A store that cannot be reached refuses the call (``kind: unavailable``) rather than counting nothing.
-The client is synchronous with one-second timeouts: one round trip on a private Docker network.
+The client is synchronous with one-second timeouts; the server calls ``ahit``, which runs a shared hit
+on a worker thread so a slow or dead store never blocks the event loop for every other caller.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections import deque
@@ -90,3 +92,9 @@ class Window:
         if len(self._hits) > 4096:
             self._hits = {k: v for k, v in self._hits.items() if v and v[-1] > now - self.seconds}
         return None
+
+    async def ahit(self, key: str, now: float) -> int | None:
+        """``hit`` for async callers: a shared window's round trip runs off the event loop."""
+        if self.store is None:
+            return self.hit(key, now)
+        return await asyncio.to_thread(self.hit, key, now)

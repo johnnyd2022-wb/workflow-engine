@@ -120,3 +120,21 @@ def test_s4_calculation_endpoints_come_from_the_openapi_overlay(world):
     assert "core.list_expired_materials" in endpoints
     assert "costing.get_stock_value" in endpoints
     assert "core.list_inventory" not in endpoints
+
+
+# --- 3. a store outage on the bearer path fails closed ------------------------------------------
+
+
+def test_s4_an_unreachable_store_refuses_bearer_requests_with_a_503(world, token, monkeypatch):
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    monkeypatch.setitem(world.app.config, "RATELIMIT_STORAGE_URI", f"redis://:x@127.0.0.1:{port}/0")
+    rate_limit._state.clear()
+    resp = world.anon().get(RECORD_OR_LIST, headers=bearer(token))
+    rate_limit._state.clear()
+    assert resp.status_code == 503, resp.get_data(as_text=True)[:200]
+    assert resp.get_json()["error"] == "temporarily_unavailable"
+    assert int(resp.headers["Retry-After"]) >= 1

@@ -110,3 +110,15 @@ def test_s4_two_servers_on_one_store_share_the_execute_budget(valkey_uri):  # no
         refused = second.execute(token, call)
     assert not any(r.is_error for r in results)
     assert refused.is_error and refused.data["error"]["kind"] == "rate_limited"
+
+
+def test_s4_a_dead_store_makes_a_tool_call_unavailable_with_a_retry_time():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    config = make_config(ratelimit_uri=f"redis://127.0.0.1:{port}/0", ratelimit_password="x")
+    with Mcp(stub_app({HOLDS: json_response(200, {"holds": []})}), config) as mcp:
+        result = mcp.execute(f"bza_{uuid.uuid4().hex}", {"id": "a", "operation_id": "list_open_holds"})
+    assert result.is_error
+    assert result.data["error"]["kind"] == "unavailable"
+    assert result.data["error"]["retry_after_seconds"] >= 1

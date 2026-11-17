@@ -26,7 +26,7 @@ class ToolFailureError(Exception):
 
     def as_data(self) -> dict:
         data = {"kind": self.kind, "message": self.message}
-        if self.kind == "rate_limited":
+        if self.kind in ("rate_limited", "unavailable"):
             data["retry_after_seconds"] = self.retry_after_seconds
         return {"error": data}
 

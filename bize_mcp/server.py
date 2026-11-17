@@ -120,7 +120,7 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
         try:
             arguments = check_arguments(tool.name, tool.input_schema, params.arguments)
             identity = await identities.identity_for(current.token)
-            wait = calls.hit(identity.grant_id or token_key(current.token), time.monotonic())
+            wait = await calls.ahit(identity.grant_id or token_key(current.token), time.monotonic())
             if wait is not None:
                 raise ToolFailureError(
                     f"Too many requests this minute. Try again in {wait} seconds.",

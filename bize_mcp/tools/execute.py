@@ -269,7 +269,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     outcome = ""
     try:
         # Keyed on the grant, not the token, so refreshing the access token doesn't reset the budget.
-        wait = ctx.execute_window.hit(ctx.identity.grant_id or token_key(ctx.token), started)
+        wait = await ctx.execute_window.ahit(ctx.identity.grant_id or token_key(ctx.token), started)
         if wait is not None:
             raise ToolFailureError(
                 f"Too many execute calls this minute. Try again in {wait} seconds.",

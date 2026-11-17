@@ -46,7 +46,9 @@ def _config(environment: str, ratelimit: dict[str, str] | None = None) -> Config
 def _config_for_store(uri: str, monkeypatch) -> Config:
     """A config whose [ratelimit] section names the Valkey at ``uri`` the way test.ini/prod.ini do."""
     parts = urlsplit(uri)
-    monkeypatch.setenv("VALKEY_PASSWORD", parts.password or "")
+    assert parts.password, "the deployed stores always have a password; so does every test store"
+    monkeypatch.setenv("VALKEY_PASSWORD", parts.password)
+    monkeypatch.setattr(Config, "_valkey_keepass_password", lambda self: "", raising=False)
     return _config("local", {"host": parts.hostname, "port": str(parts.port), "db": parts.path.lstrip("/") or "0"})
 
 

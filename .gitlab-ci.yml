@@ -253,9 +253,10 @@ relevant_tests:
       alias: postgres
       command: ["postgres", "-c", "max_connections=200"]
     # Design review S4: the shared rate-limit tests need a real Valkey (tests/valkey_support.py).
-    # The same pinned image scripts/run_valkey.sh deploys; CI-only, so no password.
+    # The same pinned image scripts/run_valkey.sh deploys, with a password as deployed (a CI-only one).
     - name: valkey/valkey:9.1.3
       alias: valkey
+      command: ["valkey-server", "--requirepass", "ci-only-valkey"]
   variables:
     ENVIRONMENT: test
     POSTGRES_DB: workflow-engine-test
@@ -263,6 +264,7 @@ relevant_tests:
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
     VALKEY_TEST_URI: redis://valkey:6379/0
+    VALKEY_TEST_PASSWORD: ci-only-valkey
     # The MR diff base must exist locally for the selector's base...head comparison.
     GIT_DEPTH: 0
   before_script:
@@ -490,9 +492,10 @@ unit_tests:
       alias: postgres
       command: ["postgres", "-c", "max_connections=200"]
     # Design review S4: the shared rate-limit tests need a real Valkey (tests/valkey_support.py).
-    # The same pinned image scripts/run_valkey.sh deploys; CI-only, so no password.
+    # The same pinned image scripts/run_valkey.sh deploys, with a password as deployed (a CI-only one).
     - name: valkey/valkey:9.1.3
       alias: valkey
+      command: ["valkey-server", "--requirepass", "ci-only-valkey"]
   variables:
     # Set environment to use test.ini config
     ENVIRONMENT: test
@@ -503,6 +506,7 @@ unit_tests:
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
     VALKEY_TEST_URI: redis://valkey:6379/0
+    VALKEY_TEST_PASSWORD: ci-only-valkey
   before_script:
     # Install dependencies
     - *install_uv

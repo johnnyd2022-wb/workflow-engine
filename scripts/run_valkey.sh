@@ -57,6 +57,14 @@ resolve_valkey_password "$TARGET"
     echo "No VALKEY_PASSWORD for $TARGET: set it, or add the KeePassXC entry (docs/production-deploy.md)." >&2
     exit 1
 }
+# It is written into valkey-server's config on stdin, so keep it to characters a config line can hold
+# unquoted (scripts/prod_secrets.py generates URL-safe base64, which is).
+case "$VALKEY_PASSWORD" in
+*[!A-Za-z0-9_.~-]*)
+    echo "VALKEY_PASSWORD may only contain letters, digits and . _ ~ - (it goes into a config line)." >&2
+    exit 1
+    ;;
+esac
 export REDISCLI_AUTH="$VALKEY_PASSWORD"
 
 # ping_reply -> what PING answers with the current password (empty when nothing answers).
@@ -98,16 +106,19 @@ if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
 fi
 
 docker volume create "$VOLUME" >/dev/null
-# Persistence is Valkey's default RDB snapshots in /data, on the named volume. The password is read
-# from the container's own environment by the shell inside it, so it is never in any argv here.
+# Persistence is Valkey's default RDB snapshots in /data, on the named volume (a new volume takes the
+# image's /data, owned by the valkey user). The shell inside the container writes the password from its
+# own environment into valkey-server's config on stdin, so it is in no command line, here or in there.
+# --user valkey: with a command of our own the image's entrypoint would otherwise keep it root.
 docker run -d --name "$CONTAINER" --restart unless-stopped \
     --network "$NETWORK" \
+    --user valkey \
     --security-opt no-new-privileges:true \
     -v "$VOLUME:/data" \
     -e REDISCLI_AUTH \
     --health-cmd 'valkey-cli --no-auth-warning ping | grep -q PONG' \
     --health-interval 10s --health-timeout 3s --health-retries 3 \
     "$IMAGE" \
-    sh -c 'exec valkey-server --requirepass "$REDISCLI_AUTH"' >/dev/null
+    sh -c 'printf "dir /data\nrequirepass %s\n" "$REDISCLI_AUTH" | exec valkey-server -' >/dev/null
 wait_ready
 echo "Created $CONTAINER from $IMAGE (network $NETWORK, volume $VOLUME, no published port)."

@@ -1,6 +1,7 @@
 """A real Valkey for the shared rate-limit tests (design review S4).
 
-``VALKEY_TEST_URI`` names one (CI runs a ``valkey/valkey`` service and sets it). Without it, and with
+``VALKEY_TEST_URI`` names one, with its password in ``VALKEY_TEST_PASSWORD`` (CI runs a ``valkey/valkey``
+service and sets both; the deployed stores always have a password, so the tests use one too). Without it, and with
 Docker available, a throwaway container is started on a random loopback port and removed afterwards.
 With neither the tests skip and say why: an absent service is a skip, never a failure.
 
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from urllib.parse import quote, urlsplit
 
 import pytest
 
@@ -35,6 +37,9 @@ def _ping(uri: str) -> bool:
 @pytest.fixture(scope="session")
 def valkey_uri():
     given = os.getenv("VALKEY_TEST_URI")
+    if given and os.getenv("VALKEY_TEST_PASSWORD"):
+        parts = urlsplit(given)
+        given = f"redis://:{quote(os.environ['VALKEY_TEST_PASSWORD'], safe='')}@{parts.hostname}:{parts.port or 6379}{parts.path}"
     if given:
         if not _ping(given):
             pytest.fail(f"VALKEY_TEST_URI is set but no Valkey answers there (host {given.rsplit('@', 1)[-1]})")
@@ -59,7 +64,7 @@ def valkey_uri():
             VALKEY_IMAGE,
             "sh",
             "-c",
-            'exec valkey-server --requirepass "$REDISCLI_AUTH" --save ""',
+            'printf "requirepass %s\\n" "$REDISCLI_AUTH" | exec valkey-server -',  # password never in argv
         ],
         env={**os.environ, "REDISCLI_AUTH": password},
         capture_output=True,

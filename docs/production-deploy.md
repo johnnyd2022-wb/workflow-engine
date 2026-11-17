@@ -117,7 +117,8 @@ counts kept in memory would be per worker: every limit twice as loose (design re
 (`valkey/valkey:9.1.3`) with `--restart unless-stopped`, the named volume, a health check, and
 **no published port**: only containers on the app's network reach it. The password goes to the
 container by name in its environment (`REDISCLI_AUTH`, which `valkey-cli` reads, so the health
-check never names it) and to `valkey-server --requirepass` from there. It is never on a command
+check never names it); from there it is written into the server's config on stdin (`requirepass`, the
+setting the founder decision names). It runs as the `valkey` user. The password is never on a command
 line, in a committed file, or in a log; the app builds `redis://:<password>@valkey-<env>:6379/0`
 in memory and its log scrubber removes credentials from any URL. The script is idempotent: a
 running instance that answers with this password is left alone, a stopped one is started, a

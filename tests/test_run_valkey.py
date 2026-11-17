@@ -149,7 +149,8 @@ def test_a_missing_instance_is_created_on_the_apps_network_with_no_published_por
     assert VALKEY_IMAGE in call
     assert not any(flag in call for flag in ("-p", "--publish", "-P", "--publish-all")), "internal network only"
     assert not re.search(r"\s-p\S|--publish=", joined)
-    assert "--requirepass" in joined, "the password is required, read from the environment"
+    assert "requirepass %s" in joined and '"$REDISCLI_AUTH"' in joined, "required, from the container's own env"
+    assert call[call.index("--user") + 1] == "valkey", "never root"
     i = call.index("-e")
     assert call[i + 1] == "REDISCLI_AUTH", "passed by name: the value never reaches argv"
     assert state["containers"][name]["password"] == PASSWORD
@@ -221,3 +222,9 @@ def test_the_image_is_pinned_to_an_exact_release_everywhere():
     ci = (ROOT / ".gitlab-ci.yml").read_text()
     pinned = set(re.findall(r"valkey/valkey:[\w.\-]+", ci))
     assert pinned == {VALKEY_IMAGE}, pinned
+
+
+def test_a_password_that_cannot_sit_in_a_config_line_is_refused(run):
+    out, state = run(password="has space")
+    assert out.returncode == 1
+    assert not _runs(state)
