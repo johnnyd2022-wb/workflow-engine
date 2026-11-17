@@ -39,6 +39,39 @@ def quiet_http_libraries() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def _redacted_arg(value):
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return redact(str(value))
+
+
+def _redact_message(record: logging.LogRecord) -> None:
+    """Redact the message, keeping ``record.args`` when that gives exactly the same text.
+
+    Some formatters read the arguments themselves (uvicorn's access formatter unpacks them), so
+    flattening every record to a finished string broke them. The arguments are kept only when the
+    redacted template filled with redacted arguments equals the redacted finished message; anything
+    else (a token split between template and argument, an object whose ``repr`` differs) falls back
+    to the flattened, redacted string.
+    """
+    full = redact(record.getMessage())
+    args = record.args
+    if args:
+        try:
+            if isinstance(args, dict):
+                kept = {key: _redacted_arg(value) for key, value in args.items()}
+            else:
+                kept = tuple(_redacted_arg(value) for value in args)
+            template = redact(record.msg)
+            if template % kept == full:
+                record.msg, record.args = template, kept
+                return
+        except Exception:  # any mismatch means: flatten instead
+            pass
+    record.msg = full
+    record.args = None
+
+
 def install_redaction() -> None:
     quiet_http_libraries()
     previous = logging.getLogRecordFactory()
@@ -49,8 +82,7 @@ def install_redaction() -> None:
         record = previous(*args, **kwargs)
         try:
             if isinstance(record.msg, str):  # a structured (dict) message belongs to its own formatter
-                record.msg = redact(record.getMessage())
-                record.args = None
+                _redact_message(record)
             if record.exc_info and record.exc_info[0] is not None:
                 record.exc_text = redact("".join(traceback.format_exception(*record.exc_info)).rstrip())
         except Exception:  # a logging problem must never break a request
