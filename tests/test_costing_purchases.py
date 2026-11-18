@@ -1207,3 +1207,60 @@ def test_costing_models_register_the_xero_accounts_table_on_their_own():
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr[-2000:]
+
+
+class _DowngradeBind:
+    """Stands in for the migration's connection: reports one table condition as occupied."""
+
+    def __init__(self, occupied):
+        self.occupied = occupied
+
+    def execute(self, statement):
+        found = self.occupied is not None and all(part in str(statement) for part in self.occupied)
+        return type("Result", (), {"first": lambda _self: (1,) if found else None})()
+
+
+def _downgrade_against(monkeypatch, occupied):
+    """Point `costing_purchases_001` at a fake connection and return it with the live list of
+    schema changes it attempts. It never touches a real schema (the shared test DB must not be
+    migrated)."""
+    import app.core.db.migrations.versions.costing_purchases_001 as migration
+
+    changes = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: _DowngradeBind(occupied))
+    for name in ("drop_column", "drop_index", "drop_table"):
+        monkeypatch.setattr(migration.op, name, lambda *args, _name=name, **_kw: changes.append((_name, args)))
+    return migration, changes
+
+
+@pytest.mark.parametrize(
+    ("occupied", "refusal"),
+    [
+        (("xero_accounts", "treatment_override IS NOT NULL"), "account treatments set by people"),
+        (("purchase_documents",), r"lose purchases \("),
+        (
+            ("costing_settings", "start_date IS NOT NULL", "purchases_cursor IS NOT NULL"),
+            "purchases start date and cursor",
+        ),
+    ],
+    ids=["account_override", "purchases", "start_date_or_cursor"],
+)
+def test_migration_downgrade_refuses_while_purchase_data_exists(monkeypatch, occupied, refusal):
+    """Codex R3 / review 8.1b: the downgrade must refuse, before changing any schema, while an
+    account override, a purchase, or a purchases start date/cursor exists."""
+    migration, changes = _downgrade_against(monkeypatch, occupied)
+    with pytest.raises(RuntimeError, match=refusal):
+        migration.downgrade()
+    assert changes == [], "the refusal must come before any schema change"
+
+
+def test_migration_downgrade_proceeds_on_an_empty_database(monkeypatch):
+    """The control: with nothing to lose it drops the purchases schema, so the refusals above
+    are the data checks and not a guard that always raises."""
+    migration, changes = _downgrade_against(monkeypatch, None)
+    migration.downgrade()
+    assert [args[0] for name, args in changes if name == "drop_table"] == [
+        "purchase_lines",
+        "purchase_documents",
+        "xero_accounts",
+    ]
