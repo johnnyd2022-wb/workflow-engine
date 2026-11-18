@@ -147,7 +147,17 @@ def test_ac27_docs_operation_returns_its_schema_and_related_operations(mcp, admi
 def test_docs_related_operations_leave_out_ones_the_caller_cannot_run(world, mcp):
     token = token_for(world, "sales")  # inventory.view and sales.view only: no production
     related = mcp.docs(token, topic="production.batches")
-    assert related.data["related_operations"] == []  # list_executions / get_execution are not theirs
+    assert related.data["related_operations"] == []
+    assert "related_operations: []" in related.data["markdown"]
+    assert "list_executions" not in related.data["markdown"] and "get_execution" not in related.data["markdown"]
+
+
+def test_topic_markdown_omits_operation_ids_missing_from_the_live_catalogue(mcp, admin_token):
+    data = mcp.docs(admin_token, topic="production.batches").data
+    assert data["related_operations"] == ["list_executions", "get_execution"]
+    assert "related_operations: [list_executions, get_execution]" in data["markdown"]
+    assert "`list_executions`" in data["markdown"] and "`get_execution`" in data["markdown"]
+    assert "get_batch_notes" not in data["markdown"]
 
 
 def test_docs_needs_exactly_one_of_topic_or_operation_id(mcp, admin_token):
