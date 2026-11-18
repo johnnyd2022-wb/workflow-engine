@@ -963,6 +963,19 @@ class InventoryRepository:
         """
         from sqlalchemy import tuple_ as _tuple
 
+        query = self._inventory_list_query(
+            org_id, inventory_type, process_id, site_id, producer_owned_only, non_empty_only
+        )
+        if cursor is not None:
+            query = query.filter(_tuple(InventoryItem.created_at, InventoryItem.id) < _tuple(cursor[0], cursor[1]))
+        query = query.order_by(InventoryItem.created_at.desc(), InventoryItem.id.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def _inventory_list_query(
+        self, org_id, inventory_type, process_id, site_id, producer_owned_only=False, non_empty_only=False
+    ):
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
         if non_empty_only:
             query = query.filter(InventoryItem.quantity >= self._NONZERO_QTY)
@@ -983,12 +996,25 @@ class InventoryRepository:
             query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
                 or_(and_(Execution.org_id == org_id, Execution.process_id == process_id), tagged_pid)
             )
-        if cursor is not None:
-            query = query.filter(_tuple(InventoryItem.created_at, InventoryItem.id) < _tuple(cursor[0], cursor[1]))
-        query = query.order_by(InventoryItem.created_at.desc(), InventoryItem.id.desc())
-        if limit is not None:
-            query = query.limit(limit)
-        return query.all()
+        return query
+
+    def inventory_list_totals(self, org_id, inventory_type, process_id, site_id, *, non_empty_only):
+        rows = (
+            self._inventory_list_query(org_id, inventory_type, process_id, site_id, non_empty_only=non_empty_only)
+            .with_entities(InventoryItem.unit, func.sum(InventoryItem.quantity), func.count(InventoryItem.id))
+            .group_by(InventoryItem.unit)
+            .order_by(InventoryItem.unit)
+            .all()
+        )
+        return {
+            "total_count": sum(count for _, _, count in rows),
+            "totals": {
+                "quantity_by_unit": [
+                    {"unit": unit, "quantity": f"{quantity.normalize():f}", "lot_count": count}
+                    for unit, quantity, count in rows
+                ]
+            },
+        }
 
     def count_inventory_items_by_type(self, org_id: UUID) -> dict[str, int]:
         """Count inventory items per inventory_type without fetching full rows.

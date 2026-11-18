@@ -154,6 +154,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         compact = request.args.get("view") == "compact"
         repo = InventoryRepository(db_session)
+        totals = repo.inventory_list_totals(org_id, inventory_type, process_id, site_id, non_empty_only=not compact)
         items = repo.list_inventory_items(
             org_id=org_id,
             inventory_type=inventory_type,
@@ -192,6 +193,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                         }
                         for i in items
                     ],
+                    **totals,
                     "has_more": has_more,
                     "next_cursor": next_cursor,
                 }
@@ -640,7 +642,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                 }
             )
 
-        body = {"inventory_items": result}
+        body = {"inventory_items": result, **totals}
         if page_limit is not None:
             # Sold-out lines were already excluded by the query, so the page is full whenever
             # has_more is true and next_cursor is the last row it returned. The loop's own

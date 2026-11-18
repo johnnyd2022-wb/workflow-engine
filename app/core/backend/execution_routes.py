@@ -441,7 +441,12 @@ def register_routes(
                 }
             )
 
-        body = {"executions": result}
+        total_count = (
+            len(result)
+            if page_limit is None and cursor is None
+            else repo.count_executions(org_id=org_id, process_id=process_id, status=status)
+        )
+        body = {"executions": result, "total_count": total_count}
         if page_limit is not None:
             body["has_more"] = has_more
             body["next_cursor"] = (

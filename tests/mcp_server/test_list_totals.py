@@ -187,6 +187,31 @@ def test_m2_a_complete_operation_over_256_kb_is_incomplete_not_trimmed():
     assert entry["error"]["counts"]["all_items"] == 45
 
 
+def test_m2_selection_cannot_make_an_incomplete_trace_look_complete():
+    transport = stub_app({TRACE_PATH + ITEM_ID: json_response(200, _trace(60))})
+    with Mcp(transport) as mcp:
+        entry = mcp.execute(
+            "bza_x", call("t", "trace_inventory_backward", {"inventory_item_id": ITEM_ID}, select="traced_item")
+        ).results[0]
+    assert entry["error"]["kind"] == "incomplete"
+
+
+def test_m2_a_complete_result_is_replaced_whole_at_the_shared_output_limit():
+    body = _trace(25, bulky=True)
+    transport = stub_app({TRACE_PATH + ITEM_ID: json_response(200, body)})
+    with Mcp(transport) as mcp:
+        entries = mcp.execute(
+            "bza_x",
+            call("a", "trace_inventory_backward", {"inventory_item_id": ITEM_ID}),
+            call("b", "trace_inventory_backward", {"inventory_item_id": ITEM_ID}),
+        ).results
+    assert sum(entry["ok"] for entry in entries) == 1
+    complete = next(entry for entry in entries if entry["ok"])
+    omitted = next(entry for entry in entries if not entry["ok"])
+    assert complete["data"] == body
+    assert omitted["error"]["kind"] == "incomplete" and "data" not in omitted
+
+
 def test_m2_a_list_operation_is_still_cut_with_a_note_not_failed():
     holds = [{"id": str(i), "reason": f"r{i}"} for i in range(130)]
     transport = stub_app({"/api/core/holds": json_response(200, {"holds": holds, "total_count": 130})})

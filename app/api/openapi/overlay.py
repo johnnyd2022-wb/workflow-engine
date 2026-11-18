@@ -42,7 +42,7 @@ import yaml
 OVERLAY_DIR = Path(__file__).parent / "overlay"
 
 OPERATION_KEYS = frozenset({"summary", "description", "parameters", "response", "errors", "request_body", "x-bize"})
-XBIZE_KEYS = frozenset({"kind", "mcp", "concepts", "related_operations", "domain"})
+XBIZE_KEYS = frozenset({"kind", "mcp", "concepts", "related_operations", "domain", "complete", "app_page"})
 KINDS = frozenset({"record", "list", "calculation"})
 FILE_KEYS = frozenset({"operations", "schemas"})
 

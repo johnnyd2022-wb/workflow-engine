@@ -53,7 +53,10 @@ DESCRIPTION = (
     "{id, operation_id, params, select?}. A later call can use an earlier result as a parameter: "
     '{"$from": "<id>", "path": "items[0].id"}. select trims a result: fields, [n], [*] and '
     "{name: path} objects, for example inventory_items[*].{id: id, name: name}. Lists come back as at "
-    "most 50 rows with a next_cursor to pass as the cursor parameter. Costs that are unknown stay null "
+    "most 50 rows. Use total_count and totals for all matches. Never add up a partial page. "
+    "If has_more is true, use next_cursor or the documented page parameters where available. "
+    "Trace, excise and reconciliation results are complete or return an incomplete error with an app link. "
+    "Costs that are unknown stay null "
     "with their status: never read null as zero. Nothing can be changed through this tool."
 )
 
@@ -184,33 +187,76 @@ def _longest_list(value: Any, found: list | None = None) -> list | None:
     return found
 
 
-def _fit(results: list[dict], notes: list[str]) -> None:
-    """Shrink ``results`` in place until the output is under the byte limit."""
+def _collection_counts(value: Any, path: str, counts: dict[str, int]) -> bool:
+    over_limit = False
+    if isinstance(value, list):
+        name = path or "result"
+        if value:
+            counts[name] = max(counts.get(name, 0), len(value))
+        over_limit = len(value) > MAX_ROWS
+        for item in value:
+            over_limit |= _collection_counts(item, f"{path}[]", counts)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            over_limit |= _collection_counts(item, f"{path}.{key}" if path else key, counts)
+    return over_limit
 
-    def size() -> int:
-        return len(json.dumps(results, separators=(",", ":")))
 
-    trimmed = False
-    while size() > MAX_OUTPUT_BYTES:
-        longest = None
-        for entry in results:
-            longest = _longest_list(entry.get("data"), longest)
+def _incomplete(ctx: ToolContext, call: dict, operation: Operation, counts: dict[str, int]) -> dict:
+    page = operation.app_page
+    app_link = (
+        {"app_url": ctx.issuer_url + page}
+        if ctx.issuer_url and isinstance(page, str) and re.fullmatch(r"/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*", page)
+        else {}
+    )
+    return _error(
+        call,
+        "incomplete",
+        "This result exceeds the assistant limits. Open the result in Biz-E.",
+        counts={key[:120]: counts[key] for key in sorted(counts, key=lambda key: (key.count("."), key))[:20]},
+        limit=MAX_ROWS,
+        **app_link,
+    )
+
+
+def _size(value: Any) -> int:
+    # The default JSON encoder escapes non-ASCII, so every output character is one byte.
+    return len(json.dumps(value, separators=(",", ":")))
+
+
+def _fit(results: list[dict], notes: list[str], incomplete: dict[str, dict]) -> None:
+    """Trim ordinary results or replace an entire complete result to meet the shared byte limit."""
+    omitted_rows = False
+    while _size(results) > MAX_OUTPUT_BYTES:
+        candidates = [entry for entry in results if entry["ok"]]
+        entry = max(candidates, key=_size)
+        if error := incomplete.get(entry["id"]):
+            entry.clear()
+            entry.update(error)
+            continue
+        longest = _longest_list(entry.get("data"))
         if longest is None:
-            biggest = max(results, key=lambda e: len(json.dumps(e.get("data"))))
-            biggest["data"] = None
-            biggest["ok"] = False
-            biggest["error"] = {"kind": "too_large", "message": "This result was too large to return."}
+            error = _error(entry, "too_large", "This result was too large to return.")
+            entry.clear()
+            entry.update(error)
         else:
             del longest[max(1, len(longest) // 2) :]
-        trimmed = True
-    if trimmed:
-        for entry in results:
             entry.pop("next_cursor", None)  # it would skip the rows left out
+            if "total_count" in entry:
+                entry["has_more"] = True
+            omitted_rows = True
+    if omitted_rows:
         notes.append("Output was over 256 KB, so some rows were left out. Narrow it with select or filters.")
 
 
 async def _one(
-    ctx: ToolContext, call: dict, operations: dict[str, Operation], done: dict, failed: set, deadline: float
+    ctx: ToolContext,
+    call: dict,
+    operations: dict[str, Operation],
+    done: dict,
+    failed: set,
+    deadline: float,
+    incomplete: dict[str, dict],
 ):
     operation = operations.get(call["operation_id"])
     if operation is None:
@@ -234,16 +280,38 @@ async def _one(
     except TimeoutError:
         return _error(call, "timeout", "Biz-E took too long to answer this call."), None
     except ToolFailureError as error:
+        if error.kind == "response_too_large":
+            if operation.complete:
+                return _incomplete(ctx, call, operation, {}), None
+            return _error(call, "upstream_error", error.message), None
         extra = {"retry_after_seconds": error.retry_after_seconds} if error.kind == "rate_limited" else {}
         return _error(call, error.kind, error.message, **extra), None
     notes: list[str] = []
     data = evaluate(expression, raw) if expression else raw
+    if operation.complete:
+        counts: dict[str, int] = {}
+        over_limit = _collection_counts(raw, "", counts)
+        error = _incomplete(ctx, call, operation, counts)
+        if over_limit or _size(raw) > MAX_OUTPUT_BYTES or (isinstance(raw, dict) and raw.get("has_more")):
+            return error, None
+        incomplete[call["id"]] = error
+    else:
+        data = clip(_cap_lists(data, "", notes))
     entry: dict[str, Any] = {
         "id": call["id"],
         "operation_id": call["operation_id"],
         "ok": True,
-        "data": clip(_cap_lists(data, "", notes)),
+        "data": data,
     }
+    if operation.kind == "list" and isinstance(raw, dict):
+        for key in ("total_count", "totals", "has_more"):
+            if key in raw:
+                entry[key] = clip(raw[key])
+        if "count" in raw and "total_count" not in entry:
+            entry["total_count"] = raw["count"]  # execution count-only response
+        if notes:
+            entry["has_more"] = True
+    partial_list = operation.kind == "list" and entry.get("has_more")
     cursor = raw.get("next_cursor") if isinstance(raw, dict) else None
     if cursor and notes:
         # Rows were cut here, so the app's cursor would skip them. Better no cursor than a wrong one.
@@ -251,6 +319,8 @@ async def _one(
     elif cursor:
         entry["next_cursor"] = cursor
         notes.append("More rows are available: pass next_cursor as the cursor parameter of the same operation.")
+    if partial_list or (operation.kind == "list" and cursor):
+        notes.append("This is a partial list. Do not add up the displayed rows; use totals when available.")
     if notes:
         entry["notes"] = notes
     return entry, raw
@@ -266,6 +336,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     done: dict[str, Any] = {}
     failed: set[str] = set()
+    incomplete: dict[str, dict] = {}
     outcome = ""
     try:
         # Keyed on the grant, not the token, so refreshing the access token doesn't reset the budget.
@@ -278,19 +349,19 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             )
         operations = await ctx.operations()
         for call in calls:
-            entry, raw = await _one(ctx, call, operations, done, failed, deadline)
+            entry, raw = await _one(ctx, call, operations, done, failed, deadline, incomplete)
             results.append(entry)
             if entry["ok"]:
                 done[call["id"]] = raw
             else:
                 failed.add(call["id"])
+        notes: list[str] = []
+        _fit(results, notes, incomplete)
     except ToolFailureError as error:
         outcome = error.kind
         raise
     finally:
         _audit(ctx, calls, results, started, outcome)
-    notes: list[str] = []
-    _fit(results, notes)
     body: dict[str, Any] = {"results": results, "ok": all(r["ok"] for r in results)}
     if notes:
         body["notes"] = notes

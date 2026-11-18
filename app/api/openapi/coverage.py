@@ -59,6 +59,21 @@ def mcp_problems(document: dict) -> dict[str, list[str]]:
             media = op["responses"]["200"]["content"]["application/json"]
             if "example" not in media:
                 problems.append("has no response example")
+            if bize.get("kind") == "list":
+                if "total_count" not in media["schema"].get("properties", {}):
+                    problems.append("list response has no total_count")
+                if "total_count" not in media.get("example", {}):
+                    problems.append("list example has no total_count")
+        if "complete" in bize and not isinstance(bize["complete"], bool):
+            problems.append("x-bize.complete must be true or false")
+        if bize.get("complete") is True:
+            page = bize.get("app_page")
+            if (
+                not isinstance(page, str)
+                or not re.fullmatch(r"/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*", page)
+                or page.startswith("/api/")
+            ):
+                problems.append("a complete response requires x-bize.app_page with an app path")
         for parameter in op.get("parameters", []):
             if not (parameter.get("description") or "").strip():
                 problems.append(f"parameter {parameter['name']} has no description")

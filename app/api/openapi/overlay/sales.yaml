@@ -93,8 +93,25 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [invoices, total, page, page_size, kind]
+        required: [total_count, invoices, total, page, page_size, kind]
         properties:
+          has_more: {type: boolean}
+          totals:
+            type: object
+            required: [revenue]
+            properties:
+              revenue:
+                type: object
+                description: "Authorised and paid sales invoices in this filter, before credit notes. Quote total for base-currency ex-GST revenue. The legacy invoiced_inc_gst mixes currencies."
+                required: [total, currency, not_converted, ex_gst_unknown, invoice_count, invoiced_inc_gst]
+                properties:
+                  total: {type: string}
+                  currency: {type: string}
+                  not_converted: {type: integer}
+                  ex_gst_unknown: {type: integer}
+                  invoice_count: {type: integer}
+                  invoiced_inc_gst: {type: string}
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           invoices:
             type: array
             items: {$ref: "#/components/schemas/Invoice"}
@@ -103,6 +120,10 @@ operations:
           page_size: {type: integer}
           kind: {type: string}
       example:
+        total_count: 1
+        has_more: false
+        totals:
+          revenue: {total: "1000.00", currency: NZD, not_converted: 0, ex_gst_unknown: 0, invoice_count: 1, invoiced_inc_gst: "1150.00"}
         invoices:
           - {id: 5a1c9e3f-7b2d-4f60-8e11-9d3b6a4c2f01, xero_invoice_id: "INV-0007", invoice_number: INV-0007, reference: null, status: PAID, invoice_type: ACCREC, total: 1150.0, sub_total: 1000.0, total_tax: 150.0, amount_due: 0.0, amount_paid: 1150.0, currency_code: NZD, date: "2026-10-28", due_date: "2026-11-20", fully_paid_on_date: "2026-11-05", contact_id: null, contact_name: Corner Bottle Store, last_synced_at: "2026-11-15T20:00:00+00:00", line_items: []}
         total: 1

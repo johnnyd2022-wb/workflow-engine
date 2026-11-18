@@ -28,6 +28,14 @@ tool descriptions tell the model to use them rather than do arithmetic.
   redirects are never followed. Output is also scrubbed of anything shaped like a token.
 * Limits: 5 calls, 10 s in total (5 s per call), 50 rows per list, 256 KB of output, 30 `execute` calls a
   minute per caller (the app adds 120 requests a minute per grant).
+* List results include `total_count`, and inventory and invoice lists provide server-calculated totals
+  for the whole filtered set. The totals are outside the row data and survive a `select` projection.
+  Inventory totals describe on-hand quantities by stored unit. Invoice revenue covers authorised and
+  paid invoices before credits, in the organisation's base currency and excluding GST. Use these totals
+  when reporting across pages.
+* Trace, excise and stocktake reconciliation results are complete-or-fail. If a result exceeds the row
+  or output limit, `execute` returns `incomplete`, collection counts where available, and a link to
+  the relevant Biz-E page.
 * Each run writes one `mcp.execute` log event (user, org, client, grant, operation ids, statuses, duration,
   parameter *names* only).
 

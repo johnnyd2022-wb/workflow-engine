@@ -27,6 +27,7 @@ class ToolContext:
     catalogue: Catalogue
     knowledge: Knowledge
     execute_window: Window
+    issuer_url: str = ""
 
     async def operations(self) -> dict[str, Operation]:
         return await self.catalogue.operations_for(self.token, self.identity)

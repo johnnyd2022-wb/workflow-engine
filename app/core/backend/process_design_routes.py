@@ -642,7 +642,7 @@ def register_routes(bp):
 
             result.append(entry)
 
-        return jsonify({"processes": result}), 200
+        return jsonify({"processes": result, "total_count": len(result)}), 200
 
     @bp.route("/api/core/processes", methods=["POST"])
     @requires_auth

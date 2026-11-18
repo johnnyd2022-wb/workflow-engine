@@ -243,6 +243,13 @@ class CRMService:
         return {
             "invoices": serialised,
             "total": total,
+            "total_count": total,
+            "has_more": page * page_size < total,
+            "totals": {
+                "revenue": self.invoice_repo.list_revenue(
+                    org_id, start_date=start_date, end_date=end_date, outstanding_only=outstanding_only
+                )
+            },
             "page": page,
             "page_size": page_size,
             "kind": kind,
