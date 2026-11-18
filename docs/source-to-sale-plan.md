@@ -1243,8 +1243,9 @@ missing; never a silent $0.
   - [x] g. **Stock value and the Xero bridge** (spec Phase 3). Stock value on the Costs page
     (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
     month-end snapshots taken on the first Xero sync (or costing read, with no Xero) after a
-    month ends and held fixed, the walk from Xero's stock accounts and Biz-E's stock roll-forward,
-    closing stock CSV. (!715)
+    month ends. Quantities freeze at the cutoff and valuation stays provisional until a manager
+    closes the month or it auto-closes from the 20th. Includes the walk from Xero's stock accounts,
+    Biz-E's stock roll-forward and the closing stock CSV. (!715, !743)
   - [x] h. **Overheads into cost** (spec Phase 4, opt-in per org, off by default). Rent, labour
     and power as rates per litre of finished product or per batch from a date, taken by each
     finished batch; freight on a purchase spread by value over the same purchase's stock; materials
