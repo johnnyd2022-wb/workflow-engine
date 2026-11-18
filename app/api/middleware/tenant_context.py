@@ -55,10 +55,27 @@ def _json_response(status: int, body: dict, headers: dict | None = None):
     return response
 
 
+# Headers Cloudflare sets on every request it forwards to the origin; a client cannot strip them
+# through the edge. The MCP container calls the app over the private Docker network, so its
+# requests never carry them (design review S1, spec "Bearer path").
+EDGE_HEADERS = ("CF-Connecting-IP", "CF-Ray")
+
+
+def _came_through_edge() -> bool:
+    return any(request.headers.get(name) is not None for name in EDGE_HEADERS)
+
+
 def _authenticate_bearer(raw_token: str):
     """Resolve an assistant's bearer token into the request's user and organisation (spec "Bearer
     path"). Returns a response to send instead of running the route, or ``None`` on success."""
-    from app.features.mcp_oauth.services.bearer_auth import BearerRejectedError, authenticate
+    from app.features.mcp_oauth.services.bearer_auth import WWW_INVALID_TOKEN, BearerRejectedError, authenticate
+    from app.utils.config_loader import config
+
+    if config.mcp_bearer_internal_only and _came_through_edge():
+        # A token is only good from the MCP server. Refused before it is looked up, so the edge
+        # can't be used to probe which tokens exist; the answer is the same as for a bad token.
+        LOGGER.info("mcp.bearer_from_edge", path=request.path, method=request.method)
+        return _json_response(401, {"error": "invalid_token"}, {"WWW-Authenticate": WWW_INVALID_TOKEN})
 
     db = db_session()
     try:
