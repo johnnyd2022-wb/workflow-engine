@@ -25,6 +25,32 @@ class SettingsError(Exception):
     """A settings body that cannot be saved. The message is safe to show."""
 
 
+SHARED_STORE_MESSAGE = (
+    "Assistants can't be switched on yet: this Biz-E server is missing a security setting that limits "
+    "how often an assistant can ask for data. Contact Biz-E support."
+)
+
+
+class SharedStoreRequiredError(SettingsError):
+    """MCP cannot be switched on: more than one worker and no shared rate-limit store (design review
+    S4), so every per-grant limit would be per worker. ``str()`` is for the organisation's admin;
+    ``detail`` is for the operator (the CLI prints it, the log records it)."""
+
+    def __init__(self, detail: str):
+        super().__init__(SHARED_STORE_MESSAGE)
+        self.detail = detail
+
+
+def _require_shared_store() -> None:
+    from app.api.ratelimit_store import shared_store_problem
+    from app.utils.config_loader import config
+
+    problem = shared_store_problem(config)
+    if problem:
+        logger.error("mcp.enable_refused_no_shared_store", detail=problem)
+        raise SharedStoreRequiredError(problem)
+
+
 def role_key_for(user) -> str:
     """The key an organisation ticks for this person: their custom role if they have one."""
     custom_id = getattr(user, "custom_role_id", None)
@@ -104,6 +130,8 @@ def update_settings(db, org_id: UUID, user_id: UUID | None, body) -> dict:
     if "allow_unverified_clients" in body and not isinstance(allow_unverified, bool):
         raise SettingsError(usage)
     keys = validate_role_keys(db, org_id, body["allowed_roles"])
+    if body["enabled"]:
+        _require_shared_store()  # switching off is always allowed
     repo = SettingsRepository(db)
     repo.save(org_id, body["enabled"], keys, user_id, datetime.now(UTC), allow_unverified_clients=allow_unverified)
     db.commit()

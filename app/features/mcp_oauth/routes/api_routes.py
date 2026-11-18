@@ -16,7 +16,7 @@ from app.core.db import db_session
 from app.core.security.access_policy import READ_PERMISSIONS, has_permission, permissions_for, role_label_for
 from app.core.security.permissions import requires_auth
 from app.features.mcp_oauth.services import settings_service
-from app.features.mcp_oauth.services.settings_service import SettingsError
+from app.features.mcp_oauth.services.settings_service import SettingsError, SharedStoreRequiredError
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -84,6 +84,9 @@ def update_settings():
     db = db_session()
     try:
         return jsonify(settings_service.update_settings(db, g.current_org_id, g.current_user.id, body))
+    except SharedStoreRequiredError as err:
+        db.rollback()
+        return jsonify({"error": str(err)}), 409
     except SettingsError as err:
         db.rollback()
         return jsonify({"error": str(err)}), 400

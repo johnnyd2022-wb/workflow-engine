@@ -152,3 +152,28 @@ deploy_app() {
     echo "${DEPLOY_NAME} is up at https://127.0.0.1:${HOST_PORT} (container $CONTAINER, image $IMAGE)."
     echo "Logs: docker logs -f $CONTAINER"
 }
+
+# resolve_valkey_password TARGET: export VALKEY_PASSWORD for the shared Valkey (design review S4) if it
+# can be found; leaves it empty otherwise. Never prints it.
+#   test: VALKEY_PASSWORD, else VALKEY_PASSWORD_TEST (CI), else KeePassXC workflow-engine/VALKEY_PASSWORD_TEST
+#         (only when a person is at a terminal or KEEPASS_PASSWORD is set: a CI job must never wait on a prompt)
+#   prod: VALKEY_PASSWORD, else KeePassXC through scripts/prod_secrets.py (its VALKEY_PASSWORD_PROD entry)
+resolve_valkey_password() {
+    local target=$1 root exports
+    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    VALKEY_PASSWORD="${VALKEY_PASSWORD:-}"
+    if [ -z "$VALKEY_PASSWORD" ] && [ "$target" = test ]; then
+        VALKEY_PASSWORD="${VALKEY_PASSWORD_TEST:-}"
+        if [ -z "$VALKEY_PASSWORD" ] && { [ -t 0 ] || [ -n "${KEEPASS_PASSWORD:-}" ]; }; then
+            VALKEY_PASSWORD="$(cd "$root" && python3 -c 'import sys; sys.path.insert(0, "scripts"); from local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/VALKEY_PASSWORD_TEST").get("Password", "").strip())' 2>/dev/null || true)"
+        fi
+    fi
+    if [ -z "$VALKEY_PASSWORD" ] && [ "$target" = prod ]; then
+        if exports="$(python3 "$root/scripts/prod_secrets.py" export 2>/dev/null)"; then
+            VALKEY_PASSWORD="$(eval "$exports" && printf '%s' "${VALKEY_PASSWORD:-}")"
+        fi
+        unset exports
+    fi
+    [ "$VALKEY_PASSWORD" != PROTECTED ] || VALKEY_PASSWORD=""
+    export VALKEY_PASSWORD
+}

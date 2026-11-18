@@ -129,11 +129,15 @@ def test_config_comes_from_the_environment_and_names_what_is_missing():
     assert "BIZE_API_BASE_URL" not in str(err.value)
 
 
-def test_config_holds_no_secrets():
+def test_config_holds_exactly_one_secret_the_rate_limit_store_password():
+    """No database credentials and no app secrets. Founder decision (design review S4, 2026-11-17): its
+    one secret is the shared Valkey's password, and it never shows in the config's repr."""
     from bize_mcp.config import Config
 
-    fields = set(Config.__dataclass_fields__)
-    assert not any(word in name for name in fields for word in ("password", "secret", "database", "db_"))
+    fields = Config.__dataclass_fields__
+    secretish = {name for name in fields for word in ("password", "secret", "database", "db_", "token") if word in name}
+    assert secretish == {"ratelimit_password"}
+    assert fields["ratelimit_password"].repr is False
 
 
 @pytest.mark.parametrize("field", ["api_base_url", "public_url", "issuer_url"])

@@ -39,10 +39,13 @@ worker_class = "gthread"
 # a full /core load alone fires ~65 static-asset requests plus the API calls, so a box
 # under real customer load will need this raised (and static assets moved off the
 # workers). Before raising: cap the SQLAlchemy pool ([database] pool_size/max_overflow)
-# so workers * (pool_size + max_overflow) stays under Postgres max_connections, and move
-# the rate limiter to shared storage ([ratelimit] storage_uri) so per-worker buckets
-# don't dilute the auth limits.
+# so workers * (pool_size + max_overflow) stays under Postgres max_connections. With more
+# than one worker the rate limiter needs its shared store ([ratelimit] host + VALKEY_PASSWORD,
+# scripts/run_valkey.sh), or every limit is per worker (design review S4).
 workers = int(os.getenv("WEB_CONCURRENCY", "2"))
+# The workers inherit this, so the app knows how many processes share its rate limits
+# (app/api/ratelimit_store.web_workers) even when gunicorn was started without it.
+os.environ.setdefault("WEB_CONCURRENCY", str(workers))
 threads = int(os.getenv("GUNICORN_THREADS", "4"))
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
 

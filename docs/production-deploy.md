@@ -99,6 +99,57 @@ first/replacement deploys, interrupted/failed handover, and restoration of the o
 container. It uses no production secrets, Docker daemon, or database. This verifies
 orchestration; it is not a live production deployment or a real container rehearsal.
 
+## Shared rate-limit store (Valkey)
+
+Every rate limit (sign-in, the contract portal, telemetry, the MCP bearer path, client
+registration) is counted in a shared Valkey, because the app runs two gunicorn workers and
+counts kept in memory would be per worker: every limit twice as loose (design review S4).
+
+| | Test | Production |
+|---|---|---|
+| Container | `valkey-test` | `valkey-prod` |
+| Network | `workflow-observability` (the test app's) | `workflow-engine-prod` (the app's) |
+| Volume | `valkey-test-data` | `valkey-prod-data` |
+| App config | `[ratelimit] host = valkey-test` in `test.ini` | `[ratelimit] host = valkey-prod` in `prod.ini` |
+| Password | `VALKEY_PASSWORD_TEST` (CI/CD variable) or KeePassXC `workflow-engine/VALKEY_PASSWORD_TEST` | KeePassXC `workflow-engine/VALKEY_PASSWORD_PROD` (`scripts/prod_secrets.py`) |
+
+`scripts/run_valkey.sh [test|prod]` starts it from the pinned official image
+(`valkey/valkey:9.1.3`) with `--restart unless-stopped`, the named volume, a health check, and
+**no published port**: only containers on the app's network reach it. The password goes to the
+container by name in its environment (`REDISCLI_AUTH`, which `valkey-cli` reads, so the health
+check never names it); from there it is written into the server's config on stdin (`requirepass`, the
+setting the founder decision names). It runs as the `valkey` user. The password is never on a command
+line, in a committed file, or in a log; the app builds `redis://:<password>@valkey-<env>:6379/0`
+in memory and its log scrubber removes credentials from any URL. The script is idempotent: a
+running instance that answers with this password is left alone, a stopped one is started, a
+missing one is created. It never removes a container or a volume.
+
+`scripts/run_prod.sh` requires `VALKEY_PASSWORD` and runs `run_valkey.sh prod` after the database
+is up, before migrations and the app. `deploy_test_simple.sh` and `run_test.sh` do the same for
+test when they can find the password; without it they warn and carry on. The public MCP server
+gets `BIZE_RATELIMIT_URI=redis://valkey-<env>:6379/0` and `VALKEY_PASSWORD`, so its own per-caller
+windows are shared too.
+
+What happens without it, or when it fails:
+
+- More than one worker and no store: the app logs `ratelimit.no_shared_store` at start, and MCP
+  cannot be switched on (`workflow mcp enable` fails; the settings page gets a 409 saying why).
+  Single-process local dev keeps in-memory counts.
+- The store is unreachable at runtime: limited routes fail closed with **503** and `Retry-After`
+  (no in-memory fallback, no swallowed errors). Sign-in and the MCP bearer path stop until Valkey
+  answers again; everything else is unaffected. `python3 scripts/preflight.py` reports its health.
+
+**First run on production (founder):** `python3 scripts/prod_secrets.py init` (creates
+`VALKEY_PASSWORD_PROD`, never overwrites), then `scripts/run_prod.sh` as usual. For test, add
+`workflow-engine/VALKEY_PASSWORD_TEST` to KeePassXC and the same value as the protected, masked
+CI/CD variable `VALKEY_PASSWORD_TEST`. Tracked as GL-002 in the [go-live checklist](go-live-checklist.md).
+
+**Rotating the Valkey password.** The running container keeps the password it was created with, and
+`run_valkey.sh` refuses (exit 1, nothing touched) when the new one does not match. Rate-limit counts
+are disposable, so rotation is: change the KeePassXC entry (and the CI/CD variable for test),
+`docker rm -f valkey-<env>` (the volume stays), then deploy. Expect sign-in to answer 503 for the
+seconds between the removal and the new app container.
+
 ## Manual staging deployment
 
 `scripts/run_test.sh` now uses the same shared checkout, backup, candidate, and app

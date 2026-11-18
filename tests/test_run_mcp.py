@@ -18,6 +18,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run_mcp.sh"
 IMAGE = "registry.example/mcp:test-abc123"
+# Design review S4: the one secret the container gets, by name only (run_prod.sh / deploy_test_simple.sh export it).
+VALKEY_PASSWORD = "canary-mcp-valkey-password"
 
 # A fake `docker`: containers live in a JSON file; a scenario injects one kind of failure.
 #   candidate_health  the candidate never answers /healthz
@@ -100,7 +102,7 @@ class Run:
         (tmp_path / "home").mkdir()
         self.state_path = tmp_path / "state.json"
 
-    def run(self, target="test", *, scenario="ok", existing=True, env=None, args=None):
+    def run(self, target="test", *, scenario="ok", existing=True, env=None, args=None, valkey=True):
         containers = {}
         if existing:
             name = "workflow-engine-mcp-test" if target == "test" else "workflow-engine-mcp"
@@ -113,6 +115,7 @@ class Run:
             "MCP_IMAGE": IMAGE,
             "MCP_HEALTH_ATTEMPTS": "3",
             "MCP_HEALTH_INTERVAL": "0",
+            **({"VALKEY_PASSWORD": VALKEY_PASSWORD} if valkey else {}),
             **(env or {}),
         }
         self.result = subprocess.run(
@@ -149,8 +152,10 @@ def mcp(tmp_path) -> Run:
     return Run(tmp_path)
 
 
-def _envs(call: list[str]) -> dict[str, str]:
-    return dict(a.split("=", 1) for i, a in enumerate(call) if call[i - 1] == "-e")
+def _envs(call: list[str]) -> dict[str, str | None]:
+    """``-e NAME=value`` as NAME: value; ``-e NAME`` (passed by name from the script's env) as NAME: None."""
+    pairs = (a.split("=", 1) for i, a in enumerate(call) if call[i - 1] == "-e")
+    return {p[0]: (p[1] if len(p) == 2 else None) for p in pairs}
 
 
 def _flag(call: list[str], name: str) -> str:
@@ -247,11 +252,37 @@ def test_no_secret_is_passed_to_the_container(mcp, target):
     )
     assert mcp.result.returncode == 0
     assert canary not in json.dumps(mcp.calls)
+    assert VALKEY_PASSWORD not in json.dumps(mcp.calls) + mcp.result.stdout + mcp.result.stderr
     for call in mcp.runs():
-        # Every -e is NAME=value for one of the three addresses and the TLS switch: nothing inherited.
-        assert set(_envs(call)) == {"BIZE_API_BASE_URL", "MCP_PUBLIC_URL", "BIZE_ISSUER_URL", "BIZE_API_VERIFY_TLS"}
-        assert not any(a == "-e" and "=" not in call[i + 1] for i, a in enumerate(call[:-1]))
+        # The three addresses, the TLS switch and the rate-limit store's address as NAME=value; the one
+        # secret, VALKEY_PASSWORD, by name only (design review S4). Nothing else inherited.
+        env = _envs(call)
+        assert set(env) == {
+            "BIZE_API_BASE_URL",
+            "MCP_PUBLIC_URL",
+            "BIZE_ISSUER_URL",
+            "BIZE_API_VERIFY_TLS",
+            "BIZE_RATELIMIT_URI",
+            "VALKEY_PASSWORD",
+        }
+        assert env["VALKEY_PASSWORD"] is None, "passed by name: the value never reaches the command line"
+        assert env["BIZE_RATELIMIT_URI"] == f"redis://valkey-{target}:6379/0"
+        assert [n for n, v in env.items() if v is None] == ["VALKEY_PASSWORD"]
         assert "--env-file" not in call and "-v" not in call and "--volume" not in call
+
+
+def test_prod_without_the_valkey_password_starts_nothing(mcp):
+    mcp.run("prod", valkey=False)
+    assert mcp.result.returncode == 1
+    assert "VALKEY_PASSWORD" in mcp.result.stderr
+    assert mcp.runs() == []
+
+
+def test_test_without_the_valkey_password_counts_in_process(mcp):
+    mcp.run("test", valkey=False)
+    assert mcp.result.returncode == 0, mcp.result.stdout + mcp.result.stderr
+    env = _envs(mcp.runs()[-1])
+    assert "BIZE_RATELIMIT_URI" not in env and "VALKEY_PASSWORD" not in env
 
 
 def test_the_container_is_locked_down(mcp):

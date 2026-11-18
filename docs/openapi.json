@@ -4,6 +4,9 @@
       "BadRequest": {
         "description": "The request was not understood: a parameter is missing or invalid."
       },
+      "Conflict": {
+        "description": "Not possible in the current state; the error says why and what to do."
+      },
       "Forbidden": {
         "description": "Signed in, but the person's role does not hold the required permission."
       },
@@ -11291,11 +11294,17 @@
           "200": {
             "description": "The request succeeded. The response body is not described yet."
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         },
         "security": [

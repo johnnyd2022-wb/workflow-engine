@@ -2,7 +2,7 @@
 
 `bize_mcp/` is the server an AI assistant connects to (`https://mcp.biz-e.app/mcp`). It is a protocol
 adapter: the app stays the only place that knows who someone is and what they may read. The server holds no
-database credentials and no app secrets, and imports nothing from `app/`. Spec
+database credentials and no app secrets (its one secret is the shared rate-limit store's password), and imports nothing from `app/`. Spec
 `.agents/specs/public-mcp.md`; sign-in walkthrough `docs/public-mcp-oauth.md`.
 
 ## Three tools over three layers
@@ -59,7 +59,10 @@ listens on 8030 and its health check is `/healthz`. `scripts/run_mcp.sh [test|pr
 | `BIZE_API_BASE_URL` | `https://workflow-engine-test:8001` | `https://workflow-engine-prod:8000` |
 | Public address (`https://…/mcp`) | `mcp-test.biz-e.app` | `mcp.biz-e.app` |
 
-* **No secrets.** The container is told three addresses and one TLS switch, nothing else. The addresses
+* **One secret.** The container is told three addresses, one TLS switch and, for its rate-limit windows,
+  the shared Valkey: `BIZE_RATELIMIT_URI=redis://valkey-<target>:6379/0` (no password in it) and
+  `VALKEY_PASSWORD`, passed by name so the value is never on a command line. That password is its only
+  secret (design review S4). Production requires it; on test, without it the windows are per process. The addresses
   come from the app's own `[mcp]` section (`app/config/<target>.ini`), never from the operator's shell, so
   the resource the server advertises is the one the app binds tokens to.
 * **`BIZE_API_VERIFY_TLS=false`.** The app serves a self-signed certificate under a name that is not its

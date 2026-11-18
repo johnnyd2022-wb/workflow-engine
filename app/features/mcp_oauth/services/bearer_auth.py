@@ -22,6 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from limits.errors import StorageError
+
+from app.api.ratelimit_store import RETRY_AFTER_SECONDS
 from app.core.db.models.organisation import Organisation, OrganisationStatus
 from app.core.db.models.user import User
 from app.core.security.access_policy import access_expired
@@ -78,7 +81,8 @@ def parse_bearer(header: str | None) -> str | None:
     return raw if raw.startswith((ACCESS_PREFIX, REFRESH_PREFIX, CODE_PREFIX)) else None
 
 
-def authenticate(db, raw: str, *, now: datetime | None = None) -> BearerPrincipal:
+def authenticate(db, raw: str, *, now: datetime | None = None, calculation: bool = False) -> BearerPrincipal:
+    """``calculation``: the route is an ``x-bize.kind: calculation`` operation (its own, lower limit)."""
     now = now or datetime.now(UTC)
     if not looks_like(ACCESS_PREFIX, raw):
         raise _invalid("malformed_token")
@@ -95,7 +99,13 @@ def authenticate(db, raw: str, *, now: datetime | None = None) -> BearerPrincipa
         if not resource or grant.resource != resource:
             raise _invalid("wrong_audience")
 
-        retry_after = rate_limit.hit_bearer(grant.id)
+        try:
+            retry_after = rate_limit.hit_bearer(grant.id, calculation=calculation)
+        except StorageError:
+            # The shared store is down: refuse rather than count nothing (design review S4).
+            raise BearerRejectedError(
+                503, "temporarily_unavailable", {"Retry-After": str(RETRY_AFTER_SECONDS)}, "ratelimit_store_unavailable"
+            ) from None
         if retry_after is not None:
             raise BearerRejectedError(429, "rate_limited", {"Retry-After": str(retry_after)}, "rate_limited")
 

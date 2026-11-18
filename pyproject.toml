@@ -36,6 +36,7 @@ dependencies = [
     "joserfc>=1.7.6",
     # Public MCP 8.2f: the OpenAPI overlay files (app/api/openapi/overlay/*.yaml) are YAML. yaml.safe_load only.
     "pyyaml==6.0.3",
+    "redis==8.1.0",
 ]
 
 [project.optional-dependencies]

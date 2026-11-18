@@ -379,6 +379,37 @@ class Config:
         return (self.get("mcp", "resource", "") or "").strip()
 
     @property
+    def valkey_password(self) -> str:
+        """The shared rate-limit store's password (design review S4). Never logged.
+
+        From ``VALKEY_PASSWORD`` (the deploy scripts pass it to the container), else for local and test
+        from KeePassXC (``[ratelimit] keepass_password_entry``, default
+        ``workflow-engine/VALKEY_PASSWORD_<ENV>``). Empty when neither has it.
+        """
+        value = self._clean_config_secret(os.getenv("VALKEY_PASSWORD"))
+        if not value and self.environment in {"local", "test"}:
+            value = self._valkey_keepass_password()
+        return value
+
+    def _valkey_keepass_password(self) -> str:
+        cached = getattr(self, "_valkey_keepass_value", None)
+        if cached is None:
+            entry_name = self.get(
+                "ratelimit", "keepass_password_entry", f"workflow-engine/VALKEY_PASSWORD_{self.environment.upper()}"
+            )
+            try:
+                from scripts.local_secrets import get_keepass_entry
+
+                entry = get_keepass_entry(entry_name=entry_name)
+            except Exception:
+                entry = {}
+            cached = self._clean_config_secret(entry.get("Password")) if entry else ""
+            if cached == "PROTECTED":
+                cached = ""
+            self._valkey_keepass_value = cached
+        return cached
+
+    @property
     def mcp_bearer_internal_only(self) -> bool:
         """Accept an assistant's token only from the private network, never through Cloudflare.
 

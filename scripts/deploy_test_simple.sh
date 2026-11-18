@@ -50,6 +50,23 @@ if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
 fi
 export GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 
+# The shared rate-limit store (design review S4): valkey-test on the app's network. Its password comes
+# from VALKEY_PASSWORD or VALKEY_PASSWORD_TEST (CD: a protected CI/CD variable), or KeePassXC locally.
+# Without one the deploy still goes ahead, but the app logs an error at start, every rate limit is per
+# gunicorn worker, and MCP cannot be switched on. A Valkey that will not come up stops the deploy here,
+# before the running app is touched.
+# shellcheck source=scripts/deploy_common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/deploy_common.sh"
+resolve_valkey_password test
+if [ -n "$VALKEY_PASSWORD" ]; then
+    if ! bash "$(dirname "${BASH_SOURCE[0]}")/run_valkey.sh" test; then
+        echo "❌ valkey-test is not up; the running app was left as it was."
+        exit 1
+    fi
+else
+    echo "⚠️  No VALKEY_PASSWORD or VALKEY_PASSWORD_TEST: rate limits stay per worker and MCP cannot be switched on."
+fi
+
 # Build and run Docker container for test.
 # The filter must match the app container's name exactly -- "name=workflow-engine-test"
 # is a substring filter and also matches "workflow-engine-test-db", which stops and
@@ -125,6 +142,9 @@ if [ -n "$POSTHOG_PROJECT_API_KEY" ]; then
 fi
 if [ -n "$DB_PASSWORD" ]; then
     DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
+fi
+if [ -n "$VALKEY_PASSWORD" ]; then
+    DOCKER_RUN_ARGS+=(-e VALKEY_PASSWORD) # by name: the value never reaches the command line
 fi
 
 # From here the old app is gone: any failure exits 3 so the CI job rolls back to :test-stable

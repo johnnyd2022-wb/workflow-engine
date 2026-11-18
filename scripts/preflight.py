@@ -3,7 +3,7 @@
 
 Answers, in one cheap pass, the questions every agent skill would otherwise re-derive
 with tool calls and tokens: which ENVIRONMENT am I in, is the test DB up, is the app
-server running, is the OTel collector listening, am I in Herdr, which scanners exist.
+server running, is the OTel collector listening, am I in Herdr, which scanners exist, is the shared rate-limit store (Valkey) healthy.
 
 Design rules:
 - stdlib only, no app imports. Importing the app loads config, opens KeePassXC, and
@@ -383,6 +383,50 @@ def check_observability_stack() -> Check:
     return Check("observability_stack", OK, f"{len(interesting)} containers up", data={"containers": interesting})
 
 
+VALKEY_CONTAINERS = ("valkey-test", "valkey-prod")  # scripts/run_valkey.sh
+
+
+def check_valkey(cfg: configparser.ConfigParser) -> Check:
+    """The shared rate-limit store (design review S4).
+
+    The containers publish no port, so reachability is Docker's own health check (valkey-cli PING with
+    the password from the container's environment), never a connection from here. For the current
+    environment: a configured ``[ratelimit] host`` that is one of those containers must be healthy; no
+    host means one process on memory, which is fine for local dev.
+    """
+    host = cfg.get("ratelimit", "host", fallback="").strip() if cfg.has_section("ratelimit") else ""
+    explicit = cfg.get("ratelimit", "storage_uri", fallback="").strip() if cfg.has_section("ratelimit") else ""
+    containers: dict[str, str] = {}
+    if shutil.which("docker"):
+        for name in VALKEY_CONTAINERS:
+            code, out, _ = run_cmd(
+                [
+                    "docker",
+                    "inspect",
+                    "-f",
+                    "{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{end}}",
+                    name,
+                ],
+                timeout=5,
+            )
+            containers[name] = out.strip() if code == 0 else "absent"
+    data = {"host": host or None, "explicit_uri": bool(explicit), "containers": containers}
+    if explicit:
+        return Check("valkey", UNKNOWN, "explicit [ratelimit] storage_uri: not probed", data=data)
+    if not host:
+        return Check("valkey", OK, "not configured: one process, in-memory limits", data=data)
+    if host in containers:
+        state = containers[host]
+        if state == "running/healthy":
+            return Check("valkey", OK, f"{host} healthy", data=data)
+        return Check("valkey", DOWN, f"{host} is {state} — start: scripts/run_valkey.sh", data=data)
+    if not shutil.which("docker"):
+        return Check("valkey", UNKNOWN, f"{host}: docker not on PATH", data=data)
+    port = int(cfg.get("ratelimit", "port", fallback="6379") or 6379)
+    up = tcp_open(host, port)
+    return Check("valkey", OK if up else DOWN, f"{host}:{port} {'listening' if up else 'not reachable'}", data=data)
+
+
 def check_git() -> Check:
     code, branch, _ = run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"], timeout=5)
     if code != 0:
@@ -548,6 +592,7 @@ def run_all(skip_slow: bool = False) -> dict[str, Any]:
             "herdr": pool.submit(check_herdr),
             "tools": pool.submit(check_tools),
             "keepass": pool.submit(check_keepass, env_name),
+            "valkey": pool.submit(check_valkey, cfg),
         }
         results: dict[str, Check] = {name: fut.result() for name, fut in futures.items()}
 
@@ -567,6 +612,7 @@ def run_all(skip_slow: bool = False) -> dict[str, Any]:
         "herdr_cli": bool(results["herdr"].data.get("cli")),
         "codex": bool(results["herdr"].data.get("codex")),
         "deps": results["deps"].ok,
+        "valkey": results["valkey"].ok,
     }
 
     # The decisions callers actually want, made once here instead of re-derived per skill.

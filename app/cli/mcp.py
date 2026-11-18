@@ -12,7 +12,7 @@ from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
 from app.core.security.tenant_scope import tenant_scope, unscoped
 from app.features.mcp_oauth.services import settings_service
-from app.features.mcp_oauth.services.settings_service import SettingsError
+from app.features.mcp_oauth.services.settings_service import SettingsError, SharedStoreRequiredError
 
 
 @click.group(name="mcp")
@@ -53,6 +53,9 @@ def enable(org_id, roles):
             result = settings_service.update_settings(
                 db, org, None, {"enabled": True, "allowed_roles": _role_keys(roles)}
             )
+    except SharedStoreRequiredError as err:
+        db.rollback()
+        raise click.ClickException(f"Assistants were not switched on. {err.detail}") from None
     except SettingsError as err:
         db.rollback()
         raise click.UsageError(str(err)) from None

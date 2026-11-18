@@ -64,6 +64,7 @@ measurement or a decision before it counts as a defect.
       memory unless `[ratelimit] storage_uri` is set; the templates leave it commented out.
     - Impact: 120/min per grant is really 240; 10 registrations/hour is 20. One request can walk the whole cost graph (L6).
     - Fix: a shared store before any production org enables MCP, and a lower limit for `calculation` operations.
+    - Status: fixed in !739 (Valkey store `valkey-test`/`valkey-prod` via scripts/run_valkey.sh for the app and bize_mcp; fails closed; MCP refuses to switch on with >1 worker and no store; 30/min per grant for calculations).
 - **S5. Refresh-token reuse has no grace window, so retries crash the grant.** Risk.
     - Problem: presenting a replaced refresh token revokes the grant
       (`app/features/mcp_oauth/services/token_service.py:197`).
