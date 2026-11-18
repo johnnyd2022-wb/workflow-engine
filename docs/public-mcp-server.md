@@ -39,6 +39,11 @@ tool descriptions tell the model to use them rather than do arithmetic.
 * Each run writes one `mcp.execute` log event (user, org, client, grant, operation ids, statuses, duration,
   parameter *names* only).
 
+Knowledge topics can define optional `aliases` in their frontmatter for phrases producers use. A
+matched alias helps rank the topic and its available operations. The seeded business-question suite
+in `tests/mcp_server/test_business_questions.py` checks discovery and real tool results through the
+shipped catalogue. It runs without an external language model.
+
 ## Running it
 
 ```bash

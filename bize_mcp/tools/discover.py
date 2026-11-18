@@ -64,8 +64,11 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     query = query_tokens(query_text)
     concepts: list[dict[str, Any]] = []
     related_ids: set[str] = set()
-    if kind in {"concepts", "all"}:
-        for _, topic in ctx.knowledge.search(query, features, domain)[:limit]:
+    alias_operations: set[str] = set()
+    for _, topic in ctx.knowledge.search(query, features, domain)[:limit]:
+        if topic.matches_alias(query):
+            alias_operations.update(topic.related_operations)
+        if kind in {"concepts", "all"}:
             related_ids.update(topic.related_operations)
             concepts.append(
                 {
@@ -88,6 +91,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
                 + score_text(query, op.domain or "", 2)
                 + score_text(query, op.description, 1)
                 + (2 if op.operation_id in related_ids else 0)
+                + (6 if op.operation_id in alias_operations else 0)
             )
             if total > 0:
                 scored.append((total, op))

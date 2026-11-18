@@ -91,7 +91,8 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     for raw in lines[1:end]:
         if not raw.strip():
             continue
-        item = re.fullmatch(r"  - ([a-z0-9_.]+)", raw)
+        item_pattern = r'  - "([a-z][a-z ]*)"' if current == "aliases" else r"  - ([a-z0-9_.]+)"
+        item = re.fullmatch(item_pattern, raw)
         if item:
             if current is None or not isinstance(data.get(current), list):
                 raise FrontmatterError(f"list item with no list: {raw!r}")
@@ -190,7 +191,11 @@ def test_ac40_overview_is_about_300_words():
 @pytest.mark.parametrize("topic", ALL_IDS)
 def test_ac40_frontmatter_is_valid(topic):
     data, body = _load(topic)
-    assert list(data) == list(FIELDS), f"fields must be exactly {FIELDS} in that order, got {list(data)}"
+    expected = (*FIELDS[:4], "aliases", *FIELDS[4:]) if "aliases" in data else FIELDS
+    assert tuple(data) == expected, f"fields must be exactly {expected} in that order, got {list(data)}"
+    aliases = data.get("aliases", [])
+    assert isinstance(aliases, list) and len(aliases) == len(set(aliases))
+    assert all(alias == alias.strip() and len(alias) <= 60 for alias in aliases)
     assert data["topic"] == topic, "the topic must equal the file name"
     if topic != "overview":
         assert TOPIC_ID.match(topic)

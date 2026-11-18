@@ -1,7 +1,7 @@
 """Layer 1: business knowledge, one Markdown file per topic in a directory (``docs/knowledge``).
 
 Each file starts with frontmatter between ``---`` lines: ``topic``, ``title``, ``domain``,
-``summary``, ``related_topics``, ``related_operations`` and ``features``. The values are plain
+``summary``, optional ``aliases``, ``related_topics``, ``related_operations`` and ``features``. The values are plain
 ``key: value`` lines; a list is ``[a, b]`` or ``- item`` lines. ``overview.md`` is the short
 domain overview returned for an empty ``discover`` query. Files are read once, at start-up.
 
@@ -70,11 +70,19 @@ class Topic:
     title: str
     domain: str
     summary: str
+    aliases: tuple[str, ...]
     related_topics: tuple[str, ...]
     related_operations: tuple[str, ...]
     features: tuple[str, ...]
     body: str = field(repr=False)
     markdown: str = field(repr=False)
+
+    def matches_alias(self, query: list[str]) -> bool:
+        for alias in self.aliases:
+            words = tokens(alias)
+            if words and all(any(token_match(word, term) for term in query) for word in words):
+                return True
+        return False
 
     def available_to(self, features: frozenset[str] | None) -> bool:
         return features is None or not self.features or all(f in features for f in self.features)
@@ -143,6 +151,7 @@ class Knowledge:
                 title=str(meta.get("title") or name),
                 domain=str(meta.get("domain") or ""),
                 summary=summary if isinstance(summary, str) else "",
+                aliases=_list(meta.get("aliases")),
                 related_topics=_list(meta.get("related_topics")),
                 related_operations=_list(meta.get("related_operations")),
                 features=_list(meta.get("features")),
@@ -170,6 +179,7 @@ class Knowledge:
                 + score_text(query, topic.title, 3)
                 + score_text(query, topic.summary, 2)
                 + score_text(query, topic.body, 0.5)
+                + (8 if topic.matches_alias(query) else 0)
             )
             if total > 0:
                 scored.append((total, topic))

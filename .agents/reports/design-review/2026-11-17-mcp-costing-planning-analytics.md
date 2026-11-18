@@ -128,6 +128,9 @@ measurement or a decision before it counts as a defect.
 - **M4. Nothing tests that the assistant gets the right answer.** Gap.
     - Problem: "prefer layer-3 operations" is a description instruction; `discover` is keyword scoring with no synonyms.
     - Fix: 20–30 real questions with known answers on seeded data as a regression set; `aliases` in topic frontmatter where it misses.
+    - Follow-up: 24 business questions now check discovery and tool results against seeded stock,
+      production, costing, invoicing and compliance data. Topic aliases cover quarantine, supplier
+      lots and purchase prices. Evaluating the prose produced by a real assistant remains open.
 - **M5. Knowledge and catalogue can drift.** Confirmed in the spec; low.
     - Problem: knowledge ships in the MCP image; the catalogue comes live from the app; they deploy separately.
     - Fix: version the catalogue and drop unresolved operation links when serving a topic.
@@ -243,7 +246,7 @@ Then:
 | Live costing | L2 foreign-currency purchases | Reconcile one real foreign purchase against the Xero base-currency amount before enabling automatic conversion. |
 | Margins and stock bridge | X2 and A2 reporting basis | Agree on sale dating and how a closed month's frozen costs appear in margins. An invoice date, import date and valuation date can differ. |
 | Pack-specific margins | X4 unmatched sale rows and provenance | Establish the sold pack for an unmatched line before using finished-lot averages. Surface the estimate's source in margin detail. |
-| MCP answers | M1 aggregates, M3 context limits, M4 regression questions and M5 versioning | Add product-level aggregates and seeded answer checks. Set compact defaults per operation and agree on a version shared by the app catalogue and the MCP image. |
+| MCP answers | M1 aggregates, M3 context limits and M5 versioning | Add product-level aggregates, set compact defaults per operation and agree on a version shared by the app catalogue and the MCP image. Use the seeded M4 suite as a baseline for a real assistant pilot. |
 | Production MCP | S4 rollout | Provision and verify Valkey, then exercise a real assistant connection for a production organisation. See GL-002 in `docs/go-live-checklist.md`. |
 
 ## To validate before deciding
