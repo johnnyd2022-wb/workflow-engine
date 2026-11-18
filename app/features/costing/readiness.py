@@ -201,9 +201,12 @@ def _declared_rows(names: dict[str, str], engine: CostEngine) -> list[dict]:
     index = engine._material_index()
     rows = []
     for norm, name in names.items():
-        costed = any(
-            engine._is_direct(lot) and engine._direct_cost(lot).status == ACTUAL for lot in index.get(norm, [])
-        )
+        try:
+            costed = any(
+                engine._is_direct(lot) and engine._direct_cost(lot).status == ACTUAL for lot in index.get(norm, [])
+            )
+        except TooLargeError:
+            costed = False  # this material exceeds even the product's own work budget
         rows.append(
             {"name": name, "inventory_item_id": None, "costed": costed, "status": "actual" if costed else "unknown"}
         )

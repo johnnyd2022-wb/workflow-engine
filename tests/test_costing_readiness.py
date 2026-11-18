@@ -88,7 +88,7 @@ def test_ac39_latest_batch_lists_raw_materials_through_wip(world, db):
     assert _detail(client, key).get_json()["ready"] is True
 
 
-def test_ac39_product_with_no_batch_uses_declared_inputs(world, db):
+def test_ac39_product_with_no_batch_uses_declared_inputs(world, db, monkeypatch):
     org, client = world
     from uuid import uuid4
 
@@ -115,6 +115,32 @@ def test_ac39_product_with_no_batch_uses_declared_inputs(world, db):
     assert {m["name"]: m["costed"] for m in body["materials"]} == {"Molasses": True, "Yeast": False}
     assert all(m["inventory_item_id"] is None for m in body["materials"])
     assert body["ready"] is False
+
+    from app.features.costing.engine import CostEngine, TooLargeError
+
+    original_prime = CostEngine.prime
+    original_flows = CostEngine._in_flows
+
+    def limited_prime(engine, ids):
+        if molasses.id in ids:
+            raise TooLargeError()
+        return original_prime(engine, ids)
+
+    def limited_flows(engine, item_id):
+        if item_id == molasses.id:
+            raise TooLargeError()
+        return original_flows(engine, item_id)
+
+    monkeypatch.setattr(CostEngine, "prime", limited_prime)
+    monkeypatch.setattr(CostEngine, "_in_flows", limited_flows)
+    response = _detail(client, f"output:{output_id}")
+    assert response.status_code == 200
+    assert {m["name"]: m["status"] for m in response.get_json()["materials"]} == {
+        "Molasses": "unknown",
+        "Yeast": "unknown",
+    }
+    row = next(row for row in _products(client) if row["key"] == f"output:{output_id}")
+    assert not row["ready"] and row["materials_total"] == 2
 
 
 def test_ac87_same_name_definitions_are_two_products_and_legacy_lots_bucket_by_name(world, db):
