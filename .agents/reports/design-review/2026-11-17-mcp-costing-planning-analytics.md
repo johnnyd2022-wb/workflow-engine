@@ -104,6 +104,10 @@ measurement or a decision before it counts as a defect.
     - Impact: 200 mL and 700 mL "Bottles" can share a price estimate that then counts as complete in margins.
     - Fix: don't estimate across differing packs; show the estimate's source lot wherever it feeds a
       margin. Check first whether the packs work already blocks this.
+    - Follow-up: last-known estimates now require matching pack counts and equivalent sizes. A
+      known pack cannot inherit an unpacked lot's price. Lot cost already names the source lot.
+      Unmatched margin rows still need a product pack basis before they can reliably use a
+      pack-specific average.
 
 ## MCP design findings
 
@@ -112,10 +116,12 @@ measurement or a decision before it counts as a defect.
     - Impact: the model adds up the first page; the truncation note is a request, not a control.
     - Fix: every `list` operation returns `total_count` and a server-computed total of its main
       quantity; add a few aggregate operations (stock by product, batches by period, sales by product).
+    - Status: !745 adds list totals and projection-safe metadata. Dedicated aggregates remain a follow-up.
 - **M2. Incorrect traces: results that must be complete are cut short.** Confirmed in code.
     - Problem: nested lists in a calculation are cut to 50 with a note and no cursor (`_cap_lists` in `bize_mcp/tools/execute.py`).
     - Impact: a partial forward trace (the scope of a recall) is presented as an answer.
     - Fix: trace, excise and reconciliation are complete-or-fail; over the limit they return counts and a link to the app page.
+    - Status: fixed in !745.
 - **M3. Context limits are loose.** Confirmed in code.
     - Problem: one `execute` may return 256 KB (~60–70k tokens); `docs` 20,000 chars; records come back whole.
     - Fix: cap output near 32 KB; a default compact projection per operation in the overlay.
@@ -125,6 +131,8 @@ measurement or a decision before it counts as a defect.
 - **M5. Knowledge and catalogue can drift.** Confirmed in the spec; low.
     - Problem: knowledge ships in the MCP image; the catalogue comes live from the app; they deploy separately.
     - Fix: version the catalogue and drop unresolved operation links when serving a topic.
+    - Follow-up: topic Markdown and structured links now use the caller's live operation catalogue.
+      A catalogue version shared by both deployments remains open.
 
 ## Analytics findings
 
@@ -227,6 +235,16 @@ Then:
 11. The assistant-answer question set (M4).
 12. Specs for planning and sales analytics (P5, A3).
 13. Tighter output limits; refresh grace window (M3, S5).
+
+## Outstanding follow-ups after the first fixes
+
+| Area | Outstanding work | What is needed |
+| --- | --- | --- |
+| Live costing | L2 foreign-currency purchases | Reconcile one real foreign purchase against the Xero base-currency amount before enabling automatic conversion. |
+| Margins and stock bridge | X2 and A2 reporting basis | Agree on sale dating and how a closed month's frozen costs appear in margins. An invoice date, import date and valuation date can differ. |
+| Pack-specific margins | X4 unmatched sale rows and provenance | Establish the sold pack for an unmatched line before using finished-lot averages. Surface the estimate's source in margin detail. |
+| MCP answers | M1 aggregates, M3 context limits, M4 regression questions and M5 versioning | Add product-level aggregates and seeded answer checks. Set compact defaults per operation and agree on a version shared by the app catalogue and the MCP image. |
+| Production MCP | S4 rollout | Provision and verify Valkey, then exercise a real assistant connection for a production organisation. See GL-002 in `docs/go-live-checklist.md`. |
 
 ## To validate before deciding
 

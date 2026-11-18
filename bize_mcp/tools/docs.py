@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from bize_mcp.catalogue import Operation
 from bize_mcp.errors import ToolFailureError
+from bize_mcp.knowledge import Topic
 from bize_mcp.shaping import clip
 from bize_mcp.tools.base import Tool, ToolContext
 from bize_mcp.validation import schema
@@ -53,6 +55,24 @@ def _operation_doc(op: Operation, allowed: dict[str, Operation], topics: set[str
     }
 
 
+_OPERATION_FRONTMATTER = re.compile(r"^related_operations:[^\n]*(?:\n[ \t]+- [^\n]*)*", re.MULTILINE)
+_CODE_SPAN = re.compile(r"`([a-z][a-z0-9_]+)`")
+
+
+def _topic_markdown(topic: Topic, related: list[str]) -> str:
+    unavailable = set(topic.related_operations).difference(related)
+    if not unavailable:
+        return topic.markdown
+    lines = topic.markdown.splitlines()
+    end = next(index for index, line in enumerate(lines[1:], 1) if line.strip() == "---")
+    header = _OPERATION_FRONTMATTER.sub("related_operations: [" + ", ".join(related) + "]", "\n".join(lines[:end]))
+    body = _CODE_SPAN.sub(
+        lambda match: "an unavailable operation" if match[1] in unavailable else match[0],
+        topic.body,
+    )
+    return f"{header}\n---\n\n{body}"
+
+
 async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     topic_name, operation_id = args.get("topic"), args.get("operation_id")
     if bool(topic_name) == bool(operation_id):
@@ -63,6 +83,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         topic = ctx.knowledge.get(topic_name, features)
         if topic is None:
             raise ToolFailureError("Not found", kind="not_found")
+        related = [op for op in topic.related_operations if op in allowed]
         return clip(
             {
                 "topic": topic.topic,
@@ -70,9 +91,9 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
                 "domain": topic.domain,
                 "summary": topic.summary,
                 "related_topics": [t for t in topic.related_topics if ctx.knowledge.get(t, features)],
-                "related_operations": [o for o in topic.related_operations if o in allowed],
+                "related_operations": related,
                 "features": list(topic.features),
-                "markdown": topic.markdown,
+                "markdown": _topic_markdown(topic, related),
             },
             MAX_DOC_TEXT,
         )

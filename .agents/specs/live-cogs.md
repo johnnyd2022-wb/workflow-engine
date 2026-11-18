@@ -498,7 +498,8 @@ boundary and to allocations; internal arithmetic uses unrounded `Decimal`. Displ
 collapses whitespace and strips a trailing `" - library stock"`.
 
 **`material_estimate(lot)`**: candidates are other lots of the same material in the org, not
-customer-owned, that are **directly priced** — their own price facts give them status `actual`
+customer-owned, with equal pack counts and equivalent sizes (or no pack recorded on either lot),
+that are **directly priced** — their own price facts give them status `actual`
 with no produced/transfer/reconciled inflow (estimates never chain, and production costs are
 never used as a material's price). A candidate's date is its `purchase_date`, else its
 `created_at` date. Pick the latest candidate dated on or before this lot's date (ties: latest

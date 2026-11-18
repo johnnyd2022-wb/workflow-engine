@@ -408,6 +408,33 @@ def test_estimate_rules_suffix_units_and_created_at_fallback(world, db):
     assert lot_cost(db, org.id, target.id)["estimate_from"]["inventory_item_id"] == str(b.id)
 
 
+@pytest.mark.parametrize("primed", [False, True])
+@pytest.mark.parametrize(
+    ("source_pack", "target_pack", "expected"),
+    [
+        ({"count": 1, "size": "700", "size_unit": "ml"}, {"count": 1, "size": "200", "size_unit": "ml"}, "unknown"),
+        ({"count": 24}, {"count": 6}, "unknown"),
+        ({"count": 24}, None, "unknown"),
+        (None, {"count": 24}, "unknown"),
+        ({"count": 1, "size": "700", "size_unit": "ml"}, {"count": 1, "size": "0.7", "size_unit": "l"}, "estimated"),
+        ({"count": 24}, {"count": 24}, "estimated"),
+    ],
+)
+def test_same_name_estimates_require_the_same_pack(world, db, primed, source_pack, target_pack, expected):
+    org, _ = world
+    source = lot(db, org.id, "Bottled tonic", 1, "units", extra_data={"pack": source_pack})
+    price(db, org.id, source.id, 14, 1)
+    target = lot(db, org.id, "Bottled tonic", 1, "units", extra_data={"pack": target_pack})
+    cost = lot_cost(db, org.id, target.id, primed=primed)
+    assert cost["status"] == expected
+    estimate = cost["estimate_from"]
+    if expected == "estimated":
+        assert estimate["inventory_item_id"] == str(source.id)
+        assert D(cost["unit_cost"]) == D("14")
+    else:
+        assert estimate is None and cost["unit_cost"] is None
+
+
 def test_ac42_estimates_never_use_another_orgs_lots(world, db):
     org, _ = world
     other = new_org(db)

@@ -16,7 +16,7 @@ features:
 
 ## What it means
 
-When a lot has no purchase or typed price, Biz-E can use the price of **the same material**: same normalised name (case, spacing and a trailing "library stock" ignored) and a compatible unit. It uses the most recent price dated on or before the lot's date, else the earliest after. The lot's status is `estimated`, and its `source` shows it is an estimate.
+When a lot has no purchase or typed price, Biz-E can use the price of **the same material**: same normalised name (case, spacing and a trailing "library stock" ignored), a compatible unit, and the same pack count and size when a pack is recorded. Equivalent measures such as 700 mL and 0.7 L match. A lot with a known pack does not borrow a price from a lot with no recorded pack. It uses the most recent price dated on or before the lot's date, else the earliest after. The lot's status is `estimated`, and its `source` shows it is an estimate.
 
 It is an organisation setting, on by default. With it off, only actual costs make a cost complete.
 
