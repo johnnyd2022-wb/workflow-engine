@@ -43,6 +43,15 @@
         <p class="ai-warn" data-ai-roles-hint hidden>Tick at least one role. Until you do, nobody can connect an assistant.</p>
       </fieldset>
 
+      <div class="ai-unverified" data-ai-unverified-box>
+        <label class="ai-switch">
+          <input type="checkbox" role="switch" class="ai-switch__input" data-ai-unverified disabled aria-describedby="ai-unverified-hint">
+          <span class="ai-switch__track" aria-hidden="true"></span>
+          <span class="ai-switch__label">Allow apps Biz-E hasn't verified</span>
+        </label>
+        <p class="ai-hint" id="ai-unverified-hint">Off: only apps Biz-E has checked, such as Claude and ChatGPT, can connect. On: any app can ask, and it's marked "Unverified app".</p>
+      </div>
+
       <p class="ai-error" role="alert" data-ai-settings-error hidden></p>
       <div class="ai-actions">
         <button type="button" class="workspace-button workspace-button--primary" data-ai-save disabled>Save changes</button>
@@ -90,6 +99,20 @@
       </div>
     </form>
   </dialog>
+
+  {% if can_manage %}
+  <dialog class="ai-dialog" data-ai-unverified-dialog aria-labelledby="ai-unverified-title">
+    <form method="dialog" hx-boost="false" data-ai-unverified-form novalidate>
+      <h2 id="ai-unverified-title">Allow apps Biz-E hasn't verified?</h2>
+      <p class="ai-dialog__body">Anyone can register an app under any name, even "Claude". With this on, people here could approve an app that only pretends to be one they know, and it could read what they can see.</p>
+      <p class="ai-dialog__body ai-muted">Turn it on only if you need an app Biz-E hasn't verified yet. Each one is marked "Unverified app" when someone approves it.</p>
+      <div class="ai-dialog__actions">
+        <button type="button" class="workspace-button" data-ai-unverified-cancel>Keep verified apps only</button>
+        <button type="submit" class="workspace-button ai-danger" data-ai-unverified-confirm>Allow unverified apps</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
 
   <script src="{{ url_for('mcp_pages.static', filename='ai-assistants.js') }}" defer></script>
 </div>

@@ -58,6 +58,7 @@ measurement or a decision before it counts as a defect.
       off-by-default limit this but don't close it.
     - Fix: seed verified records for known clients by metadata URL or redirect URIs; an org setting,
       default on, allowing verified clients only.
+    - Status: fixed in !740 (a cited verified list in code matched by redirect URIs and metadata URL, never by name; orgs allow verified apps only unless an admin opts in; consent blocked and bearer 403 for unverified clients)
 - **S4. Security: rate limits are per worker, so brute-force limits are doubled.** Confirmed in code; production config not checked.
     - Problem: gunicorn runs `WEB_CONCURRENCY=2` by default and the limiter keeps counts in process
       memory unless `[ratelimit] storage_uri` is set; the templates leave it commented out.
@@ -175,6 +176,7 @@ All in `app/features/planning/forecast_service.py` unless stated.
       frozen high; the accountant's CSV is the frozen one.
     - Fix: freeze quantities at the cutoff automatically; keep valuation provisional until a
       `costs.manage` user closes the month or a set day (e.g. the 20th).
+    - Status: fixed in !743 (month-end quantities freeze at once; the value is provisional, re-priced on read, until a costs.manage user closes it or the first sync or session read on or after the 20th does; closing writes it once, audited)
 - **L2. Incorrect stock value: foreign-currency purchases can't be costed from Xero.** Confirmed in code.
     - Problem: non-base documents are `needs_rate` with no amount and accept no action
       (`app/features/costing/purchase_sources.py:432`); assumption A11 is unresolved.

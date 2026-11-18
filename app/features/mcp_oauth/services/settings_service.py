@@ -11,6 +11,7 @@ from app.core.security.access_policy import ROLE_LABELS
 from app.core.utils.log_action import log_action
 from app.features.mcp_oauth.repositories.grant_repo import GrantRepository
 from app.features.mcp_oauth.repositories.settings_repo import SettingsRepository
+from app.features.mcp_oauth.services import verified_clients
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -73,6 +74,7 @@ def get_settings(db, org_id: UUID) -> dict:
     repo = SettingsRepository(db)
     return {
         "enabled": repo.is_enabled(org_id),
+        "allow_unverified_clients": repo.allows_unverified_clients(org_id),
         "allowed_roles": repo.allowed_role_keys(org_id),
         "roles": role_choices(db, org_id),
     }
@@ -82,6 +84,13 @@ def is_allowed_for(db, org_id: UUID, user) -> bool:
     """The org has assistants on and this person's role is ticked (checked on every request)."""
     repo = SettingsRepository(db)
     return repo.is_enabled(org_id) and repo.role_is_allowed(org_id, role_key_for(user))
+
+
+def client_is_allowed(db, org_id: UUID, client) -> bool:
+    """A verified client, or any client when the org allows unverified ones (checked on every
+    request, like the role check). ``client.verified`` is kept in line with the verified list by
+    ``verified_clients.sync`` before this is asked."""
+    return bool(client.verified) or SettingsRepository(db).allows_unverified_clients(org_id)
 
 
 def validate_role_keys(db, org_id: UUID, keys) -> list[str]:
@@ -104,23 +113,38 @@ def validate_role_keys(db, org_id: UUID, keys) -> list[str]:
     return clean
 
 
+_REQUIRED_KEYS = {"enabled", "allowed_roles"}
+_OPTIONAL_KEYS = {"allow_unverified_clients"}
+
+
 def update_settings(db, org_id: UUID, user_id: UUID | None, body) -> dict:
-    if not isinstance(body, dict) or set(body) != {"enabled", "allowed_roles"} or not isinstance(body["enabled"], bool):
-        raise SettingsError("Send {enabled: true|false, allowed_roles: [role keys]}")
+    """Save the switch and roles; ``allow_unverified_clients`` is optional and kept when left out."""
+    usage = "Send {enabled: true|false, allowed_roles: [role keys], allow_unverified_clients?: true|false}"
+    if (
+        not isinstance(body, dict)
+        or not _REQUIRED_KEYS <= set(body) <= _REQUIRED_KEYS | _OPTIONAL_KEYS
+        or not isinstance(body["enabled"], bool)
+    ):
+        raise SettingsError(usage)
+    allow_unverified = body.get("allow_unverified_clients")
+    if "allow_unverified_clients" in body and not isinstance(allow_unverified, bool):
+        raise SettingsError(usage)
     keys = validate_role_keys(db, org_id, body["allowed_roles"])
     if body["enabled"]:
         _require_shared_store()  # switching off is always allowed
-    SettingsRepository(db).save(org_id, body["enabled"], keys, user_id, datetime.now(UTC))
+    repo = SettingsRepository(db)
+    repo.save(org_id, body["enabled"], keys, user_id, datetime.now(UTC), allow_unverified_clients=allow_unverified)
     db.commit()
+    allows = repo.allows_unverified_clients(org_id)
     log_action(
         "mcp_settings_updated",
         "mcp_settings",
         org_id,
-        {"enabled": body["enabled"], "allowed_roles": keys},
+        {"enabled": body["enabled"], "allowed_roles": keys, "allow_unverified_clients": allows},
         org_id,
         user_id,
     )
-    logger.info("mcp.settings_updated", enabled=body["enabled"], roles=len(keys))
+    logger.info("mcp.settings_updated", enabled=body["enabled"], roles=len(keys), allow_unverified_clients=allows)
     return get_settings(db, org_id)
 
 
@@ -141,7 +165,8 @@ def list_grants(db, org_id: UUID, *, viewer_id: UUID, can_manage: bool) -> list[
         {
             "id": str(grant.id),
             "client_name": client.client_name,
-            "verified": bool(client.verified),
+            # The code list decides, read here without writing (a GET never writes).
+            "verified": verified_clients.is_verified(client),
             "user": _person(user),
             "scope": grant.scope,
             "created_at": grant.created_at.isoformat() if grant.created_at else None,

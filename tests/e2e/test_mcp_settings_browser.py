@@ -52,7 +52,10 @@ def world(fresh_user, db):
     w.admin, w.member, w.org_id = admin, member, org_id
 
     def connect(user_id: str, name: str, verified: bool = False):
-        client = make_client(db, name=f"MCPTEST {name}", verified=verified)
+        # Verified comes from the code list (design review S3), so a verified client uses Claude's
+        # documented callback rather than just a flag on the row.
+        redirect = ["https://claude.ai/api/mcp/auth_callback"] if verified else None
+        client = make_client(db, name=f"MCPTEST {name}", verified=verified, redirect_uris=redirect)
         clients.append(client)
         user = db.get(User, UUID(user_id))
         grant, _access, _refresh = mint_grant(db, user, client)
@@ -166,6 +169,62 @@ def test_a_failed_save_shows_the_error_and_keeps_what_was_typed(world, page):
     expect(page.get_by_role("alert").filter(has_text="Unknown role")).to_be_visible()
     expect(_roles(page).get_by_label("Staff", exact=True)).to_be_checked()
     assert world.settings() == (False, [])
+
+
+# --- design review S3: apps Biz-E hasn't verified ------------------------------------------------
+
+UNVERIFIED_NAME = re.compile("Allow apps Biz-E hasn't verified")
+
+
+def _allows_unverified(db, org_id) -> bool:
+    from app.features.mcp_oauth.models import McpOrgSettings
+
+    db.expire_all()
+    row = db.get(McpOrgSettings, org_id)
+    return bool(row and row.allow_unverified_clients)
+
+
+def test_s3_unverified_apps_are_off_and_wait_for_the_main_switch(world, page):
+    _open(page, world.admin)
+    toggle = page.get_by_role("switch", name=UNVERIFIED_NAME)
+    expect(toggle).not_to_be_checked()
+    expect(toggle).to_be_disabled()
+    page.get_by_role("switch", name=SWITCH_NAME).check()
+    expect(toggle).to_be_enabled()
+
+
+def test_s3_turning_on_unverified_apps_asks_in_a_bottom_sheet_and_saves(world, page, db):
+    _open(page, world.admin)
+    page.get_by_role("switch", name=SWITCH_NAME).check()
+    _roles(page).get_by_label("Staff", exact=True).check()
+    toggle = page.get_by_role("switch", name=UNVERIFIED_NAME)
+
+    # Backing out of the sheet leaves it off.
+    toggle.check()
+    sheet = page.locator("[data-ai-unverified-dialog]")
+    expect(sheet).to_be_visible()
+    box = _settled(sheet)
+    assert abs((box["y"] + box["height"]) - page.viewport_size["height"]) <= 2  # a bottom sheet
+    sheet.get_by_role("button", name="Keep verified apps only").click()
+    expect(sheet).to_be_hidden()
+    expect(toggle).not_to_be_checked()
+
+    toggle.check()
+    sheet.get_by_role("button", name="Allow unverified apps").click()
+    expect(sheet).to_be_hidden()
+    expect(toggle).to_be_checked()
+    page.get_by_role("button", name="Save changes").click()
+    expect(page.locator("[data-ai-status]")).to_contain_text("Saved")
+    assert _allows_unverified(db, world.org_id) is True
+
+    page.reload()
+    expect(page.get_by_role("switch", name=UNVERIFIED_NAME)).to_be_checked()
+    # Turning it off needs no confirmation.
+    page.get_by_role("switch", name=UNVERIFIED_NAME).uncheck()
+    expect(sheet).to_be_hidden()
+    page.get_by_role("button", name="Save changes").click()
+    expect(page.locator("[data-ai-status]")).to_contain_text("Saved")
+    assert _allows_unverified(db, world.org_id) is False
 
 
 # --- AC34 -----------------------------------------------------------------------------------------

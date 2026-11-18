@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import or_
 
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User, UserRole
@@ -66,14 +67,17 @@ class World:
         self.db.commit()
         return user
 
-    def enable(self, enabled=True, roles=ROLES, extra_keys=()):
-        """Set the org's MCP switch and allowed roles directly (what the settings API does)."""
+    def enable(self, enabled=True, roles=ROLES, extra_keys=(), allow_unverified=True):
+        """Set the org's MCP switch, allowed roles and unverified-apps setting directly (what the
+        settings API does). ``allow_unverified`` defaults to True so the tests written before S3
+        keep exercising their unverified test client; the S3 tests pass False (the real default)."""
         self.db.query(McpAllowedRole).filter(McpAllowedRole.org_id == self.org.id).delete()
         row = self.db.get(McpOrgSettings, self.org.id)
         if row is None:
             row = McpOrgSettings(org_id=self.org.id)
             self.db.add(row)
         row.enabled = enabled
+        row.allow_unverified_clients = allow_unverified
         for role in roles:
             self.db.add(McpAllowedRole(org_id=self.org.id, role_key=f"builtin:{role}"))
         for key in extra_keys:
@@ -104,5 +108,9 @@ def world(db, flask_app):
         yield w
     db.rollback()
     purge_orgs(db, org_ids)
-    db.query(OAuthClient).filter(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%")).delete(synchronize_session=False)
+    # make_client ids start with test-client-; a client on the verified list is renamed (e.g. to
+    # "Claude"), so the name prefix alone would miss it.
+    db.query(OAuthClient).filter(
+        or_(OAuthClient.client_name.like(f"{TEST_NAME_PREFIX}%"), OAuthClient.client_id.like("test-client-%"))
+    ).delete(synchronize_session=False)
     db.commit()

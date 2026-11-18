@@ -1,9 +1,15 @@
 """Stock value and snapshots (live-cogs 8.1g; spec "8.1g build contract").
 
 Stock value is on-hand quantity × the engine's unit cost per lot, plus the unabsorbed pool of every
-batch still running. A snapshot freezes that at a cutoff and, when an earlier snapshot exists,
-values what moved between the two (``stock_value_movements``) so the bridge to Xero can explain
-the difference exactly. Nothing stored here is ever updated.
+batch still running. A snapshot freezes the quantities at a cutoff and, when an earlier snapshot
+exists, values what moved between the two (``stock_value_movements``) so the bridge to Xero can
+explain the difference exactly.
+
+A month-end snapshot is ``provisional`` until its month is closed (design review L1): most of a
+month's bills and card spend are recorded in the days after it ends, so every read re-prices the
+frozen quantities with today's costs (and works out B and the movements again), writing nothing.
+Closing (a person with ``costs.manage``, or the first sync or session costing read on or after the
+20th of the next month) writes the valuation once, and from then on it is never updated.
 
 Unknown cost is never $0: a lot with no cost is listed with no value and counted; a partly costed
 lot carries its floor and is labelled ``partial``.
@@ -87,6 +93,14 @@ _ACTIVE_STATUSES = (ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS)
 
 class StockValueError(CostingError):
     """The snapshot can't be taken or read as asked (400)."""
+
+
+class StockValueConflictError(CostingError):
+    """The month can't be closed now: already closed, or an earlier one is still provisional (409)."""
+
+
+PROVISIONAL, CLOSED = "provisional", "closed"
+DEFAULT_AUTO_CLOSE_DAY = 20
 
 
 def _d(value) -> Decimal:
@@ -359,22 +373,15 @@ def value_stock(db: Session, org_id: UUID, cutoff_at: datetime | None = None, *,
     pricer = _Pricer(db, org_id, {i.id for i in held} | set(extra_ids))
     lines: list[Line] = []
     for item in sorted(held, key=lambda i: (i.name.casefold(), str(i.id))):
-        quantity = quantities[item.id]
-        known, status = pricer.lot(item.id)
-        value = None if known is None else q4(quantity * known)
         lines.append(
-            Line(
-                kind="lot",
+            _lot_line(
+                pricer,
+                item.id,
+                quantities[item.id],
                 category=_CATEGORY_OF.get(item.inventory_type, "raw"),
                 name=item.name,
                 unit=item.unit,
                 batch=item.supplier_batch_number or (item.extra_data or {}).get("batch_number"),
-                quantity=quantity,
-                unit_cost=known if status in (ACTUAL, ESTIMATED) else None,
-                known_unit_cost=known,
-                value=value,
-                status=status if status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN,
-                item_id=item.id,
             )
         )
     names = {}
@@ -390,21 +397,190 @@ def value_stock(db: Session, org_id: UUID, cutoff_at: datetime | None = None, *,
         if known == ZERO and status == ACTUAL:
             continue
         lines.append(
-            Line(
-                kind="in_production",
-                category="in_production",
+            _pool_line(
+                execution.id,
+                known,
+                status,
                 name=names.get(execution.process_id) or "Batch in progress",
-                unit=None,
                 batch=nz_date_of(execution.started_at).isoformat() if execution.started_at else None,
-                quantity=ZERO,
-                unit_cost=None,
-                known_unit_cost=None,
-                value=q4(max(known, ZERO)),
-                status=status,
-                execution_id=execution.id,
             )
         )
     return Valuation(cutoff_at=cutoff_at, lines=lines, basis=basis, quantities=quantities, pricer=pricer)
+
+
+def _lot_line(pricer: _Pricer, item_id: UUID, quantity: Decimal, *, category, name, unit, batch) -> Line:
+    """One lot's quantity at today's cost: the one place a quantity is priced."""
+    known, status = pricer.lot(item_id)
+    return Line(
+        kind="lot",
+        category=category,
+        name=name,
+        unit=unit,
+        batch=batch,
+        quantity=quantity,
+        unit_cost=known if status in (ACTUAL, ESTIMATED) else None,
+        known_unit_cost=known,
+        value=None if known is None else q4(quantity * known),
+        status=status if status in (ACTUAL, ESTIMATED, PARTIAL) else UNKNOWN,
+        item_id=item_id,
+    )
+
+
+def _pool_line(execution_id: UUID, known: Decimal, status: str, *, name, batch) -> Line:
+    return Line(
+        kind="in_production",
+        category="in_production",
+        name=name,
+        unit=None,
+        batch=batch,
+        quantity=ZERO,
+        unit_cost=None,
+        known_unit_cost=None,
+        value=q4(max(known, ZERO)),
+        status=status,
+        execution_id=execution_id,
+    )
+
+
+# --- a provisional snapshot, valued on read ---------------------------------------------------------
+
+
+def reprice(db: Session, org_id: UUID, snapshot: StockValueSnapshot, pricer: _Pricer, rows=None) -> Valuation:
+    """The snapshot's frozen quantities at today's costs: what a provisional snapshot is worth now,
+    and what closing it writes. Lines keep the stored order. Writes nothing."""
+    rows = stored_lines(db, org_id, snapshot.id) if rows is None else rows
+    lines: list[Line] = []
+    for row in rows:
+        if row.line_type == "lot" and row.inventory_item_id is not None:
+            line = _lot_line(
+                pricer,
+                row.inventory_item_id,
+                _d(row.quantity),
+                category=row.category,
+                name=row.name,
+                unit=row.unit,
+                batch=row.batch,
+            )
+        elif row.line_type == "in_production" and row.execution_id is not None:
+            known, status = pricer.pool(row.execution_id, snapshot.cutoff_at)
+            line = _pool_line(row.execution_id, known, status, name=row.name, batch=row.batch)
+        else:  # the lot or batch has been deleted since: the stored figure is all there is
+            stored = _StoredLine(row)
+            line = Line(
+                kind=stored.kind,
+                category=stored.category,
+                name=stored.name,
+                unit=stored.unit,
+                batch=stored.batch,
+                quantity=stored.quantity,
+                unit_cost=stored.unit_cost,
+                known_unit_cost=stored.known_unit_cost,
+                value=stored.value,
+                status=stored.status,
+            )
+        lines.append(line)
+    return Valuation(cutoff_at=snapshot.cutoff_at, lines=lines, basis=snapshot.quantity_basis, pricer=pricer)
+
+
+class _LineRow:
+    """A ``Line`` shaped like a stored ``StockValueLine`` (what ``compute_movements`` reads)."""
+
+    def __init__(self, line: Line):
+        self.line_type = line.kind
+        self.inventory_item_id = line.item_id
+        self.execution_id = line.execution_id
+        self.quantity = line.quantity
+        self.known_unit_cost = line.known_unit_cost
+        self.value = line.value
+
+
+@dataclass
+class Live:
+    """A provisional snapshot as it reads now."""
+
+    snapshot: StockValueSnapshot
+    valuation: Valuation
+    totals: dict
+    movements: list | None  # None: the first snapshot, with nothing before it to move from
+    purchases: Decimal | None
+
+
+def live_views(db: Session, org_id: UUID, upto: StockValueSnapshot | None = None) -> dict[UUID, Live]:
+    """Every provisional snapshot (up to ``upto``'s cutoff), oldest first, re-priced with one engine,
+    each with its movements from the snapshot before it as that one reads now. Writes nothing."""
+    query = db.query(StockValueSnapshot).filter(
+        StockValueSnapshot.org_id == org_id, StockValueSnapshot.status == PROVISIONAL
+    )
+    if upto is not None:
+        query = query.filter(StockValueSnapshot.cutoff_at <= upto.cutoff_at)
+    provisional = query.order_by(StockValueSnapshot.cutoff_at, StockValueSnapshot.created_at).all()
+    if not provisional:
+        return {}
+    rows = {s.id: stored_lines(db, org_id, s.id) for s in provisional}
+    closed_before: dict[UUID, tuple[StockValueSnapshot, list]] = {}
+    for s in provisional:
+        if s.previous_snapshot_id is not None and s.previous_snapshot_id not in rows:
+            previous = get_snapshot(db, org_id, s.previous_snapshot_id)
+            closed_before[previous.id] = (previous, stored_lines(db, org_id, previous.id))
+    ids = {r.inventory_item_id for group in rows.values() for r in group if r.inventory_item_id}
+    ids |= {r.inventory_item_id for _p, group in closed_before.values() for r in group if r.inventory_item_id}
+    pricer = _Pricer(db, org_id, ids)
+    out: dict[UUID, Live] = {}
+    for s in provisional:
+        valuation = reprice(db, org_id, s, pricer, rows[s.id])
+        movements = purchases = None
+        previous = None
+        if s.previous_snapshot_id in out:
+            before = out[s.previous_snapshot_id]
+            previous, previous_rows = before.snapshot, [_LineRow(line) for line in before.valuation.lines]
+            previous_total = before.totals["total"]
+        elif s.previous_snapshot_id in closed_before:
+            previous, previous_rows = closed_before[s.previous_snapshot_id]
+            previous_total = _d(previous.total_value)
+        if previous is not None:
+            movements = _movements_since(db, org_id, previous, previous_rows, previous_total, valuation, s)
+            purchases = q4(sum((m.value for m in movements if m.kind == "purchase"), ZERO))
+        out[s.id] = Live(s, valuation, valuation.totals(), movements, purchases)
+    return out
+
+
+def _movements_since(db, org_id, previous, previous_rows, previous_total, valuation: Valuation, snapshot) -> list:
+    """The valued movements from ``previous`` to ``snapshot`` (worth ``valuation``), plus the
+    rounding that makes them sum to exactly closing minus opening."""
+    movements = compute_movements(
+        db,
+        org_id,
+        previous,
+        previous_rows,
+        valuation,
+        previous.cutoff_at,
+        snapshot.cutoff_at,
+        period_start=previous.as_of_date + timedelta(days=1),
+        period_end=snapshot.as_of_date,
+    )
+    residue = q4(valuation.totals()["total"]) - q4(_d(previous_total)) - sum((m.value for m in movements), ZERO)
+    if residue:
+        movements.append(_Movement(kind="rounding", value=q4(residue)))
+    return movements
+
+
+def auto_close_day() -> int:
+    """The day of the next month a provisional month closes itself (``[costing] auto_close_day``)."""
+    from app.utils.config_loader import config
+
+    try:
+        day = config.getint("costing", "auto_close_day", fallback=DEFAULT_AUTO_CLOSE_DAY)
+    except (ValueError, TypeError):
+        day = DEFAULT_AUTO_CLOSE_DAY
+    return min(max(day, 1), 28)
+
+
+def closes_on(snapshot: StockValueSnapshot) -> date | None:
+    """When a provisional month-end closes itself: the set day of the month after it."""
+    if snapshot.kind != "month_end" or snapshot.status != PROVISIONAL:
+        return None
+    first_of_next = snapshot.as_of_date.replace(day=1) + timedelta(days=32)
+    return first_of_next.replace(day=auto_close_day())
 
 
 # --- payloads ----------------------------------------------------------------------------------------
@@ -457,18 +633,14 @@ def _currency(db: Session, org_id: UUID) -> str:
     return (settings.base_currency if settings and settings.base_currency else "NZD").upper()
 
 
-def snapshot_header(snapshot: StockValueSnapshot) -> dict:
+def snapshot_header(snapshot: StockValueSnapshot, live: Live | None = None) -> dict:
+    """``live``: the snapshot as it reads now, when it is provisional (``live_views``)."""
+    provisional = snapshot.status == PROVISIONAL
+    if provisional and live is not None:
+        return _provisional_header(snapshot, live)
     complete = snapshot.unknown_lots == 0 and snapshot.partial_lots == 0
     return {
-        "id": str(snapshot.id),
-        "kind": snapshot.kind,
-        "as_of_date": snapshot.as_of_date.isoformat(),
-        "cutoff_at": snapshot.cutoff_at.isoformat(),
-        "taken_at": snapshot.taken_at.isoformat() if snapshot.taken_at else None,
-        "trigger": snapshot.trigger,
-        "automatic": snapshot.taken_by_user_id is None,
-        "quantity_basis": snapshot.quantity_basis,
-        "previous_id": str(snapshot.previous_snapshot_id) if snapshot.previous_snapshot_id else None,
+        **_state(snapshot),
         "currency": snapshot.currency,
         "total": money(_d(snapshot.total_value)),
         "complete": complete,
@@ -489,6 +661,30 @@ def snapshot_header(snapshot: StockValueSnapshot) -> dict:
     }
 
 
+def _state(snapshot: StockValueSnapshot) -> dict:
+    due = closes_on(snapshot)
+    return {
+        "id": str(snapshot.id),
+        "kind": snapshot.kind,
+        "as_of_date": snapshot.as_of_date.isoformat(),
+        "cutoff_at": snapshot.cutoff_at.isoformat(),
+        "taken_at": snapshot.taken_at.isoformat() if snapshot.taken_at else None,
+        "trigger": snapshot.trigger,
+        "automatic": snapshot.taken_by_user_id is None,
+        "quantity_basis": snapshot.quantity_basis,
+        "previous_id": str(snapshot.previous_snapshot_id) if snapshot.previous_snapshot_id else None,
+        "status": snapshot.status,
+        "provisional": snapshot.status == PROVISIONAL,
+        "closes_on": due.isoformat() if due else None,
+        "closed_at": snapshot.closed_at.isoformat() if snapshot.closed_at else None,
+        "closed_automatically": snapshot.status == CLOSED and snapshot.closed_by_user_id is None,
+    }
+
+
+def _provisional_header(snapshot: StockValueSnapshot, live: Live) -> dict:
+    return {**_state(snapshot), "currency": snapshot.currency, **_totals_payload(live.totals)}
+
+
 def stored_lines(db: Session, org_id: UUID, snapshot_id: UUID) -> list[StockValueLine]:
     return (
         db.query(StockValueLine)
@@ -499,12 +695,25 @@ def stored_lines(db: Session, org_id: UUID, snapshot_id: UUID) -> list[StockValu
 
 
 def snapshot_payload(db: Session, org_id: UUID, snapshot: StockValueSnapshot, *, detail: bool = False) -> dict:
+    if snapshot.status == PROVISIONAL:
+        live = live_views(db, org_id, snapshot)[snapshot.id]
+        body = snapshot_header(snapshot, live)
+        if detail:
+            body["lines"] = [_line_payload(line) for line in live.valuation.lines]
+            body["changes_since_close"] = None  # not closed: it already reads at today's costs
+        return body
     body = snapshot_header(snapshot)
     if detail:
         lines = stored_lines(db, org_id, snapshot.id)
         body["lines"] = [_line_payload(_StoredLine(row)) for row in lines]
         body["changes_since_close"] = changes_since_close(db, org_id, snapshot, lines)
     return body
+
+
+def headers(db: Session, org_id: UUID, snapshots) -> list[dict]:
+    """``snapshot_header`` for each, provisional ones as they read now."""
+    live = live_views(db, org_id) if any(s.status == PROVISIONAL for s in snapshots) else {}
+    return [snapshot_header(s, live.get(s.id)) for s in snapshots]
 
 
 class _StoredLine:
@@ -552,8 +761,11 @@ def list_snapshots(db: Session, org_id: UUID) -> list[StockValueSnapshot]:
 # --- changes since close ------------------------------------------------------------------------------
 
 
-def changes_since_close(db: Session, org_id: UUID, snapshot: StockValueSnapshot, lines=None) -> dict:
-    """The stored quantities re-priced with today's costs. Never touches the snapshot."""
+def changes_since_close(db: Session, org_id: UUID, snapshot: StockValueSnapshot, lines=None) -> dict | None:
+    """A closed snapshot's stored quantities re-priced with today's costs. Never touches the snapshot.
+    None for a provisional one: it already reads at today's costs."""
+    if snapshot.status == PROVISIONAL:
+        return None
     lines = stored_lines(db, org_id, snapshot.id) if lines is None else lines
     lot_ids = {row.inventory_item_id for row in lines if row.inventory_item_id}
     pricer = _Pricer(db, org_id, lot_ids)
@@ -635,6 +847,10 @@ class _Movement:
     name: str | None = None
     quantity: Decimal = ZERO
     unit_cost: Decimal | None = None
+
+    @property
+    def inventory_item_id(self) -> UUID | None:  # read like a stored StockValueMovement
+        return self.item_id
 
 
 def _window_flows(db: Session, org_id: UUID, start: datetime, end: datetime) -> dict[UUID, dict[str, Decimal]]:
@@ -878,7 +1094,9 @@ def take_snapshot(
     previous_lines = stored_lines(db, org_id, previous.id) if previous is not None else []
     previous_item_ids = {r.inventory_item_id for r in previous_lines if r.inventory_item_id}
     valuation = value_stock(db, org_id, cutoff, extra_ids=previous_item_ids)
-    totals = valuation.totals()
+    # A month end stays provisional until it is closed (design review L1); so does a snapshot taken
+    # after a month that is still provisional, because what moved since that month isn't fixed yet.
+    provisional = kind == "month_end" or (previous is not None and previous.status == PROVISIONAL)
     snapshot = StockValueSnapshot(
         org_id=org_id,
         kind=kind,
@@ -890,76 +1108,194 @@ def take_snapshot(
         previous_snapshot_id=previous.id if previous is not None else None,
         quantity_basis=valuation.basis,
         currency=_currency(db, org_id),
-        total_value=q4(totals["total"]),
-        raw_value=q4(totals["categories"]["raw"]["value"]),
-        in_production_value=q4(totals["categories"]["in_production"]["value"]),
-        wip_value=q4(totals["categories"]["wip"]["value"]),
-        finished_value=q4(totals["categories"]["finished"]["value"]),
-        actual_value=q4(totals["split"]["actual"]),
-        estimated_value=q4(totals["split"]["estimated"]),
-        partial_value=q4(totals["split"]["partial"]),
-        unknown_lots=totals["unknown_lots"],
-        partial_lots=totals["partial_lots"],
-        lot_count=totals["lot_count"],
+        status=PROVISIONAL if provisional else CLOSED,
+        closed_at=None if provisional else taken_at,
+        closed_by_user_id=None if provisional else user_id,
     )
+    _set_totals(snapshot, valuation.totals())
     db.add(snapshot)
     db.flush()
     for line in valuation.lines:
+        row = StockValueLine(
+            org_id=org_id,
+            snapshot_id=snapshot.id,
+            line_type=line.kind,
+            inventory_item_id=line.item_id,
+            execution_id=line.execution_id,
+            name=line.name[:255],
+            unit=line.unit,
+            batch=(line.batch or None) and line.batch[:255],
+            category=line.category,
+            quantity=line.quantity,
+        )
+        _set_line_value(row, line)
+        db.add(row)
+    db.flush()
+    if previous is not None and not provisional:
+        movements = _movements_since(
+            db, org_id, previous, previous_lines, _d(previous.total_value), valuation, snapshot
+        )
+        _write_movements(db, org_id, snapshot, movements)
+    return snapshot
+
+
+def _set_totals(snapshot: StockValueSnapshot, totals: dict) -> None:
+    snapshot.total_value = q4(totals["total"])
+    snapshot.raw_value = q4(totals["categories"]["raw"]["value"])
+    snapshot.in_production_value = q4(totals["categories"]["in_production"]["value"])
+    snapshot.wip_value = q4(totals["categories"]["wip"]["value"])
+    snapshot.finished_value = q4(totals["categories"]["finished"]["value"])
+    snapshot.actual_value = q4(totals["split"]["actual"])
+    snapshot.estimated_value = q4(totals["split"]["estimated"])
+    snapshot.partial_value = q4(totals["split"]["partial"])
+    snapshot.unknown_lots = totals["unknown_lots"]
+    snapshot.partial_lots = totals["partial_lots"]
+    snapshot.lot_count = totals["lot_count"]
+
+
+def _unit(value: Decimal | None) -> Decimal | None:
+    return None if value is None else value.quantize(UNIT, rounding=ROUND_HALF_UP)
+
+
+def _set_line_value(row: StockValueLine, line: Line) -> None:
+    row.unit_cost = _unit(line.unit_cost)
+    row.known_unit_cost = _unit(line.known_unit_cost)
+    row.value = line.value
+    row.status = line.status
+
+
+def _write_movements(db: Session, org_id: UUID, snapshot: StockValueSnapshot, movements: list) -> None:
+    for movement in movements:
         db.add(
-            StockValueLine(
+            StockValueMovement(
                 org_id=org_id,
                 snapshot_id=snapshot.id,
-                line_type=line.kind,
-                inventory_item_id=line.item_id,
-                execution_id=line.execution_id,
-                name=line.name[:255],
-                unit=line.unit,
-                batch=(line.batch or None) and line.batch[:255],
-                category=line.category,
-                quantity=line.quantity,
-                unit_cost=None if line.unit_cost is None else line.unit_cost.quantize(UNIT, rounding=ROUND_HALF_UP),
-                known_unit_cost=None
-                if line.known_unit_cost is None
-                else line.known_unit_cost.quantize(UNIT, rounding=ROUND_HALF_UP),
-                value=line.value,
-                status=line.status,
+                kind=movement.kind,
+                inventory_item_id=movement.item_id,
+                execution_id=movement.execution_id,
+                name=(movement.name or None) and movement.name[:255],
+                quantity=movement.quantity,
+                unit_cost=_unit(movement.unit_cost),
+                value=movement.value,
             )
         )
+    snapshot.purchases_value = q4(sum((m.value for m in movements if m.kind == "purchase"), ZERO))
     db.flush()
+
+
+# --- closing a month ---------------------------------------------------------------------------------------
+
+
+def close_snapshot(
+    db: Session, org_id: UUID, snapshot: StockValueSnapshot, *, user_id: UUID | None = None
+) -> StockValueSnapshot:
+    """Close a provisional snapshot: write its valuation at today's costs, once, exactly as taking a
+    closed snapshot does, then close any snapshot taken after it that was waiting on it. ``user_id``
+    None: it closed itself. Audited. The caller commits."""
+    from app.core.db.models.audit_log import AuditLog
+
+    _lock(db, org_id)
+    db.refresh(snapshot)
+    if snapshot.status != PROVISIONAL:
+        raise StockValueConflictError("This month is already closed")
+    previous = (
+        get_snapshot(db, org_id, snapshot.previous_snapshot_id) if snapshot.previous_snapshot_id is not None else None
+    )
+    if previous is not None and previous.status == PROVISIONAL:
+        raise StockValueConflictError(f"Close {_label(previous)} first. Months close oldest first.")
+    rows = stored_lines(db, org_id, snapshot.id)
+    previous_rows = stored_lines(db, org_id, previous.id) if previous is not None else []
+    ids = {r.inventory_item_id for r in [*rows, *previous_rows] if r.inventory_item_id}
+    valuation = reprice(db, org_id, snapshot, _Pricer(db, org_id, ids), rows)
+    for row, line in zip(rows, valuation.lines, strict=True):
+        _set_line_value(row, line)
+    _set_totals(snapshot, valuation.totals())
+    db.query(StockValueMovement).filter(
+        StockValueMovement.org_id == org_id, StockValueMovement.snapshot_id == snapshot.id
+    ).delete(synchronize_session=False)  # a provisional snapshot holds none; keep closing idempotent anyway
     if previous is not None:
-        movements = compute_movements(
-            db,
-            org_id,
-            previous,
-            previous_lines,
-            valuation,
-            previous.cutoff_at,
-            cutoff,
-            period_start=previous.as_of_date + timedelta(days=1),
-            period_end=as_of,
+        movements = _movements_since(db, org_id, previous, previous_rows, _d(previous.total_value), valuation, snapshot)
+        _write_movements(db, org_id, snapshot, movements)
+    snapshot.status = CLOSED
+    snapshot.closed_at = utc_now()
+    snapshot.closed_by_user_id = user_id
+    db.add(
+        AuditLog(
+            org_id=org_id,
+            user_id=user_id,
+            action="stock_value_month_closed",
+            entity="stock_value_snapshot",
+            entity_id=snapshot.id,
+            meta_data={
+                "kind": snapshot.kind,
+                "as_of_date": snapshot.as_of_date.isoformat(),
+                "total": money(_d(snapshot.total_value)),
+                "automatic": user_id is None,
+            },
         )
-        residue = q4(snapshot.total_value) - q4(_d(previous.total_value)) - sum((m.value for m in movements), ZERO)
-        if residue:
-            movements.append(_Movement(kind="rounding", value=q4(residue)))
-        for movement in movements:
-            db.add(
-                StockValueMovement(
-                    org_id=org_id,
-                    snapshot_id=snapshot.id,
-                    kind=movement.kind,
-                    inventory_item_id=movement.item_id,
-                    execution_id=movement.execution_id,
-                    name=(movement.name or None) and movement.name[:255],
-                    quantity=movement.quantity,
-                    unit_cost=None
-                    if movement.unit_cost is None
-                    else movement.unit_cost.quantize(UNIT, rounding=ROUND_HALF_UP),
-                    value=movement.value,
-                )
-            )
-        snapshot.purchases_value = q4(sum((m.value for m in movements if m.kind == "purchase"), ZERO))
-        db.flush()
+    )
+    db.flush()
+    logger.info(
+        "stock_value_month_closed",
+        org_id=str(org_id),
+        snapshot_id=str(snapshot.id),
+        as_of_date=snapshot.as_of_date.isoformat(),
+        automatic=user_id is None,
+    )
+    waiting = (
+        db.query(StockValueSnapshot)
+        .filter(
+            StockValueSnapshot.org_id == org_id,
+            StockValueSnapshot.previous_snapshot_id == snapshot.id,
+            StockValueSnapshot.kind == "manual",
+            StockValueSnapshot.status == PROVISIONAL,
+        )
+        .all()
+    )
+    for later in waiting:
+        close_snapshot(db, org_id, later, user_id=user_id)
     return snapshot
+
+
+def _label(snapshot: StockValueSnapshot) -> str:
+    if snapshot.kind == "month_end":
+        return f"{snapshot.as_of_date:%B %Y}"
+    return f"the snapshot of {snapshot.as_of_date.isoformat()}"
+
+
+def close_due_months(db: Session, org_id: UUID) -> list[StockValueSnapshot]:
+    """Close every provisional month whose close day (``auto_close_day`` of the next NZ month) has
+    come, oldest first. The caller commits. Only a sync or a person's read calls this, never an
+    assistant's token (design review S2)."""
+    today = purchase_sources.nz_today()
+    closed: list[StockValueSnapshot] = []
+    due = (
+        db.query(StockValueSnapshot)
+        .filter(
+            StockValueSnapshot.org_id == org_id,
+            StockValueSnapshot.kind == "month_end",
+            StockValueSnapshot.status == PROVISIONAL,
+        )
+        .order_by(StockValueSnapshot.cutoff_at)
+        .all()
+    )
+    for snapshot in due:
+        day = closes_on(snapshot)
+        if day is None or today < day:
+            break
+        closed.append(close_snapshot(db, org_id, snapshot))
+    return closed
+
+
+def month_end_upkeep(db: Session, org_id: UUID, *, trigger: str) -> list[StockValueSnapshot]:
+    """Take any month-end snapshot that is due, then close any month whose close day has come.
+    Returns the snapshots taken. The caller commits."""
+    made = ensure_month_end_snapshots(db, org_id, trigger=trigger)
+    from app.core.security.entitlements import org_has_feature
+
+    if org_has_feature(db, org_id, FEATURE_KEY):
+        close_due_months(db, org_id)
+    return made
 
 
 def ensure_month_end_snapshots(db: Session, org_id: UUID, *, trigger: str) -> list[StockValueSnapshot]:
@@ -1034,15 +1370,26 @@ def _cents(value) -> str:
     return "" if value is None else f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):f}"
 
 
-def export_csv(snapshot: StockValueSnapshot, rows: list[StockValueLine]) -> str:
+def export_csv(snapshot: StockValueSnapshot, rows: list[StockValueLine], live: Live | None = None) -> str:
+    """``live``: a provisional snapshot as it reads now. Its file says so in its first row."""
     import csv
     import io
 
     buffer = io.StringIO()
     out = csv.writer(buffer)
+    if live is not None:
+        due = closes_on(snapshot)
+        out.writerow(
+            [
+                "Provisional — not closed",
+                "Valued at today's costs; these figures change until the month is closed"
+                + (f" (it closes itself on {due.isoformat()})" if due else ""),
+            ]
+        )
     out.writerow(["Category", "Item", "Batch", "Quantity", "Unit", "Unit cost", "Value", "Cost status"])
     order = ("raw", "wip", "finished", "in_production")
-    stored = [_StoredLine(r) for r in rows]
+    stored = live.valuation.lines if live is not None else [_StoredLine(r) for r in rows]
+    totals = live.totals if live is not None else None
     subtotals = {}
     for category in order:
         part = [ln for ln in stored if ln.category == category]
@@ -1063,12 +1410,12 @@ def export_csv(snapshot: StockValueSnapshot, rows: list[StockValueLine]) -> str:
             subtotals[category] = sum((ln.value for ln in part if ln.value is not None), ZERO)
     for category, amount in subtotals.items():
         out.writerow(["Subtotal", CATEGORY_LABELS[category], "", "", "", "", _cents(amount), ""])
-    out.writerow(
-        ["Total", f"As at {snapshot.as_of_date.isoformat()}", "", "", "", "", _cents(_d(snapshot.total_value)), ""]
-    )
-    if snapshot.unknown_lots:
-        n = snapshot.unknown_lots
-        out.writerow(["", f"{n} lot{' has' if n == 1 else 's have'} no cost, so this total is a floor"])
-    if snapshot.partial_lots:
-        out.writerow(["", f"{snapshot.partial_lots} partly costed (value is what is known)"])
+    total = totals["total"] if totals is not None else _d(snapshot.total_value)
+    unknown = totals["unknown_lots"] if totals is not None else snapshot.unknown_lots
+    partial = totals["partial_lots"] if totals is not None else snapshot.partial_lots
+    out.writerow(["Total", f"As at {snapshot.as_of_date.isoformat()}", "", "", "", "", _cents(q4(total)), ""])
+    if unknown:
+        out.writerow(["", f"{unknown} lot{' has' if unknown == 1 else 's have'} no cost, so this total is a floor"])
+    if partial:
+        out.writerow(["", f"{partial} partly costed (value is what is known)"])
     return buffer.getvalue()

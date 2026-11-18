@@ -367,6 +367,31 @@ operations:
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
   costing_bulk_purchases:
     summary: Bulk purchases
+  costing_close_stock_snapshot:
+    summary: Close a month's stock value
+    description: >-
+      Closes a provisional month-end snapshot: its frozen quantities are valued once at today's costs, with
+      the movements and purchases since the snapshot before it, and from then on the figures never change.
+      A manual snapshot that was waiting on this month closes with it. 409 when the snapshot is already
+      closed or an earlier month is still provisional (months close oldest first). Needs costs.manage and an
+      Idempotency-Key. Design review L1.
+    response:
+      description: The closed snapshot, with its lines and changes since close.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [id, kind, as_of_date, status, provisional, closed_at, total, lines]
+        properties:
+          id: {type: string, format: uuid}
+          kind: {type: string, enum: [month_end, manual]}
+          as_of_date: {type: string, format: date}
+          status: {type: string, enum: [provisional, closed]}
+          provisional: {type: boolean}
+          closed_at: {type: [string, "null"]}
+          closed_automatically: {type: boolean}
+          total: {type: string}
+          lines: {type: array, items: {type: object, additionalProperties: true}}
+          changes_since_close: {type: [object, "null"], additionalProperties: true}
   costing_create_overhead_rate:
     summary: Create overhead rate
   costing_create_rule:

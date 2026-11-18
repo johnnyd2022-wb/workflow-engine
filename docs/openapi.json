@@ -8191,6 +8191,120 @@
         }
       }
     },
+    "/api/core/costing/stock-value/snapshots/{snapshot_id}/close": {
+      "post": {
+        "description": "Closes a provisional month-end snapshot: its frozen quantities are valued once at today's costs, with the movements and purchases since the snapshot before it, and from then on the figures never change. A manual snapshot that was waiting on this month closes with it. 409 when the snapshot is already closed or an earlier month is still provisional (months close oldest first). Needs costs.manage and an Idempotency-Key. Design review L1.",
+        "operationId": "costing_close_stock_snapshot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "as_of_date": {
+                      "format": "date",
+                      "type": "string"
+                    },
+                    "changes_since_close": {
+                      "additionalProperties": true,
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "closed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closed_automatically": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "month_end",
+                        "manual"
+                      ],
+                      "type": "string"
+                    },
+                    "lines": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "provisional": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "enum": [
+                        "provisional",
+                        "closed"
+                      ],
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "as_of_date",
+                    "status",
+                    "provisional",
+                    "closed_at",
+                    "total",
+                    "lines"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The closed snapshot, with its lines and changes since close."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Close a month's stock value",
+        "tags": [
+          "costing"
+        ],
+        "x-bize": {
+          "domain": "costing",
+          "feature": "costing",
+          "mcp": false,
+          "permission": "costs.manage",
+          "schema_status": "documented"
+        }
+      }
+    },
     "/api/core/costing/stock-value/snapshots/{snapshot_id}/export.csv": {
       "get": {
         "operationId": "costing_export_stock_snapshot",

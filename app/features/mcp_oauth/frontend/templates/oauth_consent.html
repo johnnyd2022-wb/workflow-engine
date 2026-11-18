@@ -5,6 +5,7 @@
   {% set app_name = req.client.client_name | truncate(60, True, '…') %}
   {% if blocked %}
     <h1>{{ app_name }} can't connect yet</h1>
+    {% if not req.client.verified %}<p class="badges"><span class="badge">Unverified app</span></p>{% endif %}
     <p class="notice" role="alert">{{ blocked }}</p>
     <div class="who">
       <span class="muted">Signed in as</span>
@@ -14,7 +15,11 @@
     <p class="fine">Nothing was shared. You can close this tab and go back to {{ app_name }}.</p>
   {% else %}
     <h1>Connect {{ app_name }} to Biz-E</h1>
-    {% if not req.client.verified %}<p class="badges"><span class="badge">Unverified app</span></p>{% endif %}
+    {% if req.client.verified %}
+    <p class="badges"><span class="badge is-verified" title="Biz-E has checked that this app is who it says it is">&#10003; Verified</span></p>
+    {% else %}
+    <p class="badges"><span class="badge">Unverified app</span></p>
+    {% endif %}
     <p class="muted">After you choose, you're sent back to <strong>{{ host }}</strong>.</p>
 
     <div class="who">
