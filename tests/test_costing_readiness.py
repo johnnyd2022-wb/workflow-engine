@@ -502,6 +502,41 @@ def test_r2_readiness_query_count_with_a_long_price_history(world, db):
     assert len(statements) <= 40, f"{len(statements)} queries with 40 earlier juniper lots"
 
 
+@pytest.mark.parametrize("fail_lot_prime", [False, True])
+def test_readiness_survives_overflow_while_loading_lots_or_price_history(world, db, monkeypatch, fail_lot_prime):
+    from app.features.costing.engine import CostEngine, TooLargeError
+
+    org, client = world
+    earlier = lot(db, org.id, "Juniper", 2, "kg")
+    price(db, org.id, earlier.id, 30, 2)
+    juniper = lot(db, org.id, "Juniper", 2, "kg")
+    coriander = lot(db, org.id, "Coriander", 2, "kg")
+    price(db, org.id, coriander.id, 20, 2)
+    _, gin_step = _gin_batch(db, org, client, juniper, coriander)
+    independent = lot(db, org.id, "Spirit", 2, "L")
+    price(db, org.id, independent.id, 10, 2)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Vodka", "unit": "bottles"}]])
+    complete(client, execution, step, [(independent, 1, "L")], [{"name": "Vodka", "quantity": 2, "unit": "bottles"}])
+    key = f"output:{output_defs(gin_step)[0]['id']}"
+    expected = _products(client)
+    expected_detail = _detail(client, key).get_json()
+    assert {p["name"] for p in expected if p["ready"]} == {"Gin", "Vodka"}
+
+    original_prime = CostEngine.prime
+
+    def limited_prime(engine, ids):
+        ids = set(ids)
+        if (fail_lot_prime and juniper.id in ids and coriander.id in ids) or earlier.id in ids:
+            raise TooLargeError()
+        return original_prime(engine, ids)
+
+    monkeypatch.setattr(CostEngine, "prime", limited_prime)
+    assert _products(client) == expected
+    response = _detail(client, key)
+    assert response.status_code == 200
+    assert response.get_json() == expected_detail
+
+
 def test_r2_total_paid_on_a_second_site(world, db):
     from app.core.db.models.inventory_item import InventoryItem
     from tests.factories import grant_multi_site

@@ -210,6 +210,28 @@ def _declared_rows(names: dict[str, str], engine: CostEngine) -> list[dict]:
     return sorted(rows, key=lambda r: r["name"])
 
 
+def _prime_material_history(engine: CostEngine, lot_ids, declared_names) -> None:
+    engine.prime(lot_ids)
+    # Historical prices can come from other lots of the same material.
+    index = engine._material_index()
+    names = set(declared_names)
+    for lot_id in lot_ids:
+        lot = engine._get_lot(lot_id)
+        if lot is not None:
+            names.add(normalise(lot.name))
+    engine.prime({lot.id for name in names for lot in index.get(name, [])})
+
+
+def _product_engine(engine: CostEngine, lot_ids=(), declared_names=()) -> CostEngine:
+    individual = engine.own_budget()
+    try:
+        _prime_material_history(individual, lot_ids, declared_names)
+    except TooLargeError:
+        # Keep the loaded rows and let the solver see which prices it can resolve on demand.
+        return individual.own_budget()
+    return individual
+
+
 def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
     graph = _Graph(db, org_id)
     products = _products(db, org_id, graph)
@@ -225,15 +247,12 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
         if latest.get(key) is None and p.get("step") is not None
     }
     material_lots = {lot for lots in lots_by_key.values() for lot in lots}
-    engine.prime(material_lots)
-    # An unpriced material is estimated from same-name lots (last known price): prime those too,
-    # so a material with a long purchase history doesn't cost one round of queries per lot.
-    index = engine._material_index()
-    names = {normalise(engine._get_lot(lot).name) for lot in material_lots if engine._get_lot(lot) is not None}
-    names |= {norm for declared_names in declared.values() for norm in declared_names}
-    engine.prime({lot.id for norm in names for lot in index.get(norm, [])})
+    try:
+        _prime_material_history(engine, material_lots, {name for names in declared.values() for name in names})
+        shared = True
+    except TooLargeError:
+        shared = False
     lot_rows_cache: dict = {}
-    shared = True  # until the shared engine's budget runs out
     out = {}
     for key, product in products.items():
         execution_id = latest.get(key)
@@ -247,9 +266,10 @@ def _details(db: Session, org_id: UUID, keys=None) -> dict[str, dict]:
                     # its own (over what's loaded), so each reads as its own page does.
                     shared = False
             if materials is None:
-                materials = _lot_rows(lots_by_key[key], engine.own_budget(), None)
+                materials = _lot_rows(lots_by_key[key], _product_engine(engine, lots_by_key[key]))
         elif key in declared:
-            basis, materials = "declared_inputs", _declared_rows(declared[key], engine)
+            individual = engine if shared else _product_engine(engine, declared_names=declared[key])
+            basis, materials = "declared_inputs", _declared_rows(declared[key], individual)
         else:
             basis, materials = "declared_inputs", []
         out[key] = {
@@ -291,8 +311,9 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
     try:
         engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
     except TooLargeError:
-        return  # too much history to cost them together: the list shows readiness without figures
-    shared = True  # until the shared engine's node budget runs out
+        shared = False
+    else:
+        shared = True  # until the shared engine's node budget runs out
     for key, execution_id in wanted.items():
         lots = produced_by_batch.get(execution_id, [])
         try:
