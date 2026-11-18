@@ -21,6 +21,7 @@ from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_requ
 from app.core.utils.log_action import log_action
 from app.features.google_sign_in.oidc import exchange_verified_identity, google_client
 from app.features.google_sign_in.service import PROVIDER, GoogleSignInError, assert_account_available, resolve_identity
+from app.features.mcp_oauth.services import pending_authorization
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -168,7 +169,10 @@ def callback():
         session.update(AuthService(db).generate_session(user))
         session["session_timeout_minutes"] = user.session_timeout_minutes
         record_google_session(user, claims["sub"])
-        return redirect(ENROLLMENT_PAGE if enrollment_required(user) else "/dashboard")
+        if enrollment_required(user):
+            return redirect(ENROLLMENT_PAGE)
+        # Signed in for an AI assistant's connection request? Go back to its consent page.
+        return redirect(pending_authorization.take_url() or "/dashboard")
     except Exception as exc:
         db.rollback()
         # Provider errors can contain token/code/credentials. Never log their text.

@@ -50,8 +50,18 @@ html[data-spa-theme="dark"] #page-content .pu-badge--warn { background: rgb(231 
 #page-content .pu-field { display: grid; gap: 4px; font-size: 13px; color: var(--ui-text-muted); }
 #page-content .pu-field input { width: 100% !important; min-width: 0 !important; }
 #page-content .pu-sum { margin: 8px 0; font-weight: 600; }
-#page-content .pu-rest { border: 0; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+#page-content .pu-rest { border: 0; padding: 0; margin: 8px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 #page-content .pu-rest[hidden] { display: none; }
+#page-content .pu-rest legend { grid-column: 1 / -1; padding: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ui-text); }
+/* A segmented choice: the radio stays (keyboard, screen readers) but the label is the control. */
+#page-content .pu-rest label { position: relative; display: flex; align-items: center; justify-content: center; min-height: 40px;
+  padding: 8px 12px; border: 1px solid var(--ui-border); background: var(--ui-surface); font-size: 14px; text-align: center; cursor: pointer; }
+#page-content .pu-rest label:first-of-type { border-radius: var(--ui-radius-sm) 0 0 var(--ui-radius-sm); }
+#page-content .pu-rest label:last-of-type { border-radius: 0 var(--ui-radius-sm) var(--ui-radius-sm) 0; margin-left: -1px; }
+#page-content .pu-rest input[type="radio"] { position: absolute; opacity: 0; width: 1px !important; height: 1px; min-width: 0 !important; margin: 0; }
+#page-content .pu-rest label:has(input:checked) { border-color: var(--ui-accent); background: color-mix(in srgb, var(--ui-accent) 12%, var(--ui-surface));
+  color: var(--ui-text); font-weight: 600; z-index: 1; }
+#page-content .pu-rest label:has(input:focus-visible) { outline: 2px solid var(--ui-accent); outline-offset: 2px; z-index: 2; }
 #page-content .pu-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 120px; gap: 10px; align-items: center; padding: 8px 0;
   border-bottom: 1px solid var(--ui-border); }
 #page-content .pu-dialog__error { color: #b42318; }

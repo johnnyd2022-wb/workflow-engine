@@ -117,7 +117,13 @@ Add a line to `routes` and apply:
 
 For a hostname in the `biz-e.app` zone the module creates, in this order, a Cloudflare
 Access application, the tunnel route, and the DNS record, so a hostname is never reachable
-before Access is in front of it. There is no setting to publish a site without Access.
+before Access is in front of it. There is no setting to publish a whole site without Access.
+
+A client that cannot sign in through a browser (an AI assistant calling the MCP server or the
+OAuth token endpoint) needs specific paths let through. List them as `"host/path"` in
+`public_paths`; each gets its own Access application with a bypass policy, which wins over the
+host's founders-only one, so the rest of the host stays behind Access. A trailing `/*` covers
+everything under a path. Only use it for endpoints that do their own authentication.
 
 ### What every site gets
 

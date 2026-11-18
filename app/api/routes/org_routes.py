@@ -578,7 +578,13 @@ def delete_role(role_id: str):
     if holders:
         return jsonify({"error": f"{holders} person(s) still have this role. Give them another role first."}), 409
     name = role.name
+    role_uuid = role.id
     db.delete(role)
+    # A deleted role can no longer be ticked for AI assistant access (public MCP 8.2b); the key is
+    # a text value, not a foreign key, so it is removed here in the same transaction.
+    from app.features.mcp_oauth.services.settings_service import prune_custom_role
+
+    prune_custom_role(db, g.current_org_id, role_uuid)
     db.commit()
     log_action("delete", "org_role", UUID(role_id), {"name": name}, g.current_org_id, g.current_user.id)
     return jsonify(_roles_body(db)), 200

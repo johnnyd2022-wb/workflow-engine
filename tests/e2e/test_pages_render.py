@@ -33,6 +33,7 @@ CORE_PAGES = [
     "/core/notifications",
     "/core/settings",
     "/core/integrations",
+    "/core/ai-assistants",
 ]
 
 CRM_PAGES = [

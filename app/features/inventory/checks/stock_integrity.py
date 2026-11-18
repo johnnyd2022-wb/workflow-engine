@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -12,7 +12,8 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.organisation import Organisation
-from app.core.utils.unit_conversion import convert_to_inventory_unit_decimal, is_count_unit
+from app.core.utils.packs import containers_per_unit, convert_for_lot, whole_containers
+from app.core.utils.unit_conversion import is_count_unit
 from app.features.compliance_checks.routes.corechecks import CheckResult
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
@@ -41,7 +42,17 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     on_hand = _decimal(item.quantity)
     if on_hand is None:
         return [("invalid_quantity", "The on-hand quantity is invalid; correct this lot in Live Inventory.")]
-    if is_count_unit(item.unit) and on_hand != on_hand.to_integral_value():
+    per_unit = containers_per_unit(item)  # a lot of cases of 24: whole bottles, not whole cases
+    if per_unit is not None:
+        if whole_containers(on_hand, item) is None:
+            issues.append(
+                (
+                    "fractional_count",
+                    f"{_amount(on_hand)} {item.unit} on hand is {_amount(on_hand * per_unit)} containers; "
+                    "counted goods must be whole numbers.",
+                )
+            )
+    elif is_count_unit(item.unit) and on_hand != on_hand.to_integral_value():
         issues.append(
             ("fractional_count", f"{_amount(on_hand)} {item.unit} on hand; counted goods must be whole numbers.")
         )
@@ -72,7 +83,7 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
                 issues.append(("invalid_history", "A production step has no valid consumed quantity."))
             else:
                 try:
-                    used += convert_to_inventory_unit_decimal(quantity, source_unit, item.unit)
+                    used += convert_for_lot(quantity, source_unit, item, exact=per_unit is not None)
                 except (ValueError, InvalidOperation, TypeError):
                     issues.append(("invalid_history", "A production step used an incompatible stock unit."))
         elif event.event_type == "inventory_item.updated":
@@ -89,7 +100,14 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
         issues.append(("missing_history", "This lot has no opening or production stock event."))
     elif not any(code == "invalid_history" for code, _ in issues):
         expected = produced - sold - used - wasted + adjusted
-        if expected != on_hand:
+        if per_unit is not None:
+            # Stored quantities are a case's 4-decimal share of each bottle; compare bottles.
+            balanced = (expected * per_unit).to_integral_value(rounding=ROUND_HALF_UP) == (
+                on_hand * per_unit
+            ).to_integral_value(rounding=ROUND_HALF_UP)
+        else:
+            balanced = expected == on_hand
+        if not balanced:
             moves = [
                 (f"started with {_amount(produced)}", True),
                 (f"used {_amount(used)} in production", used),

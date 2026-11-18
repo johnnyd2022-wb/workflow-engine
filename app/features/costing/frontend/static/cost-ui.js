@@ -69,8 +69,70 @@
     var m = money(value);
     return m ? m + (unit ? ' per ' + unit : '') : null;
   }
+  /* "= $1.38 per bottle · $1.97 per litre": stock counted in units whose name carries a pack size
+     ("Glass bottle 700 mL", "Juniper 25 kg bag") also gets the bulk price, so a 700 mL and a 1 L
+     bottle can be compared. Anything else reads "= $X per <unit>" as before. */
+  var COUNT_UNITS = /^(bottles?|units?|each|ea|cases?|cans?|jars?|packs?|bags?|boxes|box|pcs|pieces?|sacks?|tubs?|pallets?|containers?|kegs?)$/i;
+  function parsePack(text, typed) {
+    // A size in the text: "700 mL", "1,000 mL" (thousands comma), "1,5 L" (decimal comma), ".5L",
+    // "25kg". A multipack ("24 x 200ml", "6x700ml", "700ml x 6") counts every container. A ratio
+    // ("650 g/L") is a strength, not a size, and is skipped. The last size wins. Mirrors
+    // app/core/utils/packs.py parse_pack, which the server uses to store the pack.
+    var src = String(text || '').replace(/\u00a0/g, ' ');
+    var re = /(?:(\d+)\s*[x×]\s*)?(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*[.,]?\d+)\s*(ml|millilitres?|milliliters?|l|litres?|liters?|g|grams?|kg|kilos?|kilograms?)(?![a-z])(?!\s*\/)(?:\s*[x×]\s*(\d+)(?!\s*[a-z]))?/gi;
+    var match, last = null;
+    while ((match = re.exec(src)) !== null) last = match;
+    if (!last) {
+      // Typed into the Pack size field (never read from a name): a count with no size, "500 labels".
+      var counted = typed ? /^\s*(\d{1,6})\s*(?:[x×]\s*)?(?:([a-z])[a-z .\-]{0,30})?\s*$/i.exec(src) : null;
+      // "12 oz" is a weight we can't read, not twelve of something: refuse it rather than guess.
+      var word = typed ? src.replace(/^\s*\d+\s*(?:[x×]\s*)?/i, '').trim().toLowerCase().split(' ')[0] : '';
+      var weight = /^(oz|ounces?|lbs?|pounds?|gal|gallons?|mg|milligrams?|cl|dl|pts?|pints?|qts?|quarts?|tonnes?|tons?|fl|met(re|er)s?|cm|mm|ft|foot|feet|inch(es)?|in|l|ml|g|kg)$/.test(word);
+      return counted && !weight && Number(counted[1]) > 1 ? { count: Number(counted[1]), size: null, unit: null } : null;
+    }
+    var raw = last[2];
+    var size = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw) ? Number(raw.replace(/,/g, '')) : Number(raw.replace(',', '.'));
+    var count = Number(last[1] || last[4] || 1);
+    var u = last[3].toLowerCase();
+    if (!(size > 0) || !(count > 0)) return null;
+    var unit = /^(ml|milli)/.test(u) ? 'mL' : /^(l$|litre|liter)/.test(u) ? 'L' : /^(g$|gram)/.test(u) ? 'g' : 'kg';
+    return { count: count, size: size, unit: unit };
+  }
+  function packText(pack) {
+    if (!pack) return '';
+    if (!pack.unit) return pack.count + ' pcs';
+    var size = pack.size.toLocaleString('en-NZ', { maximumFractionDigits: 4 }) + ' ' + pack.unit;
+    return pack.count > 1 ? pack.count + ' × ' + size : size;
+  }
+  function packSize(name, packed) {
+    // The stored/typed pack when there is one, else a size in the item's name.
+    var pack = packed == null ? parsePack(name) : packed ? parsePack(packed, true) : null; // a pack field's blank means none
+    if (!pack) return null;
+    if (!pack.unit) return { count: pack.count, amount: null, per: null }; // a count, no size
+    var n = pack.size * pack.count;
+    var bulk = pack.unit === 'mL' ? { amount: n / 1000, per: 'litre' } : pack.unit === 'L' ? { amount: n, per: 'litre' }
+      : pack.unit === 'g' ? { amount: n / 1000, per: 'kg' } : { amount: n, per: 'kg' };
+    bulk.count = pack.count;
+    return bulk;
+  }
+  function packHint(amount, quantity, unit, name, packed) {
+    var each = amount / quantity;
+    var counted = COUNT_UNITS.test(String(unit || '').trim());
+    var first = counted && /^(each|ea)$/i.test(String(unit).trim())
+      ? '= ' + money(each) + ' each'
+      : '= ' + perUnit(each, counted ? dutyUnit(unit) : unit);
+    var pack = counted ? packSize(name, packed) : null;
+    if (!pack) return first;
+    // "= $48.00 per case · $2.00 each of 24 · $10.00 per litre"
+    var parts = [first];
+    if (pack.count > 1) parts.push(money(each / pack.count) + ' each of ' + pack.count);
+    if (pack.per) parts.push(perUnit(each / pack.amount, pack.per));
+    return parts.join(' · ');
+  }
   function dutyUnit(unit) {
-    var words = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack' };
+    var words = { bottles: 'bottle', units: 'unit', cases: 'case', cans: 'can', jars: 'jar', packs: 'pack',
+      bags: 'bag', boxes: 'box', pieces: 'piece', sacks: 'sack', tubs: 'tub', pcs: 'piece',
+      kegs: 'keg', containers: 'container', pallets: 'pallet' };
     return words[String(unit || '').toLowerCase()] || unit || 'unit';
   }
   /* The batch card's duty line (spec Q6): never a guess; "not tracked" when the module is off. */
@@ -148,13 +210,29 @@
         var from = provenanceNode(cost.provenance);
         if (from && cost.status !== 'unknown') addFact(facts, 'Source', from);
         else if (source && cost.status !== 'unknown') addFact(facts, 'Source', source);
+        var split = cost.pack_breakdown; // a multipack lot: its price per bottle and per litre or kg
+        if (split) {
+          addFact(facts, 'Pack', split.pack);
+          if (split.per_container) {
+            addFact(facts, split.containers > 1 ? 'Each' : 'Per ' + split.pack, money(split.per_container) + (split.containers > 1 ? ' (1 of ' + split.containers + ')' : ''));
+          }
+          if (split.per_litre) addFact(facts, 'Per litre', money(split.per_litre));
+          if (split.per_kg) addFact(facts, 'Per kg', money(split.per_kg));
+        }
         if (Number(cost.unpriced_quantity) > 0 && Number(cost.priced_quantity) > 0) {
           addFact(facts, 'Priced', cost.priced_quantity + ' of ' + (Number(cost.priced_quantity) + Number(cost.unpriced_quantity)) + ' ' + (cost.unit || ''));
+        }
+        // Opt-in (8.1h): the cost's overhead part (freight on what was bought, a batch's rent and labour).
+        if (cost.overhead_unit_cost != null && Number(cost.overhead_unit_cost) > 0) {
+          addFact(facts, 'Includes', money(cost.materials_unit_cost) + ' materials · ' + money(cost.overhead_unit_cost) + ' overheads per ' + dutyUnit(cost.unit));
         }
         if (facts.childNodes.length) body.appendChild(facts);
 
         var others = (cost.missing || []).filter(function (m) { return m.inventory_item_id !== cost.inventory_item_id; });
         if (others.length) body.appendChild(missingLine(others));
+        if ((cost.warnings || []).indexOf('overhead_litres_unknown') >= 0) {
+          body.appendChild(el('p', 'cost-muted', 'Overheads per litre couldn’t be worked out for the batch that made this. Tell Biz-E the bottle size on the product, or count it in litres.'));
+        }
         if ((cost.warnings || []).indexOf('refund_exceeds_cost') >= 0) {
           body.appendChild(el('p', 'cost-muted', 'A refund on this lot is bigger than what it cost, so its cost shows as $0.'));
         }
@@ -297,7 +375,8 @@
   function provenanceNode(p) {
     if (!p || typeof p.href !== 'string' || p.href.charAt(0) !== '/' || p.href.charAt(1) === '/') return null;
     var when = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    var lead = { purchase: 'Recorded from ', batch: 'Made in a ', transfer: 'Moved from another site — ' }[p.kind];
+    var lead = { purchase: 'Recorded from ', batch: 'Made in a ',
+      transfer: p.site ? 'Moved from ' + p.site + ' — ' : 'Moved from another site — ' }[p.kind];
     if (!lead) return null;
     var span = el('span');
     span.appendChild(document.createTextNode(lead));
@@ -345,20 +424,33 @@
       card.appendChild(el('p', 'cost-muted', 'No materials recorded against this batch yet. Cost builds up as each step records what went in.'));
       return card;
     }
+    var over = cost.overheads || null; // present only when the org has opted in to overheads (8.1h)
     var figures = el('div', 'cost-card__figures');
+    if (over && finished) {
+      // What went in includes freight and overhead carried in from earlier work; the split is of the outputs.
+      var made = 0, overheadMade = 0;
+      outputs.forEach(function (o) { made += Number(o.known_amount || 0); overheadMade += Number(o.overhead_amount || 0); });
+      if (made > 0) total = String(Math.max(made - overheadMade, 0));
+    }
     figures.appendChild(figure(finished ? 'Materials' : 'Cost so far', money(total) || '$0.00'));
+    if (over && over.amount != null) figures.appendChild(figure('Overheads', money(over.amount) || '$0.00'));
     outputs.forEach(function (o) {
       var unitText = perUnit(o.unit_cost, o.unit);
       var outputFigure = figure(o.name + ' per ' + dutyUnit(o.unit), unitText ? money(o.unit_cost) : '—');
+      if (o.overhead_unit_cost != null && Number(o.overhead_unit_cost) > 0 && unitText) {
+        outputFigure.appendChild(el('p', 'cost-split', money(o.materials_unit_cost) + ' materials + ' + money(o.overhead_unit_cost) + ' overheads'));
+      }
       var line = dutyLine(o.duty_today, o.unit);
       if (line) outputFigure.appendChild(el('p', 'cost-muted', line));
       figures.appendChild(outputFigure);
     });
     card.appendChild(figures);
+    if (over) card.appendChild(overheadsDetail(over));
 
     var status = finished ? cost.status : cost.cost_so_far_status;
     if (status === 'estimated') card.appendChild(pill('warn', 'Includes estimates from earlier prices'));
-    if (status === 'partial' || status === 'unknown' || (cost.missing || []).length) {
+    var onlyOverheadsMissing = over && over.note === 'litres_unknown' && !(cost.missing || []).length;
+    if (!onlyOverheadsMissing && (status === 'partial' || status === 'unknown' || (cost.missing || []).length)) {
       var missing = cost.missing || [];
       var box = el('div', 'cost-card__missing');
       box.appendChild(pill('warn', missing.length ? 'Incomplete — ' + plural(missing.length, 'input') + ' not costed' : 'Incomplete'));
@@ -380,6 +472,38 @@
       card.appendChild(el('p', 'cost-muted', 'Cost is split between outputs by quantity, because no split was recorded.'));
     }
     return card;
+  }
+
+  /* What the batch's overheads are made of, or why there are none yet (8.1h). */
+  function overheadsDetail(over) {
+    var box = el('div', 'cost-card__overheads');
+    if (over.note === 'in_progress') {
+      box.appendChild(el('p', 'cost-muted', 'Overheads are added when the batch is complete.'));
+      return box;
+    }
+    if (over.note === 'no_finished_product') {
+      box.appendChild(el('p', 'cost-muted', 'This batch makes no finished product, so it takes no overheads.'));
+      return box;
+    }
+    if ((over.lines || []).length) {
+      var list = el('ul', 'cost-overheads');
+      over.lines.forEach(function (l) {
+        var row = el('li', 'cost-overheads__row');
+        var litres = Math.round(Number(l.quantity) * 100) / 100;
+        row.appendChild(el('span', '', l.name + ' — ' + (l.basis === 'per_litre'
+          ? litres + ' L × ' + money(l.rate) + ' per litre' : money(l.rate) + ' per batch')));
+        row.appendChild(el('span', '', money(l.amount)));
+        list.appendChild(row);
+      });
+      box.appendChild(list);
+    } else if (over.note !== 'litres_unknown') {
+      box.appendChild(el('p', 'cost-muted', 'No overhead rates apply to this batch.'));
+    }
+    if (over.note === 'litres_unknown') {
+      box.appendChild(pill('warn', 'Overheads per litre not worked out'));
+      box.appendChild(el('p', 'cost-muted', 'Biz-E needs the bottle size to turn bottles into litres. Add it to the product, or count it in litres, and the cost completes.'));
+    }
+    return box;
   }
 
   function figure(label, value) {
@@ -430,7 +554,7 @@
         wrap.classList.remove('is-invalid');
         var q = options.quantity ? Number(options.quantity()) : NaN;
         var unit = options.unit ? options.unit() : '';
-        hint.textContent = q > 0 ? '= ' + perUnit(Number(amount) / q, unit) : '';
+        hint.textContent = q > 0 ? packHint(Number(amount), q, unit, options.name ? options.name() : '', options.pack ? options.pack() : null) : '';
       }
       input.addEventListener('input', update);
       (options.watch || []).forEach(function (node) { if (node) node.addEventListener('input', update); if (node) node.addEventListener('change', update); });
@@ -443,8 +567,78 @@
         return amount;
       };
       handle.clear = function () { input.value = ''; update(); };
+      handle.refresh = update; // a form that fills name/quantity/unit in code calls this after
       handle.input = input;
     });
+    return handle;
+  }
+
+  /* "Pack size" on Add Inventory: what one unit of counted stock holds ("24 × 200 mL"), so a
+     workflow can use it in bottles, mL or g and cost each by its share. Not a cost field: shown to
+     everyone adding stock, for counted units only. Filled from the item's name until edited. */
+  function packField(anchor, options) {
+    options = options || {};
+    var handle = { value: function () { return null; }, refresh: function () {}, attached: false };
+    if (!anchor) return handle;
+    var id = options.id || 'inventory-pack';
+    var wrap = el('div', 'cost-add-field pack-field');
+    var label = el('label', options.labelClass || 'cost-field__label', 'Pack size ');
+    label.htmlFor = id;
+    label.appendChild(el('span', 'cost-optional', '(optional)'));
+    var input = el('input');
+    input.id = id;
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.name = 'pack';
+    input.placeholder = 'e.g. 24 × 200 mL';
+    input.className = options.inputClass || 'cost-money-input';
+    var hint = el('p', 'cost-hint');
+    hint.id = id + '-hint';
+    hint.setAttribute('aria-live', 'polite');
+    input.setAttribute('aria-describedby', hint.id);
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    wrap.appendChild(hint);
+    anchor.insertAdjacentElement('afterend', wrap);
+    var edited = false;
+    if (options.initial) { input.value = options.initial; edited = true; }
+
+    function unitWord() { return dutyUnit(options.unit ? options.unit() : ''); }
+    function update() {
+      paint();
+      if (options.onChange) options.onChange(); // the cost hint follows the pack, filled, cleared or unreadable
+    }
+    function paint() {
+      var counted = COUNT_UNITS.test(String(options.unit ? options.unit() : '').trim());
+      if (!edited && options.name) input.value = counted ? packText(parsePack(options.name())) : '';
+      wrap.hidden = !counted && !input.value.trim();
+      var raw = input.value.trim();
+      wrap.classList.remove('is-invalid');
+      if (!raw) { hint.textContent = 'What one ' + unitWord() + ' holds, so workflows can use it in bottles, mL or g.'; return; }
+      var pack = parsePack(raw, true);
+      if (!pack) { hint.textContent = 'Write it like 24 × 200 mL, 700 mL, 25 kg or 500 pcs'; wrap.classList.add('is-invalid'); return; }
+      if (!pack.unit) hint.textContent = 'One ' + unitWord() + ' = ' + pack.count + '. Workflows can take single ones.';
+      else hint.textContent = pack.count > 1
+        ? 'One ' + unitWord() + ' = ' + pack.count + ' × ' + packText({ count: 1, size: pack.size, unit: pack.unit }) +
+          '. Workflows can take single ones or ' + (pack.unit === 'g' || pack.unit === 'kg' ? 'grams' : 'mL') + '.'
+        : 'One ' + unitWord() + ' holds ' + packText(pack) + '.';
+    }
+    input.addEventListener('input', function () { edited = true; update(); }); // blank by hand stays blank
+    (options.watch || []).forEach(function (node) { if (node) { node.addEventListener('input', update); node.addEventListener('change', update); } });
+    update();
+    handle.attached = true;
+    handle.input = input;
+    handle.refresh = update;
+    handle.text = function () { return wrap.hidden ? '' : input.value.trim(); };
+    handle.value = function () {
+      // null: none given; false: unreadable (the form says so); else the text the server parses
+      if (wrap.hidden) return null;
+      var raw = input.value.trim();
+      if (!raw) return null;
+      if (!parsePack(raw, true)) { input.focus(); return false; }
+      return raw;
+    };
+    handle.clear = function () { input.value = ''; edited = false; update(); };
     return handle;
   }
 
@@ -452,8 +646,9 @@
   function whenReady(fn) { fn(window.BizECost); }
 
   window.BizECost = {
-    me: me, lotPanel: lotPanel, batchCard: batchCard, dutyLine: dutyLine, totalPaidField: totalPaidField,
-    money: money, parseMoney: parseMoney, whenReady: whenReady,
+    me: me, lotPanel: lotPanel, batchCard: batchCard, dutyLine: dutyLine, packHint: packHint, totalPaidField: totalPaidField,
+    packField: packField, parsePack: parsePack, packText: packText,
+    money: money, parseMoney: parseMoney, whenReady: whenReady, request: request,
   };
   document.dispatchEvent(new CustomEvent('bizecost:ready'));
 })();

@@ -523,7 +523,9 @@ def get_customer_invoice_defaults(contact_id: str):
     except ValueError:
         return jsonify({"error": "invoice_date must be YYYY-MM-DD"}), 400
     try:
-        due_date = _crm_service().suggest_invoice_due_date(UUID(contact_id), org_id, invoice_date)
+        due_date = _crm_service().suggest_invoice_due_date(
+            UUID(contact_id), org_id, invoice_date, fetch_from_xero=getattr(g, "auth_via", None) != "mcp"
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"due_date": due_date.isoformat() if due_date else None}), 200

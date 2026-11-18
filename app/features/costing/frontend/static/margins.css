@@ -51,5 +51,10 @@ html[data-spa-theme="dark"] #page-content .mg-flag { background: rgb(231 176 74 
   #page-content .mg-range { width: 100%; display: grid; grid-template-columns: 1fr; }
   #page-content .mg-range .workspace-button { width: 100%; }
   #page-content .mg-range input { width: 100% !important; }
-  #page-content .mg-months { font-size: 13px; }
+  #page-content .mg-months { font-size: 13px; min-width: 620px; } /* scrolls inside its wrap, never squeezes the month into 3 lines */
+  #page-content .mg-months th, #page-content .mg-months td { white-space: nowrap; }
+  #page-content .mg-months td .mg-cost-split { white-space: normal; min-width: 150px; }
 }
+
+/* 8.1h: the materials / overheads split under a month's cost (only when overheads are on) */
+#page-content .mg-cost-split { display: block; font-size: 12px; color: var(--ui-text-muted); }

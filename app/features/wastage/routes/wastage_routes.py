@@ -30,6 +30,7 @@ from app.core.utils.inventory_wastage_quantity import (
     parse_wastage_unit_field,
     wastage_entries_payload_hash,
 )
+from app.core.utils.packs import can_convert_for_lot, convert_for_lot, settle_take
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -401,18 +402,26 @@ def record_wastage():
                 continue
             inv_unit = (item.unit or "units").strip() or "units"
             if req_unit:
-                if not are_units_compatible(req_unit, inv_unit):
+                # A lot with a unit converts through its pack too (3 bottles from a case of 24).
+                if not (
+                    are_units_compatible(req_unit, inv_unit) or (item.unit and can_convert_for_lot(req_unit, item))
+                ):
                     validation_errors.append(
                         f"Entry {entry_idx}: quantity_unit is not compatible with inventory unit ({inv_unit})"
                     )
                     continue
                 try:
-                    waste_in_inv = convert_to_inventory_unit_decimal(waste_decimal, req_unit, inv_unit)
+                    waste_in_inv = (
+                        convert_for_lot(waste_decimal, req_unit, item)
+                        if item.unit
+                        else convert_to_inventory_unit_decimal(waste_decimal, req_unit, inv_unit)
+                    )
                 except ValueError as exc:
                     validation_errors.append(f"Entry {entry_idx}: {exc}")
                     continue
             else:
                 waste_in_inv = waste_decimal
+            waste_in_inv = settle_take(current_qty, waste_in_inv, item)  # whole bottles left
             if waste_in_inv > current_qty:
                 validation_errors.append(
                     f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"

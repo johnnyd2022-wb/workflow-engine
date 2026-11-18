@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from fnmatch import fnmatchcase
 
-from flask import g, jsonify, redirect, request, session
+from flask import current_app, g, jsonify, redirect, request, session
 
 from app.core.db.models.user import UserRole
 from app.observability import get_logger
@@ -179,6 +179,16 @@ SIGNED_IN = "signed_in"  # any signed-in user, whatever their role
 _READ = frozenset({"GET", "HEAD", "OPTIONS"})
 ANY_WORKSPACE = ("production.view", "inventory.view", "sales.view", "compliance.view")
 
+# What a read-only assistant token (scope ``bize.read``, public MCP 8.2b) may reach: GET/HEAD on
+# routes whose rule names one of these. People, settings, exports and every write sit outside it
+# whatever the person's role, and the rule needs no edit as routes are added: a new route is
+# unreachable by a token until its POLICY rule names a view permission.
+READ_PERMISSIONS = frozenset({"production.view", "inventory.view", "sales.view", "compliance.view", "costs.view"})
+# Signed-in-only routes a token may also read: they return the token user's own identity, or the
+# description of the API narrowed to what that person may read (8.2f), and nothing of the
+# organisation's data. Keep this list as short as it is.
+MCP_TOKEN_ENDPOINTS = frozenset({"mcp.get_me", "openapi.get_openapi"})
+
 # (endpoint glob, methods or None for all, requirement). First match wins, so specific
 # rules come before the broad ones under them. A requirement is PUBLIC, SIGNED_IN, a
 # permission, or a tuple meaning "any of these".
@@ -202,6 +212,24 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("ingest_faro_telemetry", None, PUBLIC),
     ("ingest_posthog_telemetry", None, PUBLIC),
     ("csp_report", None, PUBLIC),
+    # --- assistants (public MCP 8.2b): OAuth endpoints and the settings / connected-apps API.
+    # authorize is SIGNED_IN, yet a signed-out visitor reaches it: this hook only judges signed-in
+    # users, and the route itself sends the visitor to sign in and back.
+    ("oauth.metadata", None, PUBLIC),
+    ("oauth.register", None, PUBLIC),
+    ("oauth.token", None, PUBLIC),
+    ("oauth.revoke", None, PUBLIC),
+    ("oauth.authorize", None, SIGNED_IN),
+    ("oauth.authorize_decision", None, SIGNED_IN),
+    ("mcp.get_me", _READ, SIGNED_IN),
+    ("mcp.get_settings", _READ, "users.manage"),
+    ("mcp.update_settings", None, "users.manage"),
+    ("mcp.list_grants", _READ, SIGNED_IN),  # your own; every grant in the organisation with users.manage
+    ("mcp.revoke_grant", None, SIGNED_IN),  # your own; any in the organisation with users.manage
+    # The OpenAPI document (8.2f): every signed-in user and token may fetch it; the route narrows it to
+    # the operations that caller's own permissions reach, so it names nothing they could not call.
+    ("openapi.get_openapi", _READ, SIGNED_IN),
+    ("mcp_pages.ai_assistants_page", None, SIGNED_IN),  # admin controls render only with users.manage
     ("auth.login", None, PUBLIC),
     ("auth.signup", None, PUBLIC),
     ("auth.verify_two_factor", None, PUBLIC),
@@ -466,6 +494,61 @@ def allows(user, endpoint: str, method: str) -> bool:
     return has_permission(user, *required)
 
 
+_TOKEN_METHODS = frozenset({"GET", "HEAD"})
+
+
+def token_scope_includes(endpoint: str, method: str, *, mcp: bool) -> bool:
+    """Whether the ``bize.read`` scope reaches this route at all, whoever the person is.
+
+    True for GET/HEAD on a public route, on the few signed-in routes in ``MCP_TOKEN_ENDPOINTS``, and
+    on a route that is in the MCP catalogue (``mcp``: its OpenAPI operation is marked ``x-bize.mcp``)
+    and whose rule names a view permission. Anything else is out of scope: deny by default, so a
+    route with no overlay entry is never reachable with a token. The caller says whether the route
+    is in the catalogue; the one source of that is the overlay, read by ``app.api.openapi``. The
+    OpenAPI document reads this to say which operations take a token; ``token_access`` reads it to
+    enforce the same thing.
+    """
+    if method.upper() not in _TOKEN_METHODS:
+        return False
+    requirement = requirement_for(endpoint, method)
+    if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
+        return True
+    if not mcp or requirement in (DENY, PORTAL_SIGNED_IN, SIGNED_IN):
+        return False
+    required = requirement if isinstance(requirement, tuple) else (requirement,)
+    return bool(READ_PERMISSIONS.intersection(required))
+
+
+def token_access(user, endpoint: str, method: str, *, mcp: bool) -> str:
+    """How a request authenticated with an assistant token fares against the policy.
+
+    ``"ok"``: public, the token user's own identity, or a catalogue read route whose view permission
+    the person holds. ``"out_of_scope"``: a write method, a route outside the MCP catalogue, or one
+    that names no view permission (``users.manage``, ``settings.manage``, signed-in-only pages,
+    anything unclassified). ``"denied"``: a view route the person's own role does not hold.
+    """
+    if not token_scope_includes(endpoint, method, mcp=mcp):
+        return "out_of_scope"
+    requirement = requirement_for(endpoint, method)
+    if requirement == PUBLIC or endpoint in MCP_TOKEN_ENDPOINTS:
+        return "ok"
+    required = requirement if isinstance(requirement, tuple) else (requirement,)
+    readable = READ_PERMISSIONS.intersection(required)
+    return "ok" if has_permission(user, *readable) else "denied"
+
+
+def in_mcp_catalogue(app, endpoint: str, rule: str | None, method: str) -> bool:
+    """Whether this endpoint, URL rule and method are an ``x-bize.mcp`` operation of ``app``.
+
+    The set is built once at app start (``app.extensions["mcp_operations"]``, from the OpenAPI
+    overlay). An app without one has an empty catalogue, so tokens reach nothing but the
+    always-allowed routes. HEAD is answered as GET, as the OpenAPI document describes it.
+    """
+    method = method.upper()
+    key = (endpoint, rule, "GET" if method == "HEAD" else method)
+    return key in app.extensions.get("mcp_operations", frozenset())
+
+
 def setup_access_policy(app) -> None:
     """Enforce ``POLICY`` for signed-in users. Register after tenant context."""
 
@@ -486,7 +569,20 @@ def setup_access_policy(app) -> None:
             session.clear()  # nosemgrep: bize-session-clear-without-rotate
             session.modified = True
             return jsonify({"error": "Your access to this organisation has ended.", "code": "access_expired"}), 401
-        if allows(user, endpoint, request.method):
+        if getattr(g, "auth_via", None) == "mcp":
+            rule = request.url_rule.rule if request.url_rule is not None else None
+            mcp = in_mcp_catalogue(current_app, endpoint, rule, request.method)
+            verdict = token_access(user, endpoint, request.method, mcp=mcp)
+            if verdict == "out_of_scope":
+                logger.warning("mcp.out_of_scope", endpoint=endpoint, method=request.method, user_id=str(user.id))
+                response = jsonify({"error": "insufficient_scope"})
+                response.status_code = 403
+                response.headers["WWW-Authenticate"] = 'Bearer error="insufficient_scope", scope="bize.read"'
+                return response
+            permitted = verdict == "ok"
+        else:
+            permitted = allows(user, endpoint, request.method)
+        if permitted:
             return None
 
         requirement = requirement_for(endpoint, request.method)

@@ -147,6 +147,8 @@ def replay_expiry_date(name: str, received_on: date) -> date:
         return received_on + timedelta(days=_REPLAY_SHELF_LIFE_DAYS[name])
     except KeyError as exc:
         raise ValueError(f"No replay expiry policy is defined for {name!r}") from exc
+
+
 # This password entry predates the tenant promotion and remains the source of
 # truth until its KeePassXC record is deliberately renamed.
 WHISTLEBIRD_ADMIN_KEEPASS_ENTRY = "workflow-engine/whistlebird_test"
@@ -1448,14 +1450,10 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
         # Keep an existing replay tenant on the renamed workflow rather than creating
         # a second Green Gold process next to historical executions.
         legacy_green_gold = (
-            session.query(Process)
-            .filter(Process.org_id == org.id, Process.name == "Green Gold gin")
-            .one_or_none()
+            session.query(Process).filter(Process.org_id == org.id, Process.name == "Green Gold gin").one_or_none()
         )
         if legacy_green_gold is not None and (
-            session.query(Process)
-            .filter(Process.org_id == org.id, Process.name == GREEN_GOLD_WORKFLOW)
-            .one_or_none()
+            session.query(Process).filter(Process.org_id == org.id, Process.name == GREEN_GOLD_WORKFLOW).one_or_none()
             is None
         ):
             repository.update_process(legacy_green_gold.id, org.id, name=GREEN_GOLD_WORKFLOW)

@@ -154,6 +154,7 @@
     let twoFactorRequired = false;          // Admin policy: can't be disabled
     let twoFactorEnrollmentRequired = false; // Admin without 2FA: everything else is blocked
     let autoEnrollmentOffered = false;
+    let twoFactorReturnTo = null;            // /oauth/authorize?... to resume after first-time enrolment
 
     // Check for incomplete enrollment on page load
     async function checkIncompleteEnrollment() {
@@ -502,6 +503,9 @@
             current2FAStatus = data.user.two_factor_enabled || false;
             twoFactorRequired = !!data.user.two_factor_required;
             twoFactorEnrollmentRequired = !!data.user.two_factor_enrollment_required;
+            // An AI assistant's connection request the person signed in for; the server's own value.
+            const returnTo = data.user.return_to;
+            twoFactorReturnTo = (typeof returnTo === 'string' && returnTo.indexOf('/oauth/authorize?') === 0) ? returnTo : null;
             update2FAUI();
             if (twoFactorEnrollmentRequired && !autoEnrollmentOffered) {
               // Open enrolment straight away: nothing else works until it's done.
@@ -903,7 +907,7 @@
       if (twoFactorEnrollmentRequired) {
         // Enrolment was the only thing this session could do; carry on into the app.
         twoFactorEnrollmentRequired = false;
-        setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+        setTimeout(() => { window.location.href = twoFactorReturnTo || '/dashboard'; }, 800);
       }
     });
 

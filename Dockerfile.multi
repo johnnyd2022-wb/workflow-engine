@@ -44,6 +44,19 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f -k https://localhost:8020/healthcheck || exit 1
 CMD ["uv", "run", "gunicorn", "--config", "gunicorn.admin.conf.py", "app.admin_site.wsgi:app"]
 
+# Public MCP server stage (mcp.biz-e.app): the assistant-facing server, `bize_mcp/`. It talks to the
+# app over HTTP and holds no database credentials or app secrets, so it takes no ENVIRONMENT and
+# none of the app's config. Only this target installs the `mcp` extra (the SDK and an ASGI stack), so the
+# app images stay as they were. Run by scripts/run_mcp.sh, which passes the three addresses it needs
+# (BIZE_API_BASE_URL, MCP_PUBLIC_URL, BIZE_ISSUER_URL). Spec .agents/specs/public-mcp.md, "Deploy (8.2d)".
+FROM base AS mcp
+RUN uv sync --frozen --extra mcp
+EXPOSE 8030
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -fs http://127.0.0.1:8030/healthz || exit 1
+# --no-sync: the environment is complete as built; starting must never reach for the network.
+CMD ["uv", "run", "--no-sync", "uvicorn", "bize_mcp.server:app", "--host", "0.0.0.0", "--port", "8030"]
+
 # Production environment stage
 FROM base AS production
 # `prod` selects app/config/prod.ini, the same name scripts/run_prod.sh uses.

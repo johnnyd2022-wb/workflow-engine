@@ -25,7 +25,8 @@ XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
 # of accounts). Existing connections reconnect once to grant them.
 XERO_SCOPES = (
     "openid profile email accounting.contacts accounting.invoices accounting.invoices.read "
-    "accounting.banktransactions.read accounting.settings.read offline_access"
+    "accounting.banktransactions.read accounting.settings.read "
+    "accounting.reports.profitandloss.read offline_access"
 )
 
 

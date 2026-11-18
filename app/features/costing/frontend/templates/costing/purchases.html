@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('costing.static', filename='purchases.css') }}">
 <div class="pu-shell workspace-overview workspace-page" data-purchases-root
      data-can-manage="{{ 'true' if can('costs.manage') else 'false' }}"
+     data-overheads="{{ 'true' if include_overheads else 'false' }}"
      data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"
      data-xero-connected="{{ 'true' if xero_connected else 'false' }}" aria-busy="true">
   <header class="workspace-header">
@@ -63,7 +64,7 @@
       <p class="pu-sum" data-dialog-sum></p>
       <fieldset class="pu-rest" data-dialog-rest hidden>
         <legend>The rest of this purchase</legend>
-        <label><input type="radio" name="rest" value="not_stock" checked> isn't stock</label>
+        <label><input type="radio" name="rest" value="not_stock" checked> Isn't stock</label>
         <label><input type="radio" name="rest" value="later"> I'll record it later</label>
       </fieldset>
       <p class="pu-dialog__error" role="alert" data-dialog-error hidden></p>

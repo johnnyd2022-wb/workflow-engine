@@ -159,6 +159,7 @@ class XeroSyncService:
 
             self._run_purchases(api_client, org_id, tenant.xero_tenant_id, result, started_at=started_at)
             self._record_purchases(job.id, org_id, result)
+            self._take_month_end_snapshots(org_id)
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
@@ -239,6 +240,7 @@ class XeroSyncService:
 
             self._run_purchases(api_client, org_id, tenant.xero_tenant_id, result, started_at=started_at)
             self._record_purchases(job.id, org_id, result)
+            self._take_month_end_snapshots(org_id)
             self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
@@ -751,6 +753,16 @@ class XeroSyncService:
             .on_conflict_do_nothing(index_elements=["org_id"])
         )
         return self.db.query(model).filter(model.org_id == org_id).with_for_update().one()
+
+    def _take_month_end_snapshots(self, org_id: UUID) -> None:
+        """Live-cogs 8.1g: the first sync after a month ends closes its stock value. Never fails the sync."""
+        from app.features.costing import stock_value
+
+        try:
+            with self.db.begin_nested():
+                stock_value.ensure_month_end_snapshots(self.db, org_id, trigger="xero_sync")
+        except Exception as e:  # noqa: BLE001 - a snapshot must never fail a sync
+            logger.exception("month_end_snapshot_failed", org_id=str(org_id), error_type=type(e).__name__)
 
     def _record_purchases(self, job_id: UUID, org_id: UUID, result: SyncResult) -> None:
         """Put the purchases fields on the job; ``_finalise_job`` commits them with the rest."""

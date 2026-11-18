@@ -23,7 +23,7 @@
   /* Range totals for one product (or all). A month with no figure is left out and counted, so the
      known months still add up and the page says how many are missing; nothing is shown as $0. */
   function total(rows) {
-    var t = { units: 0, revenue: null, cost: null, duty: null, margin: null, statuses: [], dutyTracked: true,
+    var t = { units: 0, revenue: null, cost: null, overhead: null, hasSplit: false, duty: null, margin: null, statuses: [], dutyTracked: true,
       months: 0, missingRevenue: 0, missingCost: 0, missingDuty: 0, missingMargin: 0, marginRevenue: 0 };
     var all = {}, noRevenue = {}, noCost = {}, noDuty = {}, noMargin = {};
     function plus(a, b) { return b == null ? a : (a || 0) + b; }
@@ -40,6 +40,8 @@
       t.units += Number(r.units);
       if (!noRevenue[r.month]) t.revenue = plus(t.revenue, num(r.revenue));
       if (!noCost[r.month]) t.cost = plus(t.cost, num(r.cost));
+      if (r.overhead_cost != null) t.hasSplit = true; // opt-in (8.1h): rows carry the split only when overheads are on
+      if (!noCost[r.month]) t.overhead = plus(t.overhead, num(r.overhead_cost));
       if (!r.duty_tracked) t.dutyTracked = false;
       else if (!noDuty[r.month]) t.duty = plus(t.duty, num(r.duty));
       if (!noMargin[r.month]) { t.margin = plus(t.margin, num(r.margin)); t.marginRevenue += num(r.revenue) || 0; }
@@ -142,7 +144,7 @@
       function of(missing) { return missing ? 'Complete for ' + (t.months - missing) + ' of ' + t.months + ' months' : null; }
       els.summary.replaceChildren(
         figure('Revenue', fmt(t.revenue), of(t.missingRevenue) || 'ex GST'),
-        figure('Production cost', fmt(t.cost), of(t.missingCost)),
+        figure('Production cost', fmt(t.cost), of(t.missingCost) || (t.hasSplit && t.cost != null ? fmt(t.overhead || 0) + ' of it overheads' : null)),
         // Incomplete months are left out and counted: the known months' subtotal stands, qualified.
         figure('Duty', t.dutyTracked ? fmt(t.duty) : 'Not tracked', t.dutyTracked ? of(t.missingDuty) : null),
         figure('Margin', fmt(t.margin), t.missingMargin ? of(t.missingMargin) : (t.percent == null ? null : pct(t.percent)))
@@ -228,6 +230,9 @@
         row.appendChild(el('td', null, fmt(r.revenue)));
         var cost = el('td', null, fmt(r.cost));
         if (r.cost_status !== 'actual') cost.appendChild(el('span', 'mg-flag mg-flag--inline', r.cost_status));
+        if (r.overhead_cost != null) {
+          cost.appendChild(el('span', 'mg-cost-split', fmt(r.materials_cost) + ' materials · ' + fmt(r.overhead_cost) + ' overheads'));
+        }
         row.appendChild(cost);
         row.appendChild(el('td', null, r.duty_tracked ? fmt(r.duty) : '—'));
         row.appendChild(el('td', null, fmt(r.margin) + (r.margin_percent != null ? ' · ' + pct(r.margin_percent) : '')));

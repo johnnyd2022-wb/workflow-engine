@@ -102,7 +102,10 @@ def list_worktrees() -> list[dict[str, str]]:
     repo-wide, so this doesn't need Herdr or the caller to be in a specific worktree."""
     out = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout
     worktrees = []
     current: dict[str, str] = {}
@@ -110,9 +113,9 @@ def list_worktrees() -> list[dict[str, str]]:
         if line.startswith("worktree "):
             if current:
                 worktrees.append(current)
-            current = {"path": line[len("worktree "):]}
+            current = {"path": line[len("worktree ") :]}
         elif line.startswith("branch "):
-            current["branch"] = line[len("branch "):].removeprefix("refs/heads/")
+            current["branch"] = line[len("branch ") :].removeprefix("refs/heads/")
     if current:
         worktrees.append(current)
     return worktrees
@@ -189,7 +192,9 @@ def sweep() -> tuple[dict[str, SliceStatus], str]:
             s.partial_artifacts = partial
             if partial and s.index_line.strip().lower() == "never":
                 s.computed_status = "partial"
-                s.action = f"flag only: {len(partial)} report artifact(s), no review.md, no live worktree -- looks stalled"
+                s.action = (
+                    f"flag only: {len(partial)} report artifact(s), no review.md, no live worktree -- looks stalled"
+                )
             else:
                 s.computed_status = "reviewed" if already_dated else "never"
 
@@ -267,8 +272,10 @@ def main() -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
-    print(f"feature-index sweep: {len(slices)} slices, {len(excluded)} in review, "
-          f"{sum(1 for s in slices.values() if s.computed_status == 'reviewed')} reviewed")
+    print(
+        f"feature-index sweep: {len(slices)} slices, {len(excluded)} in review, "
+        f"{sum(1 for s in slices.values() if s.computed_status == 'reviewed')} reviewed"
+    )
     if excluded:
         print("  in progress (excluded from picklist):")
         for slug in excluded:

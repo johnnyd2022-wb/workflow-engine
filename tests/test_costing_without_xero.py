@@ -276,6 +276,7 @@ def test_r1_lot_panel_says_which_batch_made_it(world, db):
     (gin,) = produced_lots(db, org.id, step.id)
     provenance = client.get(f"{API}/lots/{gin.id}/cost").get_json()["provenance"]
     assert provenance["kind"] == "batch" and provenance["href"].startswith("/core/")
+    assert provenance["href"].endswith(f"?execution={gin.source_execution_id}"), "links to that batch, not the board"
     assert client.get(f"{API}/lots/{spirit.id}/cost").get_json()["provenance"] is None, "typed by hand"
 
 

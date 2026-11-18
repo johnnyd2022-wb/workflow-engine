@@ -1,0 +1,286 @@
+# OpenAPI overlay: the production domain. Workflows, steps, batches (executions), evidence and production tasks.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  ProcessSummary:
+    type: object
+    description: A workflow (process) the organisation has defined, with how many batches are running and done.
+    additionalProperties: true
+    required: [id, name, is_draft, step_count, active_executions, completed_executions]
+    properties:
+      id: {type: string, format: uuid}
+      name: {type: string}
+      description: {type: [string, "null"]}
+      category: {type: [string, "null"]}
+      is_draft: {type: boolean, description: "A draft workflow cannot be run yet."}
+      step_count: {type: integer}
+      active_executions: {type: integer, description: "Batches of this workflow still in progress."}
+      completed_executions: {type: integer}
+      created_at: {type: [string, "null"]}
+      event_summary: {type: [object, "null"], additionalProperties: true}
+      steps:
+        type: array
+        description: Present only when `include_steps` is true.
+        items: {type: object, additionalProperties: true}
+  ExecutionStepRecord:
+    type: object
+    description: One step of a batch, with what was actually used and made.
+    additionalProperties: true
+    required: [id, step_id, step_number, status]
+    properties:
+      id: {type: string, format: uuid}
+      step_id: {type: string, format: uuid}
+      step_number: {type: integer}
+      step_name: {type: [string, "null"]}
+      status: {type: string, description: "pending, ready, in_progress, completed or skipped."}
+      actual_inputs:
+        type: array
+        description: What was consumed, as recorded by the person who did the step.
+        items: {type: object, additionalProperties: true}
+      actual_outputs:
+        type: array
+        description: What the step produced, as recorded.
+        items: {type: object, additionalProperties: true}
+      execution_data: {type: object, additionalProperties: true}
+      started_at: {type: [string, "null"]}
+      completed_at: {type: [string, "null"]}
+      step_inputs: {type: array, items: {type: object, additionalProperties: true}}
+      step_outputs: {type: array, items: {type: object, additionalProperties: true}}
+operations:
+  core_list_processes:
+    summary: List workflows
+    description: >-
+      The organisation's workflows (processes), each with its step count and how many batches of it are in
+      progress and completed. Use a workflow's id to filter the batch list or open its steps.
+    parameters:
+      - name: include_steps
+        in: query
+        description: Set to true to include each workflow's steps. Larger response.
+        schema: {type: string, enum: ["true", "false"]}
+    response:
+      description: The workflows.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [processes]
+        properties:
+          processes:
+            type: array
+            items: {$ref: "#/components/schemas/ProcessSummary"}
+      example:
+        processes:
+          - {id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88, name: Dry Gin, description: London dry gin, category: null, is_draft: false, step_count: 6, active_executions: 1, completed_executions: 14, created_at: "2026-01-12T00:00:00", event_summary: null}
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [production.workflows, production.steps]
+      related_operations: [core_get_process, core_list_executions]
+  core_get_process:
+    summary: One workflow with its steps
+    description: >-
+      A workflow's definition: its steps in order, with the inputs each step takes and the outputs it makes.
+      This is the recipe, not a record of what was made: use the batch operations for that.
+    parameters:
+      - name: process_id
+        in: path
+        description: The workflow id, from the workflow list.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The workflow.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [id, name, is_draft, steps]
+        properties:
+          id: {type: string, format: uuid}
+          name: {type: string}
+          description: {type: [string, "null"]}
+          category: {type: [string, "null"]}
+          is_draft: {type: boolean}
+          settings: {type: object, additionalProperties: true}
+          created_at: {type: [string, "null"]}
+          updated_at: {type: [string, "null"]}
+          steps:
+            type: array
+            description: The steps in order. Each lists its declared inputs and outputs.
+            items: {type: object, additionalProperties: true}
+      example:
+        id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88
+        name: Dry Gin
+        description: London dry gin
+        category: null
+        is_draft: false
+        settings: {}
+        created_at: "2026-01-12T00:00:00"
+        updated_at: "2026-02-01T00:00:00"
+        steps: []
+    x-bize:
+      kind: record
+      mcp: true
+      concepts: [production.workflows, production.steps, production.inputs_and_outputs]
+      related_operations: [core_list_processes, core_list_executions]
+  core_list_executions:
+    summary: List batches (executions)
+    description: >-
+      Batches of a workflow, newest first, each with its status, progress, current step and the steps already
+      recorded. Filter by workflow or status. With `count=1` only the total is returned. A completed batch's
+      outputs are the lots it created: follow `source_execution_id` on a lot to get back here.
+    parameters:
+      - name: process_id
+        in: query
+        description: Only batches of this workflow.
+        schema: {type: string, format: uuid}
+      - name: status
+        in: query
+        description: Only batches in this status.
+        schema: {type: string, enum: [pending, in_progress, completed, failed, cancelled]}
+      - name: count
+        in: query
+        description: Set to 1 to return only `{count}` (the number of matching batches) instead of the batches.
+        schema: {type: string, enum: ["1", "true"]}
+      - name: limit
+        in: query
+        description: Page size. Without it every matching batch is returned. Capped by the server.
+        schema: {type: integer, minimum: 1}
+      - name: cursor
+        in: query
+        description: The `next_cursor` of the previous page.
+        schema: {type: string}
+    errors: [400]
+    response:
+      description: The batches, or just `count` when `count=1`. `has_more` and `next_cursor` appear only with `limit`.
+      schema:
+        type: object
+        additionalProperties: false
+        properties:
+          count: {type: integer, description: "Only with count=1."}
+          executions:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+              required: [id, process_id, status, progress, total_steps]
+              properties:
+                id: {type: string, format: uuid}
+                process_id: {type: string, format: uuid}
+                status: {type: string, enum: [pending, in_progress, completed, failed, cancelled]}
+                started_at: {type: [string, "null"]}
+                completed_at: {type: [string, "null"]}
+                created_at: {type: [string, "null"]}
+                completed_by: {type: [string, "null"], description: "Who finished the batch."}
+                progress: {type: number, description: "Percent of steps completed."}
+                total_steps: {type: integer}
+                current_step: {type: [object, "null"], additionalProperties: true}
+                execution_steps:
+                  type: array
+                  items: {$ref: "#/components/schemas/ExecutionStepRecord"}
+                evidence: {type: array, items: {type: object, additionalProperties: true}}
+                event_summary: {type: [object, "null"], additionalProperties: true}
+          has_more: {type: boolean}
+          next_cursor: {type: [string, "null"]}
+      example:
+        executions:
+          - {id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20, process_id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88, status: in_progress, started_at: "2026-11-14T08:00:00", completed_at: null, created_at: "2026-11-14T07:55:00", completed_by: null, progress: 33.3, total_steps: 6, current_step: null, execution_steps: [], evidence: [], event_summary: null}
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [production.batches, production.steps]
+      related_operations: [core_get_execution, core_list_processes, costing_get_execution_cost]
+  core_get_execution:
+    summary: One batch with its steps
+    description: >-
+      A batch (execution) with every step, what was actually consumed and produced at each, and the evidence
+      attached. This is the record of what happened. To see the cost of the batch use the batch cost operation;
+      to see where its outputs went use the trace operations on an output lot.
+    parameters:
+      - name: execution_id
+        in: path
+        description: The batch id, from the batch list.
+        schema: {type: string, format: uuid}
+    errors: [400, 404]
+    response:
+      description: The batch.
+      schema:
+        type: object
+        additionalProperties: true
+        required: [id, process_id, status, execution_steps]
+        properties:
+          id: {type: string, format: uuid}
+          process_id: {type: string, format: uuid}
+          status: {type: string, enum: [pending, in_progress, completed, failed, cancelled]}
+          started_at: {type: [string, "null"]}
+          completed_at: {type: [string, "null"]}
+          execution_steps:
+            type: array
+            items: {$ref: "#/components/schemas/ExecutionStepRecord"}
+          evidence: {type: array, items: {type: object, additionalProperties: true}}
+      example:
+        id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20
+        process_id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88
+        status: in_progress
+        started_at: "2026-11-14T08:00:00"
+        completed_at: null
+        execution_steps: []
+        evidence: []
+    x-bize:
+      kind: record
+      mcp: true
+      concepts: [production.batches, production.inputs_and_outputs, production.intermediates]
+      related_operations: [core_list_executions, core_get_process, costing_get_execution_cost]
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  core_amend_execution_step_record:
+    summary: Amend execution step record
+  core_assign_core_task_lane:
+    summary: Assign core task lane
+  core_create_core_task:
+    summary: Create core task
+  core_create_core_task_lane:
+    summary: Create core task lane
+  core_delete_core_task:
+    summary: Delete core task
+  core_delete_core_task_lane:
+    summary: Delete core task lane
+  core_get_task_configuration:
+    summary: Get task configuration
+  core_list_core_task_lanes:
+    summary: List core task lanes
+  core_list_core_tasks:
+    summary: List core tasks
+  core_reorder_core_task_lanes:
+    summary: Reorder core task lanes
+  core_save_task_configuration:
+    summary: Save task configuration
+  core_update_core_task:
+    summary: Update core task
+  core_update_core_task_lane:
+    summary: Update core task lane
+  operational_cases_operational_cases_api_create_from_finding:
+    summary: Create from finding
+  operational_cases_operational_cases_api_get_case:
+    summary: Get case
+  operational_cases_operational_cases_api_get_case_history_events:
+    summary: Get case history events
+  operational_cases_operational_cases_api_list_case_events:
+    summary: List case events
+  operational_cases_operational_cases_api_list_cases:
+    summary: List cases
+  operational_cases_operational_cases_api_patch_case:
+    summary: Patch case
+  operational_cases_operational_cases_api_refresh_source:
+    summary: Refresh source
+  operational_cases_operational_cases_api_source_status_batch:
+    summary: Source status batch
+  operational_cases_operational_cases_api_transition_case:
+    summary: Transition case
+  process_templates_process_templates_api_copy_process_template:
+    summary: Copy process template
+  process_templates_process_templates_api_get_process_template:
+    summary: Get process template
+  process_templates_process_templates_api_list_process_templates:
+    summary: List process templates
+  process_templates_process_templates_api_list_starter_packs:
+    summary: List starter packs
+  record_step_get_record_options:
+    summary: Get record options

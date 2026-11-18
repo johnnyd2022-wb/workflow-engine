@@ -653,6 +653,14 @@
       }
     });
     
+    // Where to go after signing in. An AI assistant's connection request waits in the server-side
+    // session; the sign-in answer carries it back as `next`. Only a path on this site's own
+    // /oauth/authorize is ever followed, never a full URL, and nothing is read from this page's address.
+    function postLoginUrl(data) {
+      const next = data && data.next;
+      return (typeof next === 'string' && next.indexOf('/oauth/authorize?') === 0 && !/[\\\r\n]/.test(next)) ? next : '/dashboard';
+    }
+
     // "Sign in" links (e.g. after accepting an invite) open the sign-in form directly.
     document.addEventListener('DOMContentLoaded', function() {
       const params = new URLSearchParams(window.location.search);
@@ -982,7 +990,7 @@
             closeModal('loginModal');
             showSuccessMessage('Signed in successfully!');
             setTimeout(() => {
-              window.location.href = '/dashboard';
+              window.location.href = postLoginUrl(data);
             }, 500);
           } else {
             errorDiv.textContent = data.error || 'Invalid verification code';
@@ -1060,7 +1068,7 @@
               closeModal('loginModal');
               showSuccessMessage('Signed in successfully!');
               setTimeout(() => {
-                window.location.href = '/dashboard';
+                window.location.href = postLoginUrl(data);
               }, 500);
             }
           } else {

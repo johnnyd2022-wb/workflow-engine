@@ -30,3 +30,21 @@ variable "routes" {
     error_message = "At least one route is required."
   }
 }
+
+variable "public_paths" {
+  description = <<-EOT
+    "host/path" entries that skip Access, for clients that cannot sign in through a browser
+    (an AI assistant's background calls to an OAuth or MCP endpoint). Each gets its own Access
+    application with a bypass policy; a path application wins over its host's founders-only one,
+    so the rest of the host stays behind Access. A trailing /* covers everything under a path.
+    The host must be published by this module.
+  EOT
+  type        = list(string)
+  default     = []
+  validation {
+    condition = alltrue([
+      for entry in var.public_paths : can(regex("^[a-z0-9.-]+/[A-Za-z0-9._~/-]+(/\\*)?$", entry))
+    ])
+    error_message = "Each public path is host/path, e.g. test.biz-e.app/oauth/token or mcp.biz-e.app/.well-known/*."
+  }
+}

@@ -185,7 +185,34 @@ RULES = (
         ("app/features/process_templates/**",),
         ("tests/test_process_templates.py", "tests/test_process_design.py"),
     ),
+    Rule(
+        "Public MCP server",
+        ("bize_mcp/**", "docs/knowledge/**"),
+        (
+            "tests/mcp_server/test_discover_docs.py",
+            "tests/mcp_server/test_error_mapping.py",
+            "tests/mcp_server/test_execute.py",
+            "tests/mcp_server/test_isolation.py",
+            "tests/mcp_server/test_protocol.py",
+            "tests/mcp_server/test_integration.py",
+            "tests/mcp_server/test_me_endpoint.py",
+            "tests/mcp_server/test_review_findings.py",
+            "tests/mcp_server/test_security.py",
+            "tests/mcp_server/test_select.py",
+        ),
+    ),
     Rule("Demo data product", ("app/features/demo_data/**",), ("tests/test_demo_data.py",)),
+    Rule(
+        "OpenAPI document",
+        ("app/api/openapi/**", "docs/openapi.json", "scripts/check_openapi.py"),
+        (
+            "tests/openapi/test_document.py",
+            "tests/openapi/test_served.py",
+            "tests/openapi/test_coverage.py",
+            "tests/openapi/test_responses.py",
+            "tests/test_access_policy.py",
+        ),
+    ),
     Rule(
         "Observability",
         ("app/observability/**",),
@@ -470,7 +497,9 @@ def main() -> int:
     )
     parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
     parser.add_argument("--fast-eligible", action="store_true", help="Exit 0 only for an approved ci::fast MR diff.")
-    parser.add_argument("--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements.")
+    parser.add_argument(
+        "--targets-file", type=Path, help="Read final pytest targets, one per line, for runtime requirements."
+    )
     args = parser.parse_args()
 
     if args.fast_eligible and not fast_requested():

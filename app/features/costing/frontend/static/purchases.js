@@ -61,6 +61,7 @@
     root.dataset.bound = '1';
     var canManage = root.dataset.canManage === 'true';
     var canAdjust = root.dataset.canAdjust === 'true';
+    var overheadsOn = root.dataset.overheads === 'true'; // 8.1h: freight can be added to the cost of stock
     var list = root.querySelector('[data-purchases-list]');
     var state = root.querySelector('[data-purchases-state]');
     var errorBox = root.querySelector('[data-purchases-error]');
@@ -213,6 +214,7 @@
       if (card.document.source === 'xero_bill') wrap.appendChild(el('span', 'pu-badge', 'Bill'));
       else if (card.document.source === 'xero_bill_credit') wrap.appendChild(el('span', 'pu-badge', 'Supplier credit'));
       else if (card.document.kind === 'refund') wrap.appendChild(el('span', 'pu-badge', 'Refund'));
+      if (card.freight) wrap.appendChild(el('span', 'pu-badge pu-badge--ok', 'Freight'));
       if (card.state === 'partly_recorded') wrap.appendChild(el('span', 'pu-badge', fmt(card.open) + ' still to record'));
       if (card.state === 'recorded') {
         wrap.appendChild(el('span', 'pu-badge pu-badge--ok', card.auto_recorded ? 'Recorded by a rule' : 'Recorded'));
@@ -266,6 +268,10 @@
       if (canAdjust) btn(card.prefill && card.prefill.source === 'rule' ? 'OK' : 'Record stock', true, function (ev) { openRecord(card, ev); });
       if (!compact && canAdjust) btn('Already in stock', false, function (ev) { openPick(card, 'link', ev); });
       btn('Not stock', false, function () { act(card, 'not-stock'); });
+      if (overheadsOn && !compact) {
+        var freight = btn('It’s freight', false, function () { act(card, 'freight'); });
+        freight.title = 'Add this to the cost of the other stock on the same purchase';
+      }
       btn('Skip', false, function () { act(card, 'skip'); });
       return wrap;
     }
@@ -325,8 +331,9 @@
       busy(node, true);
       try {
         await post(API + '/' + card.line_id + '/' + action, body);
-        var undo = action === 'skip' || action === 'not-stock';
-        showToast(action === 'skip' ? 'Skipped' : action === 'not-stock' ? 'Marked not stock' : 'Done',
+        var undo = action === 'skip' || action === 'not-stock' || action === 'freight';
+        showToast(action === 'skip' ? 'Skipped' : action === 'not-stock' ? 'Marked not stock'
+          : action === 'freight' ? 'Marked as freight' : 'Done',
           undo ? { label: 'Undo', run: function () { act(card, 'reopen'); } } : null);
         await load();
       } catch (err) {
@@ -415,18 +422,21 @@
         var amount = input('text', cents(r.amount), { inputmode: 'decimal', 'aria-label': 'Amount', placeholder: 'the rest' });
         var batch = input('text', '', { 'aria-label': 'Supplier batch number' });
         var expiry = input('date', '', { 'aria-label': 'Expiry date' });
+        var pack = input('text', r.pack || '', { 'aria-label': 'Pack size', placeholder: '24 × 200 mL', autocomplete: 'off' });
         box.appendChild(field('What', name));
         box.appendChild(field('Quantity', qty));
         box.appendChild(field('Unit', unit));
         box.appendChild(field('Amount', amount));
         box.appendChild(field('Batch no.', batch));
         box.appendChild(field('Expiry', expiry));
+        box.appendChild(field('Pack size', pack));
         if ((r.ask || []).indexOf('batch_number') >= 0) batch.required = true;
         box.read = function () {
           return {
             name: name.value.trim(), quantity: qty.value.trim(), unit: unit.value.trim(), amount: amount.value.trim(),
             inventory_type: r.inventory_type || 'raw_material',
-            supplier_batch_number: batch.value.trim() || undefined, expiry_date: expiry.value || undefined
+            supplier_batch_number: batch.value.trim() || undefined, expiry_date: expiry.value || undefined,
+            pack: pack.value.trim() || undefined
           };
         };
         amount.addEventListener('input', updateSum);

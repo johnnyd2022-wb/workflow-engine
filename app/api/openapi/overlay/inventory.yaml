@@ -1,0 +1,464 @@
+# OpenAPI overlay: the inventory domain. Stock on hand, lots, holds, sites, locations and stocktakes.
+# What the code cannot say about a route: its query parameters, response, concepts and an example.
+# Format and rules: app/api/openapi/overlay.py. Documented operations come first; below the marker are
+# generated one-line summaries that keep tests/openapi/test_coverage.py green until a route is documented.
+schemas:
+  InventoryLot:
+    type: object
+    description: >-
+      One stock line (a lot): a raw material, a work-in-progress intermediate or a finished product.
+      Fields not listed here may appear; the ones listed are always present.
+    additionalProperties: true
+    required: [id, name, inventory_type, quantity, unit]
+    properties:
+      id: {type: string, format: uuid}
+      name: {type: string, description: "The material or product name."}
+      inventory_type:
+        type: string
+        description: Where the lot sits in production, such as a raw material, work in progress or a final product.
+      quantity:
+        type: string
+        description: >-
+          Amount on hand as a decimal string. This is on-hand stock, not what is free to use: see
+          `committed` and `quality_hold`.
+      unit: {type: string, description: "The unit `quantity` is in, such as kg or L."}
+      created_at: {type: string, description: "When the lot was created (ISO 8601). Absent in the compact view."}
+      display_label: {type: ["string", "null"], description: "Only in the compact view."}
+      expiry_date: {type: [string, "null"], description: "The lot's expiry date, or null when it has none."}
+      supplier: {type: [string, "null"]}
+      supplier_batch_number: {type: [string, "null"]}
+      barcode: {type: [string, "null"]}
+      site_id: {type: [string, "null"], description: "The site the lot is held at."}
+      location_id: {type: [string, "null"], description: "The stock area inside the site."}
+      location_name: {type: [string, "null"]}
+      process_name: {type: [string, "null"], description: "The workflow that produced the lot, when it was produced."}
+      source_execution_id: {type: [string, "null"], description: "The batch that produced the lot."}
+      source_execution_step_id: {type: [string, "null"]}
+      source_output_id: {type: [string, "null"]}
+      source_step_name: {type: [string, "null"]}
+      producing_step_id: {type: [string, "null"]}
+      producing_step_name: {type: [string, "null"]}
+      ready_date_display: {type: [string, "null"], description: "When the lot becomes usable, when it is not yet."}
+      quality_hold:
+        type: [object, "null"]
+        description: The open quality hold on this lot, or null. A lot on hold is not usable whatever its quantity.
+        additionalProperties: true
+      committed:
+        type: array
+        description: Planned batches that already hold some of this lot.
+        items: {type: object, additionalProperties: true}
+      system_findings:
+        type: array
+        description: Things that need attention on this lot, such as expired stock.
+        items: {type: object, additionalProperties: true}
+      event_summary: {type: [object, "null"], additionalProperties: true}
+      extra_data: {type: [object, "null"], additionalProperties: true}
+  LotHold:
+    type: object
+    additionalProperties: false
+    required: [id, inventory_item_id, reason, open]
+    properties:
+      id: {type: string, format: uuid}
+      inventory_item_id: {type: string, format: uuid}
+      reason: {type: string}
+      source_hold_id: {type: [string, "null"], description: "The hold this one was placed because of."}
+      placed_by: {type: [string, "null"]}
+      placed_at: {type: [string, "null"]}
+      released_by: {type: [string, "null"]}
+      released_at: {type: [string, "null"]}
+      release_note: {type: [string, "null"]}
+      open: {type: boolean, description: "True while the hold is still in force."}
+  StockPositionLot:
+    type: object
+    additionalProperties: false
+    required: [id, name, batch, stage, quantity, unit]
+    properties:
+      id: {type: string, format: uuid}
+      name: {type: string}
+      batch: {type: [string, "null"]}
+      stage: {type: string, description: "Finished or In progress."}
+      quantity: {type: string}
+      unit: {type: string}
+      measure: {type: [string, "null"], description: "The regulated measure of this lot (for example litres of absolute alcohol), when the organisation tracks one."}
+      detail: {type: [string, "null"]}
+  StockPositionPlace:
+    type: object
+    additionalProperties: false
+    required: [location_id, name, inside_licensed_area, lots, total_measure]
+    properties:
+      location_id: {type: [string, "null"]}
+      name: {type: string}
+      inside_licensed_area: {type: boolean}
+      total_measure: {type: string}
+      lots:
+        type: array
+        items: {$ref: "#/components/schemas/StockPositionLot"}
+  StocktakeReconciliationRow:
+    type: object
+    additionalProperties: false
+    required: [product, unit, expected, explained, removed, losses]
+    properties:
+      product: {type: string}
+      unit: {type: string}
+      opening: {type: [string, "null"], description: "What the previous stocktake counted, or null when there is none."}
+      produced_and_in: {type: [string, "null"], description: "The balancing figure, when there is an opening count."}
+      removed: {type: string, description: "Removals less returns since the last stocktake."}
+      losses: {type: string, description: "Recorded wastage since the last stocktake."}
+      expected: {type: string, description: "What the books say should be on hand."}
+      counted: {type: [string, "null"], description: "What was counted, or null while any line is uncounted."}
+      variance: {type: [string, "null"], description: "Counted minus expected, or null while any line is uncounted."}
+      explained: {type: string, description: "The part of the variance already resolved with a reason."}
+      declared:
+        description: What was declared for the same stretch (for excise, the lodged figure), when the product has one.
+        type: [object, string, number, "null"]
+        additionalProperties: true
+operations:
+  core_list_inventory:
+    summary: List stock lots on hand
+    description: >-
+      Every stock line the organisation holds with a quantity above zero: raw materials, work in progress and
+      finished products, each with its supplier, batch, expiry, site, any open quality hold and the planned
+      batches that already hold some of it. `quantity` is what is on hand. It is not what is free to use: a lot
+      on hold, expired, not yet ready, or committed to a planned batch is on hand but not available. Use this to
+      find a lot's id for the trace, cost and hold operations.
+    parameters:
+      - name: type
+        in: query
+        description: Only lots of this inventory type (for example a raw material or a final product).
+        schema: {type: string}
+      - name: process_id
+        in: query
+        description: Only lots produced by this workflow.
+        schema: {type: string, format: uuid}
+      - name: site_id
+        in: query
+        description: Only lots held at this site.
+        schema: {type: string, format: uuid}
+      - name: view
+        in: query
+        description: "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present."
+        schema: {type: string, enum: [compact]}
+      - name: limit
+        in: query
+        description: Page size. Without it the whole list is returned. Capped by the server.
+        schema: {type: integer, minimum: 1}
+      - name: cursor
+        in: query
+        description: The `next_cursor` of the previous page, to read the page after it.
+        schema: {type: string}
+    errors: [400]
+    response:
+      description: The lots, newest first. `has_more` and `next_cursor` appear only when `limit` was given.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [inventory_items]
+        properties:
+          inventory_items:
+            type: array
+            items: {$ref: "#/components/schemas/InventoryLot"}
+          has_more: {type: boolean}
+          next_cursor: {type: [string, "null"]}
+      example:
+        inventory_items:
+          - id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11
+            name: Juniper berries
+            inventory_type: raw_material
+            quantity: "12.5"
+            unit: kg
+            created_at: "2026-11-02T09:15:00"
+            expiry_date: "2027-06-30"
+            supplier: Island Botanicals
+            supplier_batch_number: JB-2211
+            site_id: null
+            quality_hold: null
+            committed: []
+            system_findings: []
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [inventory.lots, inventory.availability, inventory.units_and_packs]
+      related_operations: [lot_holds_get_lot_holds, core_trace_inventory_backward, costing_get_lot_cost, stocktake_get_stock_position]
+  stocktake_get_stock_position:
+    summary: Stock position by place and batch
+    description: >-
+      Finished goods and work in progress with a quantity above zero, grouped by the place they are held
+      (inside or outside the licensed area) and by batch, as at today. Built for showing a regulator what is
+      on the premises. Raw materials are not counted. Where the organisation tracks a regulated measure the
+      lots carry it and `declared` lists the periods already declared.
+    parameters:
+      - name: format
+        in: query
+        description: Set to csv to download the table as CSV instead of JSON. Leave unset for JSON.
+        schema: {type: string, enum: [csv]}
+    response:
+      description: The position as at today.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [as_at, labels, places, declared]
+        properties:
+          as_at: {type: string, description: "The date (YYYY-MM-DD)."}
+          labels:
+            type: object
+            description: Names for the regulated measure, or an empty object when the organisation tracks none.
+            additionalProperties: true
+          places:
+            type: array
+            items: {$ref: "#/components/schemas/StockPositionPlace"}
+          declared:
+            type: array
+            description: Periods already declared, newest first.
+            items: {type: object, additionalProperties: true}
+      example:
+        as_at: "2026-11-16"
+        labels: {}
+        declared: []
+        places:
+          - location_id: null
+            name: Main
+            inside_licensed_area: true
+            total_measure: "0"
+            lots:
+              - {id: 0b7a3a1e-6a38-47d6-8c8e-3a6c3a1f2b44, name: Dry Gin, batch: DG-014, stage: Finished, quantity: "240", unit: bottle, measure: null, detail: null}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [inventory.availability, inventory.sites_and_locations, compliance.excise_position]
+      related_operations: [core_list_inventory, stocktake_get_stocktake_reconciliation]
+  stocktake_get_stocktake_reconciliation:
+    summary: Reconcile a stocktake against the books
+    description: >-
+      For one stocktake, per product since the previous completed stocktake: opening plus what came in, less
+      removals and losses, equals what is expected; then what was counted, the variance, and how much of it is
+      already explained. Biz-E computes this, so quote its figures instead of redoing the sums. A count that is
+      not finished leaves `counted` and `variance` null for the product. Where a compliance module tracks
+      regulated flows, only the controlled area is counted.
+    parameters:
+      - name: stocktake_id
+        in: path
+        description: The stocktake to reconcile.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: One row per product.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [since, to, tracks_flows, labels, products]
+        properties:
+          since: {type: [string, "null"], description: "The date of the previous completed stocktake, or null for the first."}
+          to: {type: string, description: "The date of this stocktake."}
+          tracks_flows: {type: boolean, description: "True when removals come from a compliance module's recorded flows."}
+          labels: {type: object, additionalProperties: true}
+          products:
+            type: array
+            items: {$ref: "#/components/schemas/StocktakeReconciliationRow"}
+      example:
+        since: "2026-05-14"
+        to: "2026-11-14"
+        tracks_flows: false
+        labels: {}
+        products:
+          - {product: Dry Gin, unit: bottle, opening: "180", produced_and_in: "300", removed: "220", losses: "2", expected: "258", counted: "256", variance: "-2", explained: "0", declared: null}
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [inventory.stocktakes, compliance.excise_position]
+      related_operations: [stocktake_get_stock_position, compliant_compliant_api_get_excise_position]
+  lot_holds_list_open_holds:
+    summary: Lots currently on quality hold
+    description: >-
+      Every lot on hold right now, newest hold first, with the lot's name and quantity. A lot on hold cannot be
+      used, moved or sold until the hold is released, whatever its quantity.
+    response:
+      description: The open holds.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [holds]
+        properties:
+          holds:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: [id, inventory_item_id, reason, open, lot]
+              properties:
+                id: {type: string, format: uuid}
+                inventory_item_id: {type: string, format: uuid}
+                reason: {type: string}
+                source_hold_id: {type: [string, "null"]}
+                placed_by: {type: [string, "null"]}
+                placed_at: {type: [string, "null"]}
+                released_by: {type: [string, "null"]}
+                released_at: {type: [string, "null"]}
+                release_note: {type: [string, "null"]}
+                open: {type: boolean}
+                lot:
+                  type: object
+                  additionalProperties: false
+                  required: [name, quantity, unit]
+                  properties:
+                    name: {type: string}
+                    quantity: {type: string}
+                    unit: {type: string}
+      example:
+        holds:
+          - {id: 3d0a7b1e-2c43-4c1b-8f5e-6a2d9e4b7c10, inventory_item_id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11, reason: Failed ABV check, source_hold_id: null, placed_by: null, placed_at: "2026-11-10T08:00:00+00:00", released_by: null, released_at: null, release_note: null, open: true, lot: {name: Dry Gin DG-014, quantity: "240", unit: bottle}}
+    x-bize:
+      kind: list
+      mcp: true
+      concepts: [inventory.holds, inventory.availability]
+      related_operations: [lot_holds_get_lot_holds, core_list_inventory]
+  lot_holds_get_lot_holds:
+    summary: Quality holds on one lot
+    description: >-
+      The open hold on a lot (if any), its full hold history, and the lots it was made from that are or were
+      also affected. Use it to answer whether a lot is usable and why not.
+    parameters:
+      - name: item_id
+        in: path
+        description: The lot (inventory item) id, from the inventory list.
+        schema: {type: string, format: uuid}
+    errors: [404]
+    response:
+      description: The lot's holds.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [open, history, made_from]
+        properties:
+          open:
+            description: The hold in force now, or null.
+            oneOf:
+              - {$ref: "#/components/schemas/LotHold"}
+              - {type: "null"}
+          history:
+            type: array
+            items: {$ref: "#/components/schemas/LotHold"}
+          made_from:
+            type: array
+            description: Lots this one was made from, with their hold status.
+            items: {type: object, additionalProperties: true}
+      example:
+        open: null
+        history: []
+        made_from: []
+    x-bize:
+      kind: record
+      mcp: true
+      concepts: [inventory.holds, inventory.availability]
+      related_operations: [lot_holds_list_open_holds, core_trace_inventory_backward]
+  core_list_expired_materials:
+    summary: Expired raw materials and what was made with them
+    description: >-
+      Raw materials that are past their expiry date and still in stock, the finished and intermediate lots
+      made with them, and the connections between them. Biz-E walks the production graph to find impacted
+      lots, so use this instead of matching names yourself. The result is cached per organisation until
+      midnight (New Zealand time) or the next change to stock, batches or workflows.
+    response:
+      description: The expired materials and the lots they reached.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [expired_raw_materials, impacted_items, connections]
+        properties:
+          expired_raw_materials:
+            type: array
+            items: {type: object, additionalProperties: true}
+          impacted_items:
+            type: array
+            items: {type: object, additionalProperties: true}
+          connections:
+            type: array
+            items: {type: object, additionalProperties: true}
+      example:
+        expired_raw_materials: []
+        impacted_items: []
+        connections: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [inventory.expiry, traceability.forward]
+      related_operations: [core_list_inventory, core_trace_raw_material]
+  core_list_output_ready_date:
+    summary: Outputs that are not yet usable
+    description: >-
+      Finished and intermediate lots whose ready date has not arrived (for example a spirit resting or a
+      ferment maturing). Such a lot is on hand but not available until its ready date. Biz-E computes the date
+      from the step that produced it, so quote it rather than estimating.
+    response:
+      description: The lots still waiting for their ready date.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [output_ready_date_items]
+        properties:
+          output_ready_date_items:
+            type: array
+            items: {type: object, additionalProperties: true}
+      example:
+        output_ready_date_items: []
+    x-bize:
+      kind: calculation
+      mcp: true
+      concepts: [inventory.ready_dates, inventory.availability]
+      related_operations: [core_list_inventory, core_list_expired_materials]
+  # ---- skeleton summaries: generated starting points, replace as a route is documented ----
+  core_create_core_supplier:
+    summary: Create core supplier
+  core_delete_core_supplier:
+    summary: Delete core supplier
+  core_import_core_suppliers_from_inventory:
+    summary: Import core suppliers from inventory
+  core_list_core_suppliers:
+    summary: List core suppliers
+  core_update_core_supplier:
+    summary: Update core supplier
+  go_live_get_go_live:
+    summary: Get go live
+  go_live_set_go_live_date:
+    summary: Set go live date
+  lot_holds_place_lot_hold:
+    summary: Place lot hold
+  lot_holds_release_lot_hold:
+    summary: Release lot hold
+  site_transfers_detail:
+    summary: Get detail
+  site_transfers_dispatch:
+    summary: Dispatch
+  site_transfers_list_transfers:
+    summary: List transfers
+  site_transfers_options:
+    summary: Get options
+  site_transfers_receive:
+    summary: Receive
+  sites_configure_sites:
+    summary: Configure sites
+  sites_create_site:
+    summary: Create site
+  sites_list_sites:
+    summary: List sites
+  sites_site_position:
+    summary: Get site position
+  sites_update_site:
+    summary: Update site
+  stock_locations_create_location:
+    summary: Create location
+  stock_locations_list_locations:
+    summary: List locations
+  stock_locations_move_stock:
+    summary: Move stock
+  stocktake_complete_stocktake:
+    summary: Complete stocktake
+  stocktake_count_stocktake_line:
+    summary: Count stocktake line
+  stocktake_create_stocktake:
+    summary: Create stocktake
+  stocktake_get_stocktake:
+    summary: Get stocktake
+  stocktake_list_stocktakes:
+    summary: List stocktakes
+  stocktake_resolve_stocktake_line:
+    summary: Resolve stocktake line

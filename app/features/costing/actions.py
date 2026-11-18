@@ -8,13 +8,14 @@ that has been acted on. Callers own the commit; every action locks its line.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.utils.packs import COUNTED_UNITS, PACK_KEY, clean_pack, describe_pack, lot_pack, parse_pack
 from app.core.utils.time import utc_now
 from app.features.costing.models import (
     DIRECT_KINDS,
@@ -223,6 +224,10 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
             raise CostingError("Each row needs a name and a unit")
         if inventory_type not in RECORDABLE_TYPES:
             raise CostingError("inventory_type must be raw_material or final_product")
+        try:
+            pack = clean_pack(row.get("pack"))  # "24 x 200 mL": lets steps use the case by the bottle
+        except ValueError as error:
+            raise CostingError(str(error)) from None
         parsed.append(
             (
                 row,
@@ -231,6 +236,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
                 inventory_type,
                 parse_amount(row.get("quantity"), "Quantity", allow_zero=False),
                 parse_amount(row.get("amount"), "Amount", allow_zero=True),
+                pack,
             )
         )
     total = sum((p[5] for p in parsed), ZERO)
@@ -238,7 +244,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
         raise CostingError(f"Rows total {total}, more than the {remaining} left on this purchase")
 
     repo = InventoryRepository(db)
-    for row, name, unit, inventory_type, quantity, amount in parsed:
+    for row, name, unit, inventory_type, quantity, amount, pack in parsed:
         try:
             item = repo.create_inventory_item(
                 org_id=org_id,
@@ -252,6 +258,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
                 expiry_date=_date(row.get("expiry_date")),
                 location_id=_uuid(row.get("location_id")) if row.get("location_id") else None,
                 site_id=_uuid(row.get("site_id")) if row.get("site_id") else None,
+                extra_data={PACK_KEY: pack} if pack else None,
                 commit=False,
             )
         except ValueError as error:
@@ -274,6 +281,14 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
     derive_state(db, line)
     db.flush()
     return line
+
+
+def _pack_suggestion(name, unit) -> str | None:
+    """A pack read from the item's name ("Tonic 24 x 200ml"), offered for counted stock only. The
+    person confirms or edits it in the record dialog; nothing is stored until they save."""
+    if unit and str(unit).strip().lower() not in COUNTED_UNITS:
+        return None
+    return describe_pack(parse_pack(name))
 
 
 def _date(raw) -> date | None:
@@ -444,9 +459,34 @@ def not_stock(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     return line
 
 
+def mark_freight(db: Session, org_id: UUID, line_id) -> PurchaseLine:
+    """Mark a line as freight (8.1h): its whole amount leaves To record and is spread, as landed
+    cost, over the stock recorded from the same purchase. Only while overheads are on and nothing
+    has been recorded against the line. Reopen undoes it."""
+    from app.features.costing.service import get_settings
+
+    if not get_settings(db, org_id).get("include_overheads"):
+        raise CostingError("Turn on overheads in the Costs settings to add freight to the cost of stock")
+    line = get_line(db, org_id, line_id)
+    _, remaining = _actionable(db, line)
+    if line.state not in ("open", "skipped", "not_stock") or line_allocations(
+        db, line, statuses=("active", "orphaned")
+    ):
+        raise CostingError("Stock has already been recorded against this purchase line")
+    if _d(line.amount_ex_tax) <= 0:
+        raise CostingError("Only money spent can be freight")
+    line.freight = True
+    line.not_stock_amount = _d(line.not_stock_amount) + remaining
+    derive_state(db, line)
+    db.flush()
+    return line
+
+
 def skip(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
+    if line.freight:
+        raise CostingError("This line is marked as freight; undo that first")
     line.state = "skipped"
     db.flush()
     return line
@@ -456,6 +496,7 @@ def reopen(db: Session, org_id: UUID, line_id) -> PurchaseLine:
     line = get_line(db, org_id, line_id)
     _actionable(db, line)
     line.not_stock_amount = ZERO
+    line.freight = False
     line.state = "open"
     derive_state(db, line)
     db.flush()
@@ -724,6 +765,7 @@ def card(db: Session, line: PurchaseLine, doc: PurchaseDocument, *, rules=None, 
         "not_stock_amount": str(_q(_d(line.not_stock_amount))),
         "state": line.state,
         "review_reason": line.review_reason,
+        **({"freight": True} if line.freight else {}),  # 8.1h; absent unless marked
         "allocations": [
             {
                 "id": str(a.id),
@@ -941,19 +983,23 @@ def last_time_index(db: Session, org_id: UUID) -> dict[str, list]:
     return index
 
 
-def _settle_rounding(rows: list, residual: Decimal) -> None:
-    """Make share rows add up to the line exactly. A shortfall goes to the last row; an excess comes
-    off the largest rows first, never taking a row below zero."""
-    if residual >= 0:
-        rows[-1][1] += residual
-        return
-    owed = -residual
-    for row in sorted(rows, key=lambda r: r[1], reverse=True):
-        take = min(row[1], owed)
-        row[1] -= take
-        owed -= take
-        if owed <= 0:
-            return
+def _split_in_cents(exact: list, total: Decimal) -> list:
+    """Round shares to cents so they add up to ``total`` exactly and none goes negative: each takes
+    its whole cents, the cents left over go to the largest remainders, and any part of a cent in
+    ``total`` itself goes to the largest row."""
+    floors = [(x * 100).to_integral_value(rounding=ROUND_FLOOR) / 100 for x in exact]
+    spare = int(((total - sum(floors, ZERO)) * 100).to_integral_value(rounding=ROUND_FLOOR))
+    order = sorted(range(len(exact)), key=lambda i: (exact[i] - floors[i], -i), reverse=True)
+    for i in order[:spare]:
+        floors[i] += Decimal("0.01")
+    if floors:
+        biggest = max(range(len(floors)), key=lambda i: floors[i])
+        floors[biggest] += total - sum(floors, ZERO)
+    return [_q(x) for x in floors]
+
+
+def _cents(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def prefill(
@@ -973,22 +1019,18 @@ def prefill(
     rules = active_rules(db, line.org_id) if rules is None else rules
     rule = winner(rules, line.account_code, doc.payee_name, line.description)
     if rule is not None and rule.treatment == "stock" and rule.template:
-        rows, used, rest_index = [], ZERO, None
-        for i, t in enumerate(rule.template):
-            if t.get("share") == "rest":
-                amount = None
-                rest_index = i
-            else:
-                amount = _q(remaining * _d(t["share"]) / 100)
-                used += amount
-            rows.append([t, amount])
-        if rest_index is not None:
-            rows[rest_index][1] = max(ZERO, remaining - used)
-            # Shares just under 100% can round up past the line (six 16.5% rows on $0.01); the excess
-            # comes back off the largest rows so the rows still add up to the line.
-            _settle_rounding(rows, remaining - used - rows[rest_index][1])
-        elif rows and sum((_d(t["share"]) for t, _ in rows), ZERO) == 100:
-            _settle_rounding(rows, remaining - used)  # shares cover the line: rounding must not leave a gap
+        # Suggestions in cents that add up: each share's exact amount, the rest row taking what's
+        # left, split by largest remainder (see _split_in_cents). When the shares don't cover the
+        # whole line, the uncovered part is a phantom row that stays open for a person.
+        exact = [None if t.get("share") == "rest" else remaining * _d(t["share"]) / 100 for t in rule.template]
+        priced = sum((x for x in exact if x is not None), ZERO)
+        leftover = max(ZERO, remaining - priced)
+        if any(x is None for x in exact):
+            rest_count = sum(1 for x in exact if x is None)
+            exact = [leftover / rest_count if x is None else x for x in exact]
+            leftover = ZERO
+        amounts = _split_in_cents(exact + [leftover], remaining)[: len(exact)]
+        rows = [[t, amount] for t, amount in zip(rule.template, amounts, strict=True)]
         out = []
         for t, amount in rows:
             amount = amount if amount is not None else ZERO
@@ -996,6 +1038,8 @@ def prefill(
             if mode == "fixed":
                 quantity = str(_d(t["quantity"]))
             elif mode == "from_price" and _d(t.get("unit_price")) > 0:
+                if amount <= 0 and len(rows) > 1:
+                    continue  # a share that came to $0 in cents buys nothing: no row to fill in
                 quantity = str(_q(amount / _d(t["unit_price"])))
             else:
                 quantity = None
@@ -1006,6 +1050,7 @@ def prefill(
                     "unit": t["unit"],
                     "quantity": quantity,
                     "amount": str(_q(amount)),
+                    "pack": _pack_suggestion(t["name"], t["unit"]),
                     "ask": _ask_flags(t),
                 }
             )
@@ -1024,8 +1069,15 @@ def prefill(
                     InventoryItem.org_id == line.org_id, InventoryItem.id.in_([a.inventory_item_id for a in allocs])
                 )
             }
+            # Suggestions read in cents ("277.42", not "277.4221"). When last time covered the
+            # whole purchase, the last row takes the exact remainder so this one does too.
+            exact = [remaining * _d(a.amount) / _d(prev.amount_ex_tax) for a in allocs]
+            if allocs and sum((_d(a.amount) for a in allocs), ZERO) == _d(prev.amount_ex_tax):
+                amounts = _split_in_cents(exact, remaining)
+            else:
+                amounts = [_cents(x) for x in exact]
             out = []
-            for a in allocs:
+            for a, amount in zip(allocs, amounts, strict=True):
                 item = items[a.inventory_item_id]
                 out.append(
                     {
@@ -1033,7 +1085,8 @@ def prefill(
                         "inventory_type": item.inventory_type,
                         "unit": item.unit,
                         "quantity": str(_d(a.quantity)),
-                        "amount": str(_q(remaining * _d(a.amount) / _d(prev.amount_ex_tax))),
+                        "amount": str(_q(amount)),
+                        "pack": describe_pack(lot_pack(item)) or _pack_suggestion(item.name, item.unit),
                         "ask": [],
                     }
                 )
@@ -1054,6 +1107,7 @@ def prefill(
                 "unit": None,
                 "quantity": None if quantity is None else str(quantity),
                 "amount": str(_q(remaining)),
+                "pack": _pack_suggestion(name, None),
                 "ask": (["unit"] if name else ["name", "unit"])
                 if quantity is not None
                 else ["name", "unit", "quantity"],

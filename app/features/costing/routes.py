@@ -17,7 +17,7 @@ from app.core.db import db_session
 from app.core.security.access_policy import has_permission
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth, requires_permission
-from app.features.costing import FEATURE_KEY, duty_today, service
+from app.features.costing import FEATURE_KEY, duty_today, overheads, service
 from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
 from app.observability import get_logger
@@ -163,12 +163,70 @@ def get_settings():
     return jsonify(service.get_settings(db_session, _org()))
 
 
+@costing_bp.route(f"{API}/materials", methods=["GET"])
+@requires_auth
+def list_materials():
+    from app.features.costing.price_history import list_materials as fetch_materials
+
+    return jsonify({"materials": fetch_materials(db_session, _org())})
+
+
+@costing_bp.route(f"{API}/materials/<path:material>/history", methods=["GET"])
+@requires_auth
+def get_material_history(material):
+    from app.features.costing.price_history import material_history
+
+    return jsonify(material_history(db_session, _org(), material, request.args.get("from"), request.args.get("to")))
+
+
 @costing_bp.route(f"{API}/settings", methods=["PUT"])
 @requires_auth
 def put_settings():
     result = service.set_settings(db_session, _org(), **_body())
     db_session.commit()
     return jsonify(result)
+
+
+# --- 8.1h: overhead rates (opt-in overheads; spec .agents/specs/live-cogs-overheads.md) ----------
+
+
+@costing_bp.errorhandler(overheads.OverheadConflictError)
+def _overhead_conflict(error):
+    db_session.rollback()
+    return jsonify({"error": str(error)}), 409
+
+
+@costing_bp.route(f"{API}/overhead-rates", methods=["GET"])
+@requires_auth
+def list_overhead_rates():
+    return jsonify({"rates": [overheads.as_dict(r) for r in overheads.list_rates(db_session, _org())]})
+
+
+@costing_bp.route(f"{API}/overhead-rates", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_create")  # a retried save after a lost reply replays, never repeats
+def create_overhead_rate():
+    rate = overheads.create_rate(db_session, _org(), _body(), user_id=_user_id())
+    db_session.commit()
+    return jsonify(overheads.as_dict(rate)), 201
+
+
+@costing_bp.route(f"{API}/overhead-rates/<rate_id>", methods=["PUT"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_update")
+def update_overhead_rate(rate_id):
+    rate = overheads.update_rate(db_session, _org(), rate_id, _body())
+    db_session.commit()
+    return jsonify(overheads.as_dict(rate))
+
+
+@costing_bp.route(f"{API}/overhead-rates/<rate_id>", methods=["DELETE"])
+@requires_auth
+@idempotent_write("costing_overhead_rate_delete")
+def delete_overhead_rate(rate_id):
+    overheads.delete_rate(db_session, _org(), rate_id)
+    db_session.commit()
+    return jsonify({"deleted": True})
 
 
 # --- 8.1b: account treatments --------------------------------------------------------------
@@ -303,6 +361,8 @@ def _simple(action_name):
                 from app.features.costing import rules
 
                 rules.not_stock_rule(db_session, _org(), line, actions._document(db_session, line), user_id=_user_id())
+        elif action_name == "freight":
+            actions.mark_freight(db_session, _org(), line_id)
         else:
             {"skip": actions.skip, "reopen": actions.reopen}[action_name](db_session, _org(), line_id)
         db_session.commit()
@@ -312,7 +372,7 @@ def _simple(action_name):
     return view
 
 
-for _action in ("not-stock", "skip", "reopen", "review"):
+for _action in ("not-stock", "skip", "reopen", "review", "freight"):
     costing_bp.add_url_rule(
         f"{API}/purchases/<line_id>/{_action}",
         endpoint=f"purchase_{_action.replace('-', '_')}",
@@ -600,6 +660,111 @@ def readiness_detail(key):
     return jsonify(readiness.product_detail(db_session, _org(), key))
 
 
+# --- 8.1g: stock value, snapshots and the Xero bridge -----------------------------------------------------
+
+
+def _auto_month_ends(org):
+    """The first costing read after a month ends closes it, for an org with no Xero (a Xero org's
+    first sync does). Never fails the read.
+
+    A person's read only: an assistant's read-only token (``g.auth_via == "mcp"``) never closes a
+    month, because the snapshot is held fixed once taken (design review S2)."""
+    from app.features.costing import stock_value
+    from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+
+    if getattr(g, "auth_via", None) == "mcp":
+        return []
+    try:
+        if XeroTenantRepository(db_session).get_connected(org) is not None:
+            return []
+        made = stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+        db_session.commit()
+        return made
+    except Exception as error:  # noqa: BLE001
+        db_session.rollback()
+        logger.exception("month_end_snapshot_failed", org_id=str(org), error_type=type(error).__name__)
+        return []
+
+
+@costing_bp.route(f"{API}/stock-value", methods=["GET"])
+@requires_auth
+def get_stock_value():
+    from app.features.costing import stock_value
+
+    org = _org()
+    made = _auto_month_ends(org)
+    return jsonify(stock_value.current_payload(db_session, org, auto=made))
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots", methods=["GET"])
+@requires_auth
+def list_stock_snapshots():
+    from app.features.costing import stock_value
+
+    org = _org()
+    _auto_month_ends(org)
+    return jsonify({"snapshots": [stock_value.snapshot_header(s) for s in stock_value.list_snapshots(db_session, org)]})
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>", methods=["GET"])
+@requires_auth
+def get_stock_snapshot(snapshot_id):
+    from app.features.costing import stock_value
+
+    org = _org()
+    snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
+    return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True))
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>/export.csv", methods=["GET"])
+@requires_auth
+def export_stock_snapshot(snapshot_id):
+    from flask import Response
+
+    from app.features.costing import stock_value
+
+    org = _org()
+    snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
+    body = stock_value.export_csv(snapshot, stock_value.stored_lines(db_session, org, snapshot.id))
+    name = f"closing-stock-{snapshot.as_of_date.isoformat()}.csv"
+    return Response(body, mimetype="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@costing_bp.route(f"{API}/stock-value/snapshot", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_stock_snapshot")
+def take_stock_snapshot():
+    from app.features.costing import stock_value
+
+    org = _org()
+    # Close any month that has ended first, so this one never leaves it uncapturable.
+    stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+    snapshot = stock_value.take_snapshot(db_session, org, kind="manual", trigger="manual", user_id=_user_id())
+    db_session.commit()
+    return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True)), 201
+
+
+@costing_bp.route(f"{API}/bridge", methods=["GET"])
+@requires_auth
+def get_bridge():
+    from app.features.costing import bridge, stock_value
+
+    org = _org()
+    first, second = request.args.get("from"), request.args.get("to")
+    if first or second:
+        if not (first and second):
+            raise service.CostingError("Send both from and to, or neither")
+        opening = stock_value.get_snapshot(db_session, org, first)
+        closing = stock_value.get_snapshot(db_session, org, second)
+    else:
+        latest = stock_value.list_snapshots(db_session, org)[:2]
+        closing, opening = (latest[0], latest[1]) if len(latest) == 2 else (None, None)
+    # An assistant's token gets the roll-forward but not the live Xero tie-out: each one is a call on
+    # the org's Xero rate limit (design review S2).
+    xero_allowed = getattr(g, "auth_via", None) != "mcp"
+    return jsonify(bridge.build_bridge(db_session, org, opening, closing, xero_allowed=xero_allowed))
+
+
 # --- 8.1d: the Purchases page -----------------------------------------------------------------------
 
 
@@ -611,7 +776,10 @@ def purchases_page():
     from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 
     connected = XeroTenantRepository(db_session).get_connected(_org()) is not None
-    return render_template("costing/purchases.html", active_page="core", xero_connected=connected)
+    include_overheads = bool(service.get_settings(db_session, _org()).get("include_overheads"))
+    return render_template(
+        "costing/purchases.html", active_page="core", xero_connected=connected, include_overheads=include_overheads
+    )
 
 
 @costing_bp.route("/core/costing/rules", methods=["GET"])

@@ -31,6 +31,10 @@ docker-compose -f docker-compose.test.yml up -d
 uv run pytest tests/ -v
 uv run pytest tests/test_executions.py -v   # single file
 
+# OpenAPI document (docs/openapi.json is generated: routes + policy table + app/api/openapi/overlay/*.yaml)
+uv run python scripts/check_openapi.py --write   # regenerate after adding or changing a route; CI fails if stale
+# A new /api/ route needs a docstring (or an overlay summary) or tests/openapi/test_coverage.py fails.
+
 # Database
 uv run workflow init-db          # create schema
 uv run alembic upgrade head      # run pending migrations
@@ -152,6 +156,16 @@ HTTP Request
 - `compliant` – `/compliant/*`, `/api/compliant/*` — compliance modules, NZ Alcohol first (feature flag: `compliant_enabled`, plus a per-org subscription)
 - `operational_cases` – `/core/cases/*`, `/api/core/cases/*` — operational cases (always mounted; access gated per org)
 - `process_templates` – industry workflow template catalogue (always mounted; exposure gated per org)
+- `oauth` / `mcp` – `/oauth/*`, `/.well-known/oauth-authorization-server` and `/api/core/mcp/*`: the OAuth server that lets
+  an AI assistant sign in on a person's normal login, plus the org's switch, roles and connected apps
+  (`app/features/mcp_oauth/`, always mounted; each org is off until an admin turns it on —
+  `uv run workflow mcp enable --org-id <id> --roles admin,member` until the Settings page lands).
+  A request may carry `Authorization: Bearer bza_…` instead of a session: `tenant_context` resolves it, and
+  `access_policy.token_access` limits it to GET/HEAD on routes whose OpenAPI operation is marked
+  `x-bize.mcp: true` in `app/api/openapi/overlay/` and whose rule names a view permission
+  (`READ_PERMISSIONS`); a route with no overlay entry is out of scope. Spec `.agents/specs/public-mcp.md`.
+  The assistant-facing server is a separate package, `bize_mcp/` (three tools: `discover`, `docs`, `execute`; its
+  SDK is the optional `mcp` extra: `uv sync --extra dev --extra mcp`), documented in `docs/public-mcp-server.md`.
 
 `/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 

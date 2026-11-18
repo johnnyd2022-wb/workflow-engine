@@ -410,3 +410,32 @@ def test_row_count_only_appears_when_rows_are_held_back(browser, app_url, worksp
         expect(page.locator('[data-widget-type="top_customers"]')).to_contain_text("Showing 10 of 12")
     finally:
         context.close()
+
+
+def test_analytics_period_total_adds_decimal_string_months_ex_gst(browser, app_url, workspace_user):
+    """Design review X1: monthly-sales money is a Decimal string, ex GST. The page must add the months as
+    numbers ("300.00" + "200.00" once read "$NaN") and say the figure is ex GST."""
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    months = [
+        {
+            "month": m,
+            "total": t,
+            "invoiced_inc_gst": g,
+            "invoice_count": 1,
+            "currency": "NZD",
+            "not_converted": 0,
+            "ex_gst_unknown": 0,
+        }
+        for m, t, g in (("2026-09", "200.00", "230.00"), ("2026-10", "300.00", "345.00"))
+    ]
+    try:
+        page.route(
+            "**/api/crm/analytics/monthly-sales*",
+            lambda route: route.fulfill(json={"monthly_sales": months[::-1], "months": months[::-1]}),
+        )
+        page.goto("/crm/analytics")
+        card = page.get_by_role("region", name="Monthly sales")
+        expect(card.locator(".sales-analytics__total strong")).to_have_text("$500")
+        expect(card.locator(".workspace-caption").first).to_contain_text("ex GST")
+    finally:
+        context.close()

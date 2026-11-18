@@ -286,6 +286,24 @@ class XeroAPIClient:
             page += 1
         return transactions
 
+    def get_profit_and_loss(self, from_date, to_date) -> list:
+        """The P&L report's top-level rows for [from_date, to_date] in the standard layout
+        (live-cogs 8.1g; needs accounting.reports.profitandloss.read)."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        result = self._call_with_retry(
+            api.get_report_profit_and_loss,
+            self._xero_tenant_id,
+            from_date=from_date,
+            to_date=to_date,
+            standard_layout=True,
+        )
+        reports = list(getattr(result, "reports", None) or [])
+        if not reports:
+            raise ValueError("Xero returned no profit and loss report")
+        return list(reports[0].rows or [])
+
     def _purchase_where(self, base: str, from_date=None, to_date=None) -> str:
         where = base
         if from_date is not None:

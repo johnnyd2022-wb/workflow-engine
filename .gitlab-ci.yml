@@ -134,8 +134,8 @@ ruff:
     - uv sync --extra dev
     # Check-only: --fix / a plain `format` rewrite files inside the CI container and exit 0,
     # so the job could never fail on formatting and unformatted code reached main.
-    - uv run ruff check app/
-    - uv run ruff format --check app/
+    - uv run ruff check app/ bize_mcp/
+    - uv run ruff format --check app/ bize_mcp/
   only:
     - merge_requests
     - main
@@ -223,6 +223,24 @@ feature_index_routes:
     - main
   allow_failure: false
 
+# Public MCP 8.2f: docs/openapi.json is the committed copy of the OpenAPI document the app generates
+# from its routes, its policy table and app/api/openapi/overlay/. Fail when it is stale so a route or
+# overlay change shows up in review as a diff of the document. Regenerate with
+# `uv run python scripts/check_openapi.py --write`. The test environment mounts every product area.
+openapi_current:
+  stage: test
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
+  variables:
+    ENVIRONMENT: test
+  script:
+    - *install_uv
+    - uv sync --extra dev
+    - uv run python scripts/check_openapi.py
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Deterministic, path-aware MR test gate. The selector emits every chosen test and the
 # source rule that chose it, so this is inspectable rather than an opaque heuristic.
 # New/unmapped application paths deliberately fall back to tests/, while docs-only MRs
@@ -254,7 +272,7 @@ relevant_tests:
       # line. Normalise here, where a target is a path and cannot contain a space.
       tr ' ' '\n' < /tmp/relevant-pytest-targets | sed '/^$/d' > /tmp/relevant-pytest-targets.tmp && mv /tmp/relevant-pytest-targets.tmp /tmp/relevant-pytest-targets
     - *install_uv
-    - uv sync --extra dev
+    - uv sync --extra dev --extra mcp
     - |
       # Test impact analysis (docs/test-impact-analysis.md): replace the rules' full-suite
       # fallback with the tests that executed the changed lines in main's recorded run. Never
@@ -478,7 +496,7 @@ unit_tests:
   before_script:
     # Install dependencies
     - *install_uv
-    - uv sync --extra dev
+    - uv sync --extra dev --extra mcp
     # Install PostgreSQL client and curl for health checks
     - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq && test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
     # Node.js for tests/js/*.test.js (node --test); see tests/test_execution_shared_utils_js.py
@@ -522,7 +540,7 @@ semgrep:
   needs: []
   image: semgrep/semgrep:latest
   script:
-    - semgrep --config .semgrep/rules/ app/ --include="*.py" --include="*.js" --error
+    - semgrep --config .semgrep/rules/ app/ bize_mcp/ --include="*.py" --include="*.js" --error
   only:
     - merge_requests
     - main
@@ -764,6 +782,12 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
       docker build --target production -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA" .
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
+      # The public MCP server (8.2d): one target, so test and prod run the same bytes under two tags.
+      docker build --target mcp -f Dockerfile.multi \
+        -t "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA" \
+        -t "$CI_REGISTRY_IMAGE/mcp:prod-$CI_COMMIT_SHORT_SHA" .
+      docker push "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA"
+      docker push "$CI_REGISTRY_IMAGE/mcp:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
   except:
@@ -843,9 +867,11 @@ deploy_test:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     # Exit 3 = the new app started but never passed /healthcheck. The old app is gone by then,
     # and cd_e2e (which rollback_test_on_failure needs) won't run, so roll back here.
+    # Exit 4 = the app is healthy but the MCP server did not come up: the job fails, the app is left
+    # alone. The rollback below redeploys the app image only, so it never touches the MCP server.
     - |
       status=0
-      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" || status=$?
+      ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/mcp:test-$CI_COMMIT_SHORT_SHA" || status=$?
       if [ "$status" -eq 3 ]; then
         echo "New app unhealthy -- rolling back to last known-good :test-stable"
         if ! ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"; then
@@ -901,6 +927,7 @@ cd_e2e:
         --env UV_VERSION="$UV_VERSION" \
         --env ENVIRONMENT=test \
         --env E2E_BASE_URL="https://workflow-engine-test:8001" \
+        --env E2E_MCP_URL="http://workflow-engine-mcp-test:8030" \
         --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
         --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
@@ -909,7 +936,7 @@ cd_e2e:
           python -m pip install --disable-pip-version-check "uv==${UV_VERSION}"
           uv sync --extra dev --locked
           uv run playwright install --with-deps chromium
-          uv run pytest -p no:cacheprovider tests/e2e/test_smoke.py -v
+          uv run pytest -p no:cacheprovider tests/e2e/test_smoke.py tests/e2e/test_mcp_smoke.py -v
         '
   needs: ["deploy_test"]
   only:

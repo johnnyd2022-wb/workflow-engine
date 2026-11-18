@@ -1230,16 +1230,61 @@ missing; never a silent $0.
     cost per unit, Incomplete with the missing inputs), cost readiness per product,
     "total paid" on Add Inventory, and costing with no Xero bank feed: total paid on every
     Add Inventory path (manual, barcode incl. add-quantity, CSV). (!693, !695)
-  - [ ] f. **Bills and margins** (spec Phase 2). Bills and supplier credits; margin per
-    product over time with duty from the excise module; material price history;
-    auto-record rules.
-  - [ ] g. **Stock value and the Xero bridge** (spec Phase 3). Month-end stock value,
-    the walk from Xero cost of sales to Biz-E's, closing stock export.
-  - [ ] h. **Overheads into cost** (spec Phase 4, opt-in per org). Rent, freight and labour
-    spread into batch cost.
+  - [x] f. **Bills and margins** (spec Phase 2). Bills and supplier credits (!697); margin per
+    product over time with duty from the excise module, on Sales › Margins (!698, !699);
+    material price history on the Costs page (!700, !702); auto-record rules (!701); duty if
+    sold today on the batch card (!704); split a batch's cost by litres, opt-in (!703); the
+    switch-on command `workflow costing enable` (!696). Polish: costing settings sheet, cost per
+    unit on the Costs list, cents suggestions, CSV money formats (!705); rules keep payees as
+    typed (!707); batches open by link, finished ones read-only (!708); pack-size price hint
+    (!710); readiness costed on a budget per product after an overflow, "Remember this" keeps
+    the typed payee, costing settings read once per request (!712). Open question, not built: "paid for by" on Add Inventory (see
+    `.agents/plans/live-cogs-polish.md`).
+  - [x] g. **Stock value and the Xero bridge** (spec Phase 3). Stock value on the Costs page
+    (raw, in production, work in progress, finished; actual, estimated, never $0 for unknown),
+    month-end snapshots taken on the first Xero sync (or costing read, with no Xero) after a
+    month ends and held fixed, the walk from Xero's stock accounts and Biz-E's stock roll-forward,
+    closing stock CSV. (!715)
+  - [x] h. **Overheads into cost** (spec Phase 4, opt-in per org, off by default). Rent, labour
+    and power as rates per litre of finished product or per batch from a date, taken by each
+    finished batch; freight on a purchase spread by value over the same purchase's stock; materials
+    and overheads shown apart on the batch card, lot panel and margins; readiness untouched. Spec
+    `.agents/specs/live-cogs-overheads.md`. (!717)
+  - [x] i. **Multipacks.** A lot can carry a pack ("24 x 200 mL", "25 kg", "500 pcs"), entered on
+    manual, barcode, CSV and the Purchases record dialog. Steps use the lot in their own units
+    (bottles, mL, g, pieces) and take the right share; cost breaks down per case, bottle and litre
+    on the lot panel and Add Inventory hint. Spec `.agents/specs/live-cogs-packs.md`. (!713)
   - Done when: a producer connects Xero, works through the Purchases page once, and every
     batch shows a cost per bottle that is either complete or names what's missing, and
     stays right when a purchase is recorded late or changed in Xero.
+
+- [ ] 8.2 **Connect your own AI assistant (public MCP).** People connect Claude, ChatGPT or any
+  MCP client to Biz-E with their normal login and read what they can already see in the app.
+  Read only to start; off per org until an admin turns it on and picks the roles; in every plan.
+  Plan `.agents/plans/public-mcp.md`, spec `.agents/specs/public-mcp.md`.
+  - [x] a. **Plan and spec** (!716).
+  - [x] b. **Sign-in for assistants.** OAuth 2.1 on existing Biz-E logins (PKCE, consent, tokens
+    bound to the MCP server), read-only rule in the access policy, per-org switch and role check.
+    Walkthrough `docs/public-mcp-oauth.md`. (!719)
+  - [x] c. **The MCP server.** Its own package and entrypoint (`bize_mcp/`), three tools:
+    `discover` (business knowledge and API operations), `docs` (one concept or operation in
+    full) and `execute` (up to five allowlisted, read-only API calls, composed declaratively;
+    no model-written code), all filtered to what the person may see. Guide `docs/public-mcp-server.md`. (!725)
+  - [x] d. **Its own container.** Dockerfile target, `scripts/run_mcp.sh`, deploy scripts, CI and
+    `mcp.biz-e.app` / `mcp-test.biz-e.app`. (!726)
+  - [x] e. **Settings → AI assistants.** On/off, which roles may use it, connected apps with
+    revoke. (!720)
+  - [x] f. **OpenAPI for the whole API.** One OpenAPI 3.1 document generated from the app
+    (every `/api/` route, its permission and domain), with `x-bize` business metadata and full,
+    tested schemas for the operations assistants can use. Served at `/api/openapi.json`. (!722)
+  - [x] g. **Business knowledge for assistants.** Domain docs (`docs/knowledge/`) on how Biz-E
+    models stock, batches, tracing, compliance, sales and cost, read by the model on demand. (!723)
+  - [x] h. **OAuth security check.** (!724) RFC 9700 best practice and the latest MCP authorization
+    revision: `iss` on authorization responses (RFC 9207), Google and 2FA-enrolment return to
+    consent, clickjacking headers, a written checklist.
+  - Done when: a producer's admin turns it on, a staff member connects Claude from
+    `mcp.biz-e.app/mcp`, asks "how much orris root do we have and what did it cost", gets the
+    right answer, and the admin can see and revoke that connection.
 
 ---
 

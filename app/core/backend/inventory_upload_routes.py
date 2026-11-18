@@ -22,6 +22,7 @@ from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
+from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
 from app.observability import get_logger, start_span
 
@@ -121,6 +122,37 @@ def _cost_allowed(org_id) -> bool:
     return may_enter_cost(db_session, getattr(g, "current_user", None), org_id)
 
 
+_THOUSANDS_SPACED = re.compile(r"^-?\d{1,3}( \d{3})+(\.\d+)?$")
+_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
+
+
+def _clean_money(raw: str | None) -> str | None:
+    """A spreadsheet's money as typed: "$1,234.50", "NZ$ 80" or "1 234.50" become plain numbers,
+    the way the Add Inventory field reads them. Anything else is left for the check to judge."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    for prefix in ("NZ$", "nz$", "NZD", "nzd", "$"):
+        if text.startswith(prefix):
+            text = text[len(prefix) :].strip()
+            break
+    grouped = text.replace("\u00a0", " ")
+    if _THOUSANDS_SPACED.match(grouped):  # "1 234.50": spaces only where thousands are grouped
+        text = grouped.replace(" ", "")
+    elif _THOUSANDS.match(text):
+        text = text.replace(",", "")
+    return text or None
+
+
+def _check_pack(raw: str | None, status: str = "ok", message: str | None = None) -> tuple[str, str | None]:
+    """A "Pack size" cell ("24 x 200 mL") must read as a pack; blank is fine."""
+    try:
+        clean_pack(raw)
+    except ValueError as error:
+        return "error", str(error)
+    return status, message
+
+
 def _check_total_paid(raw: str) -> tuple[str, str | None]:
     """A row's Total Paid, judged like the Add Inventory field: money, 0 or more, 4 dp."""
     from app.features.costing.service import CostingError, parse_amount
@@ -172,6 +204,8 @@ def _parse_upload(org_id):
     required = {"item name": "name", "quantity": "qty", "unit": "unit"}
     optional = {
         "total paid": "total_paid",
+        "pack size": "pack",
+        "pack": "pack",
         "supplier name": "supplier",
         "purchase date": "purchase_date",
         "batch number": "batch_number",
@@ -212,11 +246,14 @@ def _parse_upload(org_id):
         batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
         expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
         site = _sanitize(row.get(col_map.get("site") or "", ""), 120) or None
-        total_paid = (row.get(col_map.get("total_paid") or "", "") or "").strip() or None
+        total_paid = _clean_money(row.get(col_map.get("total_paid") or "", "") or "")
+        pack_raw = _sanitize(row.get(col_map.get("pack") or "", ""), 60) or None
 
         status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
         if status == "ok" and total_paid is not None and cost_allowed:
             status, message = _check_total_paid(total_paid)
+        if status == "ok":
+            status, message = _check_pack(pack_raw, status, message)
         unit = canonical_unit if canonical_unit else unit_raw
         if status == "ok" and sites_enabled is False:
             status, message = "error", "Remove the Site column: multiple sites are off"
@@ -244,6 +281,7 @@ def _parse_upload(org_id):
                 "expiry_date": expiry_date.isoformat() if expiry_date else None,
                 "site": site,
                 "total_paid": total_paid if cost_allowed else None,
+                "pack": pack_raw,
             }
         )
 
@@ -319,6 +357,7 @@ def register_routes(bp):
                         "unit": existing.unit,
                         "supplier": existing.supplier or "",
                         "quantity": quantity_to_api_str(existing.quantity),
+                        "pack": describe_pack(lot_pack(existing)),
                     },
                 }
             ), 200
@@ -466,9 +505,12 @@ def register_routes(bp):
                     if site_id is None:
                         status, message = "error", f"No active site called {site_name}"
                 paid_raw = r.get("total_paid")
-                paid_raw = str(paid_raw).strip() if paid_raw not in (None, "") else None
+                paid_raw = _clean_money(paid_raw) if paid_raw not in (None, "") else None
                 if status == "ok" and paid_raw is not None and cost_allowed:
                     status, message = _check_total_paid(paid_raw)
+                pack_raw = _sanitize(r.get("pack"), 60) or None
+                if status == "ok":
+                    status, message = _check_pack(pack_raw, status, message)
                 if status != "ok":
                     errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
                     continue
@@ -480,6 +522,7 @@ def register_routes(bp):
                         "canonical_unit": canonical_unit,
                         "site_id": site_id,
                         "total_paid": paid_raw if cost_allowed else None,
+                        "pack": clean_pack(pack_raw),
                     }
                 )
 
@@ -518,6 +561,8 @@ def register_routes(bp):
                             }
                         ]
                     }
+                    if v["pack"]:
+                        extra_data[PACK_KEY] = v["pack"]
                     try:
                         with db_session.begin_nested():
                             item = repo.create_inventory_item(

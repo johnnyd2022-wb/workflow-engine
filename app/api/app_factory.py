@@ -224,6 +224,19 @@ def create_app():
 
     app.register_blueprint(costing_bp)
 
+    # Public MCP 8.2b: the app is the OAuth authorization server for AI assistants, and serves the
+    # org's switch and connected-apps API. Always mounted; each org is off until an admin turns it on.
+    from app.features.mcp_oauth.routes import mcp_bp, oauth_bp, pages_bp
+
+    app.register_blueprint(oauth_bp)
+    app.register_blueprint(mcp_bp)
+    app.register_blueprint(pages_bp)  # 8.2e: Settings -> AI assistants
+
+    # Public MCP 8.2f: the API's own OpenAPI 3.1 description, narrowed to what each caller may reach.
+    from app.api.openapi.routes import openapi_bp
+
+    app.register_blueprint(openapi_bp)
+
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
@@ -493,6 +506,11 @@ def create_app():
     from app.core.security.staff_site_policy import setup_staff_site_policy
 
     setup_staff_site_policy(app)
+    # Design review S1: the token rule enforces the MCP catalogue. Built once, after every
+    # blueprint is registered, from the same overlay flags the OpenAPI document publishes.
+    from app.api.openapi.document import mcp_operations
+
+    app.extensions["mcp_operations"] = mcp_operations(app)
     setup_access_policy(app)
     from app.features.sites.routes import install_site_request_validation
 
@@ -597,6 +615,12 @@ def create_app():
                 "ingest_faro_telemetry",
                 "ingest_posthog_telemetry",
                 "csp_report",
+                # Public MCP 8.2b: an assistant calls these with no cookie and no session, so there
+                # is nothing for a forged cross-site request to ride on. The consent form
+                # (oauth.authorize_decision) is NOT here: it is an ordinary CSRF-protected form.
+                "oauth.register",
+                "oauth.token",
+                "oauth.revoke",
             }:
                 csrf.exempt(view)
 

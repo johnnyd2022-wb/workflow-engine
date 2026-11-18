@@ -322,6 +322,11 @@
                 '<label class="spa-field-label" for="csv-review-unit">Unit</label>' +
                 '<select id="csv-review-unit" class="spa-inp">' + unitOptionsHtml(row.unit) + '</select>' +
               '</div>' +
+              '<div>' +
+                '<label class="spa-field-label" for="csv-review-pack">Pack size <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                '<input type="text" id="csv-review-pack" class="spa-inp" value="' + escapeHtml(row.pack != null ? row.pack : csvPackGuess(row)) + '" placeholder="e.g. 24 × 200 mL" autocomplete="off" aria-describedby="csv-review-pack-hint">' +
+                '<p class="cost-hint" id="csv-review-pack-hint">What one unit holds, so workflows can use it in bottles, mL or g.</p>' +
+              '</div>' +
               (S.canCost
                 ? '<div>' +
                     '<label class="spa-field-label" for="csv-review-paid">Total paid (ex GST) <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
@@ -371,6 +376,13 @@
         }
       }
 
+      // A pack size read from the item's name ("Tonic 24 x 200ml"), for counted units only.
+      function csvPackGuess(row) {
+        if (!window.BizECost || !window.BizECost.parsePack) return '';
+        if (!/^(bottles?|units?|each|ea|cases?|cans?|jars?|packs?|bags?|boxes|box|pcs|pieces?|sacks?|tubs?|pallets?|containers?|kegs?)$/i.test(String(row.unit || '').trim())) return '';
+        return window.BizECost.packText(window.BizECost.parsePack(row.name));
+      }
+
       function readCurrentRowFromForm() {
         var row = S.pendingRows && S.pendingRows[0];
         if (!row) return null;
@@ -382,7 +394,9 @@
         var purEl = document.getElementById('csv-review-purchase');
         var expEl = document.getElementById('csv-review-expiry');
         var paidEl = document.getElementById('csv-review-paid');
+        var packEl = document.getElementById('csv-review-pack');
         return Object.assign({}, row, {
+          pack: packEl ? (packEl.value || '').trim() || null : row.pack,
           total_paid: paidEl ? (paidEl.value || '').replace(/[$,\s]/g, '') || null : row.total_paid,
           name: nameEl ? (nameEl.value || '').trim() : row.name,
           quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
