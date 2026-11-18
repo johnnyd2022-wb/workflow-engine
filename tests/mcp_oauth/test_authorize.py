@@ -250,10 +250,16 @@ def test_the_consent_page_names_the_client_org_user_and_read_only_access(world):
 
 
 def test_a_verified_client_is_not_labelled_unverified(world, db):
-    world.client_row.verified = True
+    # Verified comes from the code list, matched by redirect URI (design review S3), not from a flag
+    # set on the row: the client must send its codes to Claude's documented callback.
+    claude = "https://claude.ai/api/mcp/auth_callback"
+    world.client_row.redirect_uris = [claude]
     db.commit()
-    _s, _p, resp, _ = _consent_form(world)
-    assert "Unverified app" not in resp.get_data(as_text=True)
+    _s, _p, resp, _ = _consent_form(world, redirect_uri=claude)
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Unverified app" not in html
+    assert "Verified" in html
 
 
 def test_the_consent_page_lists_only_what_the_users_own_role_can_read(world):

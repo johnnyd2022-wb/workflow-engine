@@ -54,6 +54,13 @@ html[data-spa-theme="dark"] #page-content .ai-switch__input:checked ~ .ai-switch
 #page-content .ai-roles.is-off .ai-role, #page-content .ai-roles.is-off .ai-role input { cursor: not-allowed; }
 #page-content .ai-roles.is-off .ai-role__name { color: var(--ui-text-muted, #64748b); }
 
+/* Unverified apps (design review S3) */
+#page-content .ai-unverified { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 18px 0 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .ai-unverified .ai-hint { margin: 0 0 0 58px; }
+#page-content .ai-unverified.is-off .ai-switch, #page-content .ai-unverified.is-off .ai-switch__input { cursor: not-allowed; }
+#page-content .ai-unverified.is-off .ai-switch__label { color: var(--ui-text-muted, #64748b); }
+@media (max-width: 480px) { #page-content .ai-unverified .ai-hint { margin-left: 0; } }
+
 #page-content .ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 4px; }
 #page-content .ai-actions .workspace-button[disabled] { opacity: .55; cursor: not-allowed; }
 #page-content .ai-status { font-size: 14px; font-weight: 600; color: #067647; }

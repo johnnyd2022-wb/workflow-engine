@@ -183,7 +183,10 @@ def _grant_row(rows, grant):
 
 def test_ac23_an_admin_sees_all_of_the_orgs_grants_and_a_member_only_their_own(world, db):
     g_member, _a, _r = mint_grant(db, world.users["member"], world.client_row)
-    other_client = make_client(db, name="MCPTEST Second", verified=True)
+    # Verified comes from the code list (design review S3): this client uses Claude's callback.
+    other_client = make_client(
+        db, name="MCPTEST Second", verified=True, redirect_uris=["https://claude.ai/api/mcp/auth_callback"]
+    )
     g_sales, _a2, _r2 = mint_grant(db, world.users["sales"], other_client)
     g_foreign, _a3, _r3 = mint_grant(db, world.other_admin, world.client_row)
 

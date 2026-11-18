@@ -30,7 +30,8 @@ def assistant(fresh_user):
     person = fresh_user(UserRole.MEMBER)
     db = db_session()
     client_id = f"e2e-client-{secrets.token_hex(6)}"
-    db.add(McpOrgSettings(org_id=person["org_id"], enabled=True))
+    # The test client is not on the verified list, so this org allows unverified apps (S3).
+    db.add(McpOrgSettings(org_id=person["org_id"], enabled=True, allow_unverified_clients=True))
     db.add(McpAllowedRole(org_id=person["org_id"], role_key="builtin:member"))
     db.add(OAuthClient(client_id=client_id, client_name="E2E Assistant", redirect_uris=[REDIRECT], registration="dcr"))
     db.commit()
@@ -132,6 +133,24 @@ def test_consent_is_blocked_with_a_message_when_the_org_has_assistants_off(page:
     _sign_in(page, assistant)
     page.wait_for_url(re.compile(r"/oauth/authorize\?"), timeout=15_000)
     expect(page.get_by_text("hasn't turned on AI assistant access")).to_be_visible()
+    expect(page.get_by_role("button", name="Allow read-only access")).to_have_count(0)
+
+
+def test_s3_consent_for_an_unverified_app_is_blocked_when_the_org_allows_verified_apps_only(page: Page, assistant):
+    from app.core.db import db_session
+    from app.features.mcp_oauth.models import McpOrgSettings
+
+    db = db_session()
+    db.query(McpOrgSettings).filter(McpOrgSettings.org_id == assistant["org_id"]).update(
+        {"allow_unverified_clients": False}
+    )
+    db.commit()
+
+    page.goto(assistant["path"]())
+    _sign_in(page, assistant)
+    page.wait_for_url(re.compile(r"/oauth/authorize\?"), timeout=15_000)
+    expect(page.get_by_text("only allows apps Biz-E has verified")).to_be_visible()
+    expect(page.get_by_text("Unverified app")).to_be_visible()
     expect(page.get_by_role("button", name="Allow read-only access")).to_have_count(0)
 
 

@@ -225,7 +225,7 @@ def assistant_org(db, flask_app):
     org = new_org(db)
     org_id = org.id
     admin = UserFactory(org_id=org.id, email=f"drl1-{org.id.hex[:8]}@example.test", role=UserRole.ADMIN)
-    db.add(McpOrgSettings(org_id=org.id, enabled=True))
+    db.add(McpOrgSettings(org_id=org.id, enabled=True, allow_unverified_clients=True))
     db.add(McpAllowedRole(org_id=org.id, role_key="builtin:admin"))
     db.commit()
     client_row = make_client(db)
