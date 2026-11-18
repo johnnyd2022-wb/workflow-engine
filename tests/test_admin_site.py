@@ -158,19 +158,19 @@ def test_an_allow_listed_google_account_signs_in(site, monkeypatch, email):
 
 
 @pytest.mark.parametrize(
-    "claims",
+    ("email", "changes"),
     [
-        _claims("someone.else@whistlebird.co.nz"),
-        _claims("johnny@whistlebird.co.nz.attacker.test"),
-        _claims("johnny@gmail.com"),
+        ("someone.else@whistlebird.co.nz", {}),
+        ("johnny@whistlebird.co.nz.attacker.test", {}),
+        ("johnny@gmail.com", {}),
         # The right address on a personal Google account: Google is not the authority for it.
-        _claims(JOHNNY, hd=None),
-        _claims(JOHNNY, hd="attacker.test"),
+        (JOHNNY, {"hd": None}),
+        (JOHNNY, {"hd": "attacker.test"}),
     ],
 )
-def test_any_other_google_account_is_refused(site, monkeypatch, claims):
+def test_any_other_google_account_is_refused(site, monkeypatch, email, changes):
     _, browser = site
-    response = _google_sign_in(browser, claims, monkeypatch)
+    response = _google_sign_in(browser, _claims(email, **changes), monkeypatch)
     assert response.status_code == 403
     assert browser.get("/organisations").status_code == 302
 
