@@ -88,7 +88,7 @@ def test_ac39_latest_batch_lists_raw_materials_through_wip(world, db):
     assert _detail(client, key).get_json()["ready"] is True
 
 
-def test_ac39_product_with_no_batch_uses_declared_inputs(world, db):
+def test_ac39_product_with_no_batch_uses_declared_inputs(world, db, monkeypatch):
     org, client = world
     from uuid import uuid4
 
@@ -115,6 +115,32 @@ def test_ac39_product_with_no_batch_uses_declared_inputs(world, db):
     assert {m["name"]: m["costed"] for m in body["materials"]} == {"Molasses": True, "Yeast": False}
     assert all(m["inventory_item_id"] is None for m in body["materials"])
     assert body["ready"] is False
+
+    from app.features.costing.engine import CostEngine, TooLargeError
+
+    original_prime = CostEngine.prime
+    original_flows = CostEngine._in_flows
+
+    def limited_prime(engine, ids):
+        if molasses.id in ids:
+            raise TooLargeError()
+        return original_prime(engine, ids)
+
+    def limited_flows(engine, item_id):
+        if item_id == molasses.id:
+            raise TooLargeError()
+        return original_flows(engine, item_id)
+
+    monkeypatch.setattr(CostEngine, "prime", limited_prime)
+    monkeypatch.setattr(CostEngine, "_in_flows", limited_flows)
+    response = _detail(client, f"output:{output_id}")
+    assert response.status_code == 200
+    assert {m["name"]: m["status"] for m in response.get_json()["materials"]} == {
+        "Molasses": "unknown",
+        "Yeast": "unknown",
+    }
+    row = next(row for row in _products(client) if row["key"] == f"output:{output_id}")
+    assert not row["ready"] and row["materials_total"] == 2
 
 
 def test_ac87_same_name_definitions_are_two_products_and_legacy_lots_bucket_by_name(world, db):
@@ -500,6 +526,41 @@ def test_r2_readiness_query_count_with_a_long_price_history(world, db):
         event.remove(engine, "before_cursor_execute", count)
     assert any(p["ready"] for p in products), "juniper is estimated, so costed"
     assert len(statements) <= 40, f"{len(statements)} queries with 40 earlier juniper lots"
+
+
+@pytest.mark.parametrize("fail_lot_prime", [False, True])
+def test_readiness_survives_overflow_while_loading_lots_or_price_history(world, db, monkeypatch, fail_lot_prime):
+    from app.features.costing.engine import CostEngine, TooLargeError
+
+    org, client = world
+    earlier = lot(db, org.id, "Juniper", 2, "kg")
+    price(db, org.id, earlier.id, 30, 2)
+    juniper = lot(db, org.id, "Juniper", 2, "kg")
+    coriander = lot(db, org.id, "Coriander", 2, "kg")
+    price(db, org.id, coriander.id, 20, 2)
+    _, gin_step = _gin_batch(db, org, client, juniper, coriander)
+    independent = lot(db, org.id, "Spirit", 2, "L")
+    price(db, org.id, independent.id, 10, 2)
+    execution, (step,) = workflow(db, org.id, [[{"name": "Vodka", "unit": "bottles"}]])
+    complete(client, execution, step, [(independent, 1, "L")], [{"name": "Vodka", "quantity": 2, "unit": "bottles"}])
+    key = f"output:{output_defs(gin_step)[0]['id']}"
+    expected = _products(client)
+    expected_detail = _detail(client, key).get_json()
+    assert {p["name"] for p in expected if p["ready"]} == {"Gin", "Vodka"}
+
+    original_prime = CostEngine.prime
+
+    def limited_prime(engine, ids):
+        ids = set(ids)
+        if (fail_lot_prime and juniper.id in ids and coriander.id in ids) or earlier.id in ids:
+            raise TooLargeError()
+        return original_prime(engine, ids)
+
+    monkeypatch.setattr(CostEngine, "prime", limited_prime)
+    assert _products(client) == expected
+    response = _detail(client, key)
+    assert response.status_code == 200
+    assert response.get_json() == expected_detail
 
 
 def test_r2_total_paid_on_a_second_site(world, db):
