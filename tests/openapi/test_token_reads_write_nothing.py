@@ -96,9 +96,11 @@ def test_s2_a_token_read_of_stock_value_after_a_month_end_takes_no_snapshot(assi
     price(db, org.id, juniper.id, 50, 10)
     _clock(monkeypatch, _two_months_on())
 
-    for path in (f"{API}/stock-value", f"{API}/stock-value/snapshots"):
-        resp = assistant_org["token"].get(path, headers=assistant_org["headers"])
-        assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
+    resp = assistant_org["token"].get(f"{API}/stock-value", headers=assistant_org["headers"])
+    assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
+    # The snapshot list is outside the MCP catalogue (design review S1): a token can't reach it at all.
+    resp = assistant_org["token"].get(f"{API}/stock-value/snapshots", headers=assistant_org["headers"])
+    assert resp.status_code == 403 and resp.get_json() == {"error": "insufficient_scope"}
     assert _snapshot_count(db, org.id) == 0
 
     # The value itself still answers: the read just doesn't close the month.
@@ -130,13 +132,12 @@ def test_s2_a_token_read_of_the_bridge_makes_no_xero_call(assistant_org, db, mon
     db.commit()
     url = f"{API}/bridge?from={opening.id}&to={closing.id}"
 
+    # The bridge is outside the MCP catalogue (design review S1), so a token never reaches it, and so
+    # never reaches Xero through it. (Its own token branch, xero state "not_available_to_assistants",
+    # stays as a second line of defence should it ever join the catalogue.)
     resp = assistant_org["token"].get(url, headers=assistant_org["headers"])
-    assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
-    body = resp.get_json()
+    assert resp.status_code == 403 and resp.get_json() == {"error": "insufficient_scope"}
     assert [c for c in fake.calls if c[0] == "profit_and_loss"] == []
-    assert body["xero"] == {"state": "not_available_to_assistants"}
-    assert body["tie_out"] is None
-    assert body["roll_forward"]["opening"] is not None  # the half that needs no Xero is still there
 
     # A session still gets the live tie-out.
     session = assistant_org["session"].get(url)
@@ -174,10 +175,8 @@ _WRITE = re.compile(
 # Xero operations a token GET may call, each with why. Every other Xero call from a token GET fails the
 # guard (each one spends the org's Xero rate limit, the second half of S2).
 ALLOWED_XERO = {
-    # The operation *is* fetching one document from Xero, once per ask; nothing is stored. DR-S1 narrows
-    # token routes to the x-bize.mcp catalogue, which does not include either: follow-up in the MR.
-    "crm_crm_api_get_invoice_pdf": "fetches the invoice's PDF from Xero",
-    "crm_crm_api_get_invoice_view_url": "fetches the invoice's online link from Xero",
+    # An operation that *is* fetching one document from Xero, once per ask, storing nothing. Empty since
+    # design review S1: the invoice PDF and online-link routes are outside the MCP catalogue (token 403).
 }
 
 
@@ -194,7 +193,9 @@ def _token_reachable_gets():
     return sorted(
         (oid, by_oid[oid][0], by_oid[oid][2])
         for oid, (endpoint, method) in built.endpoints.items()
-        if method == "GET" and token_scope_includes(endpoint, method) and oid in by_oid
+        if method == "GET"
+        and oid in by_oid
+        and token_scope_includes(endpoint, method, mcp=by_oid[oid][2].get("x-bize", {}).get("mcp") is True)
     )
 
 
@@ -350,46 +351,17 @@ def guarded_world(showcase_world):
 # back 2xx, so a route can't hide a write behind a 404 the seed caused. A path id the seed has no row for
 # gets ``FIXED_UUID`` and lands here, named.
 _NO_ROW = "no such row is seeded: the id is FIXED_UUID, so the route answers 404 after its lookup"
-EXPECTED_NON_2XX = {
-    "compliant_compliant_api_download_np3_record_file": _NO_ROW,
-    "compliant_compliant_api_get_report": _NO_ROW,
-    "compliant_compliant_api_np3_audit_check": _NO_ROW,
-    "compliant_compliant_wine_lot_trace": _NO_ROW,
-    "contracts_get_order": _NO_ROW,
-    "contracts_list_dispatches": _NO_ROW,
-    "contracts_list_materials": _NO_ROW,
-    "core_evidence_download": _NO_ROW,
-    "core_process_docs_download": _NO_ROW,
-    "costing_purchase_candidates": _NO_ROW,
-    "crm_crm_api_get_task": _NO_ROW,
-    "operational_cases_operational_cases_api_get_case": _NO_ROW,
-    "operational_cases_operational_cases_api_get_case_history": _NO_ROW,
-    "operational_cases_operational_cases_api_get_case_history_events": _NO_ROW,
-    "operational_cases_operational_cases_api_list_case_events": _NO_ROW,
-    "recalls_draft_notice": _NO_ROW,
-    "recalls_get_recall": _NO_ROW,
-    "recalls_get_recall_by_case": _NO_ROW,
-    "site_transfers_detail": _NO_ROW,
-    "crm_crm_api_get_invoice_trace_items": "the seeded invoice has no line items: 404 Invoice not found",
-    "compliant_compliant_api_core_sources": "needs a search request the guard does not build: 400",
-    "compliant_compliant_cca_movements_get_period_review": "needs a licence_id; no licence is seeded: 400",
-    "compliant_compliant_verification_suggest_verification_step": "needs a verification outcome: 400",
-    "planning_get_promise": "needs an order to promise: 400",
-    "sites_site_position": "multiple sites are off for the showcase org: 400",
-    "crm_crm_api_excise_month": "NZ alcohol module is not set up for the showcase org: 404",
-    "crm_crm_api_excise_months": "NZ alcohol module is not set up for the showcase org: 404",
-    "tastings_choices": "tastings need the NZ alcohol module: 404",
-    "tastings_get_tasting": "tastings need the NZ alcohol module: 404",
-    "tastings_list_tastings": "tastings need the NZ alcohol module: 404",
-    "tastings_pool": "tastings need the NZ alcohol module: 404",
-    "tastings_tasting_invoice_lines": "tastings need the NZ alcohol module: 404",
-}
+EXPECTED_NON_2XX = {}
 
 
 def test_s2_the_guard_covers_the_token_reachable_reads():
     oids = {oid for oid, _p, _o in TOKEN_GETS}
-    assert len(oids) > 50
-    assert {"costing_get_stock_value", "costing_get_bridge", "core_list_inventory"} <= oids
+    # Since design review S1 a token reaches only the x-bize.mcp catalogue (28 operations on 18 Nov 2026,
+    # plus the always-allowed routes); every other GET is a 403, proven by
+    # tests/mcp_oauth/test_bearer_mcp_allowlist.py. This guard runs every operation that is left.
+    assert len(oids) >= 25
+    assert {"costing_get_stock_value", "core_list_inventory", "costing_margins_report"} <= oids
+    assert "costing_get_bridge" not in oids
     assert set(EXPECTED_NON_2XX) <= oids, "an expected non-2xx entry names an operation the guard no longer runs"
     assert set(ALLOWED_XERO) <= oids
 
