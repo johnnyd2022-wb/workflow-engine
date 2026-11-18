@@ -410,6 +410,16 @@ class Config:
         return cached
 
     @property
+    def mcp_bearer_internal_only(self) -> bool:
+        """Accept an assistant's token only from the private network, never through Cloudflare.
+
+        The MCP container calls the app over the Docker network (scripts/run_mcp.sh); a request
+        that came through the edge carries ``CF-Connecting-IP``/``CF-Ray`` and is refused
+        (design review S1). Off when unset, so local development needs nothing.
+        """
+        return self.getboolean("mcp", "bearer_internal_only", False)
+
+    @property
     def invoice_button_enabled(self) -> bool:
         return self.getboolean("features", "invoice_button_enabled", False)
 
