@@ -152,3 +152,92 @@ def test_stock_value_closed_months_and_bridge_render_without_sideways_scroll(cos
     assert state["taken"] == 1
     overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 0, f"page scrolls sideways by {overflow}px"
+
+
+# --- design review L1: a provisional month and closing it -----------------------------------------
+
+PROVISIONAL = {**NEW, "status": "provisional", "provisional": True, "closes_on": "2026-11-20", "closed_at": None}
+CLOSED = {
+    **NEW,
+    "status": "closed",
+    "provisional": False,
+    "closes_on": None,
+    "closed_at": "2026-11-18T02:00:00+00:00",
+    "closed_automatically": False,
+}
+
+
+def _mock_provisional(page, *, can_manage=True):
+    state = {"closed": 0, "keys": []}
+
+    def mocked(route):
+        url, method = route.request.url, route.request.method
+        current = CLOSED if state["closed"] else PROVISIONAL
+        if url.endswith("/me"):
+            route.fulfill(json={"enabled": True, "can_view": True, "can_manage": can_manage})
+        elif url.endswith("/readiness"):
+            route.fulfill(json={"products": []})
+        elif url.endswith("/materials"):
+            route.fulfill(json={"materials": []})
+        elif url.endswith("/close") and method == "POST":
+            state["closed"] += 1
+            state["keys"].append(route.request.headers.get("idempotency-key"))
+            route.fulfill(json={**CLOSED, "lines": [], "changes_since_close": None})
+        elif url.endswith("/stock-value/snapshots"):
+            route.fulfill(json={"snapshots": [current, OLD]})
+        elif "/stock-value/snapshots/" in url:
+            route.fulfill(json={**current, "lines": [], "changes_since_close": None})
+        elif url.endswith("/stock-value"):
+            route.fulfill(json=NOW)
+        else:
+            route.continue_()
+
+    page.route("**/api/core/costing/**", mocked)
+    return state
+
+
+@pytest.mark.parametrize("size", [(375, 800), (1440, 900)], ids=["phone", "desktop"])
+def test_a_provisional_month_says_so_and_a_manager_closes_it_from_a_bottom_sheet(costs_page, size):
+    page, app_url = costs_page
+    page.set_viewport_size({"width": size[0], "height": size[1]})
+    state = _mock_provisional(page)
+    page.goto(app_url + PAGE)
+    month = page.locator("[data-stock-list] li").first
+    expect(month).to_contain_text("Provisional until you close it (closes itself on 20 Nov)")
+
+    month.locator(".co-snap__head").click()
+    expect(month).to_contain_text("Not closed yet")
+    expect(month.get_by_role("link", name="Download provisional CSV")).to_be_visible()
+    month.get_by_role("button", name="Close month").click()
+    sheet = page.locator("[data-stock-close-sheet]")
+    expect(sheet).to_be_visible()
+    expect(sheet).to_contain_text("Close October 2026?")
+    expect(sheet).to_contain_text("can’t be reopened")
+    page.wait_for_timeout(400)  # the sheet's rise animation
+    box = sheet.bounding_box()
+    assert box is not None and abs(box["y"] + box["height"] - size[1]) <= 2, "the sheet rises from the bottom"
+    overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 0, f"page scrolls sideways by {overflow}px"
+
+    sheet.get_by_role("button", name="Not yet").click()
+    expect(sheet).to_be_hidden()
+    assert state["closed"] == 0  # nothing is written until it is confirmed
+
+    month.get_by_role("button", name="Close month").click()
+    sheet.locator("[data-stock-close-confirm]").click()
+    expect(sheet).to_be_hidden()
+    assert state["closed"] == 1 and state["keys"][0]
+    month = page.locator("[data-stock-list] li").first
+    expect(month).to_contain_text("Closed 18 Nov 2026")
+    expect(month).not_to_contain_text("Provisional")
+
+
+def test_a_viewer_sees_a_provisional_month_but_no_close_button(costs_page):
+    page, app_url = costs_page
+    _mock_provisional(page, can_manage=False)
+    page.goto(app_url + PAGE)
+    month = page.locator("[data-stock-list] li").first
+    expect(month).to_contain_text("Provisional until you close it")
+    month.locator(".co-snap__head").click()
+    expect(month).to_contain_text("Not closed yet")
+    expect(month.get_by_role("button", name="Close month")).to_have_count(0)

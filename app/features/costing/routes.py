@@ -20,6 +20,7 @@ from app.core.security.permissions import requires_auth, requires_permission
 from app.features.costing import FEATURE_KEY, duty_today, overheads, service
 from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
+from app.features.costing.stock_value import StockValueConflictError
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -664,11 +665,12 @@ def readiness_detail(key):
 
 
 def _auto_month_ends(org):
-    """The first costing read after a month ends closes it, for an org with no Xero (a Xero org's
-    first sync does). Never fails the read.
+    """The first costing read after a month ends takes its (provisional) month-end snapshot, for an
+    org with no Xero (a Xero org's first sync does). The first read on or after the close day closes
+    it, with or without Xero (design review L1). Never fails the read.
 
-    A person's read only: an assistant's read-only token (``g.auth_via == "mcp"``) never closes a
-    month, because the snapshot is held fixed once taken (design review S2)."""
+    A person's read only: an assistant's read-only token (``g.auth_via == "mcp"``) never takes or
+    closes a month (design review S2)."""
     from app.features.costing import stock_value
     from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 
@@ -676,8 +678,10 @@ def _auto_month_ends(org):
         return []
     try:
         if XeroTenantRepository(db_session).get_connected(org) is not None:
+            stock_value.close_due_months(db_session, org)
+            db_session.commit()
             return []
-        made = stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+        made = stock_value.month_end_upkeep(db_session, org, trigger="costing_read")
         db_session.commit()
         return made
     except Exception as error:  # noqa: BLE001
@@ -703,7 +707,7 @@ def list_stock_snapshots():
 
     org = _org()
     _auto_month_ends(org)
-    return jsonify({"snapshots": [stock_value.snapshot_header(s) for s in stock_value.list_snapshots(db_session, org)]})
+    return jsonify({"snapshots": stock_value.headers(db_session, org, stock_value.list_snapshots(db_session, org))})
 
 
 @costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>", methods=["GET"])
@@ -712,6 +716,7 @@ def get_stock_snapshot(snapshot_id):
     from app.features.costing import stock_value
 
     org = _org()
+    _auto_month_ends(org)  # a month whose close day has come reads closed (design review L1)
     snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
     return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True))
 
@@ -724,9 +729,11 @@ def export_stock_snapshot(snapshot_id):
     from app.features.costing import stock_value
 
     org = _org()
+    _auto_month_ends(org)
     snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
-    body = stock_value.export_csv(snapshot, stock_value.stored_lines(db_session, org, snapshot.id))
-    name = f"closing-stock-{snapshot.as_of_date.isoformat()}.csv"
+    live = stock_value.live_views(db_session, org, snapshot).get(snapshot.id)
+    body = stock_value.export_csv(snapshot, stock_value.stored_lines(db_session, org, snapshot.id), live)
+    name = f"{'provisional' if live is not None else 'closing'}-stock-{snapshot.as_of_date.isoformat()}.csv"
     return Response(body, mimetype="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
@@ -737,11 +744,34 @@ def take_stock_snapshot():
     from app.features.costing import stock_value
 
     org = _org()
-    # Close any month that has ended first, so this one never leaves it uncapturable.
-    stock_value.ensure_month_end_snapshots(db_session, org, trigger="costing_read")
+    # Take any month end that has passed first, so this one never leaves it uncapturable.
+    stock_value.month_end_upkeep(db_session, org, trigger="costing_read")
     snapshot = stock_value.take_snapshot(db_session, org, kind="manual", trigger="manual", user_id=_user_id())
     db_session.commit()
     return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True)), 201
+
+
+@costing_bp.errorhandler(StockValueConflictError)
+def _stock_value_conflict(error):
+    db_session.rollback()
+    return jsonify({"error": str(error)}), 409
+
+
+@costing_bp.route(f"{API}/stock-value/snapshots/<snapshot_id>/close", methods=["POST"])
+@requires_auth
+@idempotent_write("costing_stock_close")
+def close_stock_snapshot(snapshot_id):
+    """Close a provisional month: value its frozen quantities at today's costs and hold that fixed.
+
+    Design review L1. ``costs.manage`` (the policy). 409 when it is already closed or an earlier month
+    is still provisional (months close oldest first). Audited."""
+    from app.features.costing import stock_value
+
+    org = _org()
+    snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
+    stock_value.close_snapshot(db_session, org, snapshot, user_id=_user_id())
+    db_session.commit()
+    return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True))
 
 
 @costing_bp.route(f"{API}/bridge", methods=["GET"])
@@ -750,6 +780,7 @@ def get_bridge():
     from app.features.costing import bridge, stock_value
 
     org = _org()
+    _auto_month_ends(org)
     first, second = request.args.get("from"), request.args.get("to")
     if first or second:
         if not (first and second):

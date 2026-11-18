@@ -389,6 +389,7 @@ ENDPOINT_COVERAGE = {
     ("costing.get_stock_snapshot", "GET"): "blocked",
     ("costing.export_stock_snapshot", "GET"): "blocked",
     ("costing.take_stock_snapshot", "POST"): "blocked",
+    ("costing.close_stock_snapshot", "POST"): "blocked",
     ("costing.get_bridge", "GET"): "blocked",
     ("lot_holds.get_lot_holds", "GET"): "blocked",
     ("lot_holds.list_open_holds", "GET"): "blocked",

@@ -116,14 +116,33 @@
     <p class="cost-error" data-stock-error role="alert" aria-live="assertive" hidden></p>
     <div class="co-stock__card workspace-card" data-stock-now aria-live="polite"></div>
     <div class="co-stock__bar">
-      <h3 class="co-stock__sub">Closed months and snapshots</h3>
+      <h3 class="co-stock__sub">Months and snapshots</h3>
       {% if can('costs.manage') %}
       <button type="button" class="workspace-button" data-stock-snapshot>Take a snapshot</button>
       {% endif %}
     </div>
-    <p class="cost-muted" data-stock-empty hidden>No snapshots yet. A month is closed automatically once it ends.</p>
+    <p class="cost-muted" data-stock-empty hidden>No snapshots yet. Each month’s stock is counted when the month ends, and its value stays provisional until the month is closed.</p>
     <ul class="co-list" data-stock-list aria-label="Snapshots"></ul>
   </section>
+  {% if can('costs.manage') %}
+  <dialog class="ru-dialog" data-stock-close-sheet aria-labelledby="co-close-title">
+    <form method="dialog" hx-boost="false" data-stock-close-form>
+      <h2 id="co-close-title" data-stock-close-title>Close the month</h2>
+      <p class="co-close__total">Closing value <strong data-stock-close-total></strong></p>
+      <ul class="co-close__points">
+        <li>The stock counted at the end of the month is valued once, with the costs known today.</li>
+        <li>From then on it doesn’t change. A bill or card payment for this month recorded later shows beside it as a change since close, not in it.</li>
+        <li>It’s the figure the accountant’s CSV and the comparison with Xero use.</li>
+      </ul>
+      <p class="cost-hint">Record the month’s bills and card spend first. A closed month can’t be reopened.</p>
+      <p class="cost-error" role="alert" data-stock-close-error></p>
+      <div class="ru-dialog__actions">
+        <button type="button" class="workspace-button" data-stock-close-cancel>Not yet</button>
+        <button type="submit" class="workspace-button workspace-button--primary" data-stock-close-confirm>Close month</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
 
   <section class="co-prices" data-prices hidden aria-labelledby="co-prices-title">
     <h2 class="co-section-title" id="co-prices-title">What you pay for materials</h2>
