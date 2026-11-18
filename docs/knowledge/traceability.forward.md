@@ -3,6 +3,8 @@ topic: "traceability.forward"
 title: "Tracing forward to what a lot went into"
 domain: "traceability"
 summary: "Forward trace follows recorded step inputs to every lot made from a lot, at any depth. It is the basis for recall scoping."
+aliases:
+  - "supplier lot"
 related_topics:
   - traceability.back
   - traceability.to_sale

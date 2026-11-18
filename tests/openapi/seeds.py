@@ -139,6 +139,7 @@ def showcase_world(flask_app):
         world.ids.update(
             gin_lot=str(gin.id),
             juniper=str(juniper.id),
+            coriander=str(coriander.id),
             execution=str(execution.id),
             process=str(process_id),
             stocktake=str(stocktake.id),

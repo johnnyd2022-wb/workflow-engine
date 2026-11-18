@@ -3,6 +3,8 @@ topic: "inventory.holds"
 title: "Quality holds"
 domain: "inventory"
 summary: "A hold stops a lot being used until someone releases it with a note. Holds are kept as history and never deleted."
+aliases:
+  - "quarantine"
 related_topics:
   - inventory.availability
   - traceability.forward

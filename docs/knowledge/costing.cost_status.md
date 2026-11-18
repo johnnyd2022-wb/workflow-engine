@@ -3,6 +3,9 @@ topic: "costing.cost_status"
 title: "Cost and its status"
 domain: "costing"
 summary: "Every cost carries a status: actual, estimated, partial or unknown. A cost is complete or says what is missing, and unknown is never zero."
+aliases:
+  - "pay"
+  - "cost per kilogram"
 related_topics:
   - costing.readiness
   - costing.last_known_price
