@@ -63,12 +63,14 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [processes]
+        required: [total_count, processes]
         properties:
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           processes:
             type: array
             items: {$ref: "#/components/schemas/ProcessSummary"}
       example:
+        total_count: 1
         processes:
           - {id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88, name: Dry Gin, description: London dry gin, category: null, is_draft: false, step_count: 6, active_executions: 1, completed_executions: 14, created_at: "2026-01-12T00:00:00", event_summary: null}
     x-bize:
@@ -155,6 +157,7 @@ operations:
         type: object
         additionalProperties: false
         properties:
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           count: {type: integer, description: "Only with count=1."}
           executions:
             type: array
@@ -181,6 +184,7 @@ operations:
           has_more: {type: boolean}
           next_cursor: {type: [string, "null"]}
       example:
+        total_count: 1
         executions:
           - {id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20, process_id: 7d1f4b52-3c64-4c70-9a9a-1c2f5e6a7b88, status: in_progress, started_at: "2026-11-14T08:00:00", completed_at: null, created_at: "2026-11-14T07:55:00", completed_by: null, progress: 33.3, total_steps: 6, current_step: null, execution_steps: [], evidence: [], event_summary: null}
     x-bize:

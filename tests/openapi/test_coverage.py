@@ -134,6 +134,46 @@ def test_ac37_every_assistant_operation_is_a_get_that_a_token_can_reach_and_name
         assert op["security"] and {"bearerToken": []} in op["security"], oid
 
 
+COMPLETE = frozenset(  # design review M2: whole, or an error; never a partial answer
+    {
+        "core_trace_inventory_backward",
+        "core_trace_inventory_to_sale_graph",
+        "core_trace_raw_material",
+        "compliant_compliant_api_get_excise_period",
+        "compliant_compliant_api_get_excise_position",
+        "stocktake_get_stocktake_reconciliation",
+    }
+)
+
+
+def test_m2_traces_excise_and_reconciliation_are_complete_or_fail_and_name_their_app_page(full_doc):
+    marked = {oid for oid, (_p, _m, op) in mcp_operations(full_doc).items() if op["x-bize"].get("complete")}
+    assert marked == COMPLETE
+    for oid in COMPLETE:
+        page = mcp_operations(full_doc)[oid][2]["x-bize"].get("app_page")
+        assert isinstance(page, str) and page.startswith("/") and not page.startswith("/api/"), oid
+
+
+def test_m2_a_complete_operation_without_an_app_page_is_a_coverage_problem(full_doc):
+    import copy
+
+    doc = copy.deepcopy(full_doc)
+    op = by_id(doc)["core_trace_raw_material"][2]
+    del op["x-bize"]["app_page"]
+    assert any("app_page" in p for p in mcp_problems(doc)["core_trace_raw_material"])
+    op["x-bize"]["complete"] = "yes"
+    assert any("complete" in p for p in mcp_problems(doc)["core_trace_raw_material"])
+
+
+def test_m1_every_assistant_list_documents_total_count(full_doc):
+    for oid, (_p, _m, op) in mcp_operations(full_doc).items():
+        if op["x-bize"].get("kind") != "list":
+            continue
+        properties = response_schema(op).get("properties", {})
+        assert "total_count" in properties, oid
+        assert "total_count" in response_example(op), oid
+
+
 def test_ac37_every_assistant_operation_has_schemas_concepts_related_operations_and_an_example(full_doc):
     problems = mcp_problems(full_doc)
     assert problems == {}, "\n".join(f"{oid}: {'; '.join(p)}" for oid, p in sorted(problems.items()))

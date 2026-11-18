@@ -75,6 +75,8 @@ operations:
         connections: []
         trace_steps: []
     x-bize:
+      complete: true
+      app_page: /core/sourcemap
       kind: calculation
       mcp: true
       concepts: [traceability.back]
@@ -118,6 +120,8 @@ operations:
         finals: []
         connections: []
     x-bize:
+      complete: true
+      app_page: /core/sourcemap
       kind: calculation
       mcp: true
       concepts: [traceability.forward]
@@ -158,6 +162,8 @@ operations:
         all_items: []
         connections: []
     x-bize:
+      complete: true
+      app_page: /core/sourcemap
       kind: calculation
       mcp: true
       concepts: [traceability.to_sale, traceability.back, traceability.forward]

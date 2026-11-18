@@ -127,7 +127,9 @@ def build_server(config: Config, client: AppClient, knowledge: Knowledge) -> tup
                     kind="rate_limited",
                     retry_after_seconds=wait,
                 )
-            tool_context = ToolContext(client, current.token, identity, catalogue, knowledge, executes)
+            tool_context = ToolContext(
+                client, current.token, identity, catalogue, knowledge, executes, config.issuer_url
+            )
             structured = await tool.handler(tool_context, arguments)
         except UnauthorizedError:
             current.unauthorized = True

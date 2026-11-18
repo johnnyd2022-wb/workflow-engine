@@ -112,7 +112,7 @@ class AppClient:
         response = await self.get_raw(path, token, params)
         self._raise_for(response, by_id=by_id)
         if len(response.content) > MAX_BODY_BYTES:
-            raise ToolFailureError(PROBLEM, kind="upstream_error")
+            raise ToolFailureError(PROBLEM, kind="response_too_large")
         try:
             return response.json()
         except ValueError:

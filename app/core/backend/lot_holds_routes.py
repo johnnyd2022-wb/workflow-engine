@@ -120,15 +120,15 @@ def list_open_holds():
     """Every lot on hold now, with its name and quantity: the quality board."""
     session = db_session()
     org_id = g.current_org_id
-    rows = (
+    query = (
         session.query(LotHold, InventoryItem)
         .join(InventoryItem, (InventoryItem.id == LotHold.inventory_item_id) & (InventoryItem.org_id == LotHold.org_id))
         .filter(LotHold.org_id == org_id, LotHold.released_at.is_(None))
-        .order_by(LotHold.placed_at.desc())
-        .limit(1000)
     )
+    rows = query.order_by(LotHold.placed_at.desc()).limit(1000)
     return jsonify(
         {
+            "total_count": query.count(),
             "holds": [
                 {
                     **lot_holds.serialise(hold),
@@ -139,7 +139,7 @@ def list_open_holds():
                     },
                 }
                 for hold, item in rows
-            ]
+            ],
         }
     )
 

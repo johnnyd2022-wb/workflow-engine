@@ -2709,6 +2709,8 @@
           "compliance"
         ],
         "x-bize": {
+          "app_page": "/compliant/nz-alcohol/customs",
+          "complete": true,
           "concepts": [
             "compliance.excise_periods",
             "compliance.cca_movements"
@@ -2895,7 +2897,8 @@
                     "frequency": "monthly",
                     "reminders_from": null,
                     "tracking_from": null
-                  }
+                  },
+                  "total_count": 1
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -2962,9 +2965,15 @@
                     },
                     "settings": {
                       "$ref": "#/components/schemas/ExcisePeriodSettings"
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
+                    "total_count",
                     "periods",
                     "settings"
                   ],
@@ -3250,6 +3259,8 @@
           "compliance"
         ],
         "x-bize": {
+          "app_page": "/compliant/nz-alcohol/customs",
+          "complete": true,
           "concepts": [
             "compliance.excise_position",
             "compliance.excise_periods"
@@ -3547,7 +3558,8 @@
             "content": {
               "application/json": {
                 "example": {
-                  "records": []
+                  "records": [],
+                  "total_count": 0
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -3558,9 +3570,15 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
+                    "total_count",
                     "records"
                   ],
                   "type": "object"
@@ -8804,7 +8822,8 @@
                       "status": "in_progress",
                       "total_steps": 6
                     }
-                  ]
+                  ],
+                  "total_count": 1
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -8914,6 +8933,11 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "type": "object"
@@ -9420,7 +9444,8 @@
                       "released_by": null,
                       "source_hold_id": null
                     }
-                  ]
+                  ],
+                  "total_count": 1
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -9510,9 +9535,15 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
+                    "total_count",
                     "holds"
                   ],
                   "type": "object"
@@ -9715,7 +9746,17 @@
                       "system_findings": [],
                       "unit": "kg"
                     }
-                  ]
+                  ],
+                  "total_count": 1,
+                  "totals": {
+                    "quantity_by_unit": [
+                      {
+                        "lot_count": 1,
+                        "quantity": "3.25",
+                        "unit": "kg"
+                      }
+                    ]
+                  }
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -9734,9 +9775,46 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "totals": {
+                      "properties": {
+                        "quantity_by_unit": {
+                          "description": "On-hand quantities for every matching lot, grouped by stored unit. Includes held stock.",
+                          "items": {
+                            "properties": {
+                              "lot_count": {
+                                "type": "integer"
+                              },
+                              "quantity": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "quantity",
+                              "lot_count"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "quantity_by_unit"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
+                    "total_count",
                     "inventory_items"
                   ],
                   "type": "object"
@@ -10482,6 +10560,8 @@
           "traceability"
         ],
         "x-bize": {
+          "app_page": "/core/sourcemap",
+          "complete": true,
           "concepts": [
             "traceability.back"
           ],
@@ -10609,6 +10689,8 @@
           "traceability"
         ],
         "x-bize": {
+          "app_page": "/core/sourcemap",
+          "complete": true,
           "concepts": [
             "traceability.to_sale",
             "traceability.back",
@@ -10730,6 +10812,8 @@
           "traceability"
         ],
         "x-bize": {
+          "app_page": "/core/sourcemap",
+          "complete": true,
           "concepts": [
             "traceability.forward"
           ],
@@ -12776,7 +12860,8 @@
                       "name": "Dry Gin",
                       "step_count": 6
                     }
-                  ]
+                  ],
+                  "total_count": 1
                 },
                 "schema": {
                   "additionalProperties": false,
@@ -12786,9 +12871,15 @@
                         "$ref": "#/components/schemas/ProcessSummary"
                       },
                       "type": "array"
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
+                    "total_count",
                     "processes"
                   ],
                   "type": "object"
@@ -14758,6 +14849,8 @@
           "inventory"
         ],
         "x-bize": {
+          "app_page": "/core/stocktake",
+          "complete": true,
           "concepts": [
             "inventory.stocktakes",
             "compliance.excise_position"
@@ -16523,6 +16616,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "has_more": false,
                   "invoices": [
                     {
                       "amount_due": 0.0,
@@ -16549,11 +16643,25 @@
                   "kind": "all",
                   "page": 1,
                   "page_size": 50,
-                  "total": 1
+                  "total": 1,
+                  "total_count": 1,
+                  "totals": {
+                    "revenue": {
+                      "currency": "NZD",
+                      "ex_gst_unknown": 0,
+                      "invoice_count": 1,
+                      "invoiced_inc_gst": "1150.00",
+                      "not_converted": 0,
+                      "total": "1000.00"
+                    }
+                  }
                 },
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "has_more": {
+                      "type": "boolean"
+                    },
                     "invoices": {
                       "items": {
                         "$ref": "#/components/schemas/Invoice"
@@ -16572,9 +16680,55 @@
                     "total": {
                       "description": "How many invoices match, over all pages.",
                       "type": "integer"
+                    },
+                    "total_count": {
+                      "description": "Matching rows across all pages.",
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "totals": {
+                      "properties": {
+                        "revenue": {
+                          "description": "Authorised and paid sales invoices in this filter, before credit notes. Quote total for base-currency ex-GST revenue. The legacy invoiced_inc_gst mixes currencies.",
+                          "properties": {
+                            "currency": {
+                              "type": "string"
+                            },
+                            "ex_gst_unknown": {
+                              "type": "integer"
+                            },
+                            "invoice_count": {
+                              "type": "integer"
+                            },
+                            "invoiced_inc_gst": {
+                              "type": "string"
+                            },
+                            "not_converted": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "currency",
+                            "not_converted",
+                            "ex_gst_unknown",
+                            "invoice_count",
+                            "invoiced_inc_gst"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "revenue"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
+                    "total_count",
                     "invoices",
                     "total",
                     "page",

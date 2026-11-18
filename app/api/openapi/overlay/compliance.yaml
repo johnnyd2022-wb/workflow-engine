@@ -27,12 +27,14 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [records]
+        required: [total_count, records]
         properties:
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           records:
             type: array
             items: {type: object, additionalProperties: true}
       example:
+        total_count: 0
         records: []
     x-bize:
       kind: list
@@ -113,6 +115,8 @@ operations:
         stocktake: {frequency: annual, bulk_tolerance_percent: "0.5", last_completed_on: null, next_due: null, open_differences: 0, open_duty: "0", overdue: false}
         setup: {products: 3, incomplete: []}
     x-bize:
+      complete: true
+      app_page: /compliant/nz-alcohol/customs
       kind: calculation
       mcp: true
       concepts: [compliance.excise_position, compliance.excise_periods]
@@ -133,8 +137,9 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [periods, settings]
+        required: [total_count, periods, settings]
         properties:
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           settings: {$ref: "#/components/schemas/ExcisePeriodSettings"}
           periods:
             type: array
@@ -154,6 +159,7 @@ operations:
                 total: {type: [string, "null"], description: "Duty for the period once lodged, else null."}
                 total_lal: {type: [string, "null"]}
       example:
+        total_count: 1
         settings: {frequency: monthly, reminders_from: null, tracking_from: null}
         periods:
           - {label: November 2026, period_start: "2026-11-01", period_end: "2026-11-30", due: "2026-12-20", status: open, open: true, lodged_on: null, nil_return: null, total: null, total_lal: null}
@@ -207,6 +213,8 @@ operations:
         settings: {frequency: monthly, reminders_from: null, tracking_from: null}
         draft: {label: November 2026, period_start: "2026-11-01", period_end: "2026-11-30", due: "2026-12-20", status: open, open: true, total_duty: "700.00", total_lal: "52.4", lines: [], adjustments: [], problems: []}
     x-bize:
+      complete: true
+      app_page: /compliant/nz-alcohol/customs
       kind: calculation
       mcp: true
       concepts: [compliance.excise_periods, compliance.cca_movements]

@@ -32,7 +32,8 @@
         "parameters": [{"name": "inventory_item_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
         "x-bize": {"permission": "inventory.view", "domain": "traceability", "kind": "calculation", "mcp": true,
-                   "concepts": ["traceability.back"], "related_operations": ["list_inventory"]}
+                   "concepts": ["traceability.back"], "related_operations": ["list_inventory"],
+                   "complete": true, "app_page": "/core/sourcemap"}
       }
     },
     "/api/core/stock-position": {

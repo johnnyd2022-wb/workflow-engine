@@ -57,6 +57,8 @@ class Operation:
     params: tuple[Param, ...]
     response_schema: dict[str, Any] | None
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
+    complete: bool = False
+    app_page: str | None = None
 
     @property
     def required_params(self) -> list[str]:
@@ -194,6 +196,8 @@ def parse(document: Any) -> dict[str, Operation]:
                 params=tuple(params),
                 response_schema=_response_schema(document, entry),
                 raw=entry,
+                complete=extension.get("complete") is True,
+                app_page=extension.get("app_page"),
             )
     return found
 

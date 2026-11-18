@@ -670,7 +670,9 @@ def list_records():
     if framework_slug and framework_by_slug(framework_slug) is None:
         return jsonify({"error": "Unknown framework"}), 400
     records = _service().records(_org_id(), framework_slug)
-    return jsonify({"records": [serialise_record(record) for record in records[:200]]}), 200
+    return jsonify(
+        {"records": [serialise_record(record) for record in records[:200]], "total_count": len(records)}
+    ), 200
 
 
 @api_bp.route("/api/compliant/records", methods=["POST"])
@@ -947,7 +949,7 @@ def list_excise_periods():
             }
         )
         start = excise.previous_period(s0, cfg["frequency"])[0]
-    return jsonify({"settings": cfg, "periods": rows}), 200
+    return jsonify({"settings": cfg, "periods": rows, "total_count": len(rows)}), 200
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/position", methods=["GET"])

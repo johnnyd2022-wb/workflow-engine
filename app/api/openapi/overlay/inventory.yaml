@@ -152,14 +152,31 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [inventory_items]
+        required: [total_count, inventory_items]
         properties:
+          totals:
+            type: object
+            required: [quantity_by_unit]
+            properties:
+              quantity_by_unit:
+                type: array
+                description: "On-hand quantities for every matching lot, grouped by stored unit. Includes held stock."
+                items:
+                  type: object
+                  required: [unit, quantity, lot_count]
+                  properties:
+                    unit: {type: string}
+                    quantity: {type: string}
+                    lot_count: {type: integer}
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           inventory_items:
             type: array
             items: {$ref: "#/components/schemas/InventoryLot"}
           has_more: {type: boolean}
           next_cursor: {type: [string, "null"]}
       example:
+        total_count: 1
+        totals: {quantity_by_unit: [{unit: kg, quantity: "3.25", lot_count: 1}]}
         inventory_items:
           - id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11
             name: Juniper berries
@@ -262,6 +279,8 @@ operations:
         products:
           - {product: Dry Gin, unit: bottle, opening: "180", produced_and_in: "300", removed: "220", losses: "2", expected: "258", counted: "256", variance: "-2", explained: "0", declared: null}
     x-bize:
+      complete: true
+      app_page: /core/stocktake
       kind: calculation
       mcp: true
       concepts: [inventory.stocktakes, compliance.excise_position]
@@ -276,8 +295,9 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [holds]
+        required: [total_count, holds]
         properties:
+          total_count: {type: integer, minimum: 0, description: "Matching rows across all pages."}
           holds:
             type: array
             items:
@@ -304,6 +324,7 @@ operations:
                     quantity: {type: string}
                     unit: {type: string}
       example:
+        total_count: 1
         holds:
           - {id: 3d0a7b1e-2c43-4c1b-8f5e-6a2d9e4b7c10, inventory_item_id: 6f1c1d52-1f6e-4a54-9f0f-2f7c7a9d1c11, reason: Failed ABV check, source_hold_id: null, placed_by: null, placed_at: "2026-11-10T08:00:00+00:00", released_by: null, released_at: null, release_note: null, open: true, lot: {name: Dry Gin DG-014, quantity: "240", unit: bottle}}
     x-bize:

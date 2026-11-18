@@ -126,6 +126,17 @@ class XeroInvoiceRepository:
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[XeroInvoice], int]:
+        q = self._org_invoice_query(org_id, start_date, end_date, outstanding_only)
+        total = q.count()
+        rows = (
+            q.order_by(XeroInvoice.date.desc().nulls_last(), XeroInvoice.updated_at.desc().nulls_last())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return rows, total
+
+    def _org_invoice_query(self, org_id, start_date, end_date, outstanding_only):
         q = self.db.query(XeroInvoice).filter(
             XeroInvoice.org_id == org_id,
             XeroInvoice.invoice_type == "ACCREC",
@@ -139,14 +150,21 @@ class XeroInvoiceRepository:
                 XeroInvoice.status == "AUTHORISED",
                 XeroInvoice.amount_due > 0,
             )
-        total = q.count()
+        return q
+
+    def list_revenue(self, org_id, *, start_date, end_date, outstanding_only):
+        from app.features.crm.services.sales_sources import RevenueTotal, base_currency
+
+        revenue = RevenueTotal(currency=base_currency(self.db, org_id))
         rows = (
-            q.order_by(XeroInvoice.date.desc().nulls_last(), XeroInvoice.updated_at.desc().nulls_last())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
+            self._org_invoice_query(org_id, start_date, end_date, outstanding_only)
+            .filter(XeroInvoice.status.in_(["AUTHORISED", "PAID"]))
+            .with_entities(XeroInvoice.sub_total, XeroInvoice.total, XeroInvoice.total_tax, XeroInvoice.currency_code)
+            .yield_per(1000)
         )
-        return rows, total
+        for row in rows:
+            revenue.add(sub_total=row.sub_total, total=row.total, total_tax=row.total_tax, currency=row.currency_code)
+        return revenue.as_json()
 
     def get_line_items(self, invoice_id: UUID, org_id: UUID) -> list[XeroInvoiceLineItem]:
         return (
