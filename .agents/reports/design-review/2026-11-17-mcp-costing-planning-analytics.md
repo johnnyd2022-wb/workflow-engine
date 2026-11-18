@@ -148,16 +148,19 @@ All in `app/features/planning/forecast_service.py` unless stated.
     - Impact: 100/wk average, 150/wk Oct–Dec, 80/wk Jan–Mar. On 31 Dec it forecasts 150 × 80/100 = 120;
       right is 150 × 80/150 = 80 (50% high). End of September it is about 15% low (128 vs 150).
     - Fix: factor = last year's next N weeks ÷ last year's trailing N weeks, keeping the clamps.
+    - Status: fixed in !742 (factor is last year's next N weeks over last year's same trailing N weeks, or the weeks of those it sold in, min 2; the 31 Dec example now gives 80, not 120)
 - **P2. Incorrect run-out date: it ignores when planned stock arrives, and counts blocked plans.** Confirmed in code.
     - Problem: `cover_row` uses `available = on_hand + planned − ordered` then `today + available ÷ rate`;
       the per-batch ready dates from `planned_output` are discarded, and `blocked` batches count as supply.
     - Impact: a batch eight weeks out hides a stock-out in week three.
     - Fix: walk supply by ready date (the net-requirements engine in `engine.py` already does this);
       show blocked batches separately.
+    - Status: fixed in !742 (`engine.days_until_out` draws sales from stock and each batch from its ready date, takes each order on its due date; blocked batches are reported as `blocked` + `blocked_note`, not stock)
 - **P3. Miscalculated rate: new products are under-forecast.** Confirmed in code.
     - Problem: the rate divides by the full window even when the first sale is inside it; out-of-stock weeks count as zero demand.
     - Impact: a three-week-old product on a 12-week window shows a quarter of its rate.
     - Fix: divide by weeks since first sale (with a floor) and say so on the row.
+    - Status: fixed in !742 (rate over whole weeks since the first sale, min 2, with `rate_weeks` + `rate_note`; out-of-stock weeks still count as zero demand, see the MR's ASSUMPTION)
 - **P4. Incorrect on-hand: it counts only lots made by the workflow.** Confirmed in code; size needs validation.
     - Problem: `stock.on_hand` filters on `source_output_id`; bought-in, imported and legacy lots have none.
     - Fix: count Whistlebird's finished lots without `source_output_id` before choosing how to match them.

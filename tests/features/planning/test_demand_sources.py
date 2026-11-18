@@ -121,6 +121,44 @@ def test_engine_plan_for_nets_others_first_but_plans_only_the_chosen_demand():
 # --- netting ------------------------------------------------------------------------------
 
 
+def test_days_until_out_draws_each_supply_from_its_ready_date_until_it_expires():
+    from app.features.planning.engine import days_until_out
+
+    key = StockKey("gin", "bottles")
+    weekly = Decimal(10)
+    assert days_until_out((), weekly, today=TODAY) == 0
+    # 30 now lasts 21 days; a batch arriving on day 21 carries on, one on day 22 is too late.
+    now = Supply("lot", key, Decimal(30), TODAY)
+    assert days_until_out((now,), weekly, today=TODAY) == 21
+    assert days_until_out((now, Supply("b", key, Decimal(10), TODAY + timedelta(days=21))), weekly, today=TODAY) == 28
+    assert days_until_out((now, Supply("b", key, Decimal(10), TODAY + timedelta(days=22))), weekly, today=TODAY) == 21
+    # Nothing ready today is out today, whatever is coming.
+    assert days_until_out((Supply("b", key, Decimal(99), TODAY + timedelta(days=1)),), weekly, today=TODAY) == 0
+    # A lot expiring on day 6 is usable through day 6; first-expiring is drawn first.
+    expiring = Supply("old", key, Decimal(30), TODAY, TODAY + timedelta(days=6))
+    assert days_until_out((expiring,), weekly, today=TODAY) == 7
+    assert days_until_out((expiring, Supply("new", key, Decimal(10), TODAY)), weekly, today=TODAY) == 14
+    with pytest.raises(ValueError):
+        days_until_out((now,), Decimal(0), today=TODAY)
+
+
+def test_days_until_out_takes_each_order_on_its_due_date():
+    from app.features.planning.engine import days_until_out
+
+    key = StockKey("gin", "bottles")
+    stock = (Supply("lot", key, Decimal(100), TODAY), Supply("batch", key, Decimal(100), TODAY + timedelta(days=20)))
+    # 10 a week; the order for 100 on day 30 doesn't take today's stock early (design review P2
+    # follow-up): 200 - 100 lasts 140 days less the 70 days the order's 100 is worth.
+    order = ((TODAY + timedelta(days=30), Decimal(100)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=order) == 70
+    # An overdue order bigger than today's stock: out today, though a batch is coming.
+    overdue = ((TODAY - timedelta(days=2), Decimal(150)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=overdue) == 0
+    # An order due before the batch it needs: out on its due date.
+    early = ((TODAY + timedelta(days=5), Decimal(150)),)
+    assert days_until_out(stock, Decimal(10), today=TODAY, withdrawals=early) == 5
+
+
 def test_a_demand_covered_by_stock_on_hand_plans_no_batches(db, demand_world):
     org_id, output_id, _ = _setup(db, demand_world)
     _stock(db, org_id, output_id, 600)
@@ -475,13 +513,31 @@ def test_with_a_years_sales_the_coming_weeks_are_scaled_by_last_years_season(db,
     _mapping(db, org_id, output_id)
     trailing = [_sale(7 * k + 1, 10) for k in range(12)]  # 120 in the last 12 weeks
     year_ago = [_sale(364 - 7 * k - 1, 20) for k in range(12)]  # 240 in the same 12 weeks ahead, last year
-    first = [_sale(400, 5)]  # its first sale, over a year ago: outside every window used below
-    sales({org_id: trailing + year_ago + first}, {org_id: TODAY - timedelta(days=400)})
+    before = [_sale(364 + 7 * k + 1, 10) for k in range(12)]  # 120 in the 12 weeks before those, last year
+    sales({org_id: trailing + year_ago + before}, {org_id: TODAY - timedelta(days=364 + 78)})
     (row,) = _cover(db, org_id)["products"]
-    # Last year's average week: 360 / 52 = 6.92; those weeks sold 20 a week = x2.89.
-    assert row["seasonality_factor"] == "2.89"
-    assert row["weekly_rate"] == "28.89"
-    assert row["seasonality"] == "Last year the next 12 weeks sold 289% of an average week"
+    # Last year the coming weeks sold 20 a week against 10 a week in the weeks before: x2.
+    assert row["seasonality_factor"] == "2"
+    assert row["weekly_rate"] == "20"
+    assert row["seasonality"] == "Last year the next 12 weeks sold 200% of the 12 weeks before them"
+
+
+def test_a_season_compares_with_as_much_of_last_years_trailing_weeks_as_it_sold_in(db, demand_world, sales):
+    """A year and 8 weeks of sales: last year's coming weeks are compared with the 8 weeks before
+    them that it did sell in. With under 2 of those weeks there is no factor."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    lines = [_sale(7 * k + 1, 10) for k in range(12)] + [_sale(364 - 7 * k - 1, 20) for k in range(12)]
+    lines += [_sale(364 + 7 * k + 1, 5) for k in range(8)]  # 5 a week, its first sale 8 weeks before
+    sales({org_id: lines}, {org_id: TODAY - timedelta(days=364 + 50)})
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["seasonality_factor"], row["weekly_rate"]) == ("4", "40")  # 20 / 5, at the x4 cap
+    assert row["seasonality"] == "Last year the next 12 weeks sold 400% of the 8 weeks before them"
+
+    sales({org_id: lines[:24] + [_sale(366, 5)]}, {org_id: TODAY - timedelta(days=366)})
+    (row,) = _cover(db, org_id)["products"]
+    assert row["seasonality_factor"] is None and row["weekly_rate"] == "10"
+    assert row["seasonality"] == "Not enough of its sales before these weeks last year to compare seasons with"
 
 
 def test_available_counts_planned_batches_and_takes_off_open_orders(db, demand_world, sales):
@@ -490,7 +546,10 @@ def test_available_counts_planned_batches_and_takes_off_open_orders(db, demand_w
     sales({org_id: [_sale(3, 70)]}, {org_id: TODAY - timedelta(days=3)})
     _stock(db, org_id, output_id, 100)
     order = _demand(db, org_id, output_id, 300, 10)
-    batch_service.plan_demand(db, org_id, order.id, {}, today=TODAY)  # 200 short -> 1 batch of 250
+    rows, _ = batch_service.plan_demand(db, org_id, order.id, {}, today=TODAY)  # 200 short -> 1 batch of 250
+    for batch in rows:
+        batch.status = "planned"  # free to start (a blocked batch isn't counted: see the P2 test below)
+    db.flush()
     (row,) = _cover(db, org_id)["products"]
     assert (row["on_hand"], row["planned"], row["ordered"], row["available"]) == ("100", "250", "300", "50")
 
@@ -522,7 +581,8 @@ def test_another_orgs_sales_targets_and_stock_never_count(db, demand_world, sale
     db.add(PlanningStockTarget(org_id=other, source_output_id=output_id, weeks_of_cover=Decimal(50)))
     db.flush()
     (row,) = _cover(db, org_id)["products"]
-    assert row["weekly_rate"] == "1" and row["on_hand"] == "0" and row["target_weeks"] is None
+    # 12 sold yesterday, its first sale: rated over the 2-week minimum, not the other org's 9999.
+    assert row["weekly_rate"] == "6" and row["on_hand"] == "0" and row["target_weeks"] is None
 
 
 @pytest.mark.parametrize("weeks", [0, -1, 105, "1.234", True, "NaN", "Infinity", "lots"])
@@ -598,9 +658,116 @@ def test_seasonality_needs_a_year_of_that_products_own_sales(db, demand_world, s
     sales({org_id: new + old}, {org_id: TODAY - timedelta(days=7 * 59 + 1)})
     rows = {row["name"]: row for row in _cover(db, org_id)["products"]}
     assert rows["Gin"]["seasonality_factor"] is None
-    assert rows["Gin"]["weekly_rate"] == "9.17"  # 110 over 12 weeks, unadjusted
+    assert rows["Gin"]["weekly_rate"] == "10"  # 110 over the 11 weeks since its first sale, unadjusted
     assert rows["Gin"]["seasonality"] == "Less than 12 months of its sales, so no seasonal adjustment"
     assert rows["Old Gin"]["seasonality_factor"] is not None
+
+
+def test_the_season_compares_last_years_next_weeks_with_last_years_same_trailing_weeks():
+    """Design review P1. An average year of 100 a week, 150 a week October to December and 80 a
+    week January to March: on 31 December the 12 weeks just sold ran at 150, and last year the
+    next 12 weeks sold 80 against 150 in the 12 before them, so the forecast is 80 a week. The
+    trailing average is already at this season's level; scaling it by last year's annual average
+    (150 x 80/100 = 120) counted the season twice."""
+    today = date(2026, 12, 31)
+
+    def week(weeks_ago, units):  # one sale inside the week that ended `weeks_ago` weeks ago
+        return (today - timedelta(weeks=weeks_ago) + timedelta(days=3), Decimal(units))
+
+    sales = [week(k, 150) for k in range(1, 13)]  # Oct-Dec this year
+    sales += [week(k, 80) for k in range(41, 53)]  # last year's Jan-Mar: the next 12 weeks, a year ago
+    sales += [week(k, 87) for k in range(13, 40)] + [week(40, 91)]  # Apr-Sep: the year averages 100
+    sales += [week(k, 150) for k in range(53, 65)]  # last year's Oct-Dec: the same trailing weeks
+    assert sum(units for sold_on, units in sales if sold_on >= today - forecast_service.YEAR) == 5200
+    rate, factor, note = forecast_service.weekly_rate(sales, today=today, weeks=12, has_year=True)[:3]
+    assert rate.quantize(Decimal("0.01")) == Decimal("80.00")
+    assert factor.quantize(Decimal("0.01")) == Decimal("0.53")
+    assert note == "Last year the next 12 weeks sold 53% of the 12 weeks before them"
+
+
+def _batch(db, org_id, output_id, quantity, ready_in_days, status="planned"):
+    """A live batch of `quantity` ready in `ready_in_days`, for a forecast demand (so not on order)."""
+    demand = PlanningDemand(
+        org_id=org_id,
+        reference="Stock target: Gin",
+        source_output_id=output_id,
+        quantity=Decimal(1),  # one batch; its quantity is set below
+        unit="bottles",
+        due_date=TODAY + timedelta(days=ready_in_days),
+        priority=0,
+        source="forecast",
+        source_ref=f"forecast:{uuid4()}",
+    )
+    db.add(demand)
+    db.flush()
+    (batch,) = batch_service.plan_demand(db, org_id, demand.id, {}, today=TODAY)[0]
+    batch.quantity = Decimal(quantity)
+    batch.status = status
+    batch.theoretical_ready_date = TODAY + timedelta(days=ready_in_days)
+    db.flush()
+    return batch
+
+
+def test_a_batch_ready_later_does_not_hide_a_stock_out_before_it_arrives(db, demand_world, sales):
+    """Design review P2: 30 on hand selling 10 a week, and a 100-bottle batch ready in 8 weeks.
+    It runs out in week 3; adding the batch to today's stock said week 13."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 100, 56)
+    _stock(db, org_id, output_id, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["weekly_rate"], row["on_hand"], row["planned"]) == ("10", "30", "100")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=21)).isoformat()
+
+
+def test_an_order_due_after_a_batch_arrives_does_not_take_todays_stock(db, demand_world, sales):
+    """Review of the P2 fix: 100 on hand, 100 ready on day 20, an order for 100 due on day 30,
+    selling 10 a week. Sales and the order are both met until day 70, not out today."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 100, 20)
+    _stock(db, org_id, output_id, 100)
+    _demand(db, org_id, output_id, 100, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["on_hand"], row["planned"], row["ordered"]) == ("100", "100", "100")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=70)).isoformat()
+
+
+def test_a_blocked_batch_is_reported_but_not_counted_as_stock(db, demand_world, sales):
+    """Design review P2: a blocked batch can't start, so it isn't supply; it is shown on its own."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 10) for k in range(12)]}, {org_id: TODAY - timedelta(days=90)})
+    _batch(db, org_id, output_id, 500, 7, status="blocked")
+    _stock(db, org_id, output_id, 30)
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["planned"], row["blocked"], row["available"]) == ("0", "500", "30")
+    assert row["runs_out_on"] == (TODAY + timedelta(days=21)).isoformat()
+    assert row["blocked_note"] == "500 bottles in blocked batches aren't counted until they can start"
+    assert row["sentence"].endswith(row["blocked_note"] + ".")
+    # What to plan doesn't repeat it: the batch is already planned and needs unblocking.
+    forecast_service.save_target(db, org_id, None, {"source_output_id": str(output_id), "weeks_of_cover": 8})
+    (row,) = _cover(db, org_id)["products"]
+    assert row["suggestion"] is None  # 8 weeks + 2 days at 10 a week = 83, under 30 + 500
+
+
+def test_a_new_product_is_rated_over_the_weeks_since_its_first_sale(db, demand_world, sales):
+    """Design review P3: first sold 3 weeks ago at 30 a week, on a 12-week window, it sells 30 a
+    week, not 90 / 12 = 7.5."""
+    org_id, output_id, _ = _setup(db, demand_world)
+    _mapping(db, org_id, output_id)
+    sales({org_id: [_sale(7 * k + 1, 30) for k in range(3)]}, {org_id: TODAY - timedelta(days=15)})
+    (row,) = _cover(db, org_id)["products"]
+    assert row["weekly_rate"] == "30"
+    assert row["rate_weeks"] == 3
+    assert row["rate_note"] == "First sold 3 weeks ago, so the rate is over those 3 weeks, not 12"
+    # First sold 3 days ago: the 2-week minimum, and the note says so rather than "2 weeks ago".
+    sales({org_id: [_sale(3, 30)]}, {org_id: TODAY - timedelta(days=3)})
+    (row,) = _cover(db, org_id)["products"]
+    assert (row["weekly_rate"], row["rate_weeks"]) == ("15", 2)
+    assert row["rate_note"] == "First sold 3 days ago, so the rate is over the 2-week minimum, not 12 weeks"
 
 
 def _two_sites(db, org_id):

@@ -11634,7 +11634,7 @@
     },
     "/api/core/planner/cover": {
       "get": {
-        "description": "For every product that sells or has a cover target: its sales rate per week over the window, the stock available, the date it runs out, and how many batches to plan and by when. Each row carries a sentence Biz-E has already worked out (`sentence`), so use it rather than redoing the arithmetic. Soonest to run out first. `available` follows the planner's rules: stock on hold, expired, not yet ready or committed to a planned batch is not counted. Needs sales connected to give a rate.",
+        "description": "For every product that sells or has a cover target: its sales rate per week over the window, the stock available, the date it runs out, and how many batches to plan and by when. Each row carries a sentence Biz-E has already worked out (`sentence`), so use it rather than redoing the arithmetic. Soonest to run out first. `available` follows the planner's rules: stock on hold or expired is not counted, open orders are taken off, and a blocked batch is not counted (`blocked`, `blocked_note`). `available` is a total; the run-out date accounts for timing: each batch counts only from its ready date and each order is taken on its due date, so a late batch does not hide an earlier stock-out. A product first sold inside the window is rated over the weeks since then (`rate_weeks`, `rate_note`). Needs sales connected to give a rate.",
         "operationId": "planning_get_stock_cover",
         "parameters": [
           {

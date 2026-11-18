@@ -141,8 +141,10 @@
       if (product.on_hand !== null) facts.push(amount(product.on_hand, product.unit) + ' on hand');
       if (Number(product.planned)) facts.push(amount(product.planned, product.unit) + ' planned');
       if (Number(product.ordered)) facts.push(amount(product.ordered, product.unit) + ' on order');
+      if (product.rate_note) facts.push(product.rate_note);
       if (product.seasonality) facts.push(product.seasonality);
       main.appendChild(el('p', facts.join(' · '), 'planner-row__what'));
+      if (product.blocked_note) main.appendChild(el('p', product.blocked_note + '.', 'planner-row__note'));
       product.unknowns.forEach(function (reason) { main.appendChild(el('p', reason, 'planner-row__note')); });
       card.appendChild(main);
 
