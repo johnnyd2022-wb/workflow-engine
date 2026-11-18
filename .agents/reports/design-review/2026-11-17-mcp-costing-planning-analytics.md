@@ -194,7 +194,9 @@ All in `app/features/planning/forecast_service.py` unless stated.
 - **L2. Incorrect stock value: foreign-currency purchases can't be costed from Xero.** Confirmed in code.
     - Problem: non-base documents are `needs_rate` with no amount and accept no action
       (`app/features/costing/purchase_sources.py:432`); assumption A11 is unresolved.
-    - Fix: confirm the rate direction on one real transaction, or let the user type the NZD paid.
+    - Decision (founder, 19 Nov 2026): Keep COGS in NZD for now. Foreign-currency costing is deferred.
+      Revisit on producer demand. Use a real Xero transaction to verify the rate before automating
+      conversion, or consider manual entry of the NZD paid.
 - **L3. Costs exclude GST for everyone.** Risk; business assumption.
     - Problem: A2 assumes every customer is GST registered; NZ registration is compulsory only above $60k turnover.
     - Fix: ask the pilot producers; if any is unregistered, add a per-org basis applied at sync.
@@ -234,7 +236,7 @@ Before the numbers are described as authoritative:
 Then:
 
 9. Align sale dating between margins and the bridge; `as_of` / `provisional` on cost responses (X2, A2).
-10. Resolve the FX rate direction (L2).
+10. Revisit foreign-currency purchases when required (L2, deferred).
 11. The assistant-answer question set (M4).
 12. Specs for planning and sales analytics (P5, A3).
 13. Tighter output limits; refresh grace window (M3, S5).
@@ -243,7 +245,7 @@ Then:
 
 | Area | Outstanding work | What is needed |
 | --- | --- | --- |
-| Live costing | L2 foreign-currency purchases | Reconcile one real foreign purchase against the Xero base-currency amount before enabling automatic conversion. |
+| Live costing | L2 foreign-currency purchases (deferred) | Keep COGS in NZD. Revisit when a producer needs foreign-currency costing. |
 | Margins and stock bridge | X2 and A2 reporting basis | Agree on sale dating and how a closed month's frozen costs appear in margins. An invoice date, import date and valuation date can differ. |
 | Pack-specific margins | X4 unmatched sale rows and provenance | Establish the sold pack for an unmatched line before using finished-lot averages. Surface the estimate's source in margin detail. |
 | MCP answers | M1 aggregates, M3 context limits and M5 versioning | Add product-level aggregates, set compact defaults per operation and agree on a version shared by the app catalogue and the MCP image. Use the seeded M4 suite as a baseline for a real assistant pilot. |

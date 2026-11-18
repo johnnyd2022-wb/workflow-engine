@@ -1103,9 +1103,10 @@ regular supplier. From then on new purchases arrive pre-filled.
   bottles carry it all (slightly overstating bottle cost; reused Library stock enters a later
   batch at 0). Rejected: a per-mL share, because bottle volume isn't recorded yet. Revisit with
   the Phase 2 litres split.
-- ASSUMPTION A11: Xero's `CurrencyRate` direction is unverified, so Phase 1 stores foreign-currency
-  purchases with `fx_status = needs_rate` and no base amount. Verify against one real multi-currency
-  transaction, then convert (Whistlebird is NZD only, so nothing it buys is affected).
+- DECISION A11 (founder, 19 Nov 2026): Keep live COGS in NZD for now. Imported foreign-currency
+  purchases remain visible with `fx_status = needs_rate` and no base amount. Automatic conversion
+  and manual NZD entry for those purchases are deferred. Revisit when a producer needs it, using
+  a real Xero transaction to verify the conversion before automating it.
 - ASSUMPTION A10: Phase 1 stores no cost caches; every figure is computed on read. Rejected:
   stale-flag caches (the invalidation rules were the main source of review gaps, and current
   tenants are small).
