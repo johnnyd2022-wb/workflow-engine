@@ -314,9 +314,8 @@ def _add_unit_costs(db: Session, org_id: UUID, out: dict, latest: dict, loaded: 
     try:
         engine.prime({item_id for ids in produced_by_batch.values() for item_id in ids})
     except TooLargeError:
-        shared = False
-    else:
-        shared = True  # until the shared engine's node budget runs out
+        return  # too much history to cost them together: the list shows readiness without figures
+    shared = True  # until the shared engine's node budget runs out
     for key, execution_id in wanted.items():
         lots = produced_by_batch.get(execution_id, [])
         try:
