@@ -1,7 +1,7 @@
 """Design review S3: per-org switch for apps Biz-E hasn't verified.
 
 Revision ID: mcp_oauth_002
-Revises: mcp_oauth_001
+Revises: costing_stock_002
 
 Adds ``mcp_org_settings.allow_unverified_clients`` (boolean, NOT NULL, default false). Every
 existing organisation becomes "verified apps only", which is the point of the finding: an
@@ -17,7 +17,7 @@ from alembic import op
 from sqlalchemy import text
 
 revision = "mcp_oauth_002"
-down_revision = "mcp_oauth_001"
+down_revision = "costing_stock_002"
 branch_labels = None
 depends_on = None
 

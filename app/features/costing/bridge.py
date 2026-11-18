@@ -230,7 +230,16 @@ def _duty(db: Session, org_id: UUID, start, end, xero_total) -> dict:
     return out
 
 
-def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closing: StockValueSnapshot) -> dict:
+def _total(snapshot: StockValueSnapshot, live: dict) -> Decimal:
+    view = live.get(snapshot.id)
+    return view.totals["total"] if view is not None else Decimal(str(snapshot.total_value))
+
+
+def _roll_forward(
+    db: Session, org_id: UUID, opening: StockValueSnapshot, closing: StockValueSnapshot, live: dict
+) -> dict:
+    """``live``: ``stock_value.live_views``. A closed snapshot's movements are the stored ones; a
+    provisional one's are worked out as it reads now (design review L1)."""
     between = (
         db.query(StockValueSnapshot)
         .filter(
@@ -243,20 +252,24 @@ def _roll_forward(db: Session, org_id: UUID, opening: StockValueSnapshot, closin
     )
     totals: dict = defaultdict(lambda: ZERO)
     absorbed = {"batch": ZERO, "freight": ZERO}  # 8.1h: overhead taken into stock, by where it came from
-    ids = [s.id for s in between]
-    if ids:
+    stored_ids = [s.id for s in between if s.id not in live]
+    movements = []
+    if stored_ids:
         movements = (
             db.query(StockValueMovement)
-            .filter(StockValueMovement.org_id == org_id, StockValueMovement.snapshot_id.in_(ids))
+            .filter(StockValueMovement.org_id == org_id, StockValueMovement.snapshot_id.in_(stored_ids))
             .all()
         )
-        for movement in movements:
-            totals[movement.kind] += Decimal(str(movement.value))
-            if movement.kind == "overhead_absorbed":
-                source = "freight" if movement.inventory_item_id is not None else "batch"
-                absorbed[source] += Decimal(str(movement.value))
+    for s in between:
+        if s.id in live:
+            movements.extend(live[s.id].movements or [])
+    for movement in movements:
+        totals[movement.kind] += Decimal(str(movement.value))
+        if movement.kind == "overhead_absorbed":
+            source = "freight" if movement.inventory_item_id is not None else "batch"
+            absorbed[source] += Decimal(str(movement.value))
     purchases = totals["purchase"]
-    o, c = Decimal(str(opening.total_value)), Decimal(str(closing.total_value))
+    o, c = _total(opening, live), _total(closing, live)
     components = {
         "cogs": -totals["sale"],
         "wastage": -totals["wastage"],
@@ -305,13 +318,16 @@ def build_bridge(
     if opening.cutoff_at >= closing.cutoff_at:
         raise CostingError("The first snapshot must be earlier than the second")
     start, end = opening.as_of_date + timedelta(days=1), closing.as_of_date
-    roll_forward = _roll_forward(db, org_id, opening, closing)
+    live = stock_value.live_views(db, org_id, closing)
+    roll_forward = _roll_forward(db, org_id, opening, closing, live)
     absorbed = roll_forward.pop("absorbed", None)
     body = {
         "state": "ok",
-        "from": stock_value.snapshot_header(opening),
-        "to": stock_value.snapshot_header(closing),
+        "from": stock_value.snapshot_header(opening, live.get(opening.id)),
+        "to": stock_value.snapshot_header(closing, live.get(closing.id)),
         "period": {"from": start.isoformat(), "to": end.isoformat()},
+        # Either end not closed yet: the roll-forward reads at today's costs and can still change.
+        "provisional": bool(live),
         "roll_forward": roll_forward,
         "changes_since_close": stock_value.changes_since_close(db, org_id, closing),
         "tie_out": None,

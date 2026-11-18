@@ -2985,6 +2985,7 @@ def cmd_seed(args) -> int:
 
 def import_all_models() -> None:
     """purge_org walks Base.metadata, which only knows the tables whose models are imported."""
+    import app.core.db.models.api_idempotency_key  # noqa: F401 -- a scenario's idempotent write leaves one
     import app.features as features
 
     for module in pkgutil.walk_packages(features.__path__, features.__name__ + "."):

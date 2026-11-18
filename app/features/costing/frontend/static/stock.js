@@ -29,6 +29,22 @@
     var d = new Date(iso + (iso.length === 10 ? 'T12:00:00' : ''));
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
   }
+  function dayMonth(iso) {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+  }
+  function monthName(iso) {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' });
+  }
+  function title(snap) {
+    return snap.kind === 'month_end' ? 'End of ' + monthName(snap.as_of_date) : 'Snapshot ' + day(snap.as_of_date);
+  }
+  /* Design review L1: a month's value is provisional until it is closed. */
+  function provisionalNote(snap) {
+    if (!snap.provisional) return '';
+    if (snap.closes_on) return 'Provisional until you close it (closes itself on ' + dayMonth(snap.closes_on) + ')';
+    return 'Provisional until the month before it is closed';
+  }
+  function key() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random(); }
   function floorNote(t) {
     var parts = [];
     if (t.unknown_lots) parts.push(t.unknown_lots + (t.unknown_lots === 1 ? ' lot has' : ' lots have') + ' no cost yet');
@@ -56,11 +72,14 @@
       list: root.querySelector('[data-stock-list]'),
       empty: root.querySelector('[data-stock-empty]'),
       take: root.querySelector('[data-stock-snapshot]'),
+      sheet: document.querySelector('[data-stock-close-sheet]'),
     };
+    var canManage = false;
     function fail(msg) { els.error.textContent = msg; els.error.hidden = false; }
 
     window.BizECost.me().then(function (who) {
       if (!who || !who.can_view) return;
+      canManage = !!who.can_manage && !!els.sheet;
       root.hidden = false;
       load();
     });
@@ -110,10 +129,15 @@
       var head = el('button', 'co-snap__head');
       head.type = 'button';
       head.setAttribute('aria-expanded', 'false');
-      var title = el('span', 'co-snap__title', snap.kind === 'month_end' ? 'End of ' + new Date(snap.as_of_date + 'T12:00:00').toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' }) : 'Snapshot ' + day(snap.as_of_date));
-      title.appendChild(el('span', 'co-snap__sub', 'Taken ' + day(snap.taken_at.slice(0, 10)) + (snap.automatic ? ' automatically' : '') +
+      var name = el('span', 'co-snap__title', title(snap));
+      name.appendChild(el('span', 'co-snap__sub', 'Taken ' + day(snap.taken_at.slice(0, 10)) + (snap.automatic ? ' automatically' : '') +
         (snap.quantity_basis === 'reconstructed' ? ' · counted back to month end' : '')));
-      head.appendChild(title);
+      if (snap.kind === 'month_end' && !snap.provisional && snap.closed_at) {
+        name.appendChild(el('span', 'co-snap__sub', 'Closed ' + day(snap.closed_at) + (snap.closed_automatically ? ' automatically' : '')));
+      }
+      var note = provisionalNote(snap);
+      if (note) name.appendChild(el('span', 'co-snap__state cost-pill cost-pill--warn', note));
+      head.appendChild(name);
       head.appendChild(el('span', 'co-snap__value', (snap.complete ? '' : 'At least ') + $(snap.total)));
       var chevron = el('span', 'co-row__chevron');
       chevron.setAttribute('aria-hidden', 'true');
@@ -141,6 +165,10 @@
         }).concat([['Total', (d.complete ? '' : 'At least ') + $(d.total), true]])));
         var note = floorNote(d);
         if (note) detail.appendChild(el('p', 'cost-muted', note));
+        if (d.provisional) {
+          detail.appendChild(el('p', 'cost-muted', 'Not closed yet: these figures use today’s costs, so they change as the month’s bills and card spend are recorded. ' +
+            'The stock counted at the end of the month doesn’t change.'));
+        }
         var ch = d.changes_since_close;
         if (ch && Number(ch.delta) !== 0) {
           detail.appendChild(el('p', 'cost-pill cost-pill--warn',
@@ -148,7 +176,14 @@
             '). The closed figure above stays as it was.'));
         }
         var actions = el('div', 'co-snap__actions');
-        var csv = el('a', 'workspace-button', 'Download CSV for your accountant');
+        if (d.provisional && d.kind === 'month_end' && canManage) {
+          var closeBtn = el('button', 'workspace-button workspace-button--primary', 'Close month');
+          closeBtn.type = 'button';
+          closeBtn.setAttribute('data-stock-close', d.id);
+          closeBtn.addEventListener('click', function () { openClose(d, closeBtn); });
+          actions.appendChild(closeBtn);
+        }
+        var csv = el('a', 'workspace-button', d.provisional ? 'Download provisional CSV' : 'Download CSV for your accountant');
         csv.href = API + '/stock-value/snapshots/' + d.id + '/export.csv';
         actions.appendChild(csv);
         if (earlier) {
@@ -181,6 +216,9 @@
       }
       box.appendChild(el('h4', '', (b.xero && b.xero.state === 'same_day') ? 'What left stock between the two snapshots'
         : 'What left stock, ' + day(b.period.from) + ' to ' + day(b.period.to)));
+      if (b.provisional) {
+        box.appendChild(el('p', 'co-bridge__state cost-pill cost-pill--warn', 'Provisional: the month isn’t closed, so these figures can still change.'));
+      }
       var r = b.roll_forward;
       box.appendChild(kv([['Opening stock', $(r.opening)], ['Bought into stock', $(r.purchases)], ['Closing stock', $(r.closing)],
         ['Cost that left stock', $(r.cost_left), true]]));
@@ -233,11 +271,42 @@
       if (b.overhead && b.overhead.xero_total != null) box.appendChild(kv([['Xero overhead direct costs (not changed)', $(b.overhead.xero_total)]]));
     }
 
+    /* Closing a month: a bottom sheet says what closing means before anything is written. */
+    var closing = null;
+    if (els.sheet) {
+      var form = els.sheet.querySelector('[data-stock-close-form]');
+      var sheetError = els.sheet.querySelector('[data-stock-close-error]');
+      var confirmBtn = els.sheet.querySelector('[data-stock-close-confirm]');
+      var closeKey = null;
+      els.sheet.querySelector('[data-stock-close-cancel]').addEventListener('click', closeSheet);
+      els.sheet.addEventListener('close', function () { if (closing && closing.opener) closing.opener.focus(); });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!closing || confirmBtn.disabled) return;
+        confirmBtn.disabled = true;
+        sheetError.textContent = '';
+        window.BizECost.request('POST', API + '/stock-value/snapshots/' + closing.snap.id + '/close', {}, closeKey)
+          .then(function () { closing.opener = null; els.sheet.close(); return loadSnapshots(); })
+          .catch(function (err) { sheetError.textContent = err.message; })
+          .finally(function () { confirmBtn.disabled = false; });
+      });
+    }
+    function openClose(snap, opener) {
+      closing = { snap: snap, opener: opener };
+      els.sheet.querySelector('[data-stock-close-title]').textContent = 'Close ' + monthName(snap.as_of_date) + '?';
+      els.sheet.querySelector('[data-stock-close-total]').textContent = (snap.complete ? '' : 'at least ') + $(snap.total);
+      els.sheet.querySelector('[data-stock-close-error]').textContent = '';
+      closeKey = key();
+      els.sheet.showModal();
+      els.sheet.querySelector('[data-stock-close-cancel]').focus();
+    }
+    function closeSheet() { els.sheet.close(); }
+
     if (els.take) {
       els.take.addEventListener('click', function () {
         els.take.disabled = true;
         els.error.hidden = true;
-        window.BizECost.request('POST', API + '/stock-value/snapshot', {}, (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()))
+        window.BizECost.request('POST', API + '/stock-value/snapshot', {}, key())
           .then(loadSnapshots)
           .catch(function (e) { fail('Couldn’t take a snapshot: ' + e.message); })
           .finally(function () { els.take.disabled = false; });

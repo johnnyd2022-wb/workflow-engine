@@ -236,6 +236,12 @@ html[data-spa-theme="dark"] #page-content .cost-error { color: #f97066; }
 #page-content .co-snap__detail { padding: 4px 16px 16px; display: grid; gap: 12px; }
 #page-content .co-snap__detail[hidden] { display: none; }
 #page-content .co-snap__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Design review L1: a provisional month and the sheet that closes it */
+#page-content .co-snap__state { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 600; white-space: normal; max-width: 100%; border-radius: 10px; }
+#page-content .co-bridge__state { justify-self: start; margin: 0; border-radius: 10px; }
+#page-content .co-close__total { margin: 0; display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+#page-content .co-close__total strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#page-content .co-close__points { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.45; }
 #page-content .co-kv { margin: 0; display: grid; gap: 6px; }
 #page-content .co-kv__row { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
 #page-content .co-kv__row dt { color: var(--ui-text); min-width: 0; overflow-wrap: anywhere; }
