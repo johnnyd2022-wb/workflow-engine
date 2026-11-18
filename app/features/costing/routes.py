@@ -716,6 +716,7 @@ def get_stock_snapshot(snapshot_id):
     from app.features.costing import stock_value
 
     org = _org()
+    _auto_month_ends(org)  # a month whose close day has come reads closed (design review L1)
     snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
     return jsonify(stock_value.snapshot_payload(db_session, org, snapshot, detail=True))
 
@@ -728,6 +729,7 @@ def export_stock_snapshot(snapshot_id):
     from app.features.costing import stock_value
 
     org = _org()
+    _auto_month_ends(org)
     snapshot = stock_value.get_snapshot(db_session, org, snapshot_id)
     live = stock_value.live_views(db_session, org, snapshot).get(snapshot.id)
     body = stock_value.export_csv(snapshot, stock_value.stored_lines(db_session, org, snapshot.id), live)
@@ -778,6 +780,7 @@ def get_bridge():
     from app.features.costing import bridge, stock_value
 
     org = _org()
+    _auto_month_ends(org)
     first, second = request.args.get("from"), request.args.get("to")
     if first or second:
         if not (first and second):

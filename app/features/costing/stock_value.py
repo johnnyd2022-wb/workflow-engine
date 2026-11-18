@@ -761,7 +761,7 @@ def list_snapshots(db: Session, org_id: UUID) -> list[StockValueSnapshot]:
 # --- changes since close ------------------------------------------------------------------------------
 
 
-def changes_since_close(db: Session, org_id: UUID, snapshot: StockValueSnapshot, lines=None) -> dict:
+def changes_since_close(db: Session, org_id: UUID, snapshot: StockValueSnapshot, lines=None) -> dict | None:
     """A closed snapshot's stored quantities re-priced with today's costs. Never touches the snapshot.
     None for a provisional one: it already reads at today's costs."""
     if snapshot.status == PROVISIONAL:

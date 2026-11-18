@@ -243,6 +243,20 @@ def assistant_org(db, flask_app):
     db.commit()
 
 
+def test_l1_reading_the_snapshot_itself_on_the_20th_closes_it(plain, db, monkeypatch):
+    org, client = plain
+    juniper = lot(db, org.id, "Juniper", 10, "kg")
+    price(db, org.id, juniper.id, 50, 10)
+    _clock(monkeypatch, _month_after_next(5))
+    snapshot = _month_end(client)
+    assert snapshot["status"] == "provisional"
+
+    _clock(monkeypatch, _month_after_next(21))
+    exported = client.get(f"{API}/stock-value/snapshots/{snapshot['id']}/export.csv").get_data(as_text=True)
+    assert "Provisional" not in exported
+    assert _detail(client, snapshot["id"])["status"] == "closed"
+
+
 def test_l1_a_token_read_never_closes_the_month(assistant_org, db, monkeypatch):
     from app.features.costing.models import StockValueSnapshot
 
