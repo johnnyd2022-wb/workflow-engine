@@ -50,6 +50,7 @@ def test_ac128_batch_card_renders_tracked_and_untracked_duty(fresh_user, page, a
             json={
                 "status": "actual",
                 "known_input_cost": "100.0000",
+                "valuation_basis": "live",
                 "outputs": [
                     {
                         "name": "Tracked Gin",
@@ -78,3 +79,4 @@ def test_ac128_batch_card_renders_tracked_and_untracked_duty(fresh_user, page, a
     card = page.locator("[data-duty-card-test] .cost-card")
     expect(card).to_contain_text("Duty if sold today $4.98 · landed $26.98 per bottle")
     expect(card).to_contain_text("Duty not tracked")
+    expect(card).to_contain_text("Costs use current records")

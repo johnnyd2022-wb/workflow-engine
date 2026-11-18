@@ -29,6 +29,9 @@ def _report():
         "from": "2026-01",
         "to": "2026-02",
         "currency": "AUD",
+        "as_of": "2026-11-18T21:00:00+00:00",
+        "valuation_basis": "live",
+        "sales_date_basis": "document_date",
         "rows": [
             {
                 "product": "Limoncello",
@@ -113,6 +116,10 @@ def test_margins_currency_completeness_reload_accordion_and_boosted_return(margi
     expect(page.locator("[data-margins-summary]")).to_contain_text("A$180.00")
     expect(page.locator("[data-margins-summary]")).to_contain_text("Complete for 1 of 2 months")
     # February's duty and margin are unknown: January's stand, counted as 1 of 2 months.
+    note = page.locator("[data-margins-note]")
+    expect(note).to_contain_text("19 Nov 2026")
+    expect(note).to_contain_text("Late prices can change past margins")
+    expect(note).to_contain_text("Sales and credits use their document dates")
     expect(page.locator("[data-margins-summary]")).to_contain_text("A$12.00")
     expect(page.locator("[data-margins-summary]")).to_contain_text("A$58.00")
     expect(page.locator("[data-margins-list]")).to_contain_text("Margin A$58.00 · complete for 1 of 2 months")

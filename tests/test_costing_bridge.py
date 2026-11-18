@@ -293,6 +293,7 @@ def test_ac140_opening_plus_purchases_minus_closing_is_what_left_stock(world, db
     closing = snap(db, org, CLOSING)
 
     body = bridge(client, opening, closing)
+    assert body["stock_removal_date_basis"] == "inventory_posted_at"
 
     roll = body["roll_forward"]
     assert (D(roll["opening"]), D(roll["purchases"]), D(roll["closing"]), D(roll["cost_left"])) == (

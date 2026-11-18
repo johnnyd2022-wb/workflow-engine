@@ -232,6 +232,9 @@
         lines.appendChild(li);
       });
       box.appendChild(lines);
+      if (b.stock_removal_date_basis === 'inventory_posted_at') {
+        box.appendChild(el('p', 'cost-muted', 'Stock leaving inventory uses its posting date.'));
+      }
       if (!r.balanced) box.appendChild(el('p', 'cost-pill cost-pill--warn', 'Doesn’t add up by ' + $(r.rounding) + '; check the stock records.'));
       var x = b.xero || {};
       if (x.state === 'not_connected') {

@@ -4,6 +4,7 @@ Spec .agents/specs/live-cogs.md, "Users & permissions", "API", AC40-AC42, AC62. 
 the implementation.
 """
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -178,7 +179,11 @@ def test_lot_cost_payload_shape(world):
     assert entry["amount"] == "90.0000" and entry["quantity"] == "2.0000" and entry["cost_flow_id"] is None
 
 
-def test_execution_cost_payload_shape(world):
+def test_execution_cost_payload_shape(world, monkeypatch):
+    from app.features.costing import routes
+
+    start = datetime(2026, 11, 19, 0, tzinfo=UTC)
+    monkeypatch.setattr(routes, "utc_now", lambda: start)
     body = world["admin"].get(f"{API}/executions/{world['execution'].id}/cost").get_json()
     for key in (
         "execution_id",
@@ -191,6 +196,7 @@ def test_execution_cost_payload_shape(world):
         "outputs",
     ):
         assert key in body, key
+    assert body["as_of"] == start.isoformat() and body["valuation_basis"] == "live"
     assert body["cost_so_far"] == "0.0000" and body["cost_so_far_status"] == "actual"
     assert body["warnings"] == [] and body["missing"] == [] and body["split_assumed"] is False
     assert body["known_input_cost"] == "45.0000" and body["status"] == "actual"

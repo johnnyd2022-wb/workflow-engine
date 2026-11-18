@@ -5,7 +5,7 @@ Spec .agents/specs/live-cogs.md, "8.1f-2 build contract" (AC45-AC48, AC102-AC104
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -170,6 +170,35 @@ def test_ac45_margin_with_cost_and_duty_from_the_excise_module(world, db):
     assert D(row["average_cost_per_unit"]) == D("4.75")
     (line,) = row["lines"]
     assert line["batches"][0]["inventory_item_id"] == str(batch.id)
+
+
+def test_past_margin_uses_current_cost_and_reports_when_it_was_calculated(world, db, monkeypatch):
+    from app.features.costing import margins
+
+    lot = world["lot"]("Late price")
+    invoice = world["sell"]([("Wildflower Gin 700ml", 5, "100", "15")], day=date(2026, 10, 30))
+    world["allocate"](invoice, "l1", lot, 5)
+    first = datetime(2026, 11, 2, 0, tzinfo=UTC)
+    second = datetime(2026, 11, 3, 0, tzinfo=UTC)
+    times = iter((first, second))
+    monkeypatch.setattr(margins, "utc_now", lambda: next(times))
+
+    url = f"{API}?from=2026-10&to=2026-10"
+    before = world["client"].get(url)
+    assert before.status_code == 200
+    assert before.json["as_of"] == first.isoformat()
+    assert before.json["valuation_basis"] == "live"
+    assert before.json["sales_date_basis"] == "document_date"
+    assert before.json["rows"][0]["cost"] is None
+
+    price(db, world["org"].id, lot.id, 400, 100)
+    after = world["client"].get(url)
+    assert after.status_code == 200
+    assert after.json["as_of"] == second.isoformat()
+    assert after.json["valuation_basis"] == "live"
+    (row,) = after.json["rows"]
+    assert row["month"] == "2026-10" and row["lines"][0]["sold_on"] == "2026-10-30"
+    assert row["cost"] == "20.00" and row["revenue"] == "100.00"
 
 
 def test_ac46_units_with_no_lot_use_the_products_average_and_are_estimated(world, db):
