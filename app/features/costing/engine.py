@@ -34,6 +34,7 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.utils.packs import breakdown as pack_breakdown
+from app.core.utils.packs import lot_pack
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.modules.nz_alcohol.excise import litres_of as excise_litres
@@ -164,6 +165,20 @@ _LOADED_CACHES = (
     "_freight",
     "_exec_rows",
 )
+
+
+def _pack_signature(item: InventoryItem) -> tuple | None:
+    pack = lot_pack(item)
+    if pack is None:
+        return None
+    if "size" not in pack:
+        return (pack["count"],)
+    unit = pack["size_unit"]
+    size = Decimal(pack["size"])
+    if unit in {"l", "kg"}:
+        size = size.scaleb(3)
+        unit = {"l": "ml", "kg": "g"}[unit]
+    return pack["count"], size, unit
 
 
 class CostEngine:
@@ -910,12 +925,13 @@ class CostEngine:
 
     def _estimate(self, item: InventoryItem) -> tuple[InventoryItem, Decimal] | None:
         target = _lot_date(item)
+        pack = _pack_signature(item)
         candidates = []
         for other in self._material_index().get(normalise(item.name), []):
             if other.id == item.id:
                 continue
             self._charge(("lot", other.id))
-            if not self._is_direct(other):
+            if _pack_signature(other) != pack or not self._is_direct(other):
                 continue
             factor = self._unit_factor(item.unit, other.unit)
             if factor is None:
