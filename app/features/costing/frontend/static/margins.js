@@ -123,7 +123,7 @@
       els.summary.hidden = rows.length === 0;
       els.note.hidden = true;
       if (!rows.length) return;
-      summary(total(rows), rows);
+      summary(total(rows), rows, body);
       var byProduct = Object.create(null); // product names are data: "constructor" is a valid one
       rows.forEach(function (r) { (byProduct[r.product] = byProduct[r.product] || []).push(r); });
       Object.keys(byProduct)
@@ -140,7 +140,7 @@
       return f;
     }
 
-    function summary(t, rows) {
+    function summary(t, rows, report) {
       function of(missing) { return missing ? 'Complete for ' + (t.months - missing) + ' of ' + t.months + ' months' : null; }
       els.summary.replaceChildren(
         figure('Revenue', fmt(t.revenue), of(t.missingRevenue) || 'ex GST'),
@@ -150,6 +150,14 @@
         figure('Margin', fmt(t.margin), t.missingMargin ? of(t.missingMargin) : (t.percent == null ? null : pct(t.percent)))
       );
       var notes = [];
+      if (report.valuation_basis === 'live') {
+        var asOf = new Date(report.as_of);
+        var time = Number.isNaN(asOf.getTime()) ? '' : ' on ' + asOf.toLocaleString('en-NZ', {
+          dateStyle: 'medium', timeStyle: 'short', timeZone: 'Pacific/Auckland'
+        });
+        notes.push('Costs calculated' + time + ' from current records. Late prices can change past margins.');
+      }
+      if (report.sales_date_basis === 'document_date') notes.push('Sales and credits use their document dates.');
       if (t.status !== 'actual') notes.push(STATUS[t.status] + ' — open a product to see which months.');
       if (!t.dutyTracked) notes.push('Duty isn’t included: the NZ Alcohol module is off.');
       if (rows.some(function (r) { return r.revenue == null; })) {

@@ -33,6 +33,8 @@ The bridge report is an app page and has no assistant operation. `costing_get_st
 
 ## Do not assume
 
+- **The stock and margins reports can put the same sale in different months.** The roll-forward assigns stock leaving inventory by its posting date (`stock_removal_date_basis`). Margins use the invoice date and calculate costs from current records, including for closed months.
+
 - **Biz-E cost of sales and Xero cost of sales differ by design**, because of timing. Do not call the gap an error.
 - **A bridge needs two snapshots.** Say so if there are fewer.
 - **Do not suggest a journal.** Biz-E does not post one, and accounting advice belongs to the accountant.

@@ -147,7 +147,12 @@ measurement or a decision before it counts as a defect.
 - **A2. Past figures move without a marker.** Confirmed in the spec.
     - Problem: cost is computed on read; a late purchase or setting change moves last quarter's margin. Only stock value has a frozen close.
     - Impact: numbers copied out through MCP later disagree with the app.
-    - Fix: `as_of` and `provisional` (true until the month closes) on margins and batch cost responses.
+    - Follow-up: margins and batch cost state their calculation time (`as_of`) and live valuation basis.
+      Margins explicitly use document dates and the bridge labels stock removals by posting date.
+      A closed stock snapshot does not freeze these live reports. Changing the period rules or
+      using frozen costs in margins remains X2. A late-posted sale also changes the physical stock
+      roll-forward in its posting period. Reconcile that timing difference before changing either
+      report's treatment of closed months.
 - **A3. Sales analytics has no spec.** Gap. Write the contract with worked numbers before calling monthly sales, customer breakdown or contact analytics authoritative.
 
 ## Production planning findings
@@ -246,7 +251,7 @@ Then:
 | Area | Outstanding work | What is needed |
 | --- | --- | --- |
 | Live costing | L2 foreign-currency purchases (deferred) | Keep COGS in NZD. Revisit when a producer needs foreign-currency costing. |
-| Margins and stock bridge | X2 and A2 reporting basis | Agree on sale dating and how a closed month's frozen costs appear in margins. An invoice date, import date and valuation date can differ. |
+| Margins and stock bridge | X2 sale timing and frozen costs | The reports now show their basis. Agree on sale dating and how a closed month's frozen costs appear in margins. An invoice date, import date and valuation date can differ. |
 | Pack-specific margins | X4 unmatched sale rows and provenance | Establish the sold pack for an unmatched line before using finished-lot averages. Surface the estimate's source in margin detail. |
 | MCP answers | M1 aggregates, M3 context limits and M5 versioning | Add product-level aggregates, set compact defaults per operation and agree on a version shared by the app catalogue and the MCP image. Use the seeded M4 suite as a baseline for a real assistant pilot. |
 | Production MCP | S4 rollout | Provision and verify Valkey, then exercise a real assistant connection for a production organisation. See GL-002 in `docs/go-live-checklist.md`. |

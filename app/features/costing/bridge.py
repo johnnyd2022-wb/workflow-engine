@@ -326,6 +326,7 @@ def build_bridge(
         "from": stock_value.snapshot_header(opening, live.get(opening.id)),
         "to": stock_value.snapshot_header(closing, live.get(closing.id)),
         "period": {"from": start.isoformat(), "to": end.isoformat()},
+        "stock_removal_date_basis": "inventory_posted_at",
         # Either end not closed yet: the roll-forward reads at today's costs and can still change.
         "provisional": bool(live),
         "roll_forward": roll_forward,

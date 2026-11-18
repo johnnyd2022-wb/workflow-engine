@@ -17,6 +17,7 @@ from app.core.db import db_session
 from app.core.security.access_policy import has_permission
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth, requires_permission
+from app.core.utils.time import utc_now
 from app.features.costing import FEATURE_KEY, duty_today, overheads, service
 from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
@@ -153,7 +154,10 @@ def delete_lot_cost(item_id, entry_id):
 @requires_auth
 def get_execution_cost(execution_id):
     org_id = _org()
+    as_of = utc_now()
     result = CostEngine(db_session, org_id).execution(execution_id)
+    result["as_of"] = as_of.isoformat()
+    result["valuation_basis"] = "live"
     result["duty_today"] = duty_today.attach(db_session, org_id, result)
     return jsonify(result)
 

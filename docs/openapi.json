@@ -5960,6 +5960,7 @@
     },
     "/api/core/costing/bridge": {
       "get": {
+        "description": "Reconcile the stock value between two snapshots. The roll-forward dates stock removals by when they were posted to inventory (`stock_removal_date_basis`), so an invoice dated in an earlier month can appear there in margins while the stock leaves in a later bridge period.",
         "operationId": "costing_get_bridge",
         "parameters": [],
         "responses": {
@@ -5993,7 +5994,7 @@
     },
     "/api/core/costing/executions/{execution_id}/cost": {
       "get": {
-        "description": "What a batch cost so far: each input and its cost, the cost of what it made, the status of the figure and the duty that applies today where excise is tracked. Where a batch makes several outputs the split between them may be assumed (`split_assumed`). Unknown inputs leave the cost partial or unknown, never zero. Only for organisations that have costing.",
+        "description": "What a batch cost so far: each input and its cost, the cost of what it made, the status of the figure and the duty that applies today where excise is tracked. Where a batch makes several outputs the split between them may be assumed (`split_assumed`). Unknown inputs leave the cost partial or unknown, never zero. Costs use current records and can change when prices are updated. Only for organisations that have costing.",
         "operationId": "costing_get_execution_cost",
         "parameters": [
           {
@@ -6012,6 +6013,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "as_of": "2026-11-16T00:00:00+00:00",
                   "cost_so_far": "0",
                   "cost_so_far_status": "unknown",
                   "duty_today": {
@@ -6028,11 +6030,17 @@
                   "outputs": [],
                   "split_assumed": false,
                   "status": "unknown",
+                  "valuation_basis": "live",
                   "warnings": []
                 },
                 "schema": {
                   "additionalProperties": true,
                   "properties": {
+                    "as_of": {
+                      "description": "When this cost calculation started.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
                     "cost_so_far": {
                       "description": "The cost of the inputs used so far.",
                       "type": [
@@ -6087,6 +6095,13 @@
                     "status": {
                       "$ref": "#/components/schemas/CostStatus"
                     },
+                    "valuation_basis": {
+                      "description": "Costs use current records and can be revised.",
+                      "enum": [
+                        "live"
+                      ],
+                      "type": "string"
+                    },
                     "warnings": {
                       "items": {
                         "type": "string"
@@ -6096,6 +6111,8 @@
                   },
                   "required": [
                     "execution_id",
+                    "as_of",
+                    "valuation_basis",
                     "status",
                     "cost_so_far",
                     "cost_so_far_status",
@@ -6335,7 +6352,7 @@
     },
     "/api/core/costing/margins": {
       "get": {
-        "description": "Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue is product revenue: ex GST, in the base currency, from sale lines mapped to a product only; lines that map to no product (freight, other charges, unmapped items) are totalled in `unmapped`, never in a row. So this is not the same figure as monthly sales (invoice revenue, every line): don't compare the two. A foreign-currency sale's revenue is null, never converted. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403. A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the last six months. At most a fixed number of months at a time.",
+        "description": "Revenue, cost, duty and margin for each product in each month, with the batches behind the cost. Revenue is product revenue: ex GST, in the base currency, from sale lines mapped to a product only; lines that map to no product (freight, other charges, unmapped items) are totalled in `unmapped`, never in a row. So this is not the same figure as monthly sales (invoice revenue, every line): don't compare the two. A foreign-currency sale's revenue is null, never converted. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403. A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the last six months. At most a fixed number of months at a time. Sales and credits are grouped by document date. Production cost is recalculated from current records, including for months with a closed stock valuation.",
         "operationId": "costing_margins_report",
         "parameters": [
           {
@@ -6362,6 +6379,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "as_of": "2026-11-16T00:00:00+00:00",
                   "currency": "NZD",
                   "from": "2026-06",
                   "rows": [
@@ -6380,16 +6398,23 @@
                       "units": "220"
                     }
                   ],
+                  "sales_date_basis": "document_date",
                   "to": "2026-11",
                   "unmapped": {
                     "lines": 7,
                     "not_converted": 0,
                     "revenue": "350.00"
-                  }
+                  },
+                  "valuation_basis": "live"
                 },
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "as_of": {
+                      "description": "When this report calculation started.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
                     "currency": {
                       "description": "The base currency every amount is in.",
                       "type": "string"
@@ -6476,6 +6501,13 @@
                       },
                       "type": "array"
                     },
+                    "sales_date_basis": {
+                      "description": "Sales and credits use their invoice and credit note dates.",
+                      "enum": [
+                        "document_date"
+                      ],
+                      "type": "string"
+                    },
                     "to": {
                       "type": "string"
                     },
@@ -6502,12 +6534,22 @@
                         "not_converted"
                       ],
                       "type": "object"
+                    },
+                    "valuation_basis": {
+                      "description": "Production costs use current records and can be revised.",
+                      "enum": [
+                        "live"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "from",
                     "to",
                     "currency",
+                    "as_of",
+                    "valuation_basis",
+                    "sales_date_basis",
                     "rows",
                     "unmapped"
                   ],

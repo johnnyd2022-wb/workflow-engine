@@ -54,6 +54,6 @@ Each cost has a `status`, worst last:
 ## Do not assume
 
 - **Unknown is not zero.** Never show a missing cost as $0, and never present a `partial` floor as the cost.
-- **A cost can change after the fact.** A purchase recorded late changes past batches' costs.
+- **A cost can change after the fact.** A purchase recorded late changes past batches' costs. The batch-cost and margins responses report when the calculation started (`as_of`) and that the value uses current records (`valuation_basis: live`). Sales and credits in margins use their document dates, even when the related stock leaves in a later month.
 - **Do your own division only on an actual or estimated figure.** Use the app's per-unit values.
 - **Cost is production cost.** Do not call it margin, price or duty-inclusive.

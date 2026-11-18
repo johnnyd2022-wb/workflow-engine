@@ -17,6 +17,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.utils.time import utc_now
 from app.features.costing.engine import (
     _LIBRARY_SUFFIX,
     ACTUAL,
@@ -164,6 +165,7 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
     from app.features.crm.services.sales_sources import base_currency as org_base_currency
     from app.features.crm.services.sales_sources import sale_lines
 
+    as_of = utc_now()
     duty_on = nz_alcohol_active(db, org_id)
     base_currency = org_base_currency(db, org_id)
     lines, unmapped = sale_lines(db, org_id, start, next_month(end))
@@ -329,6 +331,9 @@ def report(db: Session, org_id: UUID, start: date, end: date) -> dict:
         "from": start.strftime("%Y-%m"),
         "to": end.strftime("%Y-%m"),
         "currency": base_currency,
+        "as_of": as_of.isoformat(),
+        "valuation_basis": "live",
+        "sales_date_basis": "document_date",
         "rows": out,
         "unmapped": _unmapped_total(unmapped, base_currency),
     }

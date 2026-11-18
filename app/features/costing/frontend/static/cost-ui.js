@@ -471,6 +471,9 @@
     if (cost.split_assumed) {
       card.appendChild(el('p', 'cost-muted', 'Cost is split between outputs by quantity, because no split was recorded.'));
     }
+    if (cost.valuation_basis === 'live') {
+      card.appendChild(el('p', 'cost-muted', 'Costs use current records and can change when prices are updated.'));
+    }
     return card;
   }
 

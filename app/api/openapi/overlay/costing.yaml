@@ -92,7 +92,7 @@ operations:
       What a batch cost so far: each input and its cost, the cost of what it made, the status of the figure
       and the duty that applies today where excise is tracked. Where a batch makes several outputs the split
       between them may be assumed (`split_assumed`). Unknown inputs leave the cost partial or unknown, never
-      zero. Only for organisations that have costing.
+      zero. Costs use current records and can change when prices are updated. Only for organisations that have costing.
     parameters:
       - name: execution_id
         in: path
@@ -104,9 +104,11 @@ operations:
       schema:
         type: object
         additionalProperties: true
-        required: [execution_id, status, cost_so_far, cost_so_far_status, known_input_cost, inputs, outputs, missing, warnings]
+        required: [execution_id, as_of, valuation_basis, status, cost_so_far, cost_so_far_status, known_input_cost, inputs, outputs, missing, warnings]
         properties:
           execution_id: {type: string, format: uuid}
+          as_of: {type: string, format: date-time, description: "When this cost calculation started."}
+          valuation_basis: {type: string, enum: [live], description: "Costs use current records and can be revised."}
           status: {$ref: "#/components/schemas/CostStatus"}
           cost_so_far: {type: [string, "null"], description: "The cost of the inputs used so far."}
           cost_so_far_status: {$ref: "#/components/schemas/CostStatus"}
@@ -122,6 +124,8 @@ operations:
             description: Excise duty per unit at today's rate, when the organisation tracks it.
       example:
         execution_id: 2b6c8f0e-5d2a-4d0c-8a51-4b3c9e1a7f20
+        as_of: "2026-11-16T00:00:00+00:00"
+        valuation_basis: live
         status: unknown
         cost_so_far: "0"
         cost_so_far_status: unknown
@@ -225,7 +229,8 @@ operations:
       is not the same figure as monthly sales (invoice revenue, every line): don't compare the two. A
       foreign-currency sale's revenue is null, never converted. Revenue is sales data, so the caller needs sales.view as well as costs.view; without it the route returns 403.
       A cost that cannot be stated is null with its status, and the margin is then null too. Defaults to the
-      last six months. At most a fixed number of months at a time.
+      last six months. At most a fixed number of months at a time. Sales and credits are grouped by document date.
+      Production cost is recalculated from current records, including for months with a closed stock valuation.
     parameters:
       - name: from
         in: query
@@ -241,11 +246,14 @@ operations:
       schema:
         type: object
         additionalProperties: false
-        required: [from, to, currency, rows, unmapped]
+        required: [from, to, currency, as_of, valuation_basis, sales_date_basis, rows, unmapped]
         properties:
           from: {type: string}
           to: {type: string}
           currency: {type: string, description: "The base currency every amount is in."}
+          as_of: {type: string, format: date-time, description: "When this report calculation started."}
+          valuation_basis: {type: string, enum: [live], description: "Production costs use current records and can be revised."}
+          sales_date_basis: {type: string, enum: [document_date], description: "Sales and credits use their invoice and credit note dates."}
           unmapped:
             type: object
             description: >-
@@ -278,6 +286,9 @@ operations:
                 average_cost_per_unit: {type: [string, "null"]}
                 lines: {type: array, items: {type: object, additionalProperties: true}}
       example:
+        as_of: "2026-11-16T00:00:00+00:00"
+        valuation_basis: live
+        sales_date_basis: document_date
         from: "2026-06"
         to: "2026-11"
         currency: NZD
@@ -410,6 +421,10 @@ operations:
     summary: Get accounts
   costing_get_bridge:
     summary: Get bridge
+    description: >-
+      Reconcile the stock value between two snapshots. The roll-forward dates stock removals by when they were
+      posted to inventory (`stock_removal_date_basis`), so an invoice dated in an earlier month can appear there
+      in margins while the stock leaves in a later bridge period.
   costing_get_material_history:
     summary: Get material history
   costing_get_settings:

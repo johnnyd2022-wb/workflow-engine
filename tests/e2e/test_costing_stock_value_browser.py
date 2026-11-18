@@ -82,6 +82,7 @@ def _mock(page, *, can_manage=True):
             route.fulfill(
                 json={
                     "state": "ok",
+                    "stock_removal_date_basis": "inventory_posted_at",
                     "period": {"from": "2026-10-01", "to": "2026-10-31"},
                     "xero": {"state": "not_connected"},
                     "tie_out": None,
@@ -146,6 +147,7 @@ def test_stock_value_closed_months_and_bridge_render_without_sideways_scroll(cos
     detail.get_by_role("button", name="Compare with Xero").click()
     expect(detail).to_contain_text("Xero isn’t connected")
     expect(detail).to_contain_text("Cost that left stock")
+    expect(detail).to_contain_text("Stock leaving inventory uses its posting date")
 
     page.locator("[data-stock-snapshot]").click()
     expect(page.locator("[data-stock-snapshot]")).to_be_enabled()
