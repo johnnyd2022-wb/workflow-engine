@@ -379,7 +379,7 @@ do not introduce reverse imports into existing domain code.
 
     subscription: core
     layer:        derived
-    flag:         none (workflow_engine_enabled is NOT this — it's a dead legacy flag)
+    flag:         none
     reviewed:     2026-08-09 (see .agents/reports/traceability/review.md)
 
     routes:

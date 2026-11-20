@@ -457,10 +457,6 @@ class Config:
         return self.getboolean("features", "compliant_enabled", True)
 
     @property
-    def workflow_engine_enabled(self) -> bool:
-        return self.getboolean("features", "workflow_engine_enabled", True)
-
-    @property
     def operational_cases_enabled(self) -> bool:
         """Deployment-wide kill switch for the operational_cases capability (A1).
 
