@@ -326,7 +326,7 @@ def _event_diff_rows(ev) -> list[dict]:
     return _build_diff_rows(ev.diff or {})
 
 
-def _human_summary(ev) -> str:
+def human_summary(ev) -> str:
     et = ev.event_type
     p = ev.payload or {}
     d = ev.diff or {}
@@ -605,7 +605,7 @@ def entity_story(entity_type: str, entity_id: str):
     total = db.query(EntityEvent).filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid).count()
 
     event_dicts = [
-        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
+        {**_event_to_dict(ev), "summary": human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
     ]
 
     if etype == "inventory_item":
@@ -789,7 +789,7 @@ def entity_summary_detail(entity_type: str, entity_id: str):
             "entity_type": etype,
             "summary": summary,
             "recent_events": [
-                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+                {**_event_to_dict(ev), "summary": human_summary(ev), "diff_rows": _event_diff_rows(ev)}
                 for ev in reversed(recent)
             ],
         }
@@ -844,8 +844,7 @@ def entity_activity_feed():
             "total": total,
             "offset": offset,
             "events": [
-                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-                for ev in events
+                {**_event_to_dict(ev), "summary": human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
             ],
         }
     ), 200

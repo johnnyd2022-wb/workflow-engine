@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.backend.event_writer import EventWriter
 from app.core.backend.idempotency import idempotent_write
+from app.core.backend.pagination import encode_list_cursor, parse_page_params
 from app.core.db import db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution
@@ -31,7 +32,8 @@ from app.core.utils.inventory_quantity import (
 )
 from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.features.compliance_checks.routes import corechecks
-from app.features.reconciliation.service import _find_producing_step
+from app.features.execution.execution_data import split_execution_data
+from app.features.reconciliation.service import find_producing_step
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -86,8 +88,8 @@ def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
     return out
 
 
-def register_routes(bp, *, parse_page_params, encode_list_cursor, split_execution_data):
-    """Register inventory routes; shared pagination/execution serializers stay in Core shell."""
+def register_routes(bp):
+    """Register inventory routes on the existing Core endpoint namespace."""
 
     @bp.route("/core/inventory/add", methods=["GET"])
     @requires_auth
@@ -562,7 +564,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     if execution and execution.process_id:
                         process_with_steps = process_by_id.get(execution.process_id)
                         if process_with_steps:
-                            producing_step_id, producing_step_name = _find_producing_step(
+                            producing_step_id, producing_step_name = find_producing_step(
                                 process_with_steps, item.name, item.unit
                             )
                         # Fallback: if no output match (e.g. name/unit mismatch), use the step where item was added
@@ -986,12 +988,12 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
                     {"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}
                 ), 409
             if total_paid is not None:
-                from app.features.costing.actions import _created_flow
+                from app.features.costing.actions import get_created_cost_flow
                 from app.features.costing.service import CostingError, set_lot_price
 
                 # One transaction: the lot and its price land together or not at all.
                 try:
-                    flow = _created_flow(db_session, org_id, item.id)
+                    flow = get_created_cost_flow(db_session, org_id, item.id)
                     if flow is None:
                         raise CostingError("This lot can't take a price when it's added")
                     set_lot_price(

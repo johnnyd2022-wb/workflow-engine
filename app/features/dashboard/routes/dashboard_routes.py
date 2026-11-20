@@ -19,7 +19,7 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.security.permissions import has_permission, requires_auth
-from app.features.activity_log.routes.activity_routes import _human_summary
+from app.features.activity_log.routes.activity_routes import human_summary
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -246,7 +246,7 @@ def _dashboard_event_log_period(
         {
             "id": str(event.id),
             "event_type": event.event_type,
-            "summary": _human_summary(event),
+            "summary": human_summary(event),
             "at": event.created_at.isoformat() if event.created_at else None,
             "actor": event.actor_label or "System",
             "entity_type": event.entity_type,

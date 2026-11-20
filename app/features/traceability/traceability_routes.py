@@ -16,7 +16,7 @@ from app.core.db.models.process import Process
 from app.core.domain.execution_entry_timing import entry_timing
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
-from app.features.activity_log.routes.activity_routes import _human_summary
+from app.features.activity_log.routes.activity_routes import human_summary
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -563,7 +563,7 @@ def register_routes(bp):
                     "at": item["at"],
                     "event_type": item["event_type"],
                     "entity_id": item["entity_id"],
-                    "summary": _human_summary(events_by_id[item["event_id"]])
+                    "summary": human_summary(events_by_id[item["event_id"]])
                     if item.get("event_id") and item["event_id"] in events_by_id
                     else item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
                     "actor": item.get("actor"),

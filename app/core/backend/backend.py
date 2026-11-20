@@ -1,6 +1,5 @@
 """Core backend API routes for process execution platform"""
 
-import base64
 import functools
 import os
 from datetime import UTC, datetime, timedelta
@@ -9,7 +8,6 @@ from uuid import UUID
 from flask import (
     Blueprint,
     abort,
-    current_app,
     g,
     jsonify,
     redirect,
@@ -31,7 +29,6 @@ from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
-from app.core.domain.expiry_rules import assert_warning_within_expiry
 from app.core.security.permissions import requires_auth
 from app.features.activity_log.routes import activity_routes
 from app.features.compliance_checks.routes import corechecks
@@ -51,55 +48,12 @@ from app.observability import get_logger
 from app.utils.config_loader import config
 
 logger = get_logger(__name__)
-_EXECUTION_DATA_TRACE_KEYS = execution_routes._EXECUTION_DATA_TRACE_KEYS  # system/audit keys, not user prompts
 
-
-def _product_available(feature: str) -> bool:
-    """Whether an optional product completed registration in this app instance."""
-    return bool(current_app.extensions.get("product_availability", {}).get(feature, False))
-
-
-# Opt-in keyset pagination for the big list endpoints (executions, inventory). A caller
-# that passes no ?limit gets the full list exactly as before -- every existing consumer
-# (process pickers, sourcemap, reconciliation, the dispose flow) is unchanged. Only the
-# /core hub tabs pass a limit. Cursor is an opaque base64url("<created_at_iso>|<id>") of
-# the last row returned; the sort is (created_at DESC, id DESC).
-LIST_PAGE_MAX = 50
 
 # Upper bound on the (id, name) process list embedded in /api/core/hub/overview for the
 # active-batches picker. A real manufacturer has tens of processes; this only stops the
 # payload ballooning on a pathological catalogue.
 HUB_PROCESSES_MIN_CAP = 500
-
-
-def _encode_list_cursor(created_at: datetime, row_id) -> str:
-    raw = f"{created_at.isoformat()}|{row_id}".encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _decode_list_cursor(token: str) -> tuple[datetime, UUID]:
-    """Parse a cursor token. Raises ValueError on anything malformed -- the caller turns
-    that into a 400 rather than a 500."""
-    pad = "=" * (-len(token) % 4)
-    raw = base64.urlsafe_b64decode(token + pad).decode()
-    ts_str, id_str = raw.split("|", 1)
-    return datetime.fromisoformat(ts_str), UUID(id_str)
-
-
-def _parse_page_params(args) -> tuple[int | None, tuple[datetime, UUID] | None]:
-    """(limit, cursor) from request args. limit is None when the caller wants the full
-    list; otherwise it is clamped to [1, LIST_PAGE_MAX]. Raises ValueError for a bad
-    limit or cursor."""
-    limit_str = args.get("limit")
-    if limit_str is None or limit_str == "":
-        return None, None
-    limit = int(limit_str)  # ValueError -> 400
-    if limit < 1:
-        raise ValueError("limit must be >= 1")
-    limit = min(limit, LIST_PAGE_MAX)
-    cursor_str = args.get("cursor")
-    cursor = _decode_list_cursor(cursor_str) if cursor_str else None
-    return limit, cursor
 
 
 # Create core blueprint
@@ -141,63 +95,6 @@ def _core_static_asset_version(endpoint: str, values: dict) -> None:
 
 
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
-
-
-def validate_custom_expiry_warning_not_exceed_duration(
-    output_name: str,
-    duration_value: int | None,
-    duration_unit: str,
-    warning_value: int | None,
-    warning_unit: str,
-) -> list[str]:
-    """
-    Validate that warning period does not exceed expiry period for custom output expiry.
-    Delegates to domain rule (single source of truth). Used at execution step completion;
-    tests call this to safeguard the validation.
-    """
-    return assert_warning_within_expiry(output_name, duration_value, duration_unit, warning_value, warning_unit)
-
-
-def _to_iso_timestamp(ts) -> str | None:
-    """Normalize a timestamp to ISO format string for consistent API output."""
-    if ts is None:
-        return None
-    if isinstance(ts, str):
-        return ts
-    if hasattr(ts, "isoformat"):
-        return ts.isoformat()
-    return str(ts)
-
-
-def _split_execution_data(execution_data: dict | None, completed_at=None):
-    """
-    Split execution_data into user prompts and system trace. Single place for prompt/trace split logic.
-    Returns (prompts_dict, trace_dict). Use for extra_data.execution_prompts and extra_data.execution_trace.
-
-    Audit keys (completed_by, completed_by_email, …) are mirrored from persisted execution_data. For HTTP step
-    completion, ``_strip_incoming_execution_trace_keys`` drops client-supplied trace keys before merge; identity is
-    then set from the authenticated session. Other persistence paths must enforce the same contract.
-    """
-    if not execution_data:
-        return {}, {}
-    prompts = {
-        k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS and v is not None and v != ""
-    }
-    trace = {}
-    for key in ("completed_by", "completed_by_email"):
-        if execution_data.get(key) is not None:
-            trace[key] = execution_data[key]
-    completed_ts = execution_data.get("completed_at")
-    if completed_ts is not None:
-        trace["completed_at"] = _to_iso_timestamp(completed_ts)
-    elif completed_at is not None:
-        trace["completed_at"] = _to_iso_timestamp(completed_at)
-    if execution_data.get("entered_at") is not None:
-        trace["entered_at"] = _to_iso_timestamp(execution_data["entered_at"])
-    for key in ("execution_errors", "execution_warnings"):
-        if execution_data.get(key) is not None:
-            trace[key] = execution_data[key]
-    return prompts, trace
 
 
 @core_bp.route("/core", methods=["GET"])
@@ -394,21 +291,9 @@ process_docs_routes.register_routes(core_bp)
 wastage_routes.register_routes(core_bp)
 tasks.register_routes(core_bp)
 process_design_routes.register_routes(core_bp)
-execution_routes.register_routes(
-    core_bp,
-    parse_page_params=_parse_page_params,
-    encode_list_cursor=_encode_list_cursor,
-    split_execution_data=_split_execution_data,
-    product_available=_product_available,
-    validate_custom_expiry_warning_not_exceed_duration=validate_custom_expiry_warning_not_exceed_duration,
-)
+execution_routes.register_routes(core_bp)
 execution_record_routes.register_routes(core_bp)
-inventory_routes.register_routes(
-    core_bp,
-    parse_page_params=_parse_page_params,
-    encode_list_cursor=_encode_list_cursor,
-    split_execution_data=_split_execution_data,
-)
+inventory_routes.register_routes(core_bp)
 traceability_routes.register_routes(core_bp)
 suppliers.register_routes(core_bp)
 demo_data_routes.register_routes(core_bp)

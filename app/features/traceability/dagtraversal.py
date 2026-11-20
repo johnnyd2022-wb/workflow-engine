@@ -53,7 +53,7 @@ _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "co
 # "Evidence" is surfaced elsewhere (execution evidence records), not as prompt metadata.
 _SYSTEM_PROMPT_LABELS = {"batch number", "evidence"}
 
-# Same audit/identity keys backend.py's _EXECUTION_DATA_TRACE_KEYS excludes from user
+# Same audit/identity keys execution_data.EXECUTION_DATA_TRACE_KEYS excludes from user
 # prompts. Deliberately not reusing the narrower, pre-existing _EXECUTION_PROMPTS_INTERNAL
 # above (which still gates the legacy execution_prompts field, unchanged) -- batch_id and
 # custom_prompts are new fields and should cleanly exclude completed_by/execution_errors/

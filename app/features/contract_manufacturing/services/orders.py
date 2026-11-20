@@ -23,7 +23,7 @@ from app.features.contract_manufacturing.models.orders import (
     ContractOrderLine,
 )
 from app.features.crm.models.xero_contact import XeroContact
-from app.features.execution.record_step import _batch_label
+from app.features.execution.record_step import batch_label
 
 
 class OrderError(ValueError):
@@ -512,7 +512,7 @@ _BATCH_LOADING = (
 def batch_view(execution):
     # nosemgrep: orm-relationship-access-in-loop -- callers selectinload process and steps
     steps = sorted(execution.execution_steps, key=lambda s: s.step_number or 0)
-    number = _batch_label(steps)
+    number = batch_label(steps)
     workflow = execution.process.name if execution.process is not None else "Untitled workflow"
     started = execution.started_at or execution.created_at
     local = started.astimezone(_NZ) if started else None

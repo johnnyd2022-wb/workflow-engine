@@ -31,7 +31,7 @@ def _normalize_str(s: str | None) -> str:
     return ((s or "").strip()).lower()
 
 
-def _find_producing_step(process: Any, item_name: str | None, item_unit: str | None) -> tuple[Any, str | None]:
+def find_producing_step(process: Any, item_name: str | None, item_unit: str | None) -> tuple[Any, str | None]:
     """Return (step_id, step_name) for the step that has an output matching (item_name, item_unit), or (None, None)."""
     if not process or not getattr(process, "steps", None):
         return (None, None)
@@ -300,7 +300,7 @@ def _enrich_producing_step_name(session: Session, org_id: UUID, matching: list[d
     for m in matching:
         pid = m.get("process_id")
         process = processes_by_id.get(pid) if pid else None
-        producing_step_id, producing_step_name = _find_producing_step(process, m.get("name"), m.get("unit"))
+        producing_step_id, producing_step_name = find_producing_step(process, m.get("name"), m.get("unit"))
         m["producing_step_id"] = str(producing_step_id) if producing_step_id else None
         m["producing_step_name"] = producing_step_name
     return matching
