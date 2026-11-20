@@ -26,21 +26,10 @@
 
       // Set icon and colors based on type
       if (type === 'success' && iconEl) {
-        iconEl.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        `;
+        iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/> <polyline points="22 4 12 14.01 9 11.01"/> </svg>';
         iconEl.style.color = 'var(--success, #10b981)';
       } else if (type === 'error' && iconEl) {
-        iconEl.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        `;
+        iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <circle cx="12" cy="12" r="10"/> <line x1="12" y1="8" x2="12" y2="12"/> <line x1="12" y1="16" x2="12.01" y2="16"/> </svg>';
         iconEl.style.color = 'var(--error, #ef4444)';
       }
 
@@ -989,7 +978,7 @@
         const el = document.getElementById(selectId);
         if (!el) return;
         const current = el.value;
-        el.innerHTML = '<option value="">' + esc(placeholder) + '</option>';
+        el.replaceChildren(new Option(placeholder, ''));
         values.forEach(function (v) {
           const opt = document.createElement('option');
           opt.value = v;
@@ -1585,6 +1574,24 @@
       renderInventoryViews();
     }
 
+    function setInventoryCategoryToggle(button, categoryId, expanded, remaining) {
+      if (!button) return;
+      button.setAttribute('aria-expanded', String(expanded));
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.id = `toggle-icon-${categoryId}`;
+      icon.setAttribute('class', expanded ? 'inventory-toggle-icon expanded' : 'inventory-toggle-icon');
+      icon.setAttribute('width', '14');
+      icon.setAttribute('height', '14');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('fill', 'none');
+      icon.setAttribute('stroke', 'currentColor');
+      icon.setAttribute('stroke-width', '2');
+      icon.setAttribute('stroke-linecap', 'round');
+      icon.setAttribute('stroke-linejoin', 'round');
+      icon.innerHTML = '<polyline points="6 9 12 15 18 9"/>';
+      button.replaceChildren(icon, document.createTextNode(expanded ? ' Show less' : ` Show ${remaining} more`));
+    }
+
     function createInventoryCategoryCard(type, items) {
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
@@ -1648,12 +1655,22 @@
       // Build card structure
       const headerDiv = document.createElement('div');
       headerDiv.className = 'inventory-category-header';
-      headerDiv.innerHTML = `
-        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          ${iconSvg}
-        </svg>
-        <span class="inventory-category-title">${categoryTitle}</span>
-      `;
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('class', `inventory-category-icon ${type}`);
+      icon.setAttribute('width', '20');
+      icon.setAttribute('height', '20');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('fill', 'none');
+      icon.setAttribute('stroke', 'currentColor');
+      icon.setAttribute('stroke-width', '2');
+      icon.setAttribute('stroke-linecap', 'round');
+      icon.setAttribute('stroke-linejoin', 'round');
+      // iconSvg comes from the fixed category artwork above.
+      icon.innerHTML = iconSvg;
+      const title = document.createElement('span');
+      title.className = 'inventory-category-title';
+      title.textContent = categoryTitle;
+      headerDiv.append(icon, title);
 
       const countP = document.createElement('p');
       countP.className = 'inventory-category-count';
@@ -1675,16 +1692,10 @@
         expandButton.className = 'btn btn-secondary btn-sm';
         expandButton.id = `toggle-${categoryId}`;
         expandButton.setAttribute('role', 'button');
-        expandButton.setAttribute('aria-expanded', 'false');
         expandButton.setAttribute('aria-controls', `scroll-${categoryId}`);
         expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
         expandButton.onclick = () => toggleInventoryCategory(categoryId);
-        expandButton.innerHTML = `
-          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show ${items.length - 3} more
-        `;
+        setInventoryCategoryToggle(expandButton, categoryId, false, items.length - 3);
         card.appendChild(expandButton);
       }
 
@@ -1738,7 +1749,8 @@
         }
       };
 
-      const formattedQuantity = formatQuantity(item.quantity);
+      const formattedQuantity = escapeHtml(formatQuantity(item.quantity));
+      const attributeId = escapeHtml(item.id).replace(/"/g, '&quot;');
 
       // Format display name: if process_name exists, show "Process: name" on one line and "Output name" on next
       const titleContent = item.process_name
@@ -1754,6 +1766,7 @@
             </ul>
           </div>`
         : '';
+      // nosemgrep: innerhtml-template-literal -- audited text and attributes are escaped before interpolation
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}">
@@ -1772,7 +1785,7 @@
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
             </button>
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}" id="arrow-${item.id}">
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}" id="arrow-${attributeId}">
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
@@ -1780,7 +1793,7 @@
         </div>
         ${item.source_execution_id ? `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
-          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${escapeHtml(item.unit || '')}</p>
           <button class="btn btn-primary btn-sm" data-action-stop data-action="executeNextStepFromInventory" data-action-args="${actionArgs(item.source_execution_id, item.producing_step_id || '')}" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
               <polygon points="5 3 19 12 5 21 5 3"/>
@@ -1790,15 +1803,15 @@
         </div>
         ` : `
         <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
-          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${escapeHtml(item.unit || '')}</p>
         </div>
         `}
-        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+        <div class="inventory-item-details" id="details-${attributeId}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
           ${checkReasonBlock}
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
               <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Quantity</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${escapeHtml(item.unit || '')}</p>
             </div>
             ${item.supplier ? `
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
@@ -1809,7 +1822,7 @@
             ${item.purchase_date ? `
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
               <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Purchase Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.purchase_date)}</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(formatDate(item.purchase_date))}</p>
             </div>
             ` : ''}
             ${item.supplier_batch_number ? `
@@ -1821,13 +1834,13 @@
             ${item.expiry_date ? `
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
               <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Expiry Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.expiry_date)}</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(formatDate(item.expiry_date))}</p>
             </div>
             ` : ''}
             ${item.created_at ? `
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
               <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Created</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.created_at)}</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(formatDate(item.created_at))}</p>
             </div>
             ` : ''}
           </div>
@@ -1855,7 +1868,7 @@
                   return `
                   <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
                     <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(input.name || 'Unknown')}</p>
-                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${inputFormattedQty} ${input.unit || ''}</p>
+                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(inputFormattedQty)} ${escapeHtml(input.unit || '')}</p>
                   </div>
                 `;
                 }).join('')}
@@ -1868,13 +1881,13 @@
               <div style="display: flex; flex-direction: column; gap: 12px;">
                 ${item.extra_data.previous_steps_data.map(prevStep => `
                   <div style="padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
-                    <p style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 13px; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">Step ${prevStep.step_number}: ${escapeHtml(prevStep.step_name || 'Unknown')}</p>
-                    <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Input: ${escapeHtml(prevStep.input_name || 'Unknown')} - ${formatQuantity(prevStep.input_quantity)} ${prevStep.input_unit || ''}</p>
+                    <p style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 13px; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">Step ${escapeHtml(prevStep.step_number)}: ${escapeHtml(prevStep.step_name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Input: ${escapeHtml(prevStep.input_name || 'Unknown')} - ${escapeHtml(formatQuantity(prevStep.input_quantity))} ${escapeHtml(prevStep.input_unit || '')}</p>
                     ${prevStep.completed_by ? `
                       <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed by: ${escapeHtml(prevStep.completed_by)}</p>
                     ` : ''}
                     ${prevStep.completed_at ? `
-                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed date: ${formatDate(prevStep.completed_at)}</p>
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed date: ${escapeHtml(formatDate(prevStep.completed_at))}</p>
                     ` : ''}
                     ${prevStep.execution_prompts && Object.keys(prevStep.execution_prompts).length > 0 ? `
                       <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light, #e5e7eb);">
@@ -1930,15 +1943,7 @@
           categoryCard.dataset.isExpanded = 'true';
           const categoryId = categoryCard.dataset.categoryId;
           const toggleButton = document.getElementById(`toggle-${categoryId}`);
-          if (toggleButton) {
-            toggleButton.setAttribute('aria-expanded', 'true');
-            toggleButton.innerHTML = `
-              <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-              Show less
-            `;
-          }
+          setInventoryCategoryToggle(toggleButton, categoryId, true);
           updateScrollContainerState(categoryCard);
         }
         details.style.display = 'block';
@@ -1954,31 +1959,12 @@
       const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
       if (!categoryCard) return;
 
-      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
       const toggleButton = document.getElementById(`toggle-${categoryId}`);
-      const isExpanded = categoryCard.dataset.isExpanded === 'true';
-
-      if (isExpanded) {
-        categoryCard.dataset.isExpanded = 'false';
-        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
-        updateScrollContainerState(categoryCard);
-        toggleButton.innerHTML = `
-          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
-        `;
-      } else {
-        categoryCard.dataset.isExpanded = 'true';
-        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
-        updateScrollContainerState(categoryCard);
-        toggleButton.innerHTML = `
-          <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show less
-        `;
-      }
+      const expanded = categoryCard.dataset.isExpanded !== 'true';
+      const count = parseInt(categoryCard.querySelector('.inventory-category-count').textContent, 10);
+      categoryCard.dataset.isExpanded = String(expanded);
+      setInventoryCategoryToggle(toggleButton, categoryId, expanded, count - 3);
+      updateScrollContainerState(categoryCard);
     }
 
     // Optimistic inventory rendering helpers
@@ -2196,7 +2182,10 @@
       var host = document.getElementById(targetId);
       if (!host) return;
       if (!rows || !rows.length) {
-        host.innerHTML = '<p class="core2-active-batches-empty">' + escapeHtml(emptyCopy || 'No activity yet.') + '</p>';
+        const empty = document.createElement('p');
+        empty.className = 'core2-active-batches-empty';
+        empty.textContent = emptyCopy || 'No activity yet.';
+        host.replaceChildren(empty);
         return;
       }
       host.innerHTML = rows.map(function (row) {
@@ -2612,10 +2601,6 @@
             description,
             category,
           });
-
-          // Update metrics
-          const metrics = await CoreAPI.getMetrics();
-          updateMetricsV2(metrics);
 
           // Redirect to process flow page and show "define steps" welcome modal
           window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
