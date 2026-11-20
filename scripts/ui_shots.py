@@ -1316,11 +1316,11 @@ def _seed_customs_stock(db, org_id, lot) -> None:
 
     from flask import Flask
 
-    from app.core.backend import stocktake
     from app.core.db.models.inventory_item import InventoryItem, InventoryType
     from app.core.db.models.stock_location import StockLocation
     from app.core.db.models.stocktake import StocktakeLine
     from app.core.db.repositories.inventory_repo import InventoryRepository
+    from app.features.inventory import stocktake
 
     repo = InventoryRepository(db)
     today = date.today()
@@ -1765,9 +1765,9 @@ def _seed_stocktake(db, org_id, inv) -> None:
     the rest still to count. Needs `stock` first."""
     from datetime import UTC, datetime
 
-    from app.core.backend import stocktake as stocktake_service
     from app.core.db.models.stocktake import StocktakeLine
     from app.core.db.models.user import User
+    from app.features.inventory import stocktake as stocktake_service
 
     def lines_of(stocktake):
         return db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == stocktake.id).all()
