@@ -73,6 +73,17 @@ def test_the_landing_page_may_frame_its_diagram_and_nothing_else_may(signed_in):
     assert _directives(page.headers["Content-Security-Policy"])["frame-ancestors"] == "'none'"
 
 
+def test_landing_diagram_can_be_reused_in_the_browser(signed_in):
+    first = signed_in.get("/landing-diagram")
+    assert first.cache_control.private
+    assert first.cache_control.max_age == 3600
+    assert not first.cache_control.public
+    cached = signed_in.get("/landing-diagram", headers={"If-None-Match": first.headers["ETag"]})
+    assert cached.status_code == 304
+    assert cached.data == b""
+    assert cached.headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
 def test_json_responses_get_no_report_only_policy(signed_in):
     resp = signed_in.get("/api/core/getting-started")
     assert resp.mimetype == "application/json"

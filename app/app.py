@@ -110,7 +110,10 @@ def landing_diagram():
 
     app_dir = os.path.dirname(os.path.abspath(__file__))
     templates_dir = os.path.join(app_dir, "ui", "templates")
-    return send_from_directory(templates_dir, "biz-e-diagram-landing.html")
+    response = send_from_directory(templates_dir, "biz-e-diagram-landing.html", max_age=3600)
+    response.cache_control.public = None
+    response.cache_control.private = True
+    return response
 
 
 @app.route("/dashboard")
