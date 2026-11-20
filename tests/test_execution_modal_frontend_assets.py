@@ -226,7 +226,7 @@ def test_execution_render_docs_module_exists():
 
 
 def test_inventory_type_utils_defines_matches_search():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "inventory-type-utils.js"
+    js_path = _REPO_ROOT / "app" / "features" / "inventory" / "frontend" / "js" / "inventory-type-utils.js"
     body = js_path.read_text(encoding="utf-8")
     assert "matchesSearch" in body and "buildInventorySearchHayLower" in body
 
