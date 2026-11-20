@@ -1,0 +1,2910 @@
+    {
+    // Global variable for notification timeout
+    let notificationTimeout = null;
+
+    // Define showNotification FIRST so overrides can use it immediately
+    // Auto-dismissing toast notification
+    window.showNotification = function(type, title, message) {
+      const modal = document.getElementById('notification-modal');
+      if (!modal) {
+        console.log(`${type}: ${title} - ${message}`);
+        return;
+      }
+
+      // Clear any existing timeout
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      const iconEl = document.getElementById('notification-icon');
+
+      if (titleEl) titleEl.textContent = title;
+      if (messageEl) messageEl.textContent = message;
+
+      // Set icon and colors based on type
+      if (type === 'success' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--success, #10b981)';
+      } else if (type === 'error' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--error, #ef4444)';
+      }
+
+      // Show notification
+      modal.style.display = 'flex';
+      // Don't block body overflow - allow user to see the page
+
+      // Auto-dismiss: errors stay longer (8 seconds), success messages (6 seconds)
+      const timeoutDuration = type === 'error' ? 8000 : 6000;
+      notificationTimeout = setTimeout(() => {
+        closeNotification();
+      }, timeoutDuration);
+    };
+
+    // Immediately override showSuccess and showError from core.js
+    // This must happen synchronously right after core.js loads, before DOMContentLoaded
+    window.showSuccess = function(message) {
+      window.showNotification('success', 'Success', message);
+    };
+
+    window.showError = function(message) {
+      window.showNotification('error', 'Error', message);
+    };
+
+    let core2HealthReturnFocus = null;
+    function closeCore2HealthSheet() {
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      if (!overlay || overlay.hidden) return;
+      overlay.hidden = true;
+      document.body.classList.remove('core2-sheet-open');
+      if (core2HealthReturnFocus && core2HealthReturnFocus.isConnected) core2HealthReturnFocus.focus();
+      core2HealthReturnFocus = null;
+    }
+
+    function openCore2HealthSheet(state, signals) {
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      const body = document.getElementById('core2-health-sheet-body');
+      const title = document.getElementById('core2-health-sheet-title');
+      if (!overlay || !body || !title) return;
+
+      core2HealthReturnFocus = document.activeElement;
+      title.textContent = core2HealthCollapsedTitle(state || 'healthy', signals || []);
+      body.innerHTML = '';
+      body.appendChild(buildCore2HealthCategoryNav(state || 'healthy', signals || []));
+      overlay.hidden = false;
+      document.body.classList.add('core2-sheet-open');
+      overlay.querySelector('[data-core2-health-close]').focus();
+    }
+
+    let _core2EscBound = false;
+    function initCore2HealthSheet() {
+      // document-level Escape handler: bind once for the life of the tab, not per
+      // overlay node -- a boosted return to /core swaps in a fresh overlay and would
+      // otherwise stack another listener each time.
+      if (!_core2EscBound) {
+        document.addEventListener('keydown', function(event) {
+          if (event.key === 'Escape') closeCore2HealthSheet();
+          if (event.key === 'Tab') {
+            const overlay = document.getElementById('core2-health-sheet-overlay');
+            if (!overlay || overlay.hidden) return;
+            const controls = Array.from(overlay.querySelectorAll('a[href], button:not([disabled])'));
+            const first = controls[0], last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+          }
+
+        });
+        _core2EscBound = true;
+      }
+
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      if (!overlay || overlay.dataset.boundCore2HealthSheet) return;
+
+      overlay.addEventListener('click', function(event) {
+        if (event.target === overlay) closeCore2HealthSheet();
+      });
+
+      overlay.querySelectorAll('[data-core2-health-close]').forEach((el) => {
+        el.addEventListener('click', closeCore2HealthSheet);
+      });
+
+      overlay.dataset.boundCore2HealthSheet = '1';
+    }
+
+    function setCore2MainTab(tab, options) {
+      options = options || {};
+      var historyMode = options.historyMode || 'replace';
+      const safeTab = (tab === 'inventory' || tab === 'workflows' || tab === 'tasks') ? tab : 'overview';
+      const tabPanels = document.querySelectorAll('[data-core2-tab-panel]');
+
+      tabPanels.forEach((panel) => {
+        const isActive = panel.getAttribute('data-core2-tab-panel') === safeTab;
+        panel.classList.toggle('core2-tab-panel--active', isActive);
+        panel.hidden = !isActive;
+      });
+
+      const heading = document.getElementById('core2-hub-title');
+      const back = document.getElementById('core2-overview-return');
+      if (heading) heading.textContent = { overview: 'Production', inventory: 'Inventory', workflows: 'Product workflows', tasks: 'Production tasks' }[safeTab];
+      if (back) back.hidden = safeTab === 'overview';
+      const caption = document.getElementById('core2-hub-caption');
+      if (caption) caption.textContent = { overview: 'Keep production moving, from stock to finished batches.', inventory: 'Stock on hand and what needs attention.', workflows: 'Product workflows and the batches running on them.', tasks: 'Plan operational work alongside Sales follow-ups.' }[safeTab];
+      document.querySelectorAll('[data-core2-overview-only]').forEach(function (el) { el.hidden = safeTab !== 'overview'; });
+      // The overview's title is the section head. The other tabs show this page's own header, and
+      // the section's name then stops being announced as the page's heading.
+      document.querySelectorAll('[data-core2-own-header]').forEach(function (el) { el.hidden = safeTab === 'overview'; });
+      const sectionTitle = document.getElementById('section-head-title');
+      if (sectionTitle) {
+        if (safeTab === 'overview') sectionTitle.removeAttribute('role');
+        else sectionTitle.setAttribute('role', 'presentation');
+      }
+
+      // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
+      closeCore2HealthSheet();
+      const batchDetailOverlay = document.getElementById('core2-active-detail-overlay');
+      if (batchDetailOverlay) batchDetailOverlay.hidden = true;
+      document.body.classList.remove('core2-sheet-open');
+      document.body.classList.remove('core2-active-detail-open');
+      document.body.style.overflow = '';
+
+      if (historyMode !== 'none') {
+        try {
+          const url = new URL(window.location.href);
+          if (safeTab === 'overview') url.searchParams.delete('tab');
+          else url.searchParams.set('tab', safeTab);
+          if (historyMode === 'push') window.history.pushState({ core2MainTab: safeTab }, '', url.toString());
+          else window.history.replaceState({ core2MainTab: safeTab }, '', url.toString());
+        } catch (e) {}
+      }
+
+      // Lazy-load the detail data the first time each tab is shown.
+      if (safeTab === 'inventory' && typeof loadCore2InventoryTab === 'function') loadCore2InventoryTab();
+      else if (safeTab === 'workflows' && typeof loadCore2WorkflowsTab === 'function') loadCore2WorkflowsTab();
+      else if (safeTab === 'tasks') window.dispatchEvent(new Event('core2:tasks-open'));
+    }
+
+    function initCore2MainTabs() {
+      if (!document.querySelector('[data-core2-tab-panel]')) return;
+
+      let selectedTab = 'overview';
+      try {
+        const fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks' || fromUrl === 'overview') {
+          selectedTab = fromUrl;
+        }
+      } catch (e) {}
+      setCore2MainTab(selectedTab, { historyMode: 'replace' });
+
+      if (!window.__core2MainTabPopstateBound) {
+        window.addEventListener('popstate', function () {
+          var tab = 'overview';
+          try {
+            var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+            if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks') tab = fromUrl;
+          } catch (e) {}
+          setCore2MainTab(tab, { historyMode: 'none' });
+        });
+        window.__core2MainTabPopstateBound = true;
+      }
+    }
+
+    // Initialize account info component and Reset DB button (test env only)
+    function initCore2Page() {
+      closeCore2HealthSheet();
+      // clear any body state a modal/sheet left set before a navigation away
+      document.body.classList.remove('core2-sheet-open', 'core2-active-detail-open');
+      document.body.style.overflow = '';
+      initCore2MainTabs();
+      initCore2HealthSheet();
+      if (window.initAccountInfo) {
+        window.initAccountInfo('account-info-container');
+      }
+      const btnResetDb = document.getElementById('btn-reset-db');
+      if (btnResetDb && !btnResetDb.dataset.boundCore2ResetDb) {
+        btnResetDb.addEventListener('click', function() {
+          const modal = document.getElementById('reset-db-modal');
+          if (modal) modal.style.display = 'flex';
+        });
+        btnResetDb.dataset.boundCore2ResetDb = '1';
+      }
+    }
+
+    window.closeResetDbModal = function() {
+      const modal = document.getElementById('reset-db-modal');
+      if (modal) modal.style.display = 'none';
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = false;
+    };
+
+    window.confirmResetDb = async function() {
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await CoreAPI.resetDemoDb();
+        closeResetDbModal();
+        if (result && result.success) {
+          window.showSuccess(result.message || 'Demo DB reset successfully.');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } else {
+          window.showError(result && result.message ? result.message : 'Reset failed.');
+        }
+      } catch (err) {
+        closeResetDbModal();
+        window.showError(err.message || 'Reset demo DB failed.');
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2Page);
+    } else {
+      initCore2Page();
+    }
+
+    // Update metrics for V2 Modern design
+    function updateMetricsV2(metrics) {
+      const totalProcessesEl = document.getElementById('metric-total-processes');
+      const activeExecutionsEl = document.getElementById('metric-active-executions');
+      const completedEl = document.getElementById('metric-completed');
+      const inventoryEl = document.getElementById('metric-inventory');
+
+      if (totalProcessesEl) totalProcessesEl.textContent = metrics.total_processes || 0;
+      if (activeExecutionsEl) activeExecutionsEl.textContent = metrics.active_executions || 0;
+      if (completedEl) completedEl.textContent = metrics.completed_executions || 0;
+      if (inventoryEl) inventoryEl.textContent = metrics.inventory_items?.total || 0;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // data-action-args for markup built as a string: JSON, escaped for a double-quoted attribute.
+    function actionArgs(...values) {
+      return JSON.stringify(values).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Render inventory for V2 Modern design
+    function countInventoryByType(items) {
+      const grouped = { raw: 0, intermediate: 0, final: 0 };
+      let total = 0;
+      if (!items || !items.length) {
+        return { ...grouped, total: 0 };
+      }
+      items.forEach((item) => {
+        let quantity = parseFloat(String(item.quantity || '0').trim());
+        if (isNaN(quantity)) quantity = 0;
+        if (quantity <= 0 || Math.abs(quantity) < 0.0001) return;
+        total++;
+        const type = item.inventory_type || 'raw_material';
+        if (type === 'raw_material') grouped.raw++;
+        else if (type === 'work_in_progress') grouped.intermediate++;
+        else if (type === 'final_product') grouped.final++;
+      });
+      return { ...grouped, total };
+    }
+
+    function updateInventoryHubCountDisplay(counts) {
+      const rawEl = document.getElementById('core2-inv-count-raw');
+      const intEl = document.getElementById('core2-inv-count-wip');
+      const finEl = document.getElementById('core2-inv-count-final');
+      if (rawEl) rawEl.textContent = String(counts.raw);
+      if (intEl) intEl.textContent = String(counts.intermediate);
+      if (finEl) finEl.textContent = String(counts.final);
+    }
+
+    function core2SetText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(value);
+    }
+
+    function core2SetBar(id, value, maxValue) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const safeMax = Math.max(1, Number(maxValue || 1));
+      const pct = Math.max(0, Math.min(100, Math.round((Number(value || 0) / safeMax) * 100)));
+      el.style.width = String(pct) + '%';
+    }
+
+    function core2IsLowStock(item) {
+      const qty = Number(item && item.quantity != null ? item.quantity : 0);
+      const startQty = Number(item && item.initial_quantity != null ? item.initial_quantity : qty);
+      if (startQty <= 0 || qty <= 0) return qty <= 0;
+      const ratio = qty / startQty;
+      return ratio <= 0.10;
+    }
+
+    function updateCore2InventorySummary(items) {
+      const nonZeroItems = (items || []).filter(function (it) {
+        const qty = Number(it && it.quantity != null ? it.quantity : 0);
+        return qty > 0.0001;
+      });
+      const inUse = nonZeroItems.filter(function (it) { return !!(it && it.source_execution_id); }).length;
+      const low = nonZeroItems.filter(core2IsLowStock).length;
+      const total = nonZeroItems.length;
+      const linked = nonZeroItems.filter(function (it) {
+        return !!(it && (it.source_execution_id || it.supplier_batch_number));
+      }).length;
+
+      core2SetText('core2-inv-summary-lines', total);
+      core2SetText('core2-inv-summary-inuse', inUse);
+      core2SetText('core2-inv-summary-low', low);
+      core2SetText('core2-inv-summary-traceable', total ? Math.round((linked / total) * 100) + '%' : '0%');
+    }
+
+    function updateCore2WorkflowSummary(processes, executions) {
+      const allExecutions = (executions || []).filter(function (e) { return !!e; });
+      const inFlight = allExecutions.filter(function (e) {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'in_progress' || status === 'pending';
+      }).length;
+      const readyNow = allExecutions.filter(function (e) {
+        if (String(e.status || '').toLowerCase() !== 'pending') return false;
+        return true;
+      }).length;
+
+      const sevenDaysAgo = new Date(Date.now() - (7 * 24 * 3600 * 1000));
+      const completed7d = allExecutions.filter(function (e) {
+        if (String(e.status || '').toLowerCase() !== 'completed') return false;
+        if (!e.completed_at) return false;
+        const dt = new Date(e.completed_at);
+        return !Number.isNaN(dt.getTime()) && dt >= sevenDaysAgo;
+      }).length;
+
+      const processCount = (processes || []).length;
+
+      core2SetText('core2-wf-summary-active', inFlight);
+      core2SetText('core2-wf-summary-ready', readyNow);
+      core2SetText('core2-wf-summary-completed7d', completed7d);
+      core2SetText('core2-wf-summary-processes', processCount);
+    }
+
+    function core2RenderKpiBars(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      const maxValue = Math.max(1, ...rows.map((r) => Number(r.value || 0)));
+      el.innerHTML = rows.map((r) => {
+        const pct = Math.max(0, Math.min(100, Math.round((Number(r.value || 0) / maxValue) * 100)));
+        return '<div class="core2-kpi-bars__row">' +
+          '<div class="core2-kpi-bars__head"><span>' + escapeHtml(r.label) + '</span><strong>' + escapeHtml(String(r.value)) + '</strong></div>' +
+          '<div class="core2-kpi-bars__meter"><span style="width:' + pct + '%"></span></div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function core2RenderKpiStack(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      el.innerHTML = rows.map((r) => {
+        return '<div class="core2-kpi-stack__item">' +
+          '<span class="core2-kpi-stack__label">' + escapeHtml(r.label) + '</span>' +
+          '<span class="core2-kpi-stack__value">' + escapeHtml(String(r.value)) + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function core2RenderKpiTable(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      el.innerHTML = rows.map((r) => {
+        return '<div class="core2-kpi-table__row">' +
+          '<span class="core2-kpi-table__name">' + escapeHtml(r.name) + '</span>' +
+          '<span class="core2-kpi-table__meta">' + escapeHtml(String(r.metaA || '')) + '</span>' +
+          '<span class="core2-kpi-table__meta">' + escapeHtml(String(r.metaB || '')) + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function updateCore2InventoryInsights(items, processes, executions) {
+      const now = new Date();
+      const nonZeroItems = (items || []).filter((it) => Number(it.quantity || 0) > 0.0001);
+
+      const diffDays = (dateStr) => {
+        if (!dateStr) return null;
+        const dt = new Date(dateStr);
+        if (Number.isNaN(dt.getTime())) return null;
+        return (dt.getTime() - now.getTime()) / (24 * 3600 * 1000);
+      };
+      const expiry7 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d >= 0 && d <= 7;
+      }).length;
+      const expiry30 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d > 7 && d <= 30;
+      }).length;
+      const expiry90 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d > 30 && d <= 90;
+      }).length;
+      const expired = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d < 0;
+      }).length;
+      const low = nonZeroItems.filter(core2IsLowStock).length;
+      const traceabilityGaps = nonZeroItems
+        .filter((it) => !it.source_execution_id && !it.supplier_batch_number)
+        .slice(0, 6)
+        .map((it) => ({
+          name: it.name || 'Inventory item',
+          metaA: `${it.quantity || 0}${it.unit || ''}`,
+          metaB: 'missing link',
+        }));
+      const priorities = [
+        { count: expired, label: 'Expired stock', hint: 'Remove or assess before it is used.', tone: 'urgent', href: '/core/notifications' },
+        { count: expiry7, label: 'Expires in 7 days', hint: 'Prioritise use or decide what to do with it.', tone: 'watch', href: '/core/inventory/live' },
+        { count: low, label: 'Low stock lines', hint: 'Review replenishment before production is affected.', tone: 'watch', href: '/core/inventory/live' },
+        { count: traceabilityGaps.length, label: 'Missing a trace link', hint: 'Add supplier or production provenance.', tone: 'watch', href: '/core/notifications' },
+      ];
+      const priorityHost = document.getElementById('core2-inventory-priorities');
+      if (priorityHost) {
+        priorityHost.innerHTML = priorities.map(function (item) {
+          return '<a class="core2-attention-item core2-attention-item--' + item.tone + '" href="' + item.href + '"><span class="core2-attention-item__count">' +
+            escapeHtml(String(item.count)) + '</span><span class="core2-attention-item__label">' + escapeHtml(item.label) +
+            '</span><span class="core2-attention-item__hint">' + escapeHtml(item.hint) + '</span></a>';
+        }).join('');
+      }
+    }
+
+    function updateCore2WorkflowInsights(processes, executions) {
+      const now = new Date();
+      const processNameById = {};
+      (processes || []).forEach((p) => {
+        if (!p || !p.id) return;
+        processNameById[String(p.id)] = p.name || 'Untitled process';
+      });
+      const activeStepCounts = {};
+      const allExecutions = (executions || []);
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      const throughputByProcess = {};
+      let readyNow = 0;
+      let inProgressNow = 0;
+      let pendingNow = 0;
+
+      allExecutions.forEach((e) => {
+        const processName = e.process_name || processNameById[String(e.process_id)] || 'Untitled process';
+        const status = String(e.status || '').toLowerCase();
+        if (status === 'in_progress' || status === 'pending') {
+          const stepName = e.current_step && e.current_step.name ? e.current_step.name : 'Awaiting step';
+          const key = `${processName} · ${stepName}`;
+          activeStepCounts[key] = Number(activeStepCounts[key] || 0) + 1;
+          if (status === 'pending') pendingNow += 1;
+          const currentNo = e.current_step && e.current_step.step_number != null ? Number(e.current_step.step_number) : NaN;
+          const stepRecord = Array.isArray(e.execution_steps)
+            ? e.execution_steps.find((s) => Number(s.step_number) === currentNo)
+            : null;
+          const stepStatus = String(stepRecord && stepRecord.status ? stepRecord.status : '').toLowerCase();
+          if (stepStatus === 'ready') readyNow += 1;
+          else if (stepStatus === 'in_progress') inProgressNow += 1;
+          else if (status === 'in_progress') {
+            inProgressNow += 1;
+          }
+        }
+        if (status === 'completed' && e.completed_at) {
+          const comp = new Date(e.completed_at);
+          if (!Number.isNaN(comp.getTime()) && comp >= weekAgo) {
+            throughputByProcess[processName] = Number(throughputByProcess[processName] || 0) + 1;
+          }
+        }
+      });
+
+      const throughputRows = Object.entries(throughputByProcess)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name, count]) => ({ title: name, meta: 'Completed batches', value: `${count} this week`, href: '/core/processes' }));
+      core2RenderWorkList('core2-workflow-activity', throughputRows, 'No batches have finished in the last 7 days.');
+
+      const queueRows = Object.entries(activeStepCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 7)
+        .map(([name, count]) => ({ title: name, meta: count === 1 ? '1 batch waiting here' : `${count} batches waiting here`, value: count === 1 ? '1 batch' : `${count} batches`, href: '/core/executions/live' }));
+      core2RenderWorkList('core2-workflow-queue', queueRows, 'No batches are currently in the production queue.');
+    }
+
+    /** SVG icons for journey CTAs (24 viewBox; drawn at 26px inside 64px circle) */
+    var CORE2_JOURNEY_ICONS = {
+      inventory: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+      workflow: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="6" height="6" rx="1"/><rect x="9" y="8" width="6" height="6" rx="1"/><path d="M8 11h1"/><path d="M15 11h1"/><circle cx="19" cy="11" r="3"/><path d="M19 9.5v3"/><path d="M17.5 11h3"/></svg>',
+      execution: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+      trace: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-8 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg>'
+    };
+
+    /** Collapsed health line: binary user-facing copy (severity remains on bar color). */
+    function core2HealthCollapsedTitle(state, signals) {
+      if (state === 'healthy') return 'System Healthy';
+      var issue = (signals || []).find(function (signal) {
+        return signal && signal.has_issue && typeof signal.message === 'string' && signal.message.trim();
+      });
+      return issue ? issue.message : 'Review production integrity';
+    }
+
+    function core2SignalToNotifyCategory(signalCategory) {
+      if (signalCategory === 'inventory_validity') return 'inventory';
+      if (signalCategory === 'traceability' || signalCategory === 'availability') return signalCategory;
+      return null;
+    }
+
+    /** User-facing copy: category label + what it means (Notifications carries actionable detail). */
+    var CORE2_HEALTH_CATEGORY_NAV = {
+      inventory: {
+        title: 'Inventory',
+        meaning: 'Product validity issues detected'
+      },
+      traceability: {
+        title: 'Traceability',
+        meaning: 'Production history cannot be fully reconstructed'
+      },
+      availability: {
+        title: 'Availability',
+        meaning: 'Items used before they were ready'
+      }
+    };
+
+    /**
+     * Health detail content for the bottom sheet modal.
+     */
+    function buildCore2HealthCategoryNav(state, signals) {
+      var frag = document.createDocumentFragment();
+      var nav = document.createElement('nav');
+      nav.className = 'core2-journey-health-nav';
+      nav.setAttribute('aria-label', 'Open notifications by category');
+
+      var seen = {};
+      (signals || []).forEach(function (s) {
+        if (!s || !s.has_issue || !s.category) return;
+        var nc = core2SignalToNotifyCategory(s.category);
+        if (nc) seen[nc] = true;
+      });
+
+      var order = ['inventory', 'traceability', 'availability'];
+      var hasGenericFinding = (signals || []).some(function (signal) {
+        return signal && signal.has_issue && !core2SignalToNotifyCategory(signal.category);
+      });
+      var hasCategoryLinks = state !== 'healthy' && (Object.keys(seen).length > 0 || hasGenericFinding);
+
+      if (!hasCategoryLinks) {
+        var p = document.createElement('p');
+        p.className = 'core2-journey-health-empty';
+        p.textContent = state === 'healthy'
+          ? 'No open issues. Notifications is where you review history and take action.'
+          : 'Review and resolve items in Notifications.';
+        nav.appendChild(p);
+        var allA = document.createElement('a');
+        allA.href = '/core/notifications';
+        allA.className = 'core2-journey-health-nav__all';
+        allA.textContent = 'Notifications';
+        allA.setAttribute('aria-label', 'Open notifications');
+        nav.appendChild(allA);
+        frag.appendChild(nav);
+        return frag;
+      }
+
+      order.forEach(function (key) {
+        if (!seen[key]) return;
+        var meta = CORE2_HEALTH_CATEGORY_NAV[key];
+        if (!meta) return;
+        var a = document.createElement('a');
+        a.className = 'core2-journey-health-nav__link';
+        a.href = '/core/notifications?category=' + encodeURIComponent(key);
+        a.setAttribute(
+          'aria-label',
+          meta.title + ': ' + meta.meaning + '. Opens notifications filtered for this category.'
+        );
+        var spanCat = document.createElement('span');
+        spanCat.className = 'core2-journey-health-nav__category';
+        spanCat.textContent = meta.title;
+        var spanMean = document.createElement('span');
+        spanMean.className = 'core2-journey-health-nav__meaning';
+        spanMean.textContent = meta.meaning;
+        a.appendChild(spanCat);
+        a.appendChild(spanMean);
+        nav.appendChild(a);
+      });
+
+      (signals || []).forEach(function (signal) {
+        if (!signal || !signal.has_issue || core2SignalToNotifyCategory(signal.category)) return;
+        var moduleLink = document.createElement('a');
+        moduleLink.className = 'core2-journey-health-nav__link';
+        moduleLink.href = typeof signal.href === 'string' && signal.href.charAt(0) === '/' ? signal.href : '/core/notifications';
+        moduleLink.setAttribute('hx-boost', 'false');
+        var moduleTitle = document.createElement('span');
+        moduleTitle.className = 'core2-journey-health-nav__category';
+        moduleTitle.textContent = signal.message || 'System finding';
+        var moduleMeaning = document.createElement('span');
+        moduleMeaning.className = 'core2-journey-health-nav__meaning';
+        moduleMeaning.textContent = String(signal.count || 1) + ' action' + (Number(signal.count || 1) === 1 ? '' : 's') + ' need attention';
+        moduleLink.appendChild(moduleTitle);
+        moduleLink.appendChild(moduleMeaning);
+        nav.appendChild(moduleLink);
+      });
+
+      frag.appendChild(nav);
+      return frag;
+    }
+
+    /**
+     * Segmented progress bar + milestone labels; one primary (circle + label) + text links.
+     * After onboarding (health mode), reuses the same strip for production integrity (API: system_status).
+     */
+    function updateCore2JourneyCtasFromData(inventoryItems, processes, executions, systemStatus) {
+      const barWrap = document.getElementById('core2-journey-bar');
+      const actionsWrap = document.getElementById('core2-journey-actions');
+      if (!barWrap && !actionsWrap) return;
+      const items = inventoryItems || [];
+      const procs = processes || [];
+      const execs = (executions || []).filter(function (e) { return e && e.id; });
+      const hasInventory = items.length > 0;
+      const hasProcess = procs.length > 0;
+      const hasExecution = execs.length > 0;
+
+      var stage;
+      if (!hasInventory) stage = 1;
+      else if (!hasProcess) stage = 2;
+      else if (!hasExecution) stage = 3;
+      else stage = 4;
+
+      var primary;
+      if (stage === 1) {
+        primary = { label: 'Add to inventory', href: '/core/inventory/add/manual', icon: 'inventory', addInventoryDropdown: true };
+      } else if (stage === 2) {
+        primary = { label: 'Create product workflow', href: '/core/flows/create', icon: 'workflow' };
+      } else if (stage === 3) {
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
+      } else {
+        // Set up and running: the everyday job on this page is recording production.
+        primary = { label: 'Record production step', href: '/core/record', icon: 'execution' };
+      }
+
+      var addInv = { kind: 'addInventory' };
+      var recordExec = { label: 'Record production step', href: '/core/record' };
+      var trace = { label: 'Trace and recall', href: '/core/sourcemap' };
+      var secondaries = [];
+      if (stage === 2) {
+        secondaries.push(addInv, recordExec);
+      } else if (stage === 3) {
+        secondaries.push(addInv, recordExec, { label: 'Create product workflow', href: '/core/flows/create' });
+      } else if (stage === 4) {
+        secondaries.push(addInv, trace);
+      }
+
+      const permissions = actionsWrap ? actionsWrap.dataset : {};
+      function actionAllowed(item) {
+        if (item.kind === 'addInventory' || item.addInventoryDropdown) return permissions.canAdjust === 'true';
+        if (item.href === '/core/flows/create') return permissions.canDesign === 'true';
+        if (item.href === '/core/record') return permissions.canRecord === 'true';
+        if (item.href === '/core/sourcemap') return permissions.canTrace === 'true';
+        return true;
+      }
+      secondaries = secondaries.filter(function (item) { return item.label !== primary.label && actionAllowed(item); });
+      if (!actionAllowed(primary)) {
+        primary = permissions.canTrace === 'true' ? { label: 'View inventory', href: '/core/inventory/view', icon: 'inventory' } : { label: 'View product workflows', href: '/core/processes', icon: 'workflow' };
+      }
+
+
+      var milestones = [
+        { complete: hasInventory, label: hasInventory ? 'Inventory populated' : 'Populate inventory', aria: hasInventory ? 'Inventory populated' : 'Populate inventory to unlock next step' },
+        { complete: hasProcess, label: hasProcess ? 'Product workflow created' : 'Create product workflow', aria: hasProcess ? 'Product workflow created' : 'Create product workflow to unlock execution recording' },
+        { complete: hasExecution, label: hasExecution ? 'Executions recorded' : 'Record product workflow', aria: hasExecution ? 'Executions recorded' : 'Record product workflow to unlock traceability' },
+        { complete: hasExecution, label: 'Traceability unlocked', aria: 'System traceability unlocked' }
+      ];
+
+      var filledCount = 0;
+      milestones.forEach(function (m) { if (m.complete) filledCount++; });
+      const allComplete = filledCount === 4;
+
+      if (barWrap) barWrap.innerHTML = '';
+      if (actionsWrap) actionsWrap.innerHTML = '';
+
+      const barFinalEl = document.createElement('div');
+      barFinalEl.className = 'production-health__content';
+      const state = !allComplete ? 'setup' :
+        (systemStatus && systemStatus.mode === 'health' && ['healthy', 'degraded', 'critical'].includes(systemStatus.state)) ? systemStatus.state :
+        (systemStatus && systemStatus.mode === 'unavailable') ? 'unavailable' : 'pending';
+      barFinalEl.dataset.healthState = state;
+      const titles = { healthy: 'Production healthy', degraded: 'Needs attention', critical: 'Action required', setup: 'Finish your setup', pending: 'Checking production health…', unavailable: 'Health check unavailable' };
+      const title = document.createElement('strong');
+      title.className = 'production-health__state';
+      title.textContent = titles[state];
+      barFinalEl.appendChild(title);
+      const bar = document.createElement('div');
+      bar.className = 'production-health__bar';
+      bar.dataset.testid = 'production-health-bar';
+      const fill = document.createElement('span');
+      fill.style.width = state === 'setup' ? (filledCount / 4 * 100) + '%' : '100%';
+      bar.appendChild(fill);
+      if (state === 'setup') {
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-label', 'Traceability setup');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '4');
+        bar.setAttribute('aria-valuenow', String(filledCount));
+      } else bar.setAttribute('aria-hidden', 'true');
+      barFinalEl.appendChild(bar);
+      const detail = document.createElement('p');
+      detail.className = 'workspace-caption';
+      const signals = systemStatus && Array.isArray(systemStatus.signals) ? systemStatus.signals : [];
+      const issue = signals.find(function (signal) { return signal && signal.has_issue && typeof signal.message === 'string' && signal.message.trim(); });
+      detail.textContent = state === 'setup' ? filledCount + ' of 4 foundations ready. ' + milestones.find(function (m) { return !m.complete; }).label + ' to continue.' :
+        state === 'healthy' ? 'No current production integrity issues.' :
+        state === 'pending' ? 'Your latest checks are on their way.' :
+        state === 'unavailable' ? 'We could not load the latest checks. Refresh to try again.' :
+        issue ? issue.message : 'Review the findings before your next production step.';
+      barFinalEl.appendChild(detail);
+      if (['healthy', 'degraded', 'critical'].includes(state)) {
+        const review = document.createElement('button');
+        review.type = 'button';
+        review.className = 'workspace-button production-health__review';
+        review.textContent = 'View health details';
+        review.addEventListener('click', function () { openCore2HealthSheet(state, signals); });
+        barFinalEl.appendChild(review);
+      }
+
+      const actionsRoot = document.createElement('div');
+      actionsRoot.className = 'core2-journey';
+      actionsRoot.setAttribute('role', 'navigation');
+      actionsRoot.setAttribute('aria-label', 'Traceability actions');
+
+      if (primary.addInventoryDropdown) {
+        const bundle = document.createElement('div');
+        bundle.className = 'core2-journey-primary-bundle';
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'core2-journey-primary core2-journey-addinv-trigger';
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-label', 'Add to inventory, choose how');
+        const circle = document.createElement('span');
+        circle.className = 'core2-journey-primary__circle';
+        circle.setAttribute('aria-hidden', 'true');
+        circle.innerHTML = CORE2_JOURNEY_ICONS[primary.icon] || CORE2_JOURNEY_ICONS.inventory;
+        const lbl = document.createElement('span');
+        lbl.className = 'core2-journey-primary__label';
+        lbl.textContent = primary.label;
+        trigger.appendChild(circle);
+        trigger.appendChild(lbl);
+        const menu = buildCore2AddInventoryMenuEl();
+        bundle.appendChild(trigger);
+        bundle.appendChild(menu);
+        actionsRoot.appendChild(bundle);
+        bindCore2JourneyAddInventoryDropdown(bundle);
+      } else {
+        const primaryA = document.createElement('a');
+        primaryA.className = 'core2-journey-primary';
+        primaryA.href = primary.href;
+        const circle = document.createElement('span');
+        circle.className = 'core2-journey-primary__circle';
+        circle.setAttribute('aria-hidden', 'true');
+        circle.innerHTML = CORE2_JOURNEY_ICONS[primary.icon] || CORE2_JOURNEY_ICONS.inventory;
+        const lbl = document.createElement('span');
+        lbl.className = 'core2-journey-primary__label';
+        lbl.textContent = primary.label;
+        primaryA.appendChild(circle);
+        primaryA.appendChild(lbl);
+        actionsRoot.appendChild(primaryA);
+      }
+
+      if (secondaries.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'core2-journey-secondary';
+        if (secondaries.length > 2) {
+          sec.classList.add('core2-journey-secondary--many');
+        }
+        secondaries.forEach(function (item, idx) {
+          if (idx > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'core2-journey-secondary__sep';
+            sep.textContent = '·';
+            sep.setAttribute('aria-hidden', 'true');
+            sec.appendChild(sep);
+          }
+          if (item.kind === 'addInventory') {
+            const invWrap = document.createElement('div');
+            invWrap.className = 'core2-journey-secondary__invwrap';
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'core2-journey-addinv-trigger';
+            trigger.textContent = 'Add to inventory';
+            trigger.setAttribute('aria-expanded', 'false');
+            trigger.setAttribute('aria-haspopup', 'true');
+            trigger.setAttribute('aria-label', 'Add to inventory, choose how');
+            const menu = buildCore2AddInventoryMenuEl();
+            invWrap.appendChild(trigger);
+            invWrap.appendChild(menu);
+            sec.appendChild(invWrap);
+            bindCore2JourneyAddInventoryDropdown(invWrap);
+          } else {
+            const a = document.createElement('a');
+            a.href = item.href;
+            a.className = 'core2-journey-secondary__link';
+            a.textContent = item.label;
+            sec.appendChild(a);
+          }
+        });
+        actionsRoot.appendChild(sec);
+      }
+
+      if (barWrap) barWrap.appendChild(barFinalEl);
+      if (actionsWrap) actionsWrap.appendChild(actionsRoot);
+    }
+
+    // Post-mutation refresh (step completed, inventory added, item disposed). Was a
+    // getInventory + getProcesses + getExecutions triple fetch that rendered only the
+    // inventory list + journey CTA, leaving the new compact-overview widgets and the
+    // active-batches graph showing pre-mutation state. Now it rebuilds the overview from
+    // the single hub call (which also re-publishes core2:hub-overview for the graph) and
+    // re-fetches a detail tab's data ONLY if that tab is already loaded or currently
+    // shown -- a mutation while the user sits on Overview must not pull the full
+    // inventory list back onto the critical path.
+    async function loadInventoryV2() {
+      if (window.CoreAPI && typeof CoreAPI.invalidateSystemFindings === 'function') {
+        CoreAPI.invalidateSystemFindings();
+      }
+      await loadCore2Overview();
+      var tab = core2CurrentMainTab();
+      if (core2TabLoaded.inventory || tab === 'inventory') {
+        core2TabLoaded.inventory = false;
+        await loadCore2InventoryTab();
+      }
+      if (core2TabLoaded.workflows || tab === 'workflows') {
+        core2TabLoaded.workflows = false;
+        await loadCore2WorkflowsTab();
+      }
+    }
+
+    function renderInventoryV2(items) {
+      const shell = document.querySelector('[data-core2-tab-panel="inventory"] .core2-live-inv') || document.querySelector('.core2-live-inv');
+      if (!shell) return;
+
+      const state = shell.__core2InvState || {
+        allItems: [],
+        view: 'items',
+        type: '',
+        chip: '',
+        groups: [],
+        sheet: null,
+        sheetOpener: null,
+        bound: false,
+      };
+      shell.__core2InvState = state;
+      state.allItems = Array.isArray(items) ? items : [];
+
+      function qNum(v) {
+        const n = parseFloat(String(v == null ? '0' : v).trim());
+        return Number.isFinite(n) ? n : 0;
+      }
+      function onHand(it) {
+        return window.InventoryStockSummary.onHand(it);
+      }
+      function isVisible(it) {
+        return window.InventoryStockSummary.isVisible(it);
+      }
+      function parseDay(v) {
+        if (!v) return null;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      function dayDiffFromNow(iso) {
+        const d = parseDay(iso);
+        if (!d) return null;
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        return Math.floor((target - today) / 86400000);
+      }
+      function allAuditEntries(it) {
+        const hist = (((it || {}).extra_data || {}).inventory_audit_history || []);
+        return Array.isArray(hist) ? hist : [];
+      }
+      function qtyBaseline(it) {
+        const es = (it || {}).event_summary || {};
+        if (es && Array.isArray(es.quantity_history) && es.quantity_history.length) {
+          let peak = 0;
+          es.quantity_history.forEach(function (h) {
+            const v = qNum(h && h.qty);
+            if (v > peak) peak = v;
+          });
+          if (peak > 0) return peak;
+        }
+        const cur = onHand(it);
+        if (cur > 0) return cur;
+        return 0;
+      }
+      function isLowStock(it) {
+        const baseline = qtyBaseline(it);
+        if (baseline <= 0) return false;
+        return (onHand(it) / baseline) <= 0.10;
+      }
+      function fmtDate(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleDateString(); } catch (e) { return String(iso).slice(0, 10); }
+      }
+      function fmtAgo(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        const ms = Date.now() - d.getTime();
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return mins + ' min ago';
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + 'h ago';
+        const days = Math.floor(hrs / 24);
+        return days + 'd ago';
+      }
+      function esc(s) {
+        return escapeHtml(s == null ? '' : String(s));
+      }
+      function typeLabel(t) {
+        if (t === 'work_in_progress') return 'Intermediate';
+        if (t === 'final_product') return 'Final';
+        return 'Raw';
+      }
+      function typePillClass(t) {
+        if (t === 'work_in_progress') return 'core2-live-inv__pill--wip';
+        if (t === 'final_product') return 'core2-live-inv__pill--final';
+        return 'core2-live-inv__pill--raw';
+      }
+      const NO_PROCESS = 'No process linked';
+      function processDisplayName(it) {
+        const ed = (it && it.extra_data) || {};
+        return String(
+          (it && it.process_name) ||
+          ed.producing_process_name ||
+          ed.process_name ||
+          (it && it.source_step_name) ||
+          NO_PROCESS
+        ).trim();
+      }
+
+      function setIf(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(text);
+      }
+      function populateSelect(selectId, values, placeholder) {
+        const el = document.getElementById(selectId);
+        if (!el) return;
+        const current = el.value;
+        el.innerHTML = '<option value="">' + esc(placeholder) + '</option>';
+        values.forEach(function (v) {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          el.appendChild(opt);
+        });
+        if (values.indexOf(current) >= 0) el.value = current;
+      }
+
+      function renderTimelineEvents(events) {
+        return '<ol class="inv-audit-timeline">' +
+          events.map(function (ev) {
+            var actorHtml = ev.actor ? '<span class="inv-audit-timeline__actor">' + esc(ev.actor) + '</span>' : '';
+            return '<li class="inv-audit-timeline__item">' +
+              '<span class="inv-audit-timeline__dot"></span>' +
+              '<div class="inv-audit-timeline__content">' +
+                '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                actorHtml +
+              '</div>' +
+              '<span class="inv-audit-timeline__time">' + esc(fmtAgo(ev.at)) + '</span>' +
+            '</li>';
+          }).join('') +
+          '</ol>';
+      }
+
+      function loadLotHistory(container, itemId) {
+        container.replaceChildren(el('span', 'core2-active-batches-empty', 'Loading...'));
+        fetch('/api/core/entities/inventory_item/' + encodeURIComponent(itemId) + '/story', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!container.isConnected) return;
+            const events = data.events || [];
+            if (!events.length) {
+              container.replaceChildren(el('span', 'core2-active-batches-empty', 'No history recorded yet.'));
+              return;
+            }
+            container.innerHTML = renderTimelineEvents(events.slice().reverse());
+          })
+          .catch(function () {
+            if (!container.isConnected) return;
+            container.replaceChildren(el('span', 'core2-active-batches-empty', 'Could not load history.'));
+          });
+      }
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+      function plural(n, word) {
+        return n + ' ' + word + (n === 1 ? '' : 's');
+      }
+      function fmtTotal(n) {
+        return window.InventoryStockSummary.format(n);
+      }
+      function pill(label, cls, title) {
+        const p = el('span', 'core2-live-inv__pill ' + cls, label);
+        if (title) p.title = title;
+        return p;
+      }
+
+      // Same name + type + unit is the same stock line, so lots of it can be summed and
+      // shown as one card. Type and unit are part of the key so a raw "Vodka" and an
+      // intermediate "Vodka", or litres and bottles, never get added together.
+      function groupKey(it) {
+        return window.InventoryStockSummary.groupKey(it);
+      }
+      function isExpired(it) {
+        const dd = dayDiffFromNow(it.expiry_date);
+        return dd != null && dd < 0;
+      }
+      function lotSortValue(it) {
+        const d = parseDay(it.expiry_date);
+        return d ? d.getTime() : Infinity;
+      }
+      function buildGroups(items) {
+        const groups = window.InventoryStockSummary.group(items);
+        groups.forEach(function (g) {
+          // Earliest expiry first (FEFO); lots with no expiry go last.
+          g.lots.sort(function (a, b) {
+            const d = lotSortValue(a) - lotSortValue(b);
+            if (d !== 0 && !Number.isNaN(d)) return d;
+            return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+          });
+        });
+        groups.sort(function (a, b) { return a.name.toLowerCase().localeCompare(b.name.toLowerCase()); });
+        return groups;
+      }
+
+      function lotTags(it) {
+        const tags = [pill(typeLabel(it.inventory_type), typePillClass(it.inventory_type))];
+        const proc = processDisplayName(it);
+        if (proc !== NO_PROCESS) tags.push(pill(proc, 'core2-live-inv__pill--workflow', 'Workflow: ' + proc));
+        if (it.source_execution_id) tags.push(pill('In use', 'core2-live-inv__pill--wip'));
+        if (isLowStock(it)) tags.push(pill('Low', 'core2-live-inv__pill--low'));
+        if (isExpired(it)) tags.push(pill('Expired', 'core2-live-inv__pill--expired'));
+        return tags;
+      }
+
+      function buildGroupCard(g, index) {
+        const expired = g.lots.filter(isExpired).length;
+        const low = g.lots.filter(isLowStock).length;
+        const inUse = g.lots.filter(function (it) { return !!it.source_execution_id; }).length;
+        // With several lots a bare "Expired" would read as the whole line, so say how many.
+        const flag = function (n, word) { return g.lots.length > 1 ? n + ' ' + word : word; };
+        const totalText = fmtTotal(g.total) + (g.unit ? ' ' + g.unit : '');
+
+        const card = el('div', 'core2-inv-card' + (expired ? ' core2-inv-card--alert' : ''));
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+        card.dataset.invGroup = String(index);
+        card.setAttribute('aria-label', g.name + ', ' + totalText + ' in stock across ' + plural(g.lots.length, 'lot') + '. Open lots.');
+
+        const header = el('div', 'core2-inv-card__header');
+        header.appendChild(pill(typeLabel(g.type), typePillClass(g.type)));
+        if (inUse) header.appendChild(pill('In use', 'core2-live-inv__pill--wip'));
+        if (low) header.appendChild(pill(flag(low, 'Low'), 'core2-live-inv__pill--low'));
+        if (expired) header.appendChild(pill(flag(expired, 'Expired'), 'core2-live-inv__pill--expired'));
+        card.appendChild(header);
+
+        card.appendChild(el('div', 'core2-inv-card__name', g.name));
+        card.appendChild(el('div', 'core2-inv-card__qty', totalText));
+        // Live inventory is deliberately lot-grouped, but expiry belongs on the
+        // collapsed card too: otherwise a supplied expiry is only visible after an
+        // operator happens to open the right item.  Lots are FEFO-sorted above.
+        const earliestExpiry = g.lots.find(function (lot) { return !!lot.expiry_date; });
+        if (earliestExpiry) {
+          card.appendChild(el(
+            'div',
+            'core2-inv-card__meta core2-inv-card__meta--muted',
+            (g.lots.length > 1 ? 'Earliest expiry ' : 'Expires ') + fmtDate(earliestExpiry.expiry_date)
+          ));
+        }
+        if (g.lots.length > 1) {
+          card.appendChild(el('div', 'core2-inv-card__count', plural(g.lots.length, 'lot') + ' in stock'));
+        } else {
+          const lot = g.lots[0];
+          if (lot.supplier_batch_number) card.appendChild(el('div', 'core2-inv-card__meta core2-inv-card__meta--muted', 'Batch ' + lot.supplier_batch_number));
+          if (lot.supplier) card.appendChild(el('div', 'core2-inv-card__meta core2-inv-card__meta--muted', lot.supplier));
+        }
+        return card;
+      }
+
+      function buildLotRow(it) {
+        const row = el('button', 'core2-inv-lot');
+        row.type = 'button';
+        row.dataset.invLot = String(it.id || '');
+
+        const main = el('div', 'core2-inv-lot__main');
+        main.appendChild(el('div', 'core2-inv-lot__title', it.supplier_batch_number ? 'Batch ' + it.supplier_batch_number : 'No batch number'));
+        const bits = [];
+        if (it.supplier) bits.push(it.supplier);
+        if (it.purchase_date) bits.push('Purchased ' + fmtDate(it.purchase_date));
+        if (it.expiry_date) bits.push('Expires ' + fmtDate(it.expiry_date));
+        if (bits.length) main.appendChild(el('div', 'core2-inv-lot__meta', bits.join(' · ')));
+        const tags = el('div', 'core2-inv-lot__tags');
+        lotTags(it).forEach(function (t) { tags.appendChild(t); });
+        main.appendChild(tags);
+        row.appendChild(main);
+
+        row.appendChild(el('div', 'core2-inv-lot__qty', String(it.quantity) + (it.unit ? ' ' + it.unit : '')));
+        const chev = el('span', 'core2-inv-lot__chev', '›');
+        chev.setAttribute('aria-hidden', 'true');
+        row.appendChild(chev);
+        return row;
+      }
+
+      function buildLotDetail(it) {
+        const wrap = el('div', 'core2-inv-detail');
+        const qty = el('div', 'core2-live-inv__qty');
+        qty.appendChild(el('span', 'core2-live-inv__qty-value', String(it.quantity)));
+        qty.appendChild(el('span', 'core2-live-inv__qty-unit', it.unit || ''));
+        wrap.appendChild(qty);
+
+        const tags = el('div', 'core2-inv-lot__tags');
+        lotTags(it).forEach(function (t) { tags.appendChild(t); });
+        wrap.appendChild(tags);
+
+        const proc = processDisplayName(it);
+        const fields = [
+          ['Supplier', it.supplier || '—'],
+          ['Supplier batch', it.supplier_batch_number || '—'],
+          ['Purchase date', fmtDate(it.purchase_date)],
+          ['Expiry', fmtDate(it.expiry_date)],
+          ['Process', proc === NO_PROCESS ? '—' : proc],
+          ['Barcode', it.barcode || '—'],
+        ];
+        const dl = el('dl', 'core2-inv-detail__meta');
+        fields.forEach(function (f) {
+          dl.appendChild(el('dt', null, f[0]));
+          dl.appendChild(el('dd', null, f[1]));
+        });
+        wrap.appendChild(dl);
+
+        wrap.appendChild(el('h4', 'core2-inv-detail__heading', 'Audit history'));
+        const history = el('div', 'core2-inv-detail__history');
+        wrap.appendChild(history);
+        if (it.id) loadLotHistory(history, it.id);
+        else history.appendChild(el('span', 'core2-active-batches-empty', 'No history recorded yet.'));
+        return wrap;
+      }
+
+      // Sheet: one group's lots, or (drilled in) one lot. Which one is showing lives in
+      // state.sheet so a live refresh can rebuild it from fresh data; whether it is open
+      // at all is read from the overlay so Escape/backdrop only have to flip `hidden`.
+      function sheetEls() {
+        return {
+          overlay: document.getElementById('core2-inv-sheet-overlay'),
+          title: document.getElementById('core2-inv-sheet-title'),
+          sub: document.getElementById('core2-inv-sheet-sub'),
+          body: document.getElementById('core2-inv-sheet-body'),
+          back: document.getElementById('core2-inv-sheet-back'),
+          close: document.getElementById('core2-inv-sheet-close'),
+        };
+      }
+      function closeSheet() {
+        const s = sheetEls();
+        state.sheet = null;
+        if (!s.overlay || s.overlay.hidden) return;
+        s.overlay.hidden = true;
+        document.body.classList.remove('core2-sheet-open');
+        const opener = state.sheetOpener;
+        state.sheetOpener = null;
+        if (opener && opener.isConnected) opener.focus();
+      }
+      function renderSheet() {
+        const s = sheetEls();
+        if (!s.overlay || s.overlay.hidden || !state.sheet) return;
+        const group = (state.groups || []).find(function (g) { return g.key === state.sheet.key; });
+        if (!group) { closeSheet(); return; }
+
+        let lot = null;
+        if (state.sheet.lotId) {
+          lot = group.lots.find(function (it) { return String(it.id) === state.sheet.lotId; }) || null;
+          if (!lot) state.sheet.lotId = null;
+        }
+        // A one-lot line has no list to go back to, so it opens straight on the lot.
+        if (!lot && group.lots.length === 1) lot = group.lots[0];
+
+        s.title.textContent = group.name;
+        s.back.hidden = !(lot && group.lots.length > 1);
+        s.body.replaceChildren();
+        if (lot) {
+          s.sub.textContent = lot.supplier_batch_number ? 'Batch ' + lot.supplier_batch_number : 'No batch number';
+          s.body.appendChild(buildLotDetail(lot));
+        } else {
+          s.sub.textContent = fmtTotal(group.total) + (group.unit ? ' ' + group.unit : '') + ' in stock across ' + plural(group.lots.length, 'lot');
+          group.lots.forEach(function (it) { s.body.appendChild(buildLotRow(it)); });
+        }
+        s.body.scrollTop = 0;
+      }
+      function openSheet(groupIndex, opener) {
+        const group = (state.groups || [])[groupIndex];
+        const s = sheetEls();
+        if (!group || !s.overlay) return;
+        state.sheet = { key: group.key, lotId: null };
+        state.sheetOpener = opener || null;
+        s.overlay.hidden = false;
+        document.body.classList.add('core2-sheet-open');
+        renderSheet();
+        if (s.close) s.close.focus();
+      }
+
+      function renderInventoryViews() {
+        const visibleItems = state.allItems.filter(isVisible);
+        const countsByType = countInventoryByType(visibleItems);
+        updateInventoryHubCountDisplay(countsByType);
+        setIf('core2-inv-snap-lines', visibleItems.length);
+        setIf('core2-inv-snap-inuse', visibleItems.filter(function (it) { return !!it.source_execution_id; }).length);
+        setIf('core2-inv-snap-received24h', visibleItems.filter(function (it) {
+          return allAuditEntries(it).some(function (e) {
+            const t = parseDay(e && e.timestamp_utc);
+            return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000);
+          });
+        }).length);
+        setIf('core2-inv-snap-low', visibleItems.filter(isLowStock).length);
+        setIf('core2-inv-snap-expiring', visibleItems.filter(function (it) {
+          const dd = dayDiffFromNow(it.expiry_date);
+          return dd != null && dd >= 0 && dd <= 7;
+        }).length);
+        setIf('core2-inv-snap-expired', visibleItems.filter(function (it) {
+          const dd = dayDiffFromNow(it.expiry_date);
+          return dd != null && dd < 0;
+        }).length);
+
+        const metricInventory = document.getElementById('metric-inventory');
+        if (metricInventory) metricInventory.textContent = visibleItems.length;
+
+        populateSelect(
+          'core2-inv-supplier',
+          Array.from(new Set(visibleItems.map(function (it) { return (it.supplier || '').trim(); }).filter(Boolean))).sort(),
+          'Any supplier'
+        );
+        populateSelect(
+          'core2-inv-process',
+          Array.from(new Set(visibleItems.map(function (it) { return processDisplayName(it); }).filter(function (v) { return v && v !== NO_PROCESS; }))).sort(),
+          'Any process'
+        );
+
+        const search = ((document.getElementById('core2-inv-search') || {}).value || '').trim().toLowerCase();
+        const supplier = (document.getElementById('core2-inv-supplier') || {}).value || '';
+        const process = (document.getElementById('core2-inv-process') || {}).value || '';
+        const expFrom = (document.getElementById('core2-inv-exp-from') || {}).value || '';
+        const expTo = (document.getElementById('core2-inv-exp-to') || {}).value || '';
+        const purFrom = (document.getElementById('core2-inv-pur-from') || {}).value || '';
+        const purTo = (document.getElementById('core2-inv-pur-to') || {}).value || '';
+
+        let filtered = visibleItems.filter(function (it) {
+          if (state.type && it.inventory_type !== state.type) return false;
+          if (supplier && String(it.supplier || '').trim() !== supplier) return false;
+          if (process && processDisplayName(it) !== process) return false;
+          const expDate = it.expiry_date ? String(it.expiry_date).slice(0, 10) : '';
+          if (expFrom && (!expDate || expDate < expFrom)) return false;
+          if (expTo && (!expDate || expDate > expTo)) return false;
+          const purDate = it.purchase_date ? String(it.purchase_date).slice(0, 10) : '';
+          if (purFrom && (!purDate || purDate < purFrom)) return false;
+          if (purTo && (!purDate || purDate > purTo)) return false;
+          if (search) {
+            let metaText = '';
+            try { metaText = JSON.stringify(it.extra_data || {}).toLowerCase(); } catch (e) {}
+            const hay = [
+              it.name, it.supplier, it.unit, it.process_name, it.source_step_name, it.barcode,
+              it.supplier_batch_number, metaText
+            ].filter(Boolean).join(' ').toLowerCase();
+            if (hay.indexOf(search) === -1) return false;
+          }
+          return true;
+        });
+
+        if (state.chip) {
+          filtered = filtered.filter(function (it) {
+            if (state.chip === 'in_use') return !!it.source_execution_id;
+            if (state.chip === 'received24h') {
+              return allAuditEntries(it).some(function (e) {
+                const t = parseDay(e && e.timestamp_utc);
+                return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000);
+              });
+            }
+            if (state.chip === 'low_stock') return isLowStock(it);
+            if (state.chip === 'expiring_7d') {
+              const dd = dayDiffFromNow(it.expiry_date);
+              return dd != null && dd >= 0 && dd <= 7;
+            }
+            if (state.chip === 'expired') {
+              const dd = dayDiffFromNow(it.expiry_date);
+              return dd != null && dd < 0;
+            }
+            return true;
+          });
+        }
+
+        state.groups = buildGroups(filtered);
+        const resultCountEl = document.getElementById('core2-inv-result-count');
+        if (resultCountEl) {
+          resultCountEl.textContent = plural(state.groups.length, 'item') + ' · ' + filtered.length + ' of ' + plural(visibleItems.length, 'lot') + ' shown';
+        }
+
+        const chipDefs = [
+          { key: 'in_use', label: 'In use', count: visibleItems.filter(function (it) { return !!it.source_execution_id; }).length },
+          { key: 'received24h', label: 'Received 24h', count: visibleItems.filter(function (it) { return allAuditEntries(it).some(function (e) { const t = parseDay(e && e.timestamp_utc); return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000); }); }).length },
+          { key: 'low_stock', label: 'Low stock', count: visibleItems.filter(isLowStock).length },
+          { key: 'expiring_7d', label: 'Expiring 7d', count: visibleItems.filter(function (it) { const dd = dayDiffFromNow(it.expiry_date); return dd != null && dd >= 0 && dd <= 7; }).length },
+          { key: 'expired', label: 'Expired', count: visibleItems.filter(function (it) { const dd = dayDiffFromNow(it.expiry_date); return dd != null && dd < 0; }).length },
+        ];
+        const chipRow = document.getElementById('core2-live-inv-chip-row');
+        if (chipRow) {
+          chipRow.innerHTML = chipDefs.map(function (c) {
+            const cls = 'core2-live-inv__chip' + (state.chip === c.key ? ' is-active' : '');
+            return '<button type="button" class="' + cls + '" data-core2-chip="' + c.key + '">' + esc(c.label) + '  ' + c.count + '</button>';
+          }).join('');
+        }
+
+        const itemsView = document.getElementById('core2-inv-items-view');
+        const movesView = document.getElementById('core2-inv-movements-view');
+        const procView = document.getElementById('core2-inv-process-view');
+        if (itemsView) itemsView.hidden = state.view !== 'items';
+        if (movesView) movesView.hidden = state.view !== 'movements';
+        if (procView) procView.hidden = state.view !== 'process';
+
+        const itemsGrid = document.getElementById('core2-inv-items-grid');
+        if (itemsGrid) {
+          itemsGrid.replaceChildren();
+          if (!state.groups.length) {
+            itemsGrid.appendChild(el('p', 'core2-active-batches-empty core2-inv-empty',
+              visibleItems.length ? 'No inventory matches these filters.' : 'No stock on hand yet.'));
+          }
+          state.groups.forEach(function (g, i) { itemsGrid.appendChild(buildGroupCard(g, i)); });
+        }
+        renderSheet();
+
+        const movesList = document.getElementById('core2-inv-movements-list');
+        if (movesList) {
+          const movementRows = [];
+          filtered.forEach(function (it) {
+            const history = allAuditEntries(it);
+            history.forEach(function (h) {
+              const ts = h && h.timestamp_utc ? h.timestamp_utc : it.created_at;
+              const added = qNum(h && h.quantity_added);
+              movementRows.push({
+                at: ts,
+                item_name: it.name || 'Inventory item',
+                process_name: processDisplayName(it),
+                line: (h && h.source_method ? String(h.source_method).replace(/_/g, ' ') : 'manual') + ' · ' + (h && (h.operator_name || h.operator_email) ? (h.operator_name || h.operator_email) : 'system'),
+                qty: added,
+                unit: it.unit || '',
+              });
+            });
+          });
+          movementRows.sort(function (a, b) { return new Date(b.at || 0) - new Date(a.at || 0); });
+          if (!movementRows.length) {
+            movesList.innerHTML = '<p class="core2-active-batches-empty" style="padding:12px;">No movement events in current filters.</p>';
+          } else {
+            movesList.innerHTML = movementRows.map(function (m) {
+              const qtyClass = m.qty >= 0 ? 'is-pos' : 'is-neg';
+              const qtyLabel = (m.qty >= 0 ? '+' : '') + m.qty + (m.unit ? ' ' + m.unit : '');
+              return '<div class="core2-live-inv__movement-row">' +
+                '<div class="core2-live-inv__movement-main"><strong>' + esc(m.item_name) + '</strong><span>' + esc(m.process_name) + ' · ' + esc(m.line) + '</span></div>' +
+                '<div class="core2-live-inv__movement-qty ' + qtyClass + '">' + esc(qtyLabel) + '</div>' +
+                '<div class="core2-live-inv__movement-time">' + esc(fmtAgo(m.at)) + '</div>' +
+              '</div>';
+            }).join('');
+          }
+        }
+
+        const procGroups = document.getElementById('core2-inv-process-groups');
+        if (procGroups) {
+          const grouped = {};
+          filtered.forEach(function (it) {
+            const key = processDisplayName(it);
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(it);
+          });
+          const keys = Object.keys(grouped).sort(function (a, b) { return a.localeCompare(b); });
+          if (!keys.length) {
+            procGroups.innerHTML = '<p class="core2-active-batches-empty" style="padding:12px;">No process groups in current filters.</p>';
+          } else {
+            procGroups.innerHTML = keys.map(function (k) {
+              const list = grouped[k];
+              const raw = list.filter(function (it) { return it.inventory_type === 'raw_material'; }).length;
+              const wip = list.filter(function (it) { return it.inventory_type === 'work_in_progress'; }).length;
+              const fin = list.filter(function (it) { return it.inventory_type === 'final_product'; }).length;
+              const cards = list.map(function (it) {
+                return '<article class="core2-live-inv__item-card">' +
+                  '<div class="core2-live-inv__item-head">' +
+                    '<h3 class="core2-live-inv__item-title">' + esc(it.name || 'Unnamed item') + '</h3>' +
+                    '<span class="core2-live-inv__pill ' + typePillClass(it.inventory_type) + '">' + esc(typeLabel(it.inventory_type)) + '</span>' +
+                  '</div>' +
+                  '<div class="core2-live-inv__qty"><span class="core2-live-inv__qty-value">' + esc(it.quantity) + '</span><span class="core2-live-inv__qty-unit">' + esc(it.unit || '') + '</span></div>' +
+                  '<dl class="core2-live-inv__meta">' +
+                    '<dt>Batch</dt><dd>' + esc(it.supplier_batch_number || '—') + '</dd>' +
+                    '<dt>Supplier</dt><dd>' + esc(it.supplier || '—') + '</dd>' +
+                    '<dt>Barcode</dt><dd>' + esc(it.barcode || '—') + '</dd>' +
+                    '<dt>Updated</dt><dd>' + esc(fmtAgo(it.created_at)) + '</dd>' +
+                  '</dl>' +
+                '</article>';
+              }).join('');
+              return '<section class="core2-live-inv__process-group">' +
+                '<div class="core2-live-inv__process-head"><strong>' + esc(k) + '</strong><span class="core2-live-inv__process-counts">' + raw + ' raw · ' + wip + ' intermediate · ' + fin + ' final</span></div>' +
+                '<div class="core2-live-inv__process-items">' + cards + '</div>' +
+              '</section>';
+            }).join('');
+          }
+        }
+      }
+
+      if (!state.bound) {
+        const modeBtns = shell.querySelectorAll('[data-core2-inv-view]');
+        modeBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const v = btn.getAttribute('data-core2-inv-view') || 'items';
+            state.view = v;
+            modeBtns.forEach(function (b) {
+              const on = b === btn;
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        });
+
+        const typeBtns = shell.querySelectorAll('[data-core2-inv-type]');
+        typeBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.type = btn.getAttribute('data-core2-inv-type') || '';
+            typeBtns.forEach(function (b) {
+              const on = b === btn;
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        });
+
+        const refineBtn = document.getElementById('core2-inv-refine-toggle');
+        const refinePanel = document.getElementById('core2-inv-refine-panel');
+        if (refineBtn && refinePanel) {
+          refineBtn.addEventListener('click', function () {
+            const show = refinePanel.hidden;
+            refinePanel.hidden = !show;
+            refineBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+          });
+        }
+
+        ['core2-inv-search', 'core2-inv-supplier', 'core2-inv-process', 'core2-inv-exp-from', 'core2-inv-exp-to', 'core2-inv-pur-from', 'core2-inv-pur-to'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', renderInventoryViews);
+          // A text box also fires `change` on blur. Re-rendering then replaces the card the
+          // user is mid-click on (mousedown on the old node, mouseup on the new one), and
+          // the browser drops that click -- so typing a search then clicking a card would
+          // need two clicks. `input` already re-rendered on every keystroke.
+          if (id !== 'core2-inv-search') el.addEventListener('change', renderInventoryViews);
+        });
+
+        const chipRow = document.getElementById('core2-live-inv-chip-row');
+        if (chipRow) {
+          chipRow.addEventListener('click', function (e) {
+            const b = e.target.closest('[data-core2-chip]');
+            if (!b) return;
+            const next = b.getAttribute('data-core2-chip');
+            state.chip = (state.chip === next) ? '' : next;
+            renderInventoryViews();
+          });
+        }
+
+        const clear = document.getElementById('core2-inv-clear');
+        if (clear) {
+          clear.addEventListener('click', function () {
+            const ids = ['core2-inv-search', 'core2-inv-supplier', 'core2-inv-process', 'core2-inv-exp-from', 'core2-inv-exp-to', 'core2-inv-pur-from', 'core2-inv-pur-to'];
+            ids.forEach(function (id) {
+              const el = document.getElementById(id);
+              if (el) el.value = '';
+            });
+            state.type = '';
+            state.chip = '';
+            shell.querySelectorAll('[data-core2-inv-type]').forEach(function (b) {
+              const on = (b.getAttribute('data-core2-inv-type') || '') === '';
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        }
+
+        const itemsGrid = document.getElementById('core2-inv-items-grid');
+        if (itemsGrid) {
+          const openFromCard = function (target) {
+            const card = target.closest('[data-inv-group]');
+            if (card && itemsGrid.contains(card)) openSheet(parseInt(card.dataset.invGroup, 10), card);
+          };
+          itemsGrid.addEventListener('click', function (e) { openFromCard(e.target); });
+          itemsGrid.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            openFromCard(e.target);
+          });
+        }
+
+        const sheet = sheetEls();
+        if (sheet.overlay) {
+          sheet.overlay.addEventListener('click', function (e) { if (e.target === sheet.overlay) closeSheet(); });
+          sheet.close.addEventListener('click', closeSheet);
+          sheet.back.addEventListener('click', function () {
+            if (!state.sheet) return;
+            state.sheet.lotId = null;
+            renderSheet();
+          });
+          sheet.body.addEventListener('click', function (e) {
+            const row = e.target.closest('[data-inv-lot]');
+            if (!row || !state.sheet) return;
+            state.sheet.lotId = row.dataset.invLot;
+            renderSheet();
+          });
+        }
+        // Escape closes the sheet. Bound once per page life on the document and it only
+        // flips the overlay (state is re-derived from `hidden`), so a boosted swap that
+        // replaces the overlay node never stacks handlers or leaves a stale closure.
+        if (!window.__core2InvSheetEscBound) {
+          document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return;
+            const o = document.getElementById('core2-inv-sheet-overlay');
+            if (!o || o.hidden) return;
+            o.hidden = true;
+            document.body.classList.remove('core2-sheet-open');
+          });
+          window.__core2InvSheetEscBound = true;
+        }
+
+        state.bound = true;
+      }
+
+      renderInventoryViews();
+    }
+
+    function createInventoryCategoryCard(type, items) {
+      const card = document.createElement('div');
+      card.className = `inventory-category-card ${type}`;
+
+      // Icon SVG based on type
+      let iconSvg = '';
+      if (type === 'raw') {
+        iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      } else if (type === 'intermediate') {
+        iconSvg = '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>';
+      } else if (type === 'final') {
+        iconSvg = '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>';
+      }
+
+      const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
+
+      const itemsContainer = document.createElement('div');
+      itemsContainer.className = 'inventory-category-items';
+      itemsContainer.style.display = 'flex';
+      itemsContainer.style.flexDirection = 'column';
+      itemsContainer.style.gap = '12px';
+
+      const scrollContainer = document.createElement('div');
+      scrollContainer.className = 'inventory-items-scroll-container';
+      scrollContainer.style.overflowX = 'hidden';
+
+      // Render all items as individual cards, or show empty state
+      if (items.length > 0) {
+        items.forEach(item => {
+          const itemCard = createInventoryItemCardV2(item);
+          itemsContainer.appendChild(itemCard);
+        });
+      } else {
+        // Show empty state message for empty categories
+        const emptyMessage = document.createElement('div');
+        emptyMessage.style.padding = '16px';
+        emptyMessage.style.textAlign = 'center';
+        emptyMessage.style.color = 'var(--text-secondary, #6b7280)';
+        emptyMessage.style.fontSize = '14px';
+
+        if (type === 'intermediate') {
+          emptyMessage.textContent = 'Work in progress products will appear here until all process steps are completed';
+        } else if (type === 'final') {
+          emptyMessage.innerHTML = 'Final products in stock will appear here when all process steps are completed';
+        } else {
+          emptyMessage.textContent = 'No items yet';
+        }
+
+        itemsContainer.appendChild(emptyMessage);
+      }
+
+      const hasMoreThanThree = items.length > 3;
+      const typeIndex = { raw: 0, intermediate: 1, final: 2 }[type];
+      const categoryId = `category-${type}-${typeIndex}`;
+      scrollContainer.id = `scroll-${categoryId}`;
+      if (!hasMoreThanThree) {
+        scrollContainer.classList.add('expanded');
+      }
+      scrollContainer.appendChild(itemsContainer);
+
+      // Build card structure
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'inventory-category-header';
+      headerDiv.innerHTML = `
+        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          ${iconSvg}
+        </svg>
+        <span class="inventory-category-title">${categoryTitle}</span>
+      `;
+
+      const countP = document.createElement('p');
+      countP.className = 'inventory-category-count';
+      countP.textContent = `${items.length} items`;
+
+      // Clear card and build structure
+      card.innerHTML = '';
+      card.appendChild(headerDiv);
+      card.appendChild(countP);
+      card.appendChild(scrollContainer);
+
+      // Store category ID and expanded state
+      card.dataset.categoryId = categoryId;
+      card.dataset.isExpanded = 'false';
+
+      // Add expand/collapse button if there are more than 3 items
+      if (hasMoreThanThree) {
+        const expandButton = document.createElement('button');
+        expandButton.className = 'btn btn-secondary btn-sm';
+        expandButton.id = `toggle-${categoryId}`;
+        expandButton.setAttribute('role', 'button');
+        expandButton.setAttribute('aria-expanded', 'false');
+        expandButton.setAttribute('aria-controls', `scroll-${categoryId}`);
+        expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
+        expandButton.onclick = () => toggleInventoryCategory(categoryId);
+        expandButton.innerHTML = `
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${items.length - 3} more
+        `;
+        card.appendChild(expandButton);
+      }
+
+      return card;
+    }
+
+    function createInventoryItemCardV2(item) {
+      // Any system check finding: red border and reasons in dropdown (scales for future checks)
+      const systemFindings = Array.isArray(item.system_findings) ? item.system_findings : [];
+      const hasFindings = systemFindings.length > 0;
+      // Backward compat: if API didn't send system_findings but item is untracked, show one reason
+      const effectiveFindings = hasFindings ? systemFindings : (item.extra_data && item.extra_data.untracked === true ? [{ check_id: 'untracked_items', reason: 'Untracked item — reconciliation required' }] : []);
+      const hasAnyFindings = effectiveFindings.length > 0;
+
+      const card = document.createElement('div');
+      card.className = 'card card-interactive process-card inventory-card-collapsed' + (hasAnyFindings ? ' inventory-card-untracked' : '');
+      card.dataset.inventoryId = item.id;
+      card.dataset.isExpanded = 'false';
+      card.style.marginBottom = '0';
+      card.style.wordWrap = 'break-word';
+      card.style.overflowWrap = 'break-word';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.padding = '12px 24px';
+
+      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' :
+                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' :
+                       'Final Product';
+
+      // Format dates
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString();
+        } catch {
+          return dateStr;
+        }
+      };
+
+      // Format quantity to 4 decimal places for accuracy, but only show decimals when needed
+      const formatQuantity = (qtyStr) => {
+        if (!qtyStr) return '0';
+        try {
+          const qty = parseFloat(qtyStr);
+          if (isNaN(qty)) return qtyStr;
+          const rounded = qty.toFixed(4);
+          return parseFloat(rounded).toString();
+        } catch {
+          return qtyStr;
+        }
+      };
+
+      const formattedQuantity = formatQuantity(item.quantity);
+
+      // Format display name: if process_name exists, show "Process: name" on one line and "Output name" on next
+      const titleContent = item.process_name
+        ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
+        : escapeHtml(item.name);
+
+      // System findings block: one red box listing all reasons (no hardcoding by check_id)
+      const checkReasonBlock = hasAnyFindings
+        ? `<div style="margin-bottom: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px;">
+            <p style="margin: 0 0 6px 0; font-weight: 600;">System findings</p>
+            <ul style="margin: 0; padding-left: 18px;">
+              ${effectiveFindings.map(f => '<li style="margin: 2px 0;">' + escapeHtml(f.reason || 'Check failed') + '</li>').join('')}
+            </ul>
+          </div>`
+        : '';
+      card.innerHTML = `
+        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}">
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+            <button class="btn-icon-small" data-action-stop data-action="openEditInventoryModal" data-action-args="${actionArgs(item.id)}" title="Edit inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" data-action-stop data-action="showDeleteInventoryConfirmation" data-action-args="${actionArgs(item.id, item.name)}" title="Delete inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}" id="arrow-${item.id}">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
+        </div>
+        ${item.source_execution_id ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+          <button class="btn btn-primary btn-sm" data-action-stop data-action="executeNextStepFromInventory" data-action-args="${actionArgs(item.source_execution_id, item.producing_step_id || '')}" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Execute next step
+          </button>
+        </div>
+        ` : `
+        <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+        </div>
+        `}
+        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+          ${checkReasonBlock}
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Quantity</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
+            </div>
+            ${item.supplier ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Supplier</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier)}</p>
+            </div>
+            ` : ''}
+            ${item.purchase_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Purchase Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.purchase_date)}</p>
+            </div>
+            ` : ''}
+            ${item.supplier_batch_number ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Batch Number</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier_batch_number)}</p>
+            </div>
+            ` : ''}
+            ${item.expiry_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Expiry Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.expiry_date)}</p>
+            </div>
+            ` : ''}
+            ${item.created_at ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Created</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.created_at)}</p>
+            </div>
+            ` : ''}
+          </div>
+          ${item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs || item.extra_data.previous_steps_data) ? `
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Metadata</h4>
+            ${item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${Object.entries(item.extra_data.execution_prompts).map(([key, value]) => `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                    <p style="color: var(--text-primary); margin: 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Variable Inputs Used</p>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${item.extra_data.variable_inputs.map(input => {
+                  const inputFormattedQty = formatQuantity(input.quantity);
+                  return `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(input.name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${inputFormattedQty} ${input.unit || ''}</p>
+                  </div>
+                `;
+                }).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.previous_steps_data && item.extra_data.previous_steps_data.length > 0 ? `
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Previous Steps Data</h4>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${item.extra_data.previous_steps_data.map(prevStep => `
+                  <div style="padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 13px; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">Step ${prevStep.step_number}: ${escapeHtml(prevStep.step_name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Input: ${escapeHtml(prevStep.input_name || 'Unknown')} - ${formatQuantity(prevStep.input_quantity)} ${prevStep.input_unit || ''}</p>
+                    ${prevStep.completed_by ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed by: ${escapeHtml(prevStep.completed_by)}</p>
+                    ` : ''}
+                    ${prevStep.completed_at ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed date: ${formatDate(prevStep.completed_at)}</p>
+                    ` : ''}
+                    ${prevStep.execution_prompts && Object.keys(prevStep.execution_prompts).length > 0 ? `
+                      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light, #e5e7eb);">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                          ${Object.entries(prevStep.execution_prompts).map(([key, value]) => `
+                            <div>
+                              <p style="color: var(--text-secondary); margin: 0 0 2px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                              <p style="color: var(--text-primary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
+        </div>
+      `;
+
+      return card;
+    }
+
+    function updateScrollContainerState(categoryCard) {
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      if (!scrollContainer) return;
+      const isCategoryExpanded = categoryCard.dataset.isExpanded === 'true';
+      scrollContainer.classList.toggle('expanded', isCategoryExpanded);
+    }
+
+    function toggleInventoryItemDetails(itemId) {
+      const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
+      if (!card) return;
+
+      const details = document.getElementById(`details-${itemId}`);
+      const arrow = document.getElementById(`arrow-${itemId}`);
+      const isExpanded = card.dataset.isExpanded === 'true';
+      const scrollContainer = card.closest('.inventory-items-scroll-container');
+      const categoryCard = scrollContainer && scrollContainer.closest('.inventory-category-card');
+
+      if (isExpanded) {
+        details.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+        card.classList.remove('inventory-card-expanded');
+        card.classList.add('inventory-card-collapsed');
+        card.dataset.isExpanded = 'false';
+        if (categoryCard) updateScrollContainerState(categoryCard);
+      } else {
+        if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
+          categoryCard.dataset.isExpanded = 'true';
+          const categoryId = categoryCard.dataset.categoryId;
+          const toggleButton = document.getElementById(`toggle-${categoryId}`);
+          if (toggleButton) {
+            toggleButton.setAttribute('aria-expanded', 'true');
+            toggleButton.innerHTML = `
+              <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              Show less
+            `;
+          }
+          updateScrollContainerState(categoryCard);
+        }
+        details.style.display = 'block';
+        arrow.style.transform = 'rotate(90deg)';
+        card.classList.remove('inventory-card-collapsed');
+        card.classList.add('inventory-card-expanded');
+        card.dataset.isExpanded = 'true';
+        if (scrollContainer) card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+      }
+    }
+
+    function toggleInventoryCategory(categoryId) {
+      const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
+      if (!categoryCard) return;
+
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      const toggleButton = document.getElementById(`toggle-${categoryId}`);
+      const isExpanded = categoryCard.dataset.isExpanded === 'true';
+
+      if (isExpanded) {
+        categoryCard.dataset.isExpanded = 'false';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
+        updateScrollContainerState(categoryCard);
+        toggleButton.innerHTML = `
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
+        `;
+      } else {
+        categoryCard.dataset.isExpanded = 'true';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
+        updateScrollContainerState(categoryCard);
+        toggleButton.innerHTML = `
+          <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show less
+        `;
+      }
+    }
+
+    // Optimistic inventory rendering helpers
+    function prependInventoryItemV2(item) {
+      // Find the raw materials category card
+      const inventoryGrid = document.getElementById('inventory-grid');
+      if (!inventoryGrid) return;
+
+      // Check if raw materials category exists
+      let rawCategoryCard = null;
+      const categoryCards = inventoryGrid.querySelectorAll('.inventory-category-card');
+      categoryCards.forEach(card => {
+        const title = card.querySelector('.inventory-category-title');
+        if (title && title.textContent === 'Raw Materials') {
+          rawCategoryCard = card;
+        }
+      });
+
+      const itemCard = createInventoryItemCardV2(item);
+      itemCard.dataset.inventoryId = item.id;
+
+      if (item.__optimistic) {
+        itemCard.style.opacity = '0.6';
+      }
+
+      if (rawCategoryCard) {
+        // Add to existing raw materials category
+        const itemsContainer = rawCategoryCard.querySelector('.inventory-category-items');
+        if (itemsContainer) {
+          itemsContainer.prepend(itemCard);
+          // Update count
+          const countEl = rawCategoryCard.querySelector('.inventory-category-count');
+          if (countEl) {
+            const currentCount = parseInt(countEl.textContent) || 0;
+            countEl.textContent = `${currentCount + 1} items`;
+          }
+        }
+      } else {
+        // Create new raw materials category card
+        const newCategoryCard = createInventoryCategoryCard('raw', [item]);
+        inventoryGrid.prepend(newCategoryCard);
+      }
+    }
+
+    function replaceOptimisticInventoryV2(tempId, realItem) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = createInventoryItemCardV2(realItem);
+      newCard.dataset.inventoryId = realItem.id;
+
+      card.replaceWith(newCard);
+    }
+
+    function removeOptimisticInventoryV2(tempId) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      // Find the category card and update count
+      const categoryCard = card.closest('.inventory-category-card');
+      if (categoryCard) {
+        const countEl = categoryCard.querySelector('.inventory-category-count');
+        if (countEl) {
+          const currentCount = parseInt(countEl.textContent) || 0;
+          if (currentCount > 1) {
+            countEl.textContent = `${currentCount - 1} items`;
+          } else {
+            // Remove the entire category card if it's the last item
+            categoryCard.remove();
+          }
+        }
+      }
+
+      card.remove();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Hub load: one small call on first paint (Overview), tab detail loaded lazily.
+    //
+    // The old loadCoreHubDashboardData() fired getMetrics + getProcesses +
+    // getInventory + getExecutions in parallel on every visit, and the
+    // active-batches graph then fetched processes?include_steps=true again --
+    // inventory/executions payloads grow unbounded with an org's history. Now:
+    //   - loadCore2Overview()      -> GET /api/core/hub/overview only (SQL aggregates)
+    //   - loadCore2InventoryTab()  -> getInventory(), first time the Inventory tab opens
+    //   - loadCore2WorkflowsTab()  -> getProcesses()+getExecutions(), first Workflows open
+    // See docs/core-load-performance-design.md.
+    // ---------------------------------------------------------------------------
+    // HTMX replaces the tab panels but keeps this script alive.  Cache loaded state
+    // against the panel node itself, not a page-lifetime boolean, so a newly swapped
+    // Inventory or Workflows panel fetches its data the first time it opens.
+    var core2LoadedTabPanels = { inventory: new WeakSet(), workflows: new WeakSet() };
+
+    function core2InventoryLoadSurface() {
+      return document.querySelector('[data-core2-tab-panel="inventory"]') ||
+        document.getElementById('core2-inv-items-grid');
+    }
+
+    // The journey-CTA widget only reads array lengths (and execs need a truthy .id);
+    // build minimal stand-ins from the overview's boolean flags.
+    function core2StubList(n) {
+      var out = [];
+      for (var i = 0; i < (n | 0); i++) out.push({ id: 'stub-' + i });
+      return out;
+    }
+
+    function applyCore2OverviewInsights(ov) {
+      var wf = (ov && ov.workflows) || {};
+      var inv = (ov && ov.inventory) || {};
+      var expiry = inv.expiry || {};
+      var attention = [
+        { count: expiry.expired || 0, label: 'Expired stock', hint: 'Remove or assess before it is used.', tone: 'urgent', href: '/core/notifications' },
+        { count: expiry.d0_7 || 0, label: 'Expires in 7 days', hint: 'Use, hold, or plan disposal.', tone: 'watch', href: '/core/inventory/live' },
+        { count: inv.low_stock || 0, label: 'Low stock lines', hint: 'Check what needs replenishing.', tone: 'watch', href: '/core/inventory/live' },
+        { count: Math.max(0, Number(inv.nonzero_lines || 0) - Number(inv.linked || 0)), label: 'Missing a trace link', hint: 'Add a supplier batch or production link.', tone: 'watch', href: '/core/notifications' },
+      ];
+      var attentionHost = document.getElementById('core2-overview-attention');
+      if (attentionHost) {
+        attentionHost.innerHTML = attention.map(function (item) {
+          var clear = !Number(item.count);
+          return '<a class="prod-check prod-check--' + (clear ? 'clear' : item.tone) + '" href="' + item.href + '">' +
+            '<span class="prod-check__count">' + escapeHtml(String(item.count)) + '</span>' +
+            '<span class="prod-check__label">' + escapeHtml(item.label) + '</span>' +
+            '<span class="prod-check__hint">' + escapeHtml(clear ? 'Nothing to do.' : item.hint) + '</span></a>';
+        }).join('');
+      }
+
+      var movement = inv.movement_24h || {};
+      [['[data-production-finished-week]', wf.completed_7d], ['[data-production-movements]', movement.events]].forEach(function (pair) {
+        var el = document.querySelector(pair[0]);
+        if (el) el.textContent = String(Number(pair[1] || 0));
+      });
+
+      core2ActiveProduction = wf.active_executions || [];
+      var oldest = core2ActiveProduction.map(core2BatchView).filter(function (batch) { return batch.hours >= 0; }).sort(function (x, y) { return y.hours - x.hours; })[0];
+      var oldestEl = document.querySelector('[data-production-oldest]');
+      var oldestName = document.querySelector('[data-production-oldest-name]');
+      if (oldestEl) oldestEl.textContent = oldest ? oldest.age.replace(/^Started /, '').replace(/ ago$/, '').replace('just now', 'under an hour') : '–';
+      if (oldestName) oldestName.textContent = oldest ? oldest.name : 'no batches under way';
+      core2RenderActiveProduction();
+    }
+
+    // Active production. Every batch says where it is, how far through, and how long it has
+    // been going, with the one way on to its next step in view.
+    var core2ActiveProduction = [];
+
+    function core2BatchView(execution) {
+      var step = execution.current_step || null;
+      var total = Number(execution.total_steps || 0);
+      var steps = execution.steps || [];
+      var done = steps.filter(function (s) { return s && s.status === 'completed'; }).length;
+      var started = execution.started_at ? new Date(execution.started_at) : null;
+      if (started && isNaN(started)) started = null;
+      var hours = started ? Math.max(0, (Date.now() - started.getTime()) / 3600000) : null;
+      var age = hours === null ? 'Not started' :
+        hours < 1 ? 'Started just now' :
+        hours < 24 ? 'Started ' + Math.round(hours) + (Math.round(hours) === 1 ? ' hour ago' : ' hours ago') :
+        'Started ' + Math.round(hours / 24) + (Math.round(hours / 24) === 1 ? ' day ago' : ' days ago');
+      var stage = done === 0 ? 'new' : (total && done >= total - 1 ? 'last' : 'mid');
+      return {
+        id: String(execution.id || ''),
+        name: execution.process_name || 'Untitled workflow',
+        step: step && step.name ? step.name : 'No step is ready to record',
+        position: total ? 'Step ' + (step ? step.step_number : Math.min(done + 1, total)) + ' of ' + total : '',
+        done: done,
+        total: total,
+        age: age,
+        hours: hours === null ? -1 : hours,
+        stage: stage,
+        stageLabel: stage === 'new' ? 'Not started' : stage === 'last' ? 'Last step' : 'In progress',
+        href: '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(String(execution.id || '')),
+      };
+    }
+
+    function core2BatchProgress(batch) {
+      // A workflow with no steps has nothing to draw; say so instead of leaving a gap.
+      if (!batch.total) return '<span class="prod-progress prod-progress--none">No steps yet</span>';
+      var cells = '';
+      for (var i = 0; i < batch.total; i++) cells += '<span' + (i < batch.done ? ' class="is-done"' : '') + '></span>';
+      return '<span class="prod-progress" role="img" aria-label="' + escapeHtml(batch.total ? batch.done + ' of ' + batch.total + ' steps done' : 'No steps yet') + '">' + cells + '</span>';
+    }
+
+    function core2BatchAction(batch, canRecord) {
+      return canRecord ? '<a class="workspace-button prod-batch__action" href="' + escapeHtml(batch.href) + '">Record next step<span class="prod-visually-hidden"> for ' + escapeHtml(batch.name) + ', ' + escapeHtml(batch.step) + '</span></a>' : '';
+    }
+
+    function core2RenderActiveProduction() {
+      var host = document.getElementById('core2-overview-active-batches');
+      if (!host) return;
+      var caption = document.querySelector('[data-production-active-caption]');
+      var batches = core2ActiveProduction.map(core2BatchView).sort(function (x, y) { return y.hours - x.hours; });
+      if (!batches.length) {
+        host.className = 'prod-batches';
+        if (caption) caption.hidden = true;
+        host.innerHTML = '<p class="core2-active-batches-empty">No batches are active right now. Start a batch from a product workflow when work begins.</p>';
+        return;
+      }
+      if (caption) {
+        caption.hidden = false;
+        caption.textContent = batches.length + (batches.length === 1 ? ' batch' : ' batches') + ' under way, longest running first.';
+      }
+      var actions = document.getElementById('core2-journey-actions');
+      var canRecord = !!actions && actions.dataset.canRecord === 'true';
+
+      host.className = 'prod-batches prod-rows';
+      host.innerHTML = batches.map(function (batch) {
+        return '<article class="prod-row" data-execution-id="' + escapeHtml(batch.id) + '"><div class="prod-row__text"><p class="prod-row__name">' + escapeHtml(batch.name) + '</p>' +
+          '<p class="prod-row__step">' + escapeHtml(batch.step) + '</p></div>' +
+          '<div class="prod-row__state">' + core2BatchProgress(batch) + '<p class="prod-row__meta">' + escapeHtml([batch.position, batch.age].filter(Boolean).join(' · ')) + '</p></div>' +
+          core2BatchAction(batch, canRecord) + '</article>';
+      }).join('');
+    }
+
+    function core2RenderWorkList(targetId, rows, emptyCopy) {
+      var host = document.getElementById(targetId);
+      if (!host) return;
+      if (!rows || !rows.length) {
+        host.innerHTML = '<p class="core2-active-batches-empty">' + escapeHtml(emptyCopy || 'No activity yet.') + '</p>';
+        return;
+      }
+      host.innerHTML = rows.map(function (row) {
+        return '<a class="core2-work-list__item" href="' + escapeHtml(row.href || '#') + '"><span><p class="core2-work-list__title">' +
+          escapeHtml(row.title || '') + '</p><p class="core2-work-list__meta">' + escapeHtml(row.meta || '') +
+          '</p></span><span class="core2-work-list__value">' + escapeHtml(row.value || '') + '</span></a>';
+      }).join('');
+    }
+
+    async function loadCore2Overview() {
+      var overview = null;
+      // Set synchronously (before the await) so the active-batches graph, which also runs
+      // on DOMContentLoaded, knows the overview is coming and must NOT issue its own
+      // processes/executions fallback fetch -- it waits for the core2:hub-overview event.
+      // Also clear any previous payload: on a refresh that then FAILS, a stale
+      // __core2HubOverview would be read by the graph before its pending/fallback branches
+      // and it would render pre-mutation data and never fall back.
+      window.__core2HubOverviewPending = true;
+      window.__core2HubOverview = null;
+      try {
+        overview = await CoreAPI.getHubOverview();
+        updateMetricsV2(overview.metrics || {});
+        applyCore2OverviewInsights(overview);
+
+        // Publish for the active-batches graph so it reuses this data instead of
+        // issuing its own processes?include_steps=true + executions calls.
+        window.__core2HubOverview = overview;
+
+        var journey = overview.journey || {};
+        var invStub = core2StubList(journey.has_inventory ? 1 : 0);
+        var procStub = core2StubList(journey.has_process ? 1 : 0);
+        var execStub = core2StubList(journey.has_execution ? 1 : 0);
+        // Render the journey bar NOW from the overview payload (setup/progress state needs
+        // no health data). /api/core/system-findings runs the whole check suite -- a DAG
+        // traversal per expired-with-stock raw material, ~1.3s / 380KB on a real org --
+        // so it must NOT block first paint (design doc "Target request shape"). Fetch it
+        // after, and upgrade the journey health + banner when it lands.
+        updateCore2JourneyCtasFromData(invStub, procStub, execStub, null);
+        if (journey.has_inventory && journey.has_process && journey.has_execution
+            && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
+          Promise.resolve().then(function () { return CoreAPI.getSystemFindings(); }).then(function (sf) {
+            var systemStatus = sf && sf.system_status ? sf.system_status : null;
+            updateCore2JourneyCtasFromData(invStub, procStub, execStub, systemStatus);
+            if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner(sf || undefined);
+          }).catch(function (err) {
+            console.warn('Could not load system status for journey bar:', err);
+            updateCore2JourneyCtasFromData(invStub, procStub, execStub, { mode: 'unavailable' });
+            if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
+          });
+        } else if (window.loadSystemFindingsBanner) {
+          window.loadSystemFindingsBanner();
+        }
+      } catch (error) {
+        // Leaving the page mid-request is not a failure to report, and there is no page left to tell.
+        if (error && error.name === 'AbortError') return overview;
+        console.error('Failed to load core overview:', error);
+        const health = document.getElementById('core2-journey-bar');
+        if (health) health.textContent = 'Production health could not be loaded. Refresh to try again.';
+        const actions = document.getElementById('core2-journey-actions');
+        if (actions) actions.innerHTML = '<a class="workspace-button" href="/core/processes">View product workflows</a>';
+        if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
+      } finally {
+        window.__core2HubOverviewPending = false;
+        // Always signal the graph: with data on success, or so it can run its own
+        // fallback fetch on failure (window.__core2HubOverview stays undefined then).
+        document.dispatchEvent(new CustomEvent('core2:hub-overview', { detail: overview }));
+      }
+      setupModalHandlers();
+      return overview;
+    }
+
+    async function loadCore2InventoryTab(force) {
+      var surface = core2InventoryLoadSurface();
+      if (!surface || (core2LoadedTabPanels.inventory.has(surface) && !force)) return;
+      core2LoadedTabPanels.inventory.add(surface);
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        if (!surface.isConnected) return;
+        const items = inventoryData.inventory_items || [];
+        updateCore2InventorySummary(items);
+        updateCore2InventoryInsights(items, [], []);
+        renderInventoryV2(items);
+      } catch (error) {
+        core2LoadedTabPanels.inventory.delete(surface);
+        if (error && error.name === 'AbortError') return;
+        console.error('Failed to load inventory tab:', error);
+      }
+    }
+
+    async function loadCore2WorkflowsTab(force) {
+      var surface = document.querySelector('[data-core2-tab-panel="workflows"]');
+      if (!surface || (core2LoadedTabPanels.workflows.has(surface) && !force)) return;
+      core2LoadedTabPanels.workflows.add(surface);
+      try {
+        const [processesData, executionsData] = await Promise.all([
+          CoreAPI.getProcesses(),
+          CoreAPI.getExecutions(),
+        ]);
+        if (!surface.isConnected) return;
+        const procs = processesData.processes || [];
+        const execs = (executionsData.executions || []).filter(function (e) { return e && e.id; });
+        updateCore2WorkflowSummary(procs, execs);
+        updateCore2WorkflowInsights(procs, execs);
+      } catch (error) {
+        core2LoadedTabPanels.workflows.delete(surface);
+        console.error('Failed to load workflows tab:', error);
+      }
+    }
+
+    function core2CurrentMainTab() {
+      try {
+        var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks') return fromUrl;
+      } catch (e) {}
+      return 'overview';
+    }
+
+    // Called by base_spa.html after an HTMX swap returns to the hub, and after
+    // mutations. Refresh the Overview plus whichever detail tab is currently shown.
+    function loadCoreHubDashboardData() {
+      loadCore2Overview();
+      var tab = core2CurrentMainTab();
+      if (tab === 'inventory') loadCore2InventoryTab(true);
+      else if (tab === 'workflows') loadCore2WorkflowsTab(true);
+    }
+    window.loadCoreHubDashboardData = loadCoreHubDashboardData;
+    window.loadCore2InventoryTab = loadCore2InventoryTab;
+    window.loadCore2WorkflowsTab = loadCore2WorkflowsTab;
+
+    function initCore2HubLoad() {
+      loadCore2Overview();
+      var tab = core2CurrentMainTab();
+      // The dedicated /core/inventory/live page renders the live-inventory grid outside
+      // the tabbed hub (it links back via ?back_tab=, not ?tab=), so core2CurrentMainTab()
+      // never resolves to 'inventory' there. Detect it directly by its grid element,
+      // the same way batches.js finds the Batches page by its root.
+      var isDedicatedInventoryPage = !!document.getElementById('core2-inv-items-grid');
+      if (tab === 'inventory' || isDedicatedInventoryPage) loadCore2InventoryTab();
+      else if (tab === 'workflows') loadCore2WorkflowsTab();
+      core2SubscribeLive();
+    }
+
+    // Live: when a colleague (or another tab) changes a process / batch / inventory item,
+    // rebuild the hub the same way a boosted return does. The local user's own mutations
+    // still refresh instantly via base_spa's htmx:afterOnLoad hook -- this only covers the
+    // changes that never produce an HTMX request in *this* browser. Debounced so a
+    // multi-row batch completion is one refetch; key-scoped so the afterSettle re-init
+    // replaces it cleanly rather than stacking.
+    var _core2LiveTimer = null;
+    function core2SubscribeLive() {
+      if (!window.LiveSync) return;
+      window.LiveSync.subscribe({
+        key: 'core2-hub',
+        match: function (evt) {
+          var t = evt.entity_type;
+          return t === 'process' || t === 'execution' || t === 'execution_step' || t === 'step' || t === 'inventory_item';
+        },
+        onChange: function () {
+          if (_core2LiveTimer) return;
+          _core2LiveTimer = setTimeout(function () {
+            _core2LiveTimer = null;
+            loadCoreHubDashboardData();
+            if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+          }, 400);
+        },
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2HubLoad);
+    } else {
+      initCore2HubLoad();
+    }
+
+    // Modal handlers
+    function setupModalHandlers() {
+      // Open modal
+      document.querySelectorAll('[data-modal-open]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const modalId = btn.getAttribute('data-modal-open');
+          const modal = document.getElementById(modalId);
+          if (modal) {
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      });
+
+      // Close modal
+      document.querySelectorAll('[data-modal-close]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const modal = btn.closest('.modal-overlay');
+          if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+          }
+        });
+      });
+
+      // Close on overlay click - DISABLED to prevent accidental closes
+      // document.querySelectorAll('.modal-overlay').forEach(modal => {
+      //   modal.addEventListener('click', (e) => {
+      //     if (e.target === modal) {
+      //       modal.style.display = 'none';
+      //       document.body.style.overflow = 'auto';
+      //     }
+      //   });
+      // });
+
+    }
+
+    // Close modal helper function (like flows2.html)
+    window.closeModal = function(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    };
+
+    let barcodeCameraCheckPromise = null;
+    const CAMERA_CHECK_TIMEOUT_MS = 3000;
+
+    function isBarcodeCameraAvailable() {
+      if (barcodeCameraCheckPromise) return barcodeCameraCheckPromise;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        barcodeCameraCheckPromise = Promise.resolve(false);
+        return barcodeCameraCheckPromise;
+      }
+      barcodeCameraCheckPromise = new Promise(function(resolve) {
+        var settled = false;
+        var timer = setTimeout(function() {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        }, CAMERA_CHECK_TIMEOUT_MS);
+        try {
+          navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
+            })
+            .catch(function() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(false);
+            });
+        } catch (e) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      });
+      return barcodeCameraCheckPromise;
+    }
+
+    /** SPA routes for add inventory (manual / CSV / barcode); barcode row toggled by camera availability. */
+    function buildCore2AddInventoryMenuEl() {
+      var menu = document.createElement('div');
+      menu.className = 'core2-journey-addinv-menu';
+      menu.hidden = true;
+      menu.setAttribute('role', 'menu');
+      var aMan = document.createElement('a');
+      aMan.href = '/core/inventory/add/manual';
+      aMan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__manual';
+      aMan.setAttribute('role', 'menuitem');
+      aMan.textContent = 'Manual entry';
+      var aCsv = document.createElement('a');
+      aCsv.href = '/core/inventory/add/csv';
+      aCsv.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__csv';
+      aCsv.setAttribute('role', 'menuitem');
+      aCsv.textContent = 'CSV upload';
+      var aScan = document.createElement('a');
+      aScan.href = '/core/inventory/add/barcode';
+      aScan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__scan';
+      aScan.setAttribute('role', 'menuitem');
+      aScan.textContent = 'Barcode / camera scan';
+      menu.appendChild(aMan);
+      menu.appendChild(aCsv);
+      menu.appendChild(aScan);
+      return menu;
+    }
+
+    function bindCore2JourneyAddInventoryDropdown(wrap) {
+      var trigger = wrap.querySelector('.core2-journey-addinv-trigger');
+      var menu = wrap.querySelector('.core2-journey-addinv-menu');
+      var scanLink = wrap.querySelector('.core2-journey-addinv-menu__scan');
+      if (!trigger || !menu) return;
+
+      var onDocClick = function (e) {
+        if (!wrap.contains(e.target)) closeMenu();
+      };
+      var onKey = function (e) {
+        if (e.key === 'Escape') closeMenu();
+      };
+
+      function closeMenu() {
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', onDocClick);
+        document.removeEventListener('keydown', onKey);
+      }
+
+      function openMenu() {
+        menu.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        document.addEventListener('click', onDocClick);
+        document.addEventListener('keydown', onKey);
+        isBarcodeCameraAvailable().then(function (has) {
+          if (scanLink) scanLink.style.display = has ? '' : 'none';
+        });
+      }
+
+      trigger.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (menu.hidden) {
+          document.querySelectorAll('.core2-journey-addinv-menu').forEach(function (m) {
+            m.hidden = true;
+          });
+          document.querySelectorAll('.core2-journey-addinv-trigger').forEach(function (t) {
+            t.setAttribute('aria-expanded', 'false');
+          });
+          openMenu();
+        } else {
+          closeMenu();
+        }
+      });
+
+      menu.addEventListener('click', function (e) {
+        if (e.target.closest('a[href]')) closeMenu();
+      });
+    }
+
+    // Attach the Create Process Form Handler Once + help tooltips
+    let _core2HelpDocClickBound = false;
+    function initCore2CreateProcessForm() {
+      const form = document.querySelector('#create-process-modal form') || document.getElementById('create-process-guided-form');
+      if (form && !form.dataset.boundCore2CreateProcess) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.createNewProcess(this);
+          return false;
+        });
+        form.dataset.boundCore2CreateProcess = '1';
+      }
+      // Help icon click/hover for guided create process modal
+      document.querySelectorAll('.help-trigger').forEach(btn => {
+        if (btn.dataset.boundCore2Help) return;
+        const tooltip = btn.parentElement && btn.parentElement.querySelector('.help-tooltip');
+        if (!tooltip) return;
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          document.querySelectorAll('.help-tooltip.visible').forEach(t => { if (t !== tooltip) t.classList.remove('visible'); });
+          tooltip.classList.toggle('visible');
+        });
+        btn.addEventListener('mouseenter', function () { tooltip.classList.add('visible'); });
+        btn.addEventListener('mouseleave', function () { tooltip.classList.remove('visible'); });
+        btn.dataset.boundCore2Help = '1';
+      });
+      if (!_core2HelpDocClickBound) {
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('.help-wrapper')) {
+            document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
+          }
+        });
+        _core2HelpDocClickBound = true;
+      }
+
+      // Dispose moved to dedicated page; keep this helper for expired-item callsites.
+      window.openRecordWastageModalForExpired = function(itemIds) {
+        const ids = Array.isArray(itemIds) ? itemIds.map(String).filter(Boolean) : [];
+        const query = ids.length ? ('?item_ids=' + encodeURIComponent(ids.join(','))) : '';
+        window.location.href = '/core/inventory/dispose' + query;
+      };
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2CreateProcessForm);
+    } else {
+      initCore2CreateProcessForm();
+    }
+
+    // Create process handler
+    window.createNewProcess = function (form) {
+      const formData = new FormData(form);
+      const name = formData.get('name')?.trim();
+      const description = formData.get('description')?.trim() || '';
+      const category = formData.get('category') || 'manufacturing';
+
+      if (!name) {
+        showNotification('error', 'Validation Error', 'Please enter a process name');
+        return false;
+      }
+
+      // Close modal immediately
+      const modal = document.getElementById('create-process-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      form.reset();
+
+      // Persist asynchronously, then redirect to flows2 with welcome=1
+      (async () => {
+        try {
+          const saved = await CoreAPI.createProcess({
+            name,
+            description,
+            category,
+          });
+
+          // Update metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+
+          // Redirect to process flow page and show "define steps" welcome modal
+          window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
+        } catch (error) {
+          showNotification(
+            'error',
+            'Failed to Create Process',
+            error.message || 'Failed to create process. Please try again.'
+          );
+        }
+      })();
+
+      return false;
+    };
+
+    // Edit process handler
+    let currentEditProcessId = null;
+
+    async function openEditProcessModal(processId) {
+      try {
+        const process = await CoreAPI.getProcess(processId);
+        currentEditProcessId = processId;
+
+        // Populate form
+        const modal = document.getElementById('edit-process-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = process.name || '';
+        form.querySelector('[name="description"]').value = process.description || '';
+        form.querySelector('[name="category"]').value = process.category || 'manufacturing';
+
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load process:', error);
+        showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process. Please try again.');
+      }
+    }
+
+    async function updateProcess(form) {
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        description: formData.get('description') || '',
+        category: formData.get('category') || null,
+      };
+
+      try {
+        await CoreAPI.updateProcess(currentEditProcessId, data);
+
+        // Close modal
+        const modal = form.closest('.modal-overlay');
+        if (modal) {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+
+        // Reload processes
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+
+        currentEditProcessId = null;
+        form.reset();
+        return false;
+      } catch (error) {
+        console.error('Failed to update process:', error);
+        showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
+        return false;
+      }
+    }
+
+    // showNotification is now defined at the top of the script
+    // This is just a reference comment
+
+    function closeNotification() {
+      const modal = document.getElementById('notification-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+    }
+
+    // Edit inventory handler
+    let currentEditInventoryId = null;
+
+    async function openEditInventoryModal(itemId) {
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        const item = inventoryData.inventory_items.find(i => i.id === itemId);
+
+        if (!item) {
+          showNotification('error', 'Error', 'Inventory item not found');
+          return;
+        }
+
+        currentEditInventoryId = itemId;
+
+        // Populate form
+        const modal = document.getElementById('edit-inventory-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = item.name || '';
+        form.querySelector('[name="quantity"]').value = item.quantity || '';
+        form.querySelector('[name="unit"]').value = item.unit || 'kg';
+        form.querySelector('[name="inventoryType"]').value = item.inventory_type || 'raw_material';
+        form.querySelector('[name="supplier"]').value = item.supplier || '';
+        form.querySelector('[name="purchaseDate"]').value = item.purchase_date ? item.purchase_date.split('T')[0] : '';
+        form.querySelector('[name="batchNumber"]').value = item.supplier_batch_number || '';
+        form.querySelector('[name="expiryDate"]').value = item.expiry_date ? item.expiry_date.split('T')[0] : '';
+
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load inventory item:', error);
+        showNotification('error', 'Failed to Load Inventory Item', error.message || 'Failed to load inventory item. Please try again.');
+      }
+    }
+
+    async function updateInventoryItem(form) {
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        quantity: parseFloat(formData.get('quantity')),
+        unit: formData.get('unit'),
+        inventory_type: formData.get('inventoryType') || 'raw_material',
+        supplier: formData.get('supplier') || null,
+        purchase_date: formData.get('purchaseDate') || null,
+        supplier_batch_number: formData.get('batchNumber') || null,
+        expiry_date: formData.get('expiryDate') || null,
+      };
+
+      try {
+        await CoreAPI.updateInventoryItem(currentEditInventoryId, data);
+
+        // Close modal
+        const modal = form.closest('.modal-overlay');
+        if (modal) {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+
+        // Rebuild overview (metrics + insight widgets + graph) and refresh open tabs.
+        await loadInventoryV2();
+
+        currentEditInventoryId = null;
+        form.reset();
+        return false;
+      } catch (error) {
+        console.error('Failed to update inventory item:', error);
+        showNotification('error', 'Failed to Update Inventory Item', error.message || 'Failed to update inventory item. Please try again.');
+        return false;
+      }
+    }
+
+    // Delete inventory handler
+    let currentDeleteInventoryId = null;
+    let currentDeleteInventoryName = null;
+
+    function showDeleteInventoryConfirmation(itemId, itemName) {
+      currentDeleteInventoryId = itemId;
+      currentDeleteInventoryName = itemName;
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
+      messageEl.textContent = `Delete "${itemName}"? This can't be undone. Only stock with no history can be deleted: anything moved, sold, wasted or counted stays in the records (adjust it to zero instead).`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    async function confirmDeleteInventory() {
+      if (!currentDeleteInventoryId) return;
+
+      try {
+        await CoreAPI.deleteInventoryItem(currentDeleteInventoryId);
+
+        // Close modal
+        const modal = document.getElementById('delete-inventory-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+
+        // Rebuild overview (metrics + insight widgets + graph) and refresh open tabs.
+        await loadInventoryV2();
+
+        currentDeleteInventoryId = null;
+        currentDeleteInventoryName = null;
+      } catch (error) {
+        console.error('Failed to delete inventory item:', error);
+        showNotification('error', 'Failed to Delete Inventory Item', error.message || 'Failed to delete inventory item. Please try again.');
+      }
+    }
+
+    function cancelDeleteInventory() {
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteInventoryId = null;
+      currentDeleteInventoryName = null;
+    }
+
+    // ============================================================
+    // EXECUTION FUNCTIONS (from flows2.html)
+    // ============================================================
+
+    // Get current user
+    let currentUser = null;
+    async function getCurrentUser() {
+      if (currentUser) {
+        return currentUser;
+      }
+
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          currentUser = await response.json();
+          return currentUser;
+        } else {
+          return { username: 'Unknown', email: 'unknown@example.com' };
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+        return { username: 'Unknown', email: 'unknown@example.com' };
+      }
+    }
+
+    // Execute next step from inventory item
+    // When producingStepId is set (e.g. for untracked items), open that step instead of the "ready" step
+    window.executeNextStepFromInventory = async function(sourceExecutionId, producingStepId) {
+      try {
+        const executionData = await CoreAPI.getExecution(sourceExecutionId);
+        const executionSteps = executionData.execution_steps || [];
+        let targetStep = null;
+
+        if (producingStepId && producingStepId.trim()) {
+          // Untracked/failed-check item: open the step that produces this output (normalize UUID comparison)
+          const wantId = String(producingStepId).trim().toLowerCase();
+          targetStep = executionSteps.find(es => String(es.step_id || '').trim().toLowerCase() === wantId);
+        }
+        if (!targetStep) {
+          // Default: current step to complete (ready step)
+          targetStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
+        }
+
+        if (!targetStep) {
+          showNotification('error', 'No Ready Step', 'There is no step ready to complete for this execution.');
+          return;
+        }
+
+        const processData = await CoreAPI.getProcess(executionData.process_id);
+        const stepDefinition = processData.steps.find(s => s.id === targetStep.step_id);
+
+        if (!stepDefinition) {
+          showNotification('error', 'Step Not Found', 'Step definition not found.');
+          return;
+        }
+
+        if (typeof window.openExecutionModal === 'function') {
+          await window.openExecutionModal(sourceExecutionId, targetStep, stepDefinition);
+        } else {
+          showNotification('error', 'Modal Not Loaded', 'Execution modal functions are not available. Please refresh the page.');
+          console.error('openExecutionModal is not defined. Make sure execution-modal.js is loaded.');
+        }
+      } catch (error) {
+        console.error('Failed to open execution modal:', error);
+        showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
+      }
+    };
+
+    // ============================================================
+    // EXECUTION MODAL FUNCTIONS
+    // ============================================================
+    // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
+    // Configuration is set above in ExecutionModalConfig
+
+
+    Object.assign(window, {
+      closeNotification,
+      loadInventoryV2,
+      toggleInventoryItemDetails,
+      openEditInventoryModal,
+      updateInventoryItem,
+      showDeleteInventoryConfirmation,
+      confirmDeleteInventory,
+      cancelDeleteInventory,
+      updateProcess,
+    });
+    }
