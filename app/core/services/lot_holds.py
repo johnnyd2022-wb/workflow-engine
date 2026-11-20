@@ -82,7 +82,7 @@ def _item(session: Session, org_id: UUID, item_id: UUID) -> InventoryItem:
 
 def made_from(session: Session, org_id: UUID, item_id: UUID) -> list[dict]:
     """Lots made from this one, at any depth, with whether each is already held."""
-    from app.core.backend.dagtraversal import trace_forward
+    from app.features.traceability.dagtraversal import trace_forward
 
     _item(session, org_id, item_id)
     nodes = trace_forward(org_id, session, item_id, include_quantity_filter=False)["items"]

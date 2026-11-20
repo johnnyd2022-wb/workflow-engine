@@ -391,14 +391,12 @@ do not introduce reverse imports into existing domain code.
       - /api/core/inventory/trace-graph/<inventory_item_id>
       - /api/core/sourcemap/objects
       - /api/core/sourcemap/trace
-    backend:  app/core/backend/backend.py:4403-4648 (trace fwd/back/graph)
-              app/core/backend/backend.py:6570-6784 (sourcemap)
-              app/core/backend/temporal_dag_tracer.py (275)
-    frontend: frontend/sourcemap/sourcemap.html, js/sourcemap.js (2561), css/sourcemap.css
+    backend:  app/features/traceability/{traceability_routes,dagtraversal,temporal_dag_tracer}.py
+    frontend: app/features/traceability/frontend/{templates,js,css}/
     tests:    test_traceability, e2e/traceability/test_sourcemap_page
 
     depends on:      platform, inventory, execution, process-design
-    depended on by:  (leaf — nothing reads it)
+    depended on by:  execution, recalls, lot holds, compliance checks
 
     - This is the lineage capability once described as a /workflow-engine/* blueprint.
       No such blueprint exists; the code lives in core and keeps its /api/core/* URLs.

@@ -1,5 +1,5 @@
 """Golden-path browser coverage for GET /api/core/entities/activity, as consumed by the
-sourcemap page's "Activity" tab (app/core/frontend/js/sourcemap.js, AC11-AC14)."""
+sourcemap page's "Activity" tab (app/features/traceability/frontend/js/sourcemap.js, AC11-AC14)."""
 
 import pytest
 from playwright.sync_api import expect

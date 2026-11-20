@@ -30,7 +30,7 @@ _SYSTEM_PROMPT_LABELS = {"batch number", "evidence"}
 
 
 def _split_temporal_prompts(execution_data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-    """Same "Batch number" / custom-prompt split as dagtraversal._split_trace_prompts,
+    """Same "Batch number" / custom-prompt split as dagtraversal.split_trace_prompts,
     applied to an execution.step_completed event's execution_data payload."""
     batch_id: str | None = None
     custom_prompts: dict[str, Any] = {}

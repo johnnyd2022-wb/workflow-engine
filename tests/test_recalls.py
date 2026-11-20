@@ -152,7 +152,7 @@ def test_opening_a_recall_scopes_customers_and_holds_the_stock(db, org_a, admin_
 
 
 def test_lots_made_from_it_are_held_too_and_sold_out_ones_are_not(db, org_a, admin_client, world, monkeypatch):
-    from app.core.backend import dagtraversal
+    from app.features.traceability import dagtraversal
 
     child = _lot(db, org_a.id, name="Navy Gin gift pack", quantity="5")
     empty = _lot(db, org_a.id, name="Navy Gin minis", quantity="0")
