@@ -31,22 +31,30 @@
   // Single-flight runner to avoid overlapping renders.
   var renderToken = 0;
   var inFlightPromise = null;
+  var inFlightContext = null;
   var rerunRequested = false;
   var initScheduled = false;
   var lastInitMs = 0;
+  var lastInitContext = null;
 
   async function loadAndRender() {
     if (!isOnExecutionStepScreen()) return;
-    var myToken = ++renderToken;
+    var pageContext = window.ExecutionStepPageContext;
     if (inFlightPromise) {
-      rerunRequested = true;
+      // DOMContentLoaded and pageshow can initialize the same page while its data is loading.
+      if (pageContext !== inFlightContext) {
+        renderToken++;
+        rerunRequested = true;
+      }
       return inFlightPromise;
     }
+    var myToken = ++renderToken;
+    inFlightContext = pageContext;
     inFlightPromise = (async function () {
       function isStale() {
         return myToken !== renderToken;
       }
-      var ctx = window.ExecutionStepPageContext || {};
+      var ctx = pageContext || {};
       var executionId = ctx.executionId;
       var processId = ctx.processId;
       var stepId = ctx.stepId;
@@ -150,14 +158,17 @@
         });
       }
     })().catch(function (e) {
+      if (myToken !== renderToken) return;
       console.error('Failed to load execution step page:', e);
       setSubtitle('Failed to load.');
       if (window.showNotification) window.showNotification('error', 'Failed to load', e && e.message ? e.message : 'Please try again.');
     }).finally(function () {
       inFlightPromise = null;
+      inFlightContext = null;
       if (rerunRequested) {
         rerunRequested = false;
-        scheduleInit();
+        // A new page context must render even if the previous init ran less than 50ms ago.
+        loadAndRender();
       }
     });
     return inFlightPromise;
@@ -235,8 +246,10 @@
     queueMicrotask(function () {
       initScheduled = false;
       var now = Date.now();
-      if (now - lastInitMs < 50) return;
+      var pageContext = window.ExecutionStepPageContext;
+      if (pageContext === lastInitContext && now - lastInitMs < 50) return;
       lastInitMs = now;
+      lastInitContext = pageContext;
       loadAndRender();
     });
   }

@@ -29,7 +29,7 @@ def get_storage_root() -> Path:
         path = Path(str(root).strip())
         logger.info("Process docs storage root from config: %s", path)
         return path
-    core_dir = Path(__file__).resolve().parent.parent.parent
+    core_dir = Path(__file__).resolve().parents[3] / "core"
     path = core_dir / "process_docs_storage"
     logger.info("Process docs storage root (default): %s", path)
     return path

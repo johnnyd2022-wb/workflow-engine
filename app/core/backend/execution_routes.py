@@ -20,7 +20,6 @@ from app.core.backend.complete_step_payload import (
     MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
 )
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
-from app.core.backend.process_design_routes import _assert_flow_process_access, _flow_process_id_from_request
 from app.core.backend.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
@@ -44,6 +43,7 @@ from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.packs import can_convert_for_lot, convert_for_lot, settle_take
 from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.features.process_design.process_design_routes import _assert_flow_process_access, _flow_process_id_from_request
 from app.observability import get_logger
 
 logger = get_logger(__name__)

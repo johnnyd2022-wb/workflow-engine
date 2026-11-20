@@ -183,15 +183,11 @@ do not introduce reverse imports into existing domain code.
       - /api/core/processes/<process_id>/steps/<step_id>
       - /api/core/processes/<process_id>/steps/reorder
       - /api/core/process-docs/*
-    backend:  app/core/backend/backend.py:1449-2006 (processes+steps API)
-              app/core/backend/backend.py:1056-1239 (wizard pages)
-              app/core/backend/backend.py:260-563 (flow-wizard guards and state)
-              app/core/backend/process_docs/ (routes 221, service 343, validation 180, storage 125)
+    backend:  app/features/process_design/process_design_routes.py
+              app/features/process_design/process_docs/
     models:   Process, ProcessVersion, Step, ProcessStepDocument
     repos:    process_repo, process_step_document_repo
-    frontend: frontend/processes/process-flow-*.html, process-wizard-*.html
-              js/create-process-modal.js (6895 — largest file in repo), js/process-flow-spa.js,
-              js/process-flow-next-steps-steps.js, js/flows2-steps.js
+    frontend: app/features/process_design/frontend/{templates,js,css}/
     storage:  app/core/process_docs_storage/<org_id>/<process_id>/<step_id>/ (on disk)
     tests:    test_process_design, test_process_templates, test_safe_flow_return_to,
               e2e/test_workflow_flow, e2e/test_process_docs_flow
@@ -199,7 +195,7 @@ do not introduce reverse imports into existing domain code.
     depends on:      platform, inventory (steps reference item types)
     depended on by:  execution, traceability, dashboard
 
-    - The wizard keeps state in the Flask session (_flow_state_* helpers, backend.py:472-563)
+    - The wizard keeps state in the Flask session (_flow_state_* helpers in process_design_routes.py)
       with a step-order guard. Wizard changes must keep _maybe_enforce_flow_wizard_step honest.
     - _safe_flow_return_to (backend.py:260) is an open-redirect guard whose ALLOWED_PREFIX
       must stay in sync with batch-start-scripts.html. It has its own test file.

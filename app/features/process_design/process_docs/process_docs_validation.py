@@ -7,9 +7,9 @@ from uuid import UUID
 
 from flask import request
 
-from app.core.backend.process_docs.process_docs_storage import get_temp_dir
 from app.core.db import db_session
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.features.process_design.process_docs.process_docs_storage import get_temp_dir
 from app.observability import get_logger
 
 logger = get_logger(__name__)
