@@ -5,7 +5,7 @@
 // that open the shared step editor.
 //
 // Configuration:
-// Set window.ExecutionModalConfig before loading this script:
+// Set window.ExecutionModalConfig before opening the editor:
 //   window.ExecutionModalConfig = {
 //     onStepCompleted: async function() {
 //       // Called after step is completed successfully
@@ -109,22 +109,20 @@
     throw new Error('execution-security-utils.js must be loaded before execution-modal.js');
   }
 
-  // Get configuration or use defaults
-  const config = window.ExecutionModalConfig || {
+  let config;
+  const defaultConfig = {
     onStepCompleted: async function() {
-      console.warn('ExecutionModalConfig.onStepCompleted not configured. Set window.ExecutionModalConfig before loading this script.');
+      console.warn('ExecutionModalConfig.onStepCompleted not configured. Set window.ExecutionModalConfig before opening the editor.');
     }
   };
-
-  window.ExecutionModalSecondary.install({
-    config: config,
-    CoreAPI: window.CoreAPI,
-  });
 
   // ============================================================
   // OPEN EXECUTION MODAL
   // ============================================================
   window.openExecutionModal = async function(executionId, executionStep, stepDefinition, options) {
+    // The shell can swap between a standalone recording screen and the Core dialog.
+    config = window.ExecutionModalConfig || defaultConfig;
+    window.ExecutionModalSecondary.install({ config: config, CoreAPI: window.CoreAPI });
     return window.ExecutionOpenStep.openExecutionModal(
       {
         SessionAPI: SessionAPI,

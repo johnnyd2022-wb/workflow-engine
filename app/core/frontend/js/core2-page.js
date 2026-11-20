@@ -2831,9 +2831,35 @@
       }
     }
 
+    let executionEditorLoad;
+    function loadExecutionEditor() {
+      if (typeof window.openExecutionModal === 'function') return Promise.resolve();
+      if (!executionEditorLoad) {
+        const template = document.getElementById('core-execution-editor-scripts');
+        const sources = template.content.querySelectorAll('script[src]');
+        executionEditorLoad = Promise.allSettled(Array.from(sources, (source) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          // Fetch in parallel while preserving the shared stack's execution order.
+          script.async = false;
+          script.src = source.src;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        }))).then((results) => {
+          if (results.some((result) => result.status === 'rejected') || typeof window.openExecutionModal !== 'function') {
+            executionEditorLoad = undefined;
+            throw new Error('The execution editor could not load.');
+          }
+        });
+      }
+      return executionEditorLoad;
+    }
+
     // Execute next step from inventory item
     // When producingStepId is set (e.g. for untracked items), open that step instead of the "ready" step
     window.executeNextStepFromInventory = async function(sourceExecutionId, producingStepId) {
+      const markup = document.getElementById('core-execution-editor-markup');
+      if (!markup) return;
       try {
         const executionData = await CoreAPI.getExecution(sourceExecutionId);
         const executionSteps = executionData.execution_steps || [];
@@ -2862,24 +2888,20 @@
           return;
         }
 
-        if (typeof window.openExecutionModal === 'function') {
-          await window.openExecutionModal(sourceExecutionId, targetStep, stepDefinition);
-        } else {
-          showNotification('error', 'Modal Not Loaded', 'Execution modal functions are not available. Please refresh the page.');
-          console.error('openExecutionModal is not defined. Make sure execution-modal.js is loaded.');
+        await loadExecutionEditor();
+        if (!markup.isConnected) return;
+        if (!document.getElementById('execute-step-modal')) {
+          markup.after(markup.content.cloneNode(true));
         }
+        window.ExecutionModalConfig = {
+          onStepCompleted: () => loadInventoryV2(),
+        };
+        await window.openExecutionModal(sourceExecutionId, targetStep, stepDefinition);
       } catch (error) {
         console.error('Failed to open execution modal:', error);
         showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
       }
     };
-
-    // ============================================================
-    // EXECUTION MODAL FUNCTIONS
-    // ============================================================
-    // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
-    // Configuration is set above in ExecutionModalConfig
-
 
     Object.assign(window, {
       closeNotification,

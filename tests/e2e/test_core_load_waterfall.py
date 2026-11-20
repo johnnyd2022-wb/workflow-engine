@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import expect
 
+from tests.e2e.test_execution_flow import _add_step, _create_process, _start_execution
+
 pytestmark = [pytest.mark.e2e]
 
 
@@ -309,12 +311,49 @@ def _csrf(page):
 
 
 @pytest.mark.parametrize("path", ["/core", "/core/inventory/live", "/core/executions/live"])
-def test_core_page_code_is_a_cacheable_asset(logged_in_page, path):
+def test_core_initial_load_caches_page_code_and_defers_editor(logged_in_page, path):
     response = logged_in_page.goto(path)
     assert response and response.ok
     assert len(response.body()) < 150_000
+    assert logged_in_page.locator("#execute-step-modal").count() == 0
+    assert not logged_in_page.evaluate(
+        "() => performance.getEntriesByType('resource').some(entry => entry.name.includes('/execution-render-inputs.js'))"
+    )
     script = logged_in_page.locator('script[src*="/static/js/core2-page.js"]').get_attribute("src")
     assert script and "?v=" in script
     cached = logged_in_page.request.get(script)
     assert cached.ok
     assert "max-age=3600" in cached.headers["cache-control"]
+
+
+@pytest.mark.parametrize("boosted", [False, True], ids=["direct", "boosted"])
+def test_core_execution_editor_loads_on_inventory_action(logged_in_page, boosted):
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    process_id = _create_process(page, "Lazy core editor")
+    _add_step(page, process_id, 1, "Mix")
+    execution_id = _start_execution(page, process_id)
+
+    if boosted:
+        page.locator('a.nav-link[href="/core"]').click()
+    else:
+        page.goto("/core/inventory/live")
+    page.wait_for_function("typeof window.executeNextStepFromInventory === 'function'")
+    modal = page.locator("#execute-step-modal")
+    assert modal.count() == 0
+
+    with page.expect_request("**/execution-render-inputs.js*"):
+        page.evaluate("id => window.executeNextStepFromInventory(id, '')", execution_id)
+    expect(modal).to_be_visible()
+    expect(modal.locator("#execute-step-name")).to_have_text("Mix")
+
+    modal.get_by_role("button", name="Cancel").click()
+    expect(modal).to_be_hidden()
+    page.evaluate("id => window.executeNextStepFromInventory(id, '')", execution_id)
+    expect(modal).to_be_visible()
+    assert (
+        page.evaluate(
+            "() => performance.getEntriesByType('resource').filter(entry => entry.name.includes('/execution-render-inputs.js')).length"
+        )
+        == 1
+    )

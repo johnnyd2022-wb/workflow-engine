@@ -14,8 +14,9 @@ The browser audit covers 91 distinct HTML pages and seeded entry states, includi
 2. Core, Live Inventory and Live Executions sent the same large script in every HTML response. Those pages now share a versioned, cacheable asset.
 3. The landing diagram sent an uncompressed document on cold and warm navigation. Its static response now negotiates gzip and keeps separate validators for each representation.
 4. The Dashboard API fetched daily and weekly execution counters in separate queries. The follow-up combines them in one database round trip while preserving the tenant and time filters.
-
 5. Workflow detail loaded the execution editor and rendered its hidden modal eagerly. Start Batch and batch card actions open a dedicated screen that loads the editor there. A browser regression test checks the asset boundary and opens a seeded batch step.
+
+6. Core, Live Inventory, and Live Executions defer the shared execution editor until the inventory action needs it. Browser tests check both direct and boosted entry, and a second open reuses the loaded editor.
 
 The remaining largest cold bundles are on Live Executions, Workflow detail, Live Inventory, Core and the Process wizard. The audit identifies the largest resources for each navigation. Representative stock and batch history is needed to rank the remaining API costs.
 

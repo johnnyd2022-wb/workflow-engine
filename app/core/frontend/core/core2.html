@@ -471,19 +471,15 @@
    base_spa.html), so without it the script would run -- and, on the Suppliers page, call
    window.CoreAPI -- before core-api.js has defined it. #}
 <script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}" defer></script>
+<template id="core-execution-editor-markup">
+  {% include 'shared/execution-modal.html' %}
+</template>
+<template id="core-execution-editor-scripts">
+  {% include 'shared/execution_modal_stack_scripts.html' %}
+</template>
 {% endblock %}
 
 {% block scripts %}
-  <script nonce="{{ csp_nonce() }}">
-    // Configure execution modal callbacks before loading shared script
-    window.ExecutionModalConfig = {
-      onStepCompleted: async function() {
-        // Reload inventory to reflect consumed items and new outputs
-        await window.loadInventoryV2();
-      }
-    };
-  </script>
-  {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='core2-page.js') }}"></script>
   
@@ -766,6 +762,4 @@
     }
   </style>
   
-  <!-- Execute Step Modal (Shared) -->
-  {% include 'shared/execution-modal.html' %}
 {% endblock %}
