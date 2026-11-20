@@ -89,6 +89,28 @@ FROM perf_results r
 JOIN recent ON recent.id = r.run_id
 GROUP BY r.route, r.metric;
 
+-- Browser audit samples are separate from the rolling CI performance baseline.
+CREATE TABLE IF NOT EXISTS page_load_runs (
+    id          bigserial PRIMARY KEY,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    commit_sha  text NOT NULL,
+    branch      text,
+    mr_iid      integer,
+    pipeline_id bigint,
+    job_id      bigint,
+    source      text NOT NULL CHECK (source IN ('local', 'ci')),
+    label       text
+);
+
+CREATE TABLE IF NOT EXISTS page_load_samples (
+    run_id       bigint NOT NULL REFERENCES page_load_runs (id) ON DELETE CASCADE,
+    route        text NOT NULL,
+    cache        text NOT NULL CHECK (cache IN ('cold', 'warm')),
+    sample       integer NOT NULL CHECK (sample >= 0),
+    metrics      jsonb NOT NULL CHECK (jsonb_typeof(metrics) = 'object'),
+    PRIMARY KEY (run_id, route, cache, sample)
+);
+
 -- Dated market observations from the market-research skill. A report may contain both
 -- point measurements and estimate ranges; source/method fields keep comparisons auditable.
 CREATE TABLE IF NOT EXISTS market_indicators (

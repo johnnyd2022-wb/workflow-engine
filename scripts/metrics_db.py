@@ -11,9 +11,9 @@ Connection, in order:
      job containers reach the host-published port as host.docker.internal:8402)
   2. KeePassXC entry workflow-engine/bize-dev-db-rw on 127.0.0.1:8402, only when
      $KEEPASS_PASSWORD is set -- an unattended skill must never block on a password prompt.
-No credentials, or an unreachable DB, is "unavailable", never a crash: writes go to a local
-spool file that the next successful call flushes; reads report the gap. The DB being down
-must not be able to block a merge or lose a skill's run.
+Skill ledger writes use a local spool when the database is unavailable. Regular
+performance budget runs report unavailable storage and still enforce their test budgets.
+Opt-in browser audits report a storage failure when they cannot record their samples.
 
 Admin (local only, drives the container via `docker exec`; needs $KEEPASS_PASSWORD):
     python3 scripts/metrics_db.py setup            # create db + roles + schema + grants
@@ -38,6 +38,7 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -454,6 +455,78 @@ def record_perf(results: list[dict[str, Any]]) -> str:
         return "unavailable"
 
 
+def record_page_load(
+    samples: list[dict[str, Any]],
+    *,
+    label: str | None = None,
+    run_provenance: dict[str, Any] | None = None,
+) -> int:
+    """Write a browser audit atomically, preserving each cold and warm navigation."""
+    if not samples:
+        raise ValueError("a page load run requires at least one sample")
+    prov = provenance() if run_provenance is None else run_provenance
+    rows = []
+    for sample in samples:
+        metrics = {key: value for key, value in sample.items() if key not in ("route", "cache", "sample")}
+        rows.append((sample["route"], sample["cache"], sample["sample"], json.dumps(metrics)))
+    with session() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO page_load_runs (commit_sha, branch, mr_iid, pipeline_id, job_id, source, label) "
+            "VALUES (%(commit_sha)s, %(branch)s, %(mr_iid)s, %(pipeline_id)s, %(job_id)s, %(source)s, %(label)s) "
+            "RETURNING id",
+            {**prov, "label": label},
+        )
+        run_id = cur.fetchone()[0]
+        cur.executemany(
+            "INSERT INTO page_load_samples (run_id, route, cache, sample, metrics) VALUES (%s, %s, %s, %s, %s::jsonb)",
+            [(run_id, *row) for row in rows],
+        )
+    return run_id
+
+
+def page_load_runs() -> list[dict[str, Any]]:
+    with session() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, recorded_at, commit_sha, branch, mr_iid, pipeline_id, job_id, source, label, "
+            "(SELECT count(*) FROM page_load_samples WHERE run_id = page_load_runs.id) AS samples "
+            "FROM page_load_runs ORDER BY recorded_at DESC, id DESC LIMIT 50"
+        )
+        columns = [column.name for column in cur.description]
+        return [{name: _iso(value) for name, value in zip(columns, row, strict=True)} for row in cur.fetchall()]
+
+
+def page_load_samples(run_id: int) -> list[dict[str, Any]]:
+    with session() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT route, cache, sample, metrics FROM page_load_samples "
+            "WHERE run_id = %s ORDER BY route, sample, cache",
+            (run_id,),
+        )
+        return [
+            {"route": route, "cache": cache, "sample": sample, **metrics}
+            for route, cache, sample, metrics in cur.fetchall()
+        ]
+
+
+def summarize_page_load(samples: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for sample in samples:
+        groups.setdefault((sample["route"], sample["cache"]), []).append(sample)
+    measures = ("ttfb_ms", "lcp_ms", "load_ms", "transferred_bytes", "requests", "cached_resources", "document_queries")
+    return {
+        group: {
+            "sample_count": len(rows),
+            **{
+                metric: median(values)
+                if (values := [row[metric] for row in rows if row.get(metric) is not None])
+                else None
+                for metric in measures
+            },
+        }
+        for group, rows in groups.items()
+    }
+
+
 def latest_perf_run(branch: str | None = None) -> dict[str, Any] | None:
     """The most recent perf run in the shape perf_triage used to read from last-run.json."""
     with session() as conn, conn.cursor() as cur:
@@ -598,6 +671,8 @@ def cmd_status() -> int:
                 "SELECT 'skill_outcomes', count(*) FROM skill_outcomes UNION ALL "
                 "SELECT 'perf_runs', count(*) FROM perf_runs UNION ALL "
                 "SELECT 'perf_results', count(*) FROM perf_results UNION ALL "
+                "SELECT 'page_load_runs', count(*) FROM page_load_runs UNION ALL "
+                "SELECT 'page_load_samples', count(*) FROM page_load_samples UNION ALL "
                 "SELECT 'market_indicators', count(*) FROM market_indicators"
             )
             for table, n in cur.fetchall():
@@ -617,16 +692,24 @@ def cmd_check() -> int:
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = ANY(%s)",
                 (
                     os.environ.get("BIZE_METRICS_SCHEMA", SCHEMA),
-                    ["skill_runs", "skill_outcomes", "perf_runs", "perf_results", "market_indicators"],
+                    [
+                        "skill_runs",
+                        "skill_outcomes",
+                        "perf_runs",
+                        "perf_results",
+                        "page_load_runs",
+                        "page_load_samples",
+                        "market_indicators",
+                    ],
                 ),
             )
             found = cur.fetchone()[0]
     except MetricsDBUnavailableError as e:
         print(f"SKIPPED: metrics DB not checked ({e}); this never blocks a merge")
         return 0
-    if found != 5:
+    if found != 7:
         print(
-            f"metrics DB reachable but schema incomplete ({found}/5 tables) -- run metrics_db.py migrate",
+            f"metrics DB reachable but schema incomplete ({found}/7 tables) -- run metrics_db.py migrate",
             file=sys.stderr,
         )
         return 1
@@ -688,8 +771,41 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name)
     imp = sub.add_parser("import-legacy")
     imp.add_argument("base", nargs="?", help="repo root holding the legacy files (default: this repo)")
+    sub.add_parser("page-load-runs", help="list recent browser audit runs")
+    samples = sub.add_parser("page-load-samples", help="show the samples for a browser audit run")
+    samples.add_argument("run_id", type=int)
+    compare = sub.add_parser("page-load-compare", help="compare per-page cold and warm medians")
+    compare.add_argument("before", type=int)
+    compare.add_argument("after", type=int)
     args = ap.parse_args(argv)
     try:
+        if args.cmd == "page-load-runs":
+            print(json.dumps(page_load_runs(), indent=2))
+            return 0
+        if args.cmd == "page-load-samples":
+            rows = page_load_samples(args.run_id)
+            if not rows:
+                print(f"no page load samples for run {args.run_id}", file=sys.stderr)
+                return 1
+            print(json.dumps(rows, indent=2))
+            return 0
+        if args.cmd == "page-load-compare":
+            before = summarize_page_load(page_load_samples(args.before))
+            after = summarize_page_load(page_load_samples(args.after))
+            if not before or not after:
+                print("both page load runs must contain samples", file=sys.stderr)
+                return 1
+            rows = [
+                {
+                    "route": route,
+                    "cache": cache,
+                    "before": before.get((route, cache)),
+                    "after": after.get((route, cache)),
+                }
+                for route, cache in sorted(before.keys() | after.keys())
+            ]
+            print(json.dumps(rows, indent=2))
+            return 0
         if args.cmd == "import-legacy":
             return cmd_import_legacy([args.base] if args.base else [])
         return {"setup": cmd_setup, "migrate": cmd_migrate, "status": cmd_status, "check": cmd_check}[args.cmd]()

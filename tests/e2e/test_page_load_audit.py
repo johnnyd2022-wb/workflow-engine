@@ -16,8 +16,12 @@ from tests.e2e.test_mobile_page_audit import (
 from tests.e2e.test_perf_budgets import instrument_performance
 from tests.e2e.test_process_wizard_flow import _create_process_with_step
 
-REPORT = os.environ.get("PAGE_LOAD_REPORT")
-pytestmark = [pytest.mark.e2e, pytest.mark.skipif(not REPORT, reason="set PAGE_LOAD_REPORT to collect a browser audit")]
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(
+        os.environ.get("PAGE_LOAD_AUDIT") != "1", reason="set PAGE_LOAD_AUDIT=1 to collect browser metrics"
+    ),
+]
 APP_ROUTES = [
     *APP_PAGES,
     "/core/costing/costs",
