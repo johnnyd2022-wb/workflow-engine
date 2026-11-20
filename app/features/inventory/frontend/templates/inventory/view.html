@@ -3,6 +3,8 @@
 {% block title %}View inventory{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-view.css') }}">
+
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='recall.css') }}">
   <meta name="description" content="Filter and review all inventory on hand.">
 {% endblock %}

@@ -2,6 +2,8 @@
 {% block title %}Suppliers · Inventory · Production{% endblock %}
 {% block body_class %}suppliers-page{% endblock %}
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='suppliers.css') }}">
+
   <meta name="description" content="Who you buy from, what you buy from them, and how to reach them.">
 {% endblock %}
 {% block content %}

@@ -5,6 +5,8 @@
 {% block body_class %}sourcemap-page{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}">
+
 {% endblock %}
 
 {% block content %}
