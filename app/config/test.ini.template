@@ -36,7 +36,6 @@ multi_site_enabled = true
 invoice_button_enabled = false
 schedule_enabled = false
 crm_enabled = true
-workflow_engine_enabled = true
 
 [observability]
 log_level = INFO

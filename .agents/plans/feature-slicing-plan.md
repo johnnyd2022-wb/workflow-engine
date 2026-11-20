@@ -1,6 +1,6 @@
 # Feature Slicing Plan — proposal for review
 
-**Status:** taxonomy agreed 2026-07-27, carve not started. Index is the active deliverable.
+**Status:** taxonomy agreed 2026-07-27. This document records the original proposal. The [Core feature splits plan](core-feature-splits-and-page-performance.md) tracks the implemented route and frontend moves and the performance work. The [feature index](../feature-index.md) reflects the current layout.
 **Purpose:** define the slice taxonomy so (a) future Claude sessions can scope work to one
 slice instead of "core", and (b) the eventual physical split has a target to move toward.
 
@@ -362,10 +362,7 @@ Left open, to settle when the relevant phase starts rather than now:
 
 1. **Index staleness check** (§5) — script that validates `routes:` against the live URL
    map, vs. a skill-owned freshness pass. Decide before the index has grown enough to rot.
-2. **Retiring `workflow_engine_enabled`** — decision 2 says the flag goes. Removing it
-   touches `local.ini`, `test.ini` and `config_loader.py:278`. Trivial, but it's a config
-   change to production files, so it wants its own small MR rather than riding along with a
-   code move.
+2. **Retiring `workflow_engine_enabled`** — removed the unused flag. The legacy settings link still redirects.
 3. **Xero sub-split** (slice 12) — deferred until CRM actually hurts.
 4. **`app/core/` → `app/platform/` rename mechanics** — decision 3 approves it, but it's a
    large import-churn diff. Best done as its own MR *after* Phase 1 has emptied the

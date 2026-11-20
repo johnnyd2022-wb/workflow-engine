@@ -156,7 +156,7 @@ HTTP Request
 - `operational_cases` – `/core/cases/*`, `/api/core/cases/*` — operational cases (always mounted; access gated per org)
 - `process_templates` – industry workflow template catalogue (always mounted; exposure gated per org)
 
-`/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
+The app lives under `/core/*`. The legacy `/workflow-engine/settings` URL redirects to `/core/settings`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 
 ### Key subsystems
 

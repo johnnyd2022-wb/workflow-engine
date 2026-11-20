@@ -31,3 +31,10 @@ def test_ac10_dashboard_alias_redirects_to_core_dashboard(logged_in_page, app_ur
         f"unexpected redirect target: {location!r} (expected {expected!r} or a relative "
         f"same-origin path, not an external host)"
     )
+
+
+@pytest.mark.parametrize("alias", ["/settings", "/workflow-engine/settings"])
+def test_settings_aliases_keep_redirecting(logged_in_page, alias):
+    response = logged_in_page.request.get(alias, max_redirects=0)
+    assert response.status == 308
+    assert response.headers["location"] == "/core/settings"

@@ -170,7 +170,7 @@ HTTP Request
   The assistant-facing server is a separate package, `bize_mcp/` (three tools: `discover`, `docs`, `execute`; its
   SDK is the optional `mcp` extra: `uv sync --extra dev --extra mcp`), documented in `docs/public-mcp-server.md`.
 
-`/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
+The app lives under `/core/*`. The legacy `/workflow-engine/settings` URL redirects to `/core/settings`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 
 ### Key subsystems
 
