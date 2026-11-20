@@ -17,6 +17,7 @@
 {# The section head above is this page's title. #}
 {% set section_head_is_page_title = true %}
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='overview.js') }}" defer data-alpine-component="crmOverview"></script>
 <div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" data-can-record="{{ 'true' if can('sales.record') else 'false' }}" @sales-add-widget.window="openWidgetModal()">
   <div x-show="error && !loadError" class="crm-error-banner" role="alert" x-cloak>
     <span x-text="error"></span>

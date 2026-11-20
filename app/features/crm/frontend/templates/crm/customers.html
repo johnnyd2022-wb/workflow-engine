@@ -2,6 +2,7 @@
 {% block title %}Customers · Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='customers.js') }}" defer data-alpine-component="crmCustomers"></script>
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customers.css') }}">
 <div id="customers-page" class="crm-root workspace-overview customers-page" x-data="crmCustomers()"
      @keydown.escape.window="closePreview()">
@@ -193,5 +194,4 @@
   {% endif %}
 
 </div>
-<script src="{{ url_for('crm.serve_crm_js', filename='customers.js') }}" defer></script>
 {% endblock %}

@@ -8,6 +8,7 @@
 
 
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='tasks-calendar.js') }}" defer data-alpine-component="crmTasks"></script>
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='tasks.css') }}">
 <div id="tasks-page" class="max-content crm-root workspace-overview tasks-page" x-data="crmTasks()"
      data-tasks-style="1" :data-tasks-style="style" :aria-busy="loading ? 'true' : 'false'" aria-busy="true"

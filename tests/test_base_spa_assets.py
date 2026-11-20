@@ -18,17 +18,33 @@ def test_shared_spa_uses_the_crm_static_endpoint():
     base_spa = (REPO_ROOT / "app/core/frontend/shared/base_spa.html").read_text(encoding="utf-8")
 
     assert "url_for('crm.serve_crm_css', filename='crm.css')" in base_spa
-    for filename in (
-        "crm-api.js",
-        "overview.js",
-        "customers.js",
-        "customer-detail.js",
-        "tasks-calendar.js",
-        "configuration.js",
-        "integrations.js",
-    ):
-        assert f"url_for('crm.serve_crm_js', filename='{filename}')" in base_spa
+    assert "url_for('crm.serve_crm_js', filename='crm-api.js')" in base_spa
     assert base_spa.count("{% if crm_enabled %}") >= 2
+
+
+@pytest.mark.parametrize(
+    ("template", "script", "component"),
+    [
+        ("crm/overview.html", "overview.js", "crmOverview"),
+        ("crm/customers.html", "customers.js", "crmCustomers"),
+        ("crm/customer_detail.html", "customer-detail.js", "crmCustomerDetail"),
+        ("crm/tasks.html", "tasks-calendar.js", "crmTasks"),
+        ("crm/configuration.html", "configuration.js", "crmConfiguration"),
+        ("crm/matching.html", "matching.js", "crmMatching"),
+        ("crm/excise.html", "excise.js", "crmExcise"),
+        ("integrations/integrations.html", "integrations.js", "xeroIntegration"),
+    ],
+)
+def test_sales_controller_is_loaded_by_its_owning_page(template, script, component):
+    from app.api.app_factory import create_app
+
+    env = create_app().jinja_env
+    shell, *_ = env.loader.get_source(env, "shared/base_spa.html")
+    page, *_ = env.loader.get_source(env, template)
+    asset = f"url_for('crm.serve_crm_js', filename='{script}')"
+    assert asset not in shell
+    assert page.count(asset) == 1
+    assert f'data-alpine-component="{component}"' in page
 
 
 def test_crm_is_enabled_in_every_shipped_environment_config():
