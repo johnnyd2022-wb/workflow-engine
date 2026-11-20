@@ -1,13 +1,11 @@
 # Feature Index
 
-**What this is:** the cached map of what this app does and where each capability lives, so a
-session can scope work to one slice instead of treating `core` as a single 6784-line feature.
-Read the slice you're touching plus its `depended on by` line before you start.
+Use this map to find the slice that owns a route, service or UI. Read its
+`depended on by` line before changing a shared contract.
 
-17 implemented slices + platform. Six — **crm**, **demo-data**, **compliant-platform**,
-**compliant-nz-alcohol**, **operational-cases** and **process-templates** — have feature
-directories under `app/features/`. The other slices still live in `app/core/` or
-`app/api/routes/`.
+Inventory, Process Design, Execution and Traceability are co-located under
+`app/features/`. Their public `core.*` endpoint IDs are composed by Core.
+The slice entries identify the owners of the remaining routes and shared services.
 
 Each slice block carries a `reviewed:` line, one of three states: a **date** (last
 `review-feature` audit, linking to the `.agents/reports/<slug>/review.md` that proves it),
@@ -25,7 +23,7 @@ Line ranges into `app/core/backend/backend.py` are load-bearing and shift every 
 leaves that file — treat a miss as a signal to re-locate and update this file, not as licence
 to guess.
 
-Last verified: 2026-09-25, `backend.py` @ 6784 lines.
+Route ledger verified on 20 November 2026 against the composed Flask app.
 
 ## Two axes
 
@@ -197,7 +195,7 @@ do not introduce reverse imports into existing domain code.
 
     - The wizard keeps state in the Flask session (_flow_state_* helpers in process_design_routes.py)
       with a step-order guard. Wizard changes must keep _maybe_enforce_flow_wizard_step honest.
-    - _safe_flow_return_to (backend.py:260) is an open-redirect guard whose ALLOWED_PREFIX
+    - _safe_flow_return_to in the Execution feature is an open-redirect guard whose ALLOWED_PREFIX
       must stay in sync with batch-start-scripts.html. It has its own test file.
     - flows2-*.js straddles this slice and execution — the least clean boundary in the app.
 
@@ -237,7 +235,7 @@ do not introduce reverse imports into existing domain code.
       inventory, produces outputs, writes movements, emits events and enforces idempotency
       in one transaction. Read all of it before changing any of it.
     - Incoming execution_data is stripped of audit/trace keys (_strip_incoming_execution_trace_keys,
-      backend.py:611) then re-derived from the session. Any other persistence path must do
+      execution_routes.py) then re-derived from the session. Any other persistence path must do
       the same — the contract is documented beside that helper.
     - workflow_execution_lineage records parent/child execution relationships.
 

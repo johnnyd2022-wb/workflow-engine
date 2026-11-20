@@ -68,15 +68,18 @@ restate them here:
   external comms, print secrets, or weaken a gate (delete/loosen a test, suppress a rule)
   to get green.
 - `.agents/conventions.md` — code patterns, with file:line evidence. Read it before writing
-  feature code. Two parts are stale: §1's "5800-line `backend.py`" (it's ~630 lines and
-  shrinking) and §6's "no `conftest.py`" (`tests/conftest.py` and `tests/factories.py` exist).
+  feature code. Core now composes feature routes in `backend.py`. Test fixtures live in
+  `tests/conftest.py` and `tests/factories.py`.
 - `.agents/verification-chain.md` — how every code change is verified, and by which engine.
 
 Code rules that are easy to break:
 
 - New feature code goes in `app/features/<slug>/{routes,services,repositories,models,frontend}/`.
   **Never add to `app/core/backend/backend.py`**: the `backend_size` CI job fails any MR
-  that grows it, because routes are being carved out of it into slices.
+  that grows it. Inventory, Process Design, Execution and Traceability compose existing
+  `core.*` routes from their feature packages. Keep route IDs stable and import public
+  dependencies across features. Use page head blocks for page-owned styles so both
+  direct visits and boosted navigation load them.
 - Repository methods take `org_id` explicitly and filter inline. There is no shared
   scoping helper. New code reads `g.current_org_id` (a UUID), not `g.org_id` (a str).
   `@requires_org_scope` guards only `org_routes.py`; the tenant middleware does the real
@@ -157,7 +160,7 @@ HTTP Request
 
 ### Key subsystems
 
-**Execution & DAG**: Processes are defined as DAGs of steps. `app/core/backend/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. Lineage is recorded on the inventory side — `InventoryItem.source_execution_id` / `source_execution_step_id` — not in a separate table (the legacy `workflow_execution_lineage` in `app/initialize.py` has no model and no writer).
+**Execution & DAG**: Processes are defined as DAGs of steps. `app/features/traceability/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. Lineage is recorded on the inventory side — `InventoryItem.source_execution_id` / `source_execution_step_id` — not in a separate table (the legacy `workflow_execution_lineage` in `app/initialize.py` has no model and no writer).
 
 **Inventory**: Quantity writes require an `InventoryQuantityWriteReason` enum value (guards against untracked mutations). Unit conversion utilities live in `app/core/utils/`. Wastage is tracked in a separate table with batch-based entry hashing for idempotency.
 
