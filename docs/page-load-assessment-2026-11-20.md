@@ -1,13 +1,13 @@
 # Page load assessment
 
-Measured 91 pages and page states in Chromium against the HTTPS test app on 20 November 2026. The baseline revision was `f3140bf1`. Each row records three paired navigations on a 1440 × 900 viewport. The cold navigation restored session state into a fresh browser context with an empty browser cache. The warm navigation left the page and revisited the URL in the same context. The Flask process and PostgreSQL stayed running throughout each run.
+Measured 91 pages and page states in Chromium against the HTTPS test app on 20 November 2026. The baseline revision was `f3140bf1`. Each row records three paired navigations on a 1440 × 900 viewport. Core, Live Inventory, Live Executions and the landing diagram use five pairs from a final controlled rerun. The cold navigation restored session state into a fresh browser context with an empty browser cache. The warm navigation left the page and revisited the URL in the same context. The Flask process and PostgreSQL stayed running throughout each run.
 
 Transfer size comes from the document and same-origin resource timing entries. Requests count those entries, including browser cache hits. Server query counts cover the HTML document request only. Load measurements wait for initial network activity to settle, but data-dependent readiness varies by page. The audit used a synthetic organisation with a small data set and fixtures for gated detail pages, workflow drafts, OAuth, transfer dockets and portal sessions. Local timings varied while other tests ran and are suitable for triage. The principal before-and-after measurements are transfer size and request count.
 
 ## Changes, in priority order
 
 1. **Cold signed-in loads.** Source Map, Inventory view and Workflow detail sheets accounted for about 67, 42 and 35 KB respectively on pages that did not use them. Move those and four smaller sheets into their owning pages' head blocks. The existing boosted response carries the same head assets into the page swap. Pages without any of those seven styles eliminated seven entries and about 195 KB. Each owning page kept its own stylesheet.
-2. **Warm Core, Live Inventory and Live Executions.** Those routes rendered the same approximately 143 KB inline script in every document. Serve that script as a versioned Core asset, keeping the boot sequence and the boosted route behavior. Warm transfer fell from 278 to 135 KB on Core, 260 to 125 KB on Live Inventory, and 258 to 128 KB on Live Executions. This adds one cacheable resource to the first visit.
+2. **Warm Core, Live Inventory and Live Executions.** Those routes rendered the same approximately 143 KB inline script in every document. Serve that script as a versioned Core asset, keeping the boot sequence and the boosted route behavior. Warm transfer fell from 279 to 135 KB on Core, 260 to 116 KB on Live Inventory, and 258 to 115 KB on Live Executions. This adds one cacheable resource to the first visit.
 3. **Landing diagram.** The standalone diagram transferred 229 KB in both passes. Serve the static file with negotiated gzip and a browser-private cache policy. The browser measured 159 KB on both passes. The explicit revisit still transferred the document. Gzip saved about 70 KB in both runs.
 
 The largest remaining cold bundles are on Live Executions, Workflow detail, Live Inventory, Core and the Process wizard. For the first four, separate execution modal and page bootstrap work by initial tab before tuning smaller resources. For the wizard, the 167 KB create-process script is the largest observed resource and gives the next target. On the rest of the signed-in pages, verify usage and navigation behavior before removing the remaining globally included Core and CRM assets. Public pages carry substantially less transfer. A production-shaped seed with deep stock and batch history is needed to rank back-end API costs.
@@ -37,7 +37,7 @@ Transfer is decimal KB. LCP and TTFB are median milliseconds. Queries report the
 | `/compliant/nz-alcohol/premises` | 1318.9 → 1124.0 | 77.5 → 76.9 | 72 → 65 | 332 → 380 | 228 → 208 | 24 → 38 | 7 |
 | `/compliant/nz-alcohol/wine` | 1347.5 → 1152.8 | 87.1 → 86.8 | 72 → 65 | 416 → 452 | 208 → 288 | 28 → 40 | 7 |
 | `/compliant/tools` | 1299.1 → 1104.2 | 103.1 → 102.5 | 71 → 64 | 520 → 460 | 264 → 276 | 42 → 43 | 6 |
-| `/core` | 1746.4 → 1551.6 | 278.5 → 135.3 | 88 → 82 | 652 → 680 | 308 → 384 | 30 → 36 | 6 |
+| `/core` | 1746.7 → 1551.3 | 278.8 → 135.3 | 88 → 82 | 716 → 688 | 324 → 380 | 33 → 36 | 6 |
 | `/core/ai-assistants` | 1283.2 → 1088.3 | 79.0 → 78.4 | 72 → 65 | 412 → 392 | 164 → 212 | 34 → 30 | 6 |
 | `/core/cases` | 1268.0 → 1073.1 | 74.1 → 73.5 | 71 → 64 | 336 → 448 | 168 → 164 | 21 → 28 | 6 |
 | `/core/cases/<case_id>` | 1306.3 → 1111.3 | 75.5 → 74.9 | 73 → 66 | 728 → 664 | 372 → 372 | 32 → 40 | 7 |
@@ -52,7 +52,7 @@ Transfer is decimal KB. LCP and TTFB are median milliseconds. Queries report the
 | `/core/costing/rules` | 1292.3 → 1097.6 | 76.0 → 75.7 | 71 → 64 | 524 → 560 | 276 → 292 | 28 → 35 | 6 |
 | `/core/dashboard` | 1296.3 → 1125.3 | 86.4 → 87.0 | 71 → 65 | 328 → 448 | 152 → 220 | 25 → 37 | 6 |
 | `/core/executions/<execution_id>/steps/<step_id>/record` | 1254.7 → 1059.8 | 72.9 → 72.3 | 69 → 62 | 576 → 320 | 148 → 188 | 37 → 54 | 8 |
-| `/core/executions/live` | 1812.1 → 1630.2 | 258.2 → 127.8 | 94 → 88 | 780 → 320 | 348 → 176 | 40 → 34 | 6 |
+| `/core/executions/live` | 1812.1 → 1616.7 | 258.2 → 114.7 | 94 → 88 | 692 → 676 | 360 → 364 | 34 → 38 | 6 |
 | `/core/flows` | 1794.1 → 1634.7 | 110.5 → 110.0 | 93 → 87 | 408 → 568 | 140 → 200 | 24 → 37 | 6 |
 | `/core/flows/batches/start` | 1582.9 → 1382.0 | 105.1 → 98.5 | 100 → 93 | 1092 → 1052 | 668 → 720 | 36 → 42 | 7 |
 | `/core/flows/create/evidence-and-prompts` | 1662.7 → 1468.0 | 113.8 → 113.5 | 106 → 99 | 712 → 636 | 264 → 272 | 47 → 37 | 8 |
@@ -73,7 +73,7 @@ Transfer is decimal KB. LCP and TTFB are median milliseconds. Queries report the
 | `/core/inventory/add/manual` | 1326.4 → 1131.5 | 92.1 → 91.6 | 72 → 65 | 436 → 364 | 204 → 196 | 29 → 27 | 6 |
 | `/core/inventory/dispose` | 1264.2 → 1069.3 | 85.4 → 84.9 | 69 → 62 | 396 → 420 | 156 → 152 | 37 → 28 | 6 |
 | `/core/inventory/dispose/confirm` | 1255.7 → 1060.8 | 77.0 → 76.4 | 68 → 61 | 528 → 408 | 136 → 192 | 58 → 47 | 8 |
-| `/core/inventory/live` | 1727.8 → 1541.6 | 259.9 → 125.3 | 89 → 83 | 476 → 344 | 140 → 200 | 25 → 35 | 6 |
+| `/core/inventory/live` | 1727.8 → 1532.4 | 259.9 → 116.4 | 89 → 83 | 520 → 540 | 212 → 144 | 34 → 28 | 6 |
 | `/core/inventory/view` | 1396.6 → 1244.6 | 79.7 → 79.5 | 76 → 70 | 372 → 368 | 196 → 180 | 26 → 29 | 6 |
 | `/core/notifications` | 1280.0 → 1085.0 | 74.2 → 73.7 | 71 → 64 | 480 → 340 | 176 → 200 | 42 → 32 | 6 |
 | `/core/people` | 1298.6 → 1103.7 | 84.9 → 84.3 | 73 → 66 | 448 → 324 | 192 → 208 | 33 → 30 | 6 |
@@ -99,7 +99,7 @@ Transfer is decimal KB. LCP and TTFB are median milliseconds. Queries report the
 | `/crm/tasks` | 1382.5 → 1187.6 | 98.7 → 98.1 | 77 → 70 | 464 → 508 | 276 → 304 | 22 → 24 | 7 |
 | `/crm/xero/select-tenant` | 1299.2 → 1104.3 | 75.8 → 75.3 | 69 → 62 | 416 → 504 | 160 → 196 | 36 → 45 | 6 |
 | `/invite/<token>` | 7.9 → 7.9 | 7.9 → 7.9 | 1 → 1 | 48 → 60 | 40 → 44 | 14 → 21 | 2 |
-| `/landing-diagram` | 228.7 → 158.8 | 228.7 → 158.8 | 1 → 1 | 76 → 140 | 44 → 80 | 8 → 20 | 0 |
+| `/landing-diagram` | 228.7 → 158.8 | 228.7 → 158.8 | 1 → 1 | 96 → 124 | 64 → 68 | 11 → 13 | 0 |
 | `/oauth/authorize` | 7.4 → 7.4 | 7.4 → 7.4 | 1 → 1 | 96 → 88 | 68 → 76 | 53 → 34 | 9 |
 | `/portal` | 5.0 → 5.0 | 5.0 → 5.0 | 3 → 3 | 112 → 132 | 80 → 104 | 44 → 63 | 5 |
 | `/portal/invite` | 4.9 → 4.9 | 4.9 → 4.9 | 3 → 3 | 68 → 64 | 64 → 56 | 14 → 11 | 0 |
