@@ -8,12 +8,17 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 import datetime
+import gzip
 import ssl
 
 # Import xero client stuff here
 import subprocess
+from functools import lru_cache
+from hashlib import sha256
+from io import BytesIO
+from pathlib import Path
 
-from flask import make_response, redirect, render_template, url_for
+from flask import make_response, redirect, render_template, request, send_file, url_for
 
 from app.api.app_factory import create_app
 from app.core.security.permissions import requires_auth
@@ -101,18 +106,31 @@ def favicon():
     return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
 
 
+_LANDING_DIAGRAM = Path(__file__).resolve().parent / "ui/templates/biz-e-diagram-landing.html"
+
+
+@lru_cache(maxsize=1)
+def _compressed_landing_diagram(_mtime_ns: int, _size: int) -> tuple[bytes, str]:
+    body = gzip.compress(_LANDING_DIAGRAM.read_bytes(), mtime=0)
+    return body, sha256(body).hexdigest()
+
+
 @app.route("/landing-diagram")
 def landing_diagram():
-    """Serve the biz-e operational diagram (embedded on landing page via iframe)"""
-    import os
-
-    from flask import send_from_directory
-
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    templates_dir = os.path.join(app_dir, "ui", "templates")
-    response = send_from_directory(templates_dir, "biz-e-diagram-landing.html", max_age=3600)
+    """Serve the static operational diagram embedded on the landing page."""
+    encodings = request.accept_encodings
+    if encodings["gzip"] > 0 and encodings["gzip"] >= encodings["identity"]:
+        source = _LANDING_DIAGRAM.stat()
+        body, etag = _compressed_landing_diagram(source.st_mtime_ns, source.st_size)
+        response = send_file(
+            BytesIO(body), mimetype="text/html", etag=etag, last_modified=source.st_mtime, max_age=3600
+        )
+        response.headers["Content-Encoding"] = "gzip"
+    else:
+        response = send_file(_LANDING_DIAGRAM, max_age=3600)
     response.cache_control.public = None
     response.cache_control.private = True
+    response.vary.add("Accept-Encoding")
     return response
 
 

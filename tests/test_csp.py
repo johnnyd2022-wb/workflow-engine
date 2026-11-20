@@ -1,5 +1,6 @@
 """GL-S03: pages enforce a fresh nonce for inline script and log sanitized CSP reports."""
 
+import gzip
 import io
 import json
 import re
@@ -73,15 +74,41 @@ def test_the_landing_page_may_frame_its_diagram_and_nothing_else_may(signed_in):
     assert _directives(page.headers["Content-Security-Policy"])["frame-ancestors"] == "'none'"
 
 
-def test_landing_diagram_can_be_reused_in_the_browser(signed_in):
-    first = signed_in.get("/landing-diagram")
+@pytest.fixture
+def public_site():
+    from app.app import app
+
+    client = app.test_client()
+    client.environ_base["wsgi.url_scheme"] = "https"
+    client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+    return client
+
+
+def test_landing_diagram_can_be_reused_in_the_browser(public_site):
+    first = public_site.get("/landing-diagram")
+    assert first.status_code == 200
     assert first.cache_control.private
     assert first.cache_control.max_age == 3600
     assert not first.cache_control.public
-    cached = signed_in.get("/landing-diagram", headers={"If-None-Match": first.headers["ETag"]})
+    cached = public_site.get("/landing-diagram", headers={"If-None-Match": first.headers["ETag"]})
     assert cached.status_code == 304
     assert cached.data == b""
     assert cached.headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
+def test_landing_diagram_negotiates_compression_and_validates_each_representation(public_site):
+    path = "/landing-diagram"
+    plain = public_site.get(path, headers={"Accept-Encoding": "gzip;q=0"})
+    encoded = public_site.get(path, headers={"Accept-Encoding": "gzip"})
+    assert plain.status_code == encoded.status_code == 200
+    assert "Content-Encoding" not in plain.headers
+    assert encoded.headers["Content-Encoding"] == "gzip"
+    assert "Accept-Encoding" in plain.vary and "Accept-Encoding" in encoded.vary
+    assert gzip.decompress(encoded.data) == plain.data
+    assert len(encoded.data) < len(plain.data)
+    assert plain.headers["ETag"] != encoded.headers["ETag"]
+    cached = public_site.get(path, headers={"Accept-Encoding": "gzip", "If-None-Match": encoded.headers["ETag"]})
+    assert cached.status_code == 304
 
 
 def test_json_responses_get_no_report_only_policy(signed_in):
