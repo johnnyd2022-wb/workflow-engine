@@ -262,8 +262,6 @@
           {% include 'shared/spa-fixed-action-bar.html' %}
         </div>
 
-  <!-- Execute Step Modal (Shared) -->
-  {% include 'shared/execution-modal.html' %}
 
   {#
     Scripts are intentionally inside #page-content (not {% block scripts %}) so that HTMX
@@ -278,16 +276,9 @@
     (function () {
       var rawId = new URLSearchParams(window.location.search).get('id') || '{{ process_id or "" }}';
       window.processId = (rawId && rawId !== 'None' && rawId !== 'null' && rawId !== 'undefined') ? rawId : null;
-      window.ExecutionModalConfig = {
-        onStepCompleted: async function () {
-          await loadExecutions();
-          await loadInventory();
-        },
-      };
     })();
   </script>
-  <script src="{{ url_for('core.serve_core_js', filename='execution-ui-utils.js') }}"></script>
-  {% include 'shared/execution_modal_stack_scripts.html' %}
+  {# The dedicated batch-step screen owns the execution editor and its scripts. #}
   <script src="{{ url_for('core.serve_core_js', filename='flows2-utils.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='flows2-steps.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='flows2-executions.js') }}"></script>
