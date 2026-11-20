@@ -167,12 +167,20 @@ function crmCustomers() {
       this.$nextTick(() => document.getElementById('crm-import-file')?.focus());
     },
 
+    resetImportPreview() {
+      this.importer.result = null;
+      this.importer.saved = false;
+    },
+
+    resetImportInput() {
+      this.importer.text = '';
+      this.resetImportPreview();
+    },
+
     async importFile(event) {
       const file = event.target.files?.[0];
-      this.importer.result = null;
+      this.resetImportInput();
       this.importer.error = '';
-      this.importer.saved = false;
-      this.importer.text = '';
       if (!file) return;
       if (file.size > 1000000) { this.importer.error = 'Choose a CSV file smaller than 1 MB.'; return; }
       this.importer.text = await file.text();

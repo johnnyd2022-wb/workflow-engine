@@ -4,6 +4,7 @@
 
 
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='configuration.js') }}" defer data-alpine-component="crmConfiguration"></script>
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='sales-settings.css') }}">
 {# Alpine calls init() itself; an x-init="init()" here loaded every setting twice. #}
 <div class="max-content crm-root workspace-overview sales-settings" x-data="crmConfiguration()" :aria-busy="loading ? 'true' : 'false'" aria-busy="true">

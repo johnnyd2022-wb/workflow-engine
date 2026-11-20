@@ -23,6 +23,7 @@
 
 
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='matching.js') }}" defer data-alpine-component="crmMatching"></script>
 {# /matching/assign and /matching/run need sales.record (policy table) AND inventory.adjust (route check); can() is any-of, so ask twice. #}
 {% set can_pick = can('sales.record') and can('inventory.adjust') %}
 <div class="max-content crm-root" x-data="crmMatching()">

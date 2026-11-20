@@ -7,10 +7,13 @@
 {% endblock %}
 
 {% block content %}
+  {% if crm_enabled %}
+  <script src="{{ url_for('crm.serve_crm_js', filename='integrations.js') }}" defer data-alpine-component="xeroIntegration"></script>
+  {% endif %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='integrations.css') }}">
   {# Alpine calls init() itself; an x-init="init()" here loaded the Xero status twice. #}
-  <div class="max-content workspace-overview ig-page" x-data="xeroIntegration()"
-       :aria-busy="loading ? 'true' : 'false'" aria-busy="true">
+  <div class="max-content workspace-overview ig-page"{% if crm_enabled %} x-data="xeroIntegration()"
+       :aria-busy="loading ? 'true' : 'false'" aria-busy="true"{% endif %}>
     <header class="workspace-header">
       <div>
         <h1>Integrations</h1>

@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block content %}
+<script src="{{ url_for('crm.serve_crm_js', filename='excise.js') }}" defer data-alpine-component="crmExcise"></script>
 <div class="max-content crm-root ex-root" x-data="crmExcise()">
   {% set crm_heading = "Excise estimate" %}
   {% include "crm/_crm_banner.html" %}

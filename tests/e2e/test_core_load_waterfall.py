@@ -10,6 +10,7 @@ data call (`/api/core/hub/overview`), and the Inventory / Workflows tab data mus
 until its tab is actually opened -- and must not reload on a second visit.
 """
 
+import time
 from urllib.parse import urlsplit
 
 import pytest
@@ -387,3 +388,20 @@ def test_page_stylesheet_loads_on_boosted_entry(logged_in_page, route, styleshee
         "name => Array.from(document.styleSheets).some(sheet => sheet.href?.includes('/' + name))",
         arg=stylesheet,
     )
+
+
+def test_boosted_sales_overview_waits_for_its_own_controller(logged_in_page):
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    assert page.locator('script[data-alpine-component="crmOverview"]').count() == 0
+    assert page.evaluate("typeof window.crmOverview") == "undefined"
+
+    def delay_controller(route):
+        time.sleep(0.35)
+        route.continue_()
+
+    page.route("**/crm/static/js/overview.js*", delay_controller)
+    with page.expect_response("**/api/crm/overview") as overview:
+        page.locator('#sidebar a.nav-link[data-nav-section="sales"]').click()
+    assert overview.value.ok
+    assert page.locator(".sales-overview").count() == 1

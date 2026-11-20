@@ -402,17 +402,9 @@
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='tasks.js') }}" defer></script>
-  {# CRM scripts loaded before Alpine so components are defined when Alpine initialises x-data. #}
+  {# CRM pages supply their own controllers and use this shared client. #}
   {% if crm_enabled %}
   <script src="{{ url_for('crm.serve_crm_js', filename='crm-api.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='overview.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='customers.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='customer-detail.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='tasks-calendar.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='configuration.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='integrations.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='matching.js') }}" defer></script>
-  <script src="{{ url_for('crm.serve_crm_js', filename='excise.js') }}" defer></script>
   {% endif %}
   {# GL-S03 step 3: Alpine's CSP build (no eval). Components are named in x-data and registered
      with Alpine.data() below; the page scripts above define them. #}
@@ -826,6 +818,7 @@
       });
       alpine.stopObservingMutations();
       // Never leave Alpine blind if the swap fails before it settles.
+      clearTimeout(spaAlpinePaused);
       spaAlpinePaused = setTimeout(function () { spaResumeAlpine(null); }, 5000);
     });
     document.body.addEventListener('htmx:swapError', function () { spaResumeAlpine(null); });
@@ -835,7 +828,18 @@
     document.body.addEventListener('htmx:afterSettle', function (evt) {
       var tgt = evt.detail && evt.detail.target;
       if (tgt && tgt.id === 'page-content' && spaAlpinePaused) {
-        spaResumeAlpine(tgt);
+        var controller = tgt.querySelector('script[data-alpine-component]');
+        if (controller && typeof window[controller.dataset.alpineComponent] !== 'function') {
+          // An external controller may finish after HTMX settles the DOM swap.
+          controller.addEventListener('load', function () {
+            if (tgt.contains(controller)) spaResumeAlpine(tgt);
+          }, { once: true });
+          controller.addEventListener('error', function () {
+            if (tgt.contains(controller)) spaResumeAlpine(null);
+          }, { once: true });
+        } else {
+          spaResumeAlpine(tgt);
+        }
       }
       tagExecAddMissingItemControls(tgt && tgt.id === 'page-content' ? tgt : document);
       syncAddInventoryManualPageShell();

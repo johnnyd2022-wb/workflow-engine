@@ -97,9 +97,9 @@ def test_sales_to_date_counts_every_invoice_not_just_the_chart_range(xero, sales
     db.add_all(
         [
             XeroInvoice(org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-old", invoice_number="INV-0001",
-                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", total=Decimal("1000"), date=old),
+                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", sub_total=Decimal("1000"), total=Decimal("1150"), date=old),
             XeroInvoice(org_id=org.id, xero_tenant_id="tenant", xero_invoice_id="inv-new", invoice_number="INV-0002",
-                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", total=Decimal("250"),
+                        contact_id=customer.id, invoice_type="ACCREC", status="AUTHORISED", sub_total=Decimal("250"), total=Decimal("287.50"),
                         date=date.today()),
         ]
     )  # fmt: skip
