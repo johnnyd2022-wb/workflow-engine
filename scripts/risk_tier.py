@@ -39,7 +39,7 @@ TIER_C_PATHS: tuple[tuple[str, str], ...] = (
     ("app/core/domain/inventory_quantity_guard.py", "inventory quantity guard"),
     ("app/core/db/repositories/inventory_repo.py", "inventory quantities"),
     ("app/core/db/repositories/execution_repo.py", "production records and lineage"),
-    ("app/core/backend/execution_routes.py", "step completion and its constraints"),
+    ("app/features/execution/execution_routes.py", "step completion and its constraints"),
     ("app/core/backend/dagtraversal.py", "lineage and trace"),
     ("app/core/utils/unit_conversion.py", "unit conversion"),
     ("app/core/services/lot_holds.py", "quality holds"),

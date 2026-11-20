@@ -13,15 +13,15 @@ from uuid import UUID, uuid4
 
 from flask import request
 
-from app.core.backend.evidence.evidence_storage import (
+from app.features.compliant.models import ComplianceRecord, ComplianceRecordFile
+from app.features.execution.evidence.evidence_storage import (
     compute_checksum,
     delete_file,
     extension_from_mime,
     finalize_from_temp,
     read_file_path,
 )
-from app.core.backend.evidence.evidence_validation import detect_mime_from_path, get_max_file_size_bytes
-from app.features.compliant.models import ComplianceRecord, ComplianceRecordFile
+from app.features.execution.evidence.evidence_validation import detect_mime_from_path, get_max_file_size_bytes
 
 ALLOWED_MIME_TYPES = ("application/pdf", "image/png", "image/jpeg")
 MAX_FILES_PER_RECORD = 10

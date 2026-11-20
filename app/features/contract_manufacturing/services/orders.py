@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import selectinload
 
 from app.core.backend.event_writer import EventWriter
-from app.core.backend.record_step import _batch_label
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
@@ -24,6 +23,7 @@ from app.features.contract_manufacturing.models.orders import (
     ContractOrderLine,
 )
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.execution.record_step import _batch_label
 
 
 class OrderError(ValueError):

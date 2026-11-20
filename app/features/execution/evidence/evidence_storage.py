@@ -36,7 +36,7 @@ def get_storage_root():
         logger.info("Evidence storage root from config: %s", path)
         return path
     # Default: app/core/evidence_storage (per execution-evidence spec)
-    core_dir = Path(__file__).resolve().parent.parent.parent  # app/core
+    core_dir = Path(__file__).resolve().parents[3] / "core"  # app/core
     path = core_dir / "evidence_storage"
     logger.info("Evidence storage root (default): %s", path)
     return path

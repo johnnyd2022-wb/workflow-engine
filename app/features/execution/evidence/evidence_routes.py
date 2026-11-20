@@ -5,20 +5,20 @@ from uuid import UUID
 
 from flask import g, jsonify, request, send_file
 
-from app.core.backend.evidence.evidence_service import (
+from app.core.security.permissions import requires_auth
+from app.core.utils.log_action import log_action
+from app.features.execution.evidence.evidence_service import (
     delete_evidence,
     get_evidence_for_download,
     list_evidence_for_execution,
     upload_evidence_from_temp,
 )
-from app.core.backend.evidence.evidence_validation import (
+from app.features.execution.evidence.evidence_validation import (
     get_allowed_mime_types,
     get_max_file_size_bytes,
     validate_file_streaming,
     validate_upload_request,
 )
-from app.core.security.permissions import requires_auth
-from app.core.utils.log_action import log_action
 from app.observability import get_logger
 
 logger = get_logger(__name__)

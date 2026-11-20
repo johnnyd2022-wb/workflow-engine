@@ -13,7 +13,8 @@ const renderDocsPath = path.join(
   '..',
   '..',
   'app',
-  'core',
+  'features',
+  'execution',
   'frontend',
   'js',
   'execution-render-docs.js'

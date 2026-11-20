@@ -176,7 +176,7 @@ def create_app():
 
     app.register_blueprint(getting_started_bp)
     # Record a production step: the Production overview's main button (go-live UX blocker).
-    from app.core.backend.record_step import record_step_bp
+    from app.features.execution.record_step import record_step_bp
 
     app.register_blueprint(record_step_bp)
 

@@ -11,16 +11,6 @@ from uuid import UUID
 from flask import abort, g, jsonify, redirect, render_template, request
 from pydantic import ValidationError
 
-from app.core.backend.complete_step_payload import (
-    MAX_COMPLETE_STEP_CONTENT_LENGTH,
-    CompleteStepRequestBody,
-    validate_json_blob,
-)
-from app.core.backend.complete_step_payload import (
-    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
-)
-from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
-from app.core.backend.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
@@ -43,6 +33,19 @@ from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.packs import can_convert_for_lot, convert_for_lot, settle_take
 from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.features.execution.complete_step_payload import (
+    MAX_COMPLETE_STEP_CONTENT_LENGTH,
+    CompleteStepRequestBody,
+    validate_json_blob,
+)
+from app.features.execution.complete_step_payload import (
+    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
+)
+from app.features.execution.evidence.evidence_service import (
+    list_evidence_for_execution,
+    list_evidence_for_executions_batch,
+)
+from app.features.execution.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.features.process_design.process_design_routes import _assert_flow_process_access, _flow_process_id_from_request
 from app.observability import get_logger
 
@@ -1181,7 +1184,7 @@ def register_routes(
                         }
                     )
 
-            # Whole bottles; remainders to Library stock (plan 1.2, app/core/backend/step_outputs.py)
+            # Whole bottles; remainders to Library stock (plan 1.2, app/features/execution/step_outputs.py)
             _step_process = getattr(getattr(execution_step, "step", None), "process", None)
             execution_errors.extend(
                 apply_whole_unit_rules(output_creations, actual_outputs, getattr(_step_process, "settings", None))

@@ -95,7 +95,7 @@ def test_a_batch_shows_the_batch_number_recorded_on_its_step(account):  # noqa: 
 
 def test_the_recorded_batch_is_read_on_its_own_not_inferred_from_the_bounded_list(account, monkeypatch):  # noqa: F811
     """Review on !576: a batch outside the limited list is still in progress, not finished."""
-    from app.core.backend import record_step
+    from app.features.execution import record_step
 
     client = account["client"]
     pid, _ = _workflow(client, "Two Step", ["Steep", "Bottle"])
@@ -124,7 +124,7 @@ def test_another_orgs_batch_is_not_reported_as_recorded(account):  # noqa: F811
 
 def test_the_workflow_limit_is_spent_on_runnable_workflows_most_recent_first(account, monkeypatch):  # noqa: F811
     """Review on !576: empty or alphabetically early workflows must not crowd out runnable ones."""
-    from app.core.backend import record_step
+    from app.features.execution import record_step
 
     client = account["client"]
     _workflow(client, "A empty", [])

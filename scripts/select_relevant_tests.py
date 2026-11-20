@@ -83,6 +83,8 @@ RULES = (
         "Core execution engine",
         (
             "app/core/backend/**",
+            "app/features/execution/**/*.py",
+            "app/features/execution/*.py",
             "app/core/domain/**",
             "app/core/db/repositories/execution*",
             "app/core/db/models/execution*",
@@ -153,7 +155,13 @@ RULES = (
     ),
     Rule(
         "Shared frontend UI",
-        ("app/core/frontend/css/**", "app/core/frontend/js/**", "app/ui/**"),
+        (
+            "app/core/frontend/css/**",
+            "app/core/frontend/js/**",
+            "app/features/execution/frontend/css/**",
+            "app/features/execution/frontend/js/**",
+            "app/ui/**",
+        ),
         (
             "tests/test_execution_modal_frontend_assets.py",
             "tests/test_execution_shared_utils_js.py",

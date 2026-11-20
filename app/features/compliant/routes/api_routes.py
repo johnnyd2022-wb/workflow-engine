@@ -10,7 +10,6 @@ from uuid import UUID
 from flask import Blueprint, Response, g, jsonify, render_template, request, send_file
 from sqlalchemy.exc import IntegrityError
 
-from app.core.backend.evidence.evidence_service import get_evidence_for_download
 from app.core.backend.idempotency import idempotent_write
 from app.core.db import db_session
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
@@ -33,6 +32,7 @@ from app.features.compliant.modules.nz_alcohol.workflow_rules import (
 from app.features.compliant.np3_evidence_pdf import build_np3_evidence_register_pdf
 from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
+from app.features.execution.evidence.evidence_service import get_evidence_for_download
 from app.observability import get_logger
 
 logger = get_logger(__name__)

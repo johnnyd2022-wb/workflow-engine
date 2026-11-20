@@ -114,7 +114,7 @@ def test_frontend_source_does_not_select_a_same_named_python_test():
 
 
 def test_node_requirement_is_precise():
-    plan = selector.select(["app/core/frontend/js/execution-shared-utils.js"])
+    plan = selector.select(["app/features/execution/frontend/js/execution-shared-utils.js"])
 
     assert plan["needs_node"] is True
     assert plan["needs_database"] is False

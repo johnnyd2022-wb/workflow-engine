@@ -21,12 +21,9 @@ from flask import (
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
-    execution_record_routes,
-    execution_routes,
     tasks,
     traceability_routes,
 )
-from app.core.backend.evidence import evidence_routes
 from app.core.backend.feature_frontend import register_core_feature_frontend
 from app.core.backend.static_assets import core_asset_directory, core_asset_version
 from app.core.db import db_session
@@ -42,6 +39,8 @@ from app.features.compliance_checks.routes import corechecks
 from app.features.dashboard.routes import dashboard_routes
 from app.features.demo_data.routes import api_routes as demo_data_routes
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
+from app.features.execution import execution_record_routes, execution_routes
+from app.features.execution.evidence import evidence_routes
 from app.features.inventory import inventory_routes, inventory_upload_routes, suppliers
 from app.features.inventory import static as inventory_static
 from app.features.process_design import process_design_routes
@@ -112,7 +111,7 @@ core_bp = Blueprint(
     static_url_path="/static",
 )
 
-register_core_feature_frontend(core_bp, "inventory", "process_design")
+register_core_feature_frontend(core_bp, "inventory", "process_design", "execution")
 
 
 @functools.lru_cache(maxsize=1)
