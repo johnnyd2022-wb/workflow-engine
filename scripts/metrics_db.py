@@ -11,9 +11,9 @@ Connection, in order:
      job containers reach the host-published port as host.docker.internal:8402)
   2. KeePassXC entry workflow-engine/bize-dev-db-rw on 127.0.0.1:8402, only when
      $KEEPASS_PASSWORD is set -- an unattended skill must never block on a password prompt.
-No credentials, or an unreachable DB, is "unavailable", never a crash: writes go to a local
-spool file that the next successful call flushes; reads report the gap. The DB being down
-must not be able to block a merge or lose a skill's run.
+Skill ledger writes use a local spool when the database is unavailable. Regular
+performance budget runs report unavailable storage and still enforce their test budgets.
+Opt-in browser audits report a storage failure when they cannot record their samples.
 
 Admin (local only, drives the container via `docker exec`; needs $KEEPASS_PASSWORD):
     python3 scripts/metrics_db.py setup            # create db + roles + schema + grants

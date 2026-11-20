@@ -109,3 +109,21 @@ def test_performance_triage_attributes_routes_to_their_slices():
         "/api/core/hub/overview": "core",
     }
     assert {route: area_of_route(route) for route in expected} == expected
+
+
+def test_perf_triage_json_keeps_setup_output_off_stdout(monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import perf_triage
+
+    def build():
+        print("setup diagnostic")
+        return {"summary": {}}
+
+    monkeypatch.setattr(perf_triage, "build_triage", build)
+    monkeypatch.setattr(sys, "argv", ["perf_triage.py", "--json"])
+    assert perf_triage.main() == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"summary": {}}
+    assert "setup diagnostic" in captured.err

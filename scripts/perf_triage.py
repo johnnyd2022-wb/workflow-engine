@@ -37,6 +37,7 @@ import json
 import shutil
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -348,7 +349,8 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        data = build_triage()
+        with redirect_stdout(sys.stderr):
+            data = build_triage()
     except Exception as exc:  # pragma: no cover - defensive
         msg = {"error": f"could not build triage: {exc}"}
         print(json.dumps(msg) if args.json else f"perf_triage: {msg['error']}", file=sys.stderr)
