@@ -844,8 +844,7 @@ def entity_activity_feed():
             "total": total,
             "offset": offset,
             "events": [
-                {**_event_to_dict(ev), "summary": human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-                for ev in events
+                {**_event_to_dict(ev), "summary": human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
             ],
         }
     ), 200
