@@ -7,10 +7,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.backend import suppliers
 from app.core.db.models.step import Step
 from app.core.db.models.supplier import Supplier
 from app.features.compliance_checks.checks.planned_material_shortages import run_planned_material_shortages_check
+from app.features.inventory import suppliers
 from app.features.planning import batch_service
 from app.features.planning import material_adapter as adapter
 from tests.features.planning import test_material_adapter as materials
