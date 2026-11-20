@@ -73,6 +73,7 @@ def test_an_attention_row_is_one_link_to_where_the_problem_is(expired_stock_page
 
     row.click()
     expect(page).to_have_url(re.compile(r"/core/inventory/view$"))
+    expect(page.get_by_role("heading", name="Inventory", exact=True)).to_be_visible()
     assert_clean_page(page)
 
 

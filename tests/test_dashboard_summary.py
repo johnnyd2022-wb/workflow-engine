@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -24,7 +24,7 @@ from app.features.dashboard.routes.dashboard_routes import (
     _dashboard_count_red_amber,
     _dashboard_module_workspace_summaries,
     _dashboard_open_action_item_dates,
-    _dashboard_operations_summary,
+    _dashboard_operations_summaries,
     _dashboard_parse_date_like,
     _dashboard_parse_due_date,
     _dashboard_priority_rank,
@@ -195,6 +195,8 @@ def test_dashboard_projects_module_workspace_summaries_without_check_id_branches
 
 
 def test_dashboard_operations_summary_org_isolated(db):
+    from sqlalchemy import event
+
     org_repo = OrganisationRepository(db)
     process_repo = ProcessRepository(db)
     execution_repo = ExecutionRepository(db)
@@ -203,16 +205,24 @@ def test_dashboard_operations_summary_org_isolated(db):
     org_b = org_repo.create_org("Dashboard Org B")
     process_a = process_repo.create_process(org_id=org_a.id, name="Proc A", description="", is_draft=False)
     process_b = process_repo.create_process(org_id=org_b.id, name="Proc B", description="", is_draft=False)
-    day_start = datetime.combine(date.today(), datetime.min.time())
-    next_day_start = day_start + timedelta(days=1)
+    today = date(2026, 1, 19)
+    day_start = _local_midnight(today)
+    org_a_id, org_b_id = org_a.id, org_b.id
 
     try:
         ex_active = execution_repo.create_execution(org_id=org_a.id, process_id=process_a.id)
         ex_active.status = ExecutionStatus.IN_PROGRESS
+        ex_active.started_at = day_start - timedelta(days=3)
 
         ex_completed = execution_repo.create_execution(org_id=org_a.id, process_id=process_a.id)
         ex_completed.status = ExecutionStatus.COMPLETED
         ex_completed.completed_at = day_start + timedelta(hours=1)
+        ex_completed.started_at = day_start
+
+        ex_previous = execution_repo.create_execution(org_id=org_a.id, process_id=process_a.id)
+        ex_previous.status = ExecutionStatus.COMPLETED
+        ex_previous.completed_at = day_start - timedelta(days=2)
+        ex_previous.started_at = day_start - timedelta(days=2)
 
         ex_failed = execution_repo.create_execution(org_id=org_a.id, process_id=process_a.id)
         ex_failed.status = ExecutionStatus.FAILED
@@ -224,12 +234,33 @@ def test_dashboard_operations_summary_org_isolated(db):
 
         db.commit()
 
-        summary_a = _dashboard_operations_summary(org_a.id, db, day_start, next_day_start)
-        summary_b = _dashboard_operations_summary(org_b.id, db, day_start, next_day_start)
+        statements = []
 
-        assert summary_a == {"active_executions": 1, "completed_today": 1, "failed_or_cancelled_today": 1}
-        assert summary_b["active_executions"] == 0
-        assert summary_b["completed_today"] == 1
+        def record_statement(_conn, _cursor, statement, *_args):
+            statements.append(statement)
+
+        connection = db.connection()
+        event.listen(connection, "before_cursor_execute", record_statement)
+        try:
+            day_a, week_a = _dashboard_operations_summaries(org_a_id, db, day_start, today)
+            day_b, week_b = _dashboard_operations_summaries(org_b_id, db, day_start, today)
+        finally:
+            event.remove(connection, "before_cursor_execute", record_statement)
+
+        assert len(statements) == 2
+        assert day_a == {"active_executions": 1, "completed_today": 1, "failed_or_cancelled_today": 1}
+        assert week_a == {
+            "window": "week_to_date",
+            "active_executions": 1,
+            "started_this_week": 1,
+            "completed_this_week": 1,
+            "failed_or_cancelled_this_week": 1,
+            "stalled_active_over_48h": 1,
+            "completed_last_week": 1,
+            "completed_vs_last_week_pct": 0.0,
+        }
+        assert day_b == {"active_executions": 0, "completed_today": 1, "failed_or_cancelled_today": 0}
+        assert week_b["completed_last_week"] == 0
     finally:
         db.query(Execution).filter(Execution.org_id.in_([org_a.id, org_b.id])).delete(synchronize_session=False)
         db.query(Process).filter(Process.org_id.in_([org_a.id, org_b.id])).delete(synchronize_session=False)
