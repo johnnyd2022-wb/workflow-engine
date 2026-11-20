@@ -13,6 +13,8 @@ from urllib.parse import urlencode
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.page_load_audit import audit_current_page
+
 pytestmark = pytest.mark.e2e
 
 REDIRECT = "https://assistant.example.test/callback"
@@ -164,5 +166,6 @@ def test_consent_page_has_no_sideways_scroll_on_a_phone(browser, app_url, assist
         expect(page.get_by_role("button", name="Allow read-only access")).to_be_visible()
         widths = page.evaluate("() => [document.documentElement.scrollWidth, window.innerWidth]")
         assert widths[0] <= widths[1], widths
+        audit_current_page(page, "/oauth/authorize")
     finally:
         context.close()

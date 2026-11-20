@@ -9,6 +9,7 @@ from playwright.sync_api import expect
 
 from app.core.db.models.user import UserRole
 from tests.e2e.conftest import csrf_headers, login_through_ui
+from tests.e2e.page_load_audit import audit_current_page
 
 pytestmark = pytest.mark.e2e
 
@@ -84,17 +85,23 @@ def test_publish_invite_and_customer_readonly_portal_at_phone_width(browser, app
         portal = customer_context.new_page()
         portal.goto(link)
         assert "#" not in portal.url
+        if width == 390:
+            audit_current_page(portal, "/portal/invite (valid invitation)", url=link)
         if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
             portal.screenshot(path=str(Path(directory) / f"portal__invite__valid-{width}.png"), full_page=True)
         password = "E2E-Portal-Password-2026"
         portal.locator('[name="password"]').fill(password)
         portal.get_by_role("button", name="Create portal account").click()
         expect(portal.get_by_role("heading", name="Your orders", exact=True)).to_be_visible()
+        if width == 390:
+            audit_current_page(portal, "/portal")
         if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
             Path(directory).mkdir(parents=True, exist_ok=True)
             portal.screenshot(path=str(Path(directory) / f"portal-{width}.png"), full_page=True)
         portal.get_by_role("link", name=order["reference"], exact=True).click()
         expect(portal.get_by_role("heading", name=order["reference"], exact=True)).to_be_visible()
+        if width == 390:
+            audit_current_page(portal, "/portal/orders/<order_id>")
         if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
             portal.screenshot(path=str(Path(directory) / f"portal__orders__seeded-{width}.png"), full_page=True)
         expect(portal.get_by_text("Shared actual ABV: 40.2%")).to_be_visible()

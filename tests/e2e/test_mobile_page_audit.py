@@ -25,6 +25,7 @@ from app.features.contract_manufacturing.models.orders import ContractCustomer, 
 from app.features.crm.models.xero_contact import XeroContact
 from app.features.operational_cases.models.operational_case import OperationalCase
 from tests.e2e.conftest import assert_clean_page, attach_probe
+from tests.e2e.page_load_audit import audit_current_page
 from tests.factories import ExecutionFactory, InventoryItemFactory, ProcessFactory, UserFactory
 
 pytestmark = pytest.mark.e2e
@@ -355,6 +356,7 @@ def test_xero_tenant_picker_at_phone_width(browser, storage_state_path, app_url)
         geometry = _capture_and_measure(page, path)
         assert geometry["document"] <= geometry["viewport"] + 1, geometry
         assert_clean_page(page)
+        audit_current_page(page, path)
     finally:
         context.close()
 
@@ -390,6 +392,7 @@ def test_google_second_factor_page_at_phone_width(browser, app_url, e2e_user):
         geometry = _capture_and_measure(page, path)
         assert geometry["document"] <= geometry["viewport"] + 1, geometry
         assert_clean_page(page)
+        audit_current_page(page, path)
     finally:
         context.close()
 
