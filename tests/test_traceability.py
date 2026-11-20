@@ -129,7 +129,7 @@ class TestCurrentStateTraceBranch:
     and even if it had, called trace_forward/trace_backward with the wrong signature and
     treated their dict return as an object with .nodes/.edges. Every request into this
     branch raised inside the try and was swallowed by a bare `except Exception`, always
-    returning 500. Fixed by routing to the real app.core.backend.dagtraversal functions,
+    returning 500. Fixed by routing to the real app.features.traceability.dagtraversal functions,
     matching how trace_raw_material/trace_inventory_backward already call them."""
 
     def test_current_state_trace_returns_graph_not_500(self, app_client, dag):
@@ -153,9 +153,9 @@ class TestCurrentStateTraceBranch:
         and edges as the two separate calls; strictly fewer DB round trips."""
         from sqlalchemy import event
 
-        from app.core.backend.dagtraversal import trace_backward, trace_bidirectional, trace_forward
         from app.core.db import engine
         from app.core.security.tenant_scope import tenant_scope
+        from app.features.traceability.dagtraversal import trace_backward, trace_bidirectional, trace_forward
 
         d = build_linear_dag(db, org.id)
         db.commit()
@@ -339,13 +339,13 @@ def _plant_step_completed_event(
 
 
 class TestTemporalDAGTracerUnit:
-    """Direct unit coverage for TemporalDAGTracer (app/core/backend/temporal_dag_tracer.py)
+    """Direct unit coverage for TemporalDAGTracer (app/features/traceability/temporal_dag_tracer.py)
     -- zero test references existed anywhere in the suite before this review
     (baseline.md). Exercises the BFS edge-building/traversal that
     tests/e2e/traceability/test_tenant_isolation.py's API-level probe doesn't reach."""
 
     def test_trace_builds_consumed_and_produced_edges_across_two_hops(self, db, org):
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         raw_id, exec_id, wip_id = uuid4(), uuid4(), uuid4()
         now = datetime.now(UTC)
@@ -364,7 +364,7 @@ class TestTemporalDAGTracerUnit:
         assert (str(exec_id), str(wip_id), "produced") in relationships
 
     def test_trace_excludes_events_after_as_of(self, db, org):
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         raw_id, exec_id, wip_id = uuid4(), uuid4(), uuid4()
         now = datetime.now(UTC)
@@ -385,7 +385,7 @@ class TestTemporalDAGTracerUnit:
         edge to this org's graph, even when both orgs reference the same execution_id by
         coincidence (edges are entirely org-scoped at the query level, not merely filtered
         post-hoc)."""
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         shared_exec_id = uuid4()
         raw_id = uuid4()
@@ -403,7 +403,7 @@ class TestTemporalDAGTracerUnit:
         assert str(foreign_wip_id) not in node_ids, "other org's produced-item edge leaked into this org's graph"
 
     def test_timeline_includes_all_connected_events_ordered_oldest_first(self, db, org):
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         raw_id, exec_id = uuid4(), uuid4()
         now = datetime.now(UTC)
@@ -437,7 +437,7 @@ class TestTemporalDAGTracerUnit:
         prompt) already rides along in the step_completed event's execution_data -- non-root
         nodes should surface it instead of always being state: None (AC17 covers `state`
         specifically; batch_id/custom_prompts are new, separate fields)."""
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         raw_id, exec_id, wip_id = uuid4(), uuid4(), uuid4()
         now = datetime.now(UTC)
@@ -475,7 +475,7 @@ class TestTemporalDAGTracerUnit:
         assert exec_node["batch_id"] == "VAT55"
 
     def test_node_metadata_never_pulls_in_another_orgs_batch_id(self, db, org, other_org):
-        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+        from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
         shared_exec_id = uuid4()
         raw_id = uuid4()

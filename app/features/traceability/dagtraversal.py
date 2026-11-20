@@ -69,7 +69,7 @@ _TRACE_METADATA_INTERNAL_KEYS = {
 }
 
 
-def _split_trace_prompts(execution_data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+def split_trace_prompts(execution_data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     """Split a completed step's raw execution_data into (batch_id, custom_prompts).
 
     batch_id is the answer to the step's reserved "Batch number" prompt, if configured —
@@ -760,7 +760,7 @@ class DAGTracer:
                     if match:
                         extra["variable_output"] = match
             if step and step.execution_data and "batch_id" not in extra:
-                batch_id, custom_prompts = _split_trace_prompts(step.execution_data)
+                batch_id, custom_prompts = split_trace_prompts(step.execution_data)
                 if batch_id:
                     extra["batch_id"] = batch_id
                 if custom_prompts:
@@ -799,7 +799,7 @@ class DAGTracer:
             "process_name": process_name,
             "created_at": item.created_at.isoformat() if item.created_at else None,
             # Production batch id, from the step's "Batch number" compliance/traceability
-            # prompt (see _split_trace_prompts) — distinct from supplier_batch_number,
+            # prompt (see split_trace_prompts) — distinct from supplier_batch_number,
             # which is the raw-material supplier's own lot code.
             "batch_id": extra_data.get("batch_id"),
             "custom_prompts": extra_data.get("custom_prompts") or {},

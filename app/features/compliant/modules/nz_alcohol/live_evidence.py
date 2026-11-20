@@ -13,10 +13,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.dagtraversal import DAGTracer
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.features.traceability.dagtraversal import DAGTracer
 
 
 def _limited_ids(values: Iterable[UUID | str | None], limit: int = 25) -> list[str]:

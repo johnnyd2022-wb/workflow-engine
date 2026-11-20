@@ -78,10 +78,10 @@ def _plain(value) -> str:
 def scope_for(session: Session, org_id: UUID, lot_id: UUID) -> tuple[list[dict], list[dict]]:
     """The lots a recall of ``lot_id`` reaches (it and everything made from it) and the customers
     those lots were sold to, by product, with the quantity each received."""
-    from app.core.backend.dagtraversal import trace_forward
     from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
     from app.features.crm.models.xero_contact import XeroContact
     from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.traceability.dagtraversal import trace_forward
 
     nodes = trace_forward(org_id, session, lot_id, include_quantity_filter=False)["items"]
     lots = [

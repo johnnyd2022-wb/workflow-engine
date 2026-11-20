@@ -11,10 +11,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
+from app.features.traceability.dagtraversal import DAGTracer, validate_item_uuid
 from tests.dag_traversal_helpers import (
     QueryCounter,
     assert_traversal_invariants,
@@ -236,7 +236,7 @@ class TestDAGTracerExtraDataEnrichment:
 
     def test_item_to_dict_promotes_batch_id_and_custom_prompts_from_extra_data(self):
         """Pure unit: batch_id/custom_prompts are read straight off extra_data (already split
-        by _split_trace_prompts before _item_to_dict is called) -- no DB needed."""
+        by split_trace_prompts before _item_to_dict is called) -- no DB needed."""
         from unittest.mock import MagicMock
 
         item = MagicMock()
@@ -281,22 +281,22 @@ class TestDAGTracerExtraDataEnrichment:
 
 
 class TestSplitTracePrompts:
-    """Pure unit tests for _split_trace_prompts -- the "Batch number" / custom-prompt split
+    """Pure unit tests for split_trace_prompts -- the "Batch number" / custom-prompt split
     that create-process-modal.js's isBatchNumber and flows2-steps.js's
     isTraceabilityOrSystemPrompt already use client-side to distinguish the reserved
     compliance/traceability prompts from an org's own custom ones."""
 
     def test_extracts_batch_number_case_insensitively(self):
-        from app.core.backend.dagtraversal import _split_trace_prompts
+        from app.features.traceability.dagtraversal import split_trace_prompts
 
-        batch_id, custom = _split_trace_prompts({"Batch number": "VAT55"})
+        batch_id, custom = split_trace_prompts({"Batch number": "VAT55"})
         assert batch_id == "VAT55"
         assert custom == {}
 
     def test_separates_custom_prompts_from_batch_and_evidence(self):
-        from app.core.backend.dagtraversal import _split_trace_prompts
+        from app.features.traceability.dagtraversal import split_trace_prompts
 
-        batch_id, custom = _split_trace_prompts(
+        batch_id, custom = split_trace_prompts(
             {
                 "Batch number": "VAT55",
                 "Evidence": "file-ref-123",
@@ -308,9 +308,9 @@ class TestSplitTracePrompts:
         assert custom == {"Botanical origin": "Wairarapa rhubarb", "Operator notes": "Ran long by 10 minutes"}
 
     def test_excludes_internal_audit_keys_from_custom_prompts(self):
-        from app.core.backend.dagtraversal import _split_trace_prompts
+        from app.features.traceability.dagtraversal import split_trace_prompts
 
-        batch_id, custom = _split_trace_prompts(
+        batch_id, custom = split_trace_prompts(
             {
                 "completed_by": "op@test.com",
                 "completed_by_email": "op@test.com",
@@ -324,16 +324,16 @@ class TestSplitTracePrompts:
         assert custom == {}
 
     def test_no_batch_prompt_configured_returns_none(self):
-        from app.core.backend.dagtraversal import _split_trace_prompts
+        from app.features.traceability.dagtraversal import split_trace_prompts
 
-        batch_id, custom = _split_trace_prompts({"Operator notes": "All good"})
+        batch_id, custom = split_trace_prompts({"Operator notes": "All good"})
         assert batch_id is None
         assert custom == {"Operator notes": "All good"}
 
     def test_empty_and_null_values_are_skipped(self):
-        from app.core.backend.dagtraversal import _split_trace_prompts
+        from app.features.traceability.dagtraversal import split_trace_prompts
 
-        batch_id, custom = _split_trace_prompts({"Batch number": "", "Blank field": None, "Kept": "value"})
+        batch_id, custom = split_trace_prompts({"Batch number": "", "Blank field": None, "Kept": "value"})
         assert batch_id is None
         assert custom == {"Kept": "value"}
 
@@ -474,7 +474,7 @@ class TestDAGTracerTraverse:
 
     def test_stop_condition_node_still_included(self, db, demo_data):
         """Real DB + resetdb: stop_condition includes that node; we stop traversing beyond it."""
-        from app.core.backend.dagtraversal import stop_at_inventory_types
+        from app.features.traceability.dagtraversal import stop_at_inventory_types
 
         org_id = demo_data["org_id"]
         finals = (

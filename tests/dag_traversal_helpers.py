@@ -12,7 +12,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.dagtraversal import TraversalResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -21,6 +20,7 @@ from app.core.db.models.step import Step
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.features.traceability.dagtraversal import TraversalResult
 
 # ---------------------------------------------------------------------------
 # 1. Graph correctness invariant assertions

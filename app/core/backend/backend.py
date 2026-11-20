@@ -22,7 +22,6 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
     tasks,
-    traceability_routes,
 )
 from app.core.backend.feature_frontend import register_core_feature_frontend
 from app.core.backend.static_assets import core_asset_directory, core_asset_version
@@ -46,6 +45,7 @@ from app.features.inventory import static as inventory_static
 from app.features.process_design import process_design_routes
 from app.features.process_design.process_docs import process_docs_routes
 from app.features.reconciliation.routes import reconciliation_routes
+from app.features.traceability import traceability_routes
 from app.features.wastage.routes import wastage_routes
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -111,7 +111,7 @@ core_bp = Blueprint(
     static_url_path="/static",
 )
 
-register_core_feature_frontend(core_bp, "inventory", "process_design", "execution")
+register_core_feature_frontend(core_bp, "inventory", "process_design", "execution", "traceability")
 
 
 @functools.lru_cache(maxsize=1)

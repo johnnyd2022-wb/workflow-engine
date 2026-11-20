@@ -52,7 +52,7 @@ def test_ac9_temporal_trace_root_state_not_visible_cross_tenant(two_tenants_with
     """AC9: TemporalDAGTracer._snapshot_at now filters EntityEvent by org_id, so
     POST /api/core/sourcemap/trace's temporal branch no longer returns another org's root
     item state when given that org's item id as root_id (was: leaked name/quantity/supplier
-    via body["root"]["state"]; fixed in app/core/backend/temporal_dag_tracer.py:121-134)."""
+    via body["root"]["state"]; fixed in app/features/traceability/temporal_dag_tracer.py:121-134)."""
     page_b = two_tenants_with_chains["b"]["page"]
     org_a_r1_id = two_tenants_with_chains["a"]["dag"]["r1_id"]
 

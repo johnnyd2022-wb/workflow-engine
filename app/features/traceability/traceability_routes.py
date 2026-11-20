@@ -168,8 +168,8 @@ def register_routes(bp):
         Returns all items in the production chain regardless of current quantity — zero-quantity
         intermediates must be visible for a complete audit trail.
         """
-        from app.core.backend.dagtraversal import trace_forward, validate_item_uuid
         from app.core.db.models.inventory_item import InventoryItem
+        from app.features.traceability.dagtraversal import trace_forward, validate_item_uuid
 
         org_id = UUID(g.org_id)
         raw_material_uuid, err = validate_item_uuid(raw_material_id)
@@ -260,8 +260,8 @@ def register_routes(bp):
         Returns all items in the production chain regardless of current quantity — zero-quantity
         intermediates must be visible for a complete audit trail.
         """
-        from app.core.backend.dagtraversal import trace_backward, validate_item_uuid
         from app.core.db.models.inventory_item import InventoryItem
+        from app.features.traceability.dagtraversal import trace_backward, validate_item_uuid
 
         org_id = UUID(g.org_id)
         item_uuid, err = validate_item_uuid(inventory_item_id)
@@ -373,8 +373,8 @@ def register_routes(bp):
         sales nodes using the persisted FIFO allocations. A sale edge therefore identifies
         the exact labelled final-product batch that fulfilled the invoice line.
         """
-        from app.core.backend.dagtraversal import trace_bidirectional, validate_item_uuid
         from app.features.crm.services.sales_traceability_service import append_sales_to_dag
+        from app.features.traceability.dagtraversal import trace_bidirectional, validate_item_uuid
 
         org_id = UUID(g.org_id)
         item_uuid, err = validate_item_uuid(inventory_item_id)
@@ -545,7 +545,7 @@ def register_routes(bp):
             except ValueError:
                 return jsonify({"error": "Invalid as_of datetime format"}), 400
 
-            from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+            from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 
             tracer = TemporalDAGTracer(db, org_id, as_of, max_depth=depth)
             result = tracer.trace(root_id, root_type)
@@ -593,7 +593,7 @@ def register_routes(bp):
             return jsonify({"error": "Item not found"}), 404
 
         try:
-            from app.core.backend.dagtraversal import trace_bidirectional
+            from app.features.traceability.dagtraversal import trace_bidirectional
 
             both = trace_bidirectional(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
             result_fwd = both["forward"]

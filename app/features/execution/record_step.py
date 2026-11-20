@@ -18,13 +18,13 @@ from flask import Blueprint, g, jsonify, render_template, request
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import selectinload
 
-from app.core.backend.dagtraversal import _split_trace_prompts
 from app.core.db import db_session
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
 from app.core.db.models.step import Step
 from app.core.security.permissions import requires_auth
+from app.features.traceability.dagtraversal import split_trace_prompts
 
 WAITING_SECONDS = 2 * 24 * 3600  # the Batches page's "waiting" threshold
 # Far beyond a working floor's in-flight batches or product range; the oldest batches come first.
@@ -45,7 +45,7 @@ def _batch_label(steps: list[ExecutionStep]) -> str | None:
     process builder and the trace use), else a batch or lot id typed on an output."""
     for step in steps:
         if isinstance(step.execution_data, dict):
-            code, _ = _split_trace_prompts(step.execution_data)
+            code, _ = split_trace_prompts(step.execution_data)
             if code not in (None, ""):
                 return str(code).strip() or None
     for step in steps:
