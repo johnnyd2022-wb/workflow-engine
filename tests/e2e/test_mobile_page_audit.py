@@ -95,10 +95,19 @@ APP_PAGES = [
 @pytest.fixture(scope="module", autouse=True)
 def mobile_audit_subscription(e2e_user):
     db = db_session()
-    db.get(User, UUID(e2e_user["user_id"])).role = UserRole.ADMIN
+    user_id = UUID(e2e_user["user_id"])
+    user = db.get(User, user_id)
+    original_role = user.role
+    user.role = UserRole.ADMIN
     FeatureSubscriptionRepository(db).grant(e2e_user["org_id"], "compliant")
     ComplianceService(db).upsert_profile(e2e_user["org_id"], {"enabled": True, "industry_module": "nz_alcohol"})
     db.commit()
+    try:
+        yield
+    finally:
+        db = db_session()
+        db.get(User, user_id).role = original_role
+        db.commit()
 
 
 def _capture_and_measure(page, path):

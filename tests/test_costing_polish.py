@@ -42,7 +42,7 @@ def test_a_ready_product_shows_what_one_unit_cost_on_the_list(world, db):  # noq
     ],
 )
 def test_csv_total_paid_reads_money_as_typed(raw, clean):
-    from app.core.backend.inventory_upload_routes import _check_total_paid, _clean_money
+    from app.features.inventory.inventory_upload_routes import _check_total_paid, _clean_money
 
     assert _clean_money(raw) == clean
     if clean in ("1,23", "1 23.45"):

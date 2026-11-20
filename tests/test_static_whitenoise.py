@@ -42,6 +42,14 @@ def client():
     [
         ("/static/js/app.js", ("app", "core", "frontend", "js", "app.js")),
         ("/static/css/core2.css", ("app", "core", "frontend", "css", "core2.css")),
+        (
+            "/static/js/inventory-view.js",
+            ("app", "features", "inventory", "frontend", "js", "inventory-view.js"),
+        ),
+        (
+            "/static/css/inventory-view.css",
+            ("app", "features", "inventory", "frontend", "css", "inventory-view.css"),
+        ),
     ],
 )
 def test_whitenoise_serves_asset_with_validator_and_pinned_cache_control(client, url, disk):
@@ -101,9 +109,9 @@ def test_inventory_templates_not_exposed(client):
     template source, bypassing the Flask allowlist. Every non-allowlisted inventory
     filename must stay non-200; the two public assets keep their content type and the
     pinned Cache-Control."""
-    repo_inventory = REPO_ROOT / "app" / "core" / "frontend" / "inventory"
+    repo_inventory = REPO_ROOT / "app/features/inventory/frontend/templates/inventory"
     template_names = sorted(p.name for p in repo_inventory.glob("*.html"))
-    assert template_names, "expected server-rendered templates in app/core/frontend/inventory/"
+    assert template_names, "expected server-rendered Inventory templates"
     for name in template_names:
         resp = client.get(f"/static/inventory/{name}")
         assert resp.status_code != 200, (

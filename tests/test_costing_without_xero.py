@@ -315,6 +315,6 @@ def test_r1_rule_and_cost_writes_replay_on_retry(world, db):
 def test_r1_csv_escape_encodes_quotes_for_attributes():
     from pathlib import Path
 
-    html = (Path(__file__).resolve().parents[1] / "app/core/frontend/inventory/add_csv.html").read_text()
+    html = (Path(__file__).resolve().parents[1] / "app/features/inventory/frontend/templates/inventory/add_csv.html").read_text()
     body = html[html.index("function escapeHtml") : html.index("function escapeHtml") + 400]
     assert "&quot;" in body and "&#39;" in body

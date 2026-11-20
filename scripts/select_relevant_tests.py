@@ -145,7 +145,7 @@ RULES = (
     ),
     Rule(
         "Inventory UI",
-        ("app/core/frontend/inventory/**", "app/core/frontend/inventory_static/**"),
+        ("app/features/inventory/**", "app/core/frontend/inventory/**", "app/core/frontend/inventory_static/**"),
         (
             "tests/test_execution_modal_frontend_assets.py",
             "tests/test_inventory_csv_validation.py",

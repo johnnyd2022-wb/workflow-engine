@@ -1,5 +1,5 @@
 """Golden-path browser coverage for GET /api/core/entities/<type>/<id>/story, as consumed
-by the "Audit history" section of the inventory line panel (app/core/frontend/js/inventory-view.js) --
+by the "Audit history" section of the inventory line panel (app/features/inventory/frontend/js/inventory-view.js) --
 the one real frontend caller of this route (AC1-AC6)."""
 
 import re

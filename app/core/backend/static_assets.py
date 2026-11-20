@@ -15,6 +15,7 @@ from pathlib import Path
 _APP_DIR = Path(__file__).resolve().parents[2]
 _FEATURES_DIR = (_APP_DIR / "features").resolve()
 _CORE_FRONTEND_DIR = (_APP_DIR / "core" / "frontend").resolve()
+INVENTORY_STATIC_DIR = _FEATURES_DIR / "inventory/frontend/inventory_static"
 _KINDS = {"js": ".js", "css": ".css"}
 _CORE_ASSET_FEATURES = frozenset(
     {
@@ -119,8 +120,7 @@ def core_asset_version() -> str:
         except OSError:
             continue
         h.update(f"{kind}/{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
-    for sub in ("inventory_static", "img"):
-        directory = os.path.join(_CORE_FRONTEND_DIR, sub)
+    for directory in (INVENTORY_STATIC_DIR, _CORE_FRONTEND_DIR / "img"):
         try:
             names = sorted(os.listdir(directory))
         except OSError:

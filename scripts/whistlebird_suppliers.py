@@ -57,7 +57,7 @@ class SuppliersManifest:
 
 def parse_suppliers_manifest(data: Any) -> SuppliersManifest:
     """Validate with the API's own rules, so a bad manifest fails before any destructive step."""
-    from app.core.backend.suppliers import FIELDS, SupplierError, clean_fields
+    from app.features.inventory.suppliers import FIELDS, SupplierError, clean_fields
 
     if not isinstance(data, dict) or set(data) != {"suppliers"} or not isinstance(data["suppliers"], list):
         raise SuppliersManifestError('manifest must be an object with a "suppliers" list')

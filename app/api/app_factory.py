@@ -160,7 +160,7 @@ def create_app():
 
     app.register_blueprint(go_live_bp)
     # GL-P02: quality hold and release on a lot.
-    from app.core.backend.lot_holds_routes import lot_holds_bp
+    from app.features.inventory.lot_holds_routes import lot_holds_bp
 
     app.register_blueprint(lot_holds_bp)
     # GL-P10: download every record the business holds as one ZIP.
@@ -181,11 +181,11 @@ def create_app():
     app.register_blueprint(record_step_bp)
 
     # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
-    from app.core.backend.stock_locations import stock_locations_bp
+    from app.features.inventory.stock_locations import stock_locations_bp
 
     app.register_blueprint(stock_locations_bp)
     # Stocktakes (plan 2.6).
-    from app.core.backend.stocktake import stocktake_bp
+    from app.features.inventory.stocktake import stocktake_bp
 
     app.register_blueprint(stocktake_bp)
 
@@ -735,7 +735,7 @@ def create_app():
     # the source dir handed to it must contain public assets only. `img/` qualifies (its
     # sole file is the allowlisted hero image). `inventory/` does NOT: it holds
     # server-rendered Jinja (add.html, dispose.html, view.html, ...) alongside the two
-    # public assets. Those two live in the sibling `inventory_static/` dir, which holds
+    # public assets. Those two live in the feature's `inventory_static/` dir, which holds
     # nothing else, and only that dir is exposed here -- still at the /static/inventory/
     # URL prefix, so no template or url_for() reference changes. The Flask
     # `serve_core_inventory_static` route stays as the fall-through with its hard-coded
@@ -759,14 +759,14 @@ def create_app():
         # in the Docker image the files are immutable, so scan once at boot.
         autorefresh=(config.environment == "local"),
     )
-    from app.core.backend.static_assets import core_asset_directories
+    from app.core.backend.static_assets import INVENTORY_STATIC_DIR, core_asset_directories
 
     _core_frontend = os.path.join(app_dir, "core", "frontend")
     for asset_dir in core_asset_directories("js"):
         app.wsgi_app.add_files(str(asset_dir), prefix="static/js/")
     for asset_dir in core_asset_directories("css"):
         app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
+    app.wsgi_app.add_files(str(INVENTORY_STATIC_DIR), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     # Self-hosted webfonts (fonts.css): woff2 files plus their licence note, all public.
     app.wsgi_app.add_files(os.path.join(_core_frontend, "fonts"), prefix="static/fonts/")

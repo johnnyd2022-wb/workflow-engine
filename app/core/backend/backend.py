@@ -23,14 +23,12 @@ from app.core.backend import (
     changes_feed,
     execution_record_routes,
     execution_routes,
-    inventory_routes,
-    inventory_upload_routes,
     process_design_routes,
-    suppliers,
     tasks,
     traceability_routes,
 )
 from app.core.backend.evidence import evidence_routes
+from app.core.backend.feature_frontend import register_core_feature_frontend
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.static_assets import core_asset_directory, core_asset_version
 from app.core.db import db_session
@@ -46,6 +44,8 @@ from app.features.compliance_checks.routes import corechecks
 from app.features.dashboard.routes import dashboard_routes
 from app.features.demo_data.routes import api_routes as demo_data_routes
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
+from app.features.inventory import inventory_routes, inventory_upload_routes, suppliers
+from app.features.inventory import static as inventory_static
 from app.features.reconciliation.routes import reconciliation_routes
 from app.features.wastage.routes import wastage_routes
 from app.observability import get_logger
@@ -111,6 +111,8 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+register_core_feature_frontend(core_bp, "inventory")
 
 
 @functools.lru_cache(maxsize=1)
@@ -336,48 +338,10 @@ def serve_core_css(filename):
         abort(500, "Internal server error")
 
 
-_INVENTORY_STATIC_ALLOWLIST = frozenset({"inventory-icon.svg", "inventory-spa-header.css"})
 _IMG_STATIC_ALLOWLIST = frozenset({"hero-wave.jpg"})
 
 
-@core_bp.route("/static/inventory/<filename>")
-@limiter.exempt
-def serve_core_inventory_static(filename):
-    """Serve the two public SVG/CSS assets from core frontend inventory_static/ (used by
-    the inventory SPA header partial). That directory holds public assets only -- the
-    server-rendered inventory templates live in the sibling inventory/ dir and are never
-    reachable through this route or the WhiteNoise layer that fronts it."""
-    from werkzeug.security import safe_join
-
-    if ".." in filename or "/" in filename or "\\" in filename:
-        abort(400, "Invalid filename")
-    if filename not in _INVENTORY_STATIC_ALLOWLIST:
-        abort(400, "Invalid file")
-
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in (".svg", ".css"):
-        abort(400, "Invalid file type")
-
-    inventory_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "inventory_static")
-    safe_path = safe_join(inventory_dir, filename)
-    if safe_path is None:
-        abort(400, "Invalid filename")
-
-    from werkzeug.exceptions import NotFound
-
-    try:
-        response = send_from_directory(inventory_dir, filename)
-        if ext == ".svg":
-            response.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
-        else:
-            response.headers["Content-Type"] = "text/css; charset=utf-8"
-        return response
-    except (FileNotFoundError, NotFound):
-        logger.info("Inventory static file not found: %s", filename)
-        abort(404, "File not found")
-    except Exception:
-        logger.exception("Error serving inventory static: %s", filename)
-        abort(500, "Internal server error")
+inventory_static.register_routes(core_bp)
 
 
 @core_bp.route("/static/img/<filename>")

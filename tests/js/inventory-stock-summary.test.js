@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 global.window = global;
-require('../../app/core/frontend/js/inventory-stock-summary.js');
+require('../../app/features/inventory/frontend/js/inventory-stock-summary.js');
 
 const stock = global.InventoryStockSummary;
 

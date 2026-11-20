@@ -186,7 +186,7 @@ def _day(value) -> str:
 
 def stocktake_alerts(session: Session, org_id: UUID, settings: dict | None, today: date) -> list[dict]:
     """Plan 2.6: the next stocktake coming due, and every unresolved variance with its LAL and duty."""
-    from app.core.backend import stocktake
+    from app.features.inventory import stocktake
 
     alerts = []
     plan = stocktake.schedule(session, org_id, settings, today)

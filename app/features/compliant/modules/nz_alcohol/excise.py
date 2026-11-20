@@ -1238,9 +1238,9 @@ def position(session: Session, org_id: UUID, profile, today: date | None = None)
     not yet lodged) against Customs' thresholds for six- and twelve-monthly lodging; the
     period in progress; the stocktake; breakages to claim a remission for; and product setup.
     """
-    from app.core.backend import stocktake
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.stocktake import Stocktake, StocktakeLine, StocktakeResolution
+    from app.features.inventory import stocktake
 
     today = today or date.today()
     cfg = settings_for(profile)
