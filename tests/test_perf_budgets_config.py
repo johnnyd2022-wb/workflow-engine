@@ -94,3 +94,18 @@ def test_hub_overview_query_budget_is_pinned_at_the_observed_floor():
     q = OVERRIDES["/api/core/hub/overview"]["queries"]
     assert q["budget"] == 11, "calibrated 2026-09-03 at 11 queries; raising this pin hides an N+1"
     assert q["ceiling"] == 25
+
+
+def test_performance_triage_attributes_routes_to_their_slices():
+    from scripts.perf_triage import area_of_route
+
+    expected = {
+        "/api/core/inventory/trace-backward/<inventory_item_id>": "traceability",
+        "/core/inventory/dispose/confirm": "wastage",
+        "/api/core/inventory/reconcile/add": "reconciliation",
+        "/core/flows/batches/start": "execution",
+        "/core/flows/create/inputs": "process_design",
+        "/api/core/inventory/<item_id>": "inventory",
+        "/api/core/hub/overview": "core",
+    }
+    assert {route: area_of_route(route) for route in expected} == expected

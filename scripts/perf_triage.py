@@ -54,6 +54,29 @@ SEVERITY_WEIGHT = {"ERROR": 5, "WARNING": 3, "INFO": 1}
 AREA_ROUTE_PREFIXES: dict[str, tuple[str, ...]] = {
     "crm": ("/crm", "/api/crm"),
     "workflow_engine": ("/workflow-engine",),
+    # Match the specific route owner before the wider Core and Inventory prefixes.
+    "traceability": ("/core/sourcemap", "/api/core/sourcemap", "/api/core/inventory/trace"),
+    "wastage": ("/core/inventory/dispose", "/api/core/inventory/wastage"),
+    "reconciliation": ("/api/core/inventory/reconcile",),
+    "execution": (
+        "/core/executions",
+        "/core/record",
+        "/core/flows/batches",
+        "/core/flows/executions",
+        "/api/core/executions",
+        "/api/core/execution-metadata",
+        "/api/core/evidence",
+    ),
+    "process_design": ("/core/processes", "/core/flows", "/api/core/processes", "/api/core/process-docs"),
+    "inventory": (
+        "/core/inventory",
+        "/core/stocktake",
+        "/core/suppliers",
+        "/api/core/inventory",
+        "/api/core/stocktake",
+        "/api/core/suppliers",
+        "/api/core/config/units",
+    ),
     "core": ("/core", "/api/core", "/auth", "/org", "/dashboard"),
     "shared-frontend": (),  # app/ui — served into every page; findings score globally
 }

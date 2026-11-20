@@ -109,14 +109,16 @@ def test_inventory_templates_not_exposed(client):
     template source, bypassing the Flask allowlist. Every non-allowlisted inventory
     filename must stay non-200; the two public assets keep their content type and the
     pinned Cache-Control."""
-    repo_inventory = REPO_ROOT / "app/features/inventory/frontend/templates/inventory"
-    template_names = sorted(p.name for p in repo_inventory.glob("*.html"))
+    inventory_template_roots = [
+        REPO_ROOT / "app/features/inventory/frontend/templates/inventory",
+        REPO_ROOT / "app/core/frontend/inventory",
+    ]
+    template_names = sorted({p.name for root in inventory_template_roots for p in root.glob("*.html")})
     assert template_names, "expected server-rendered Inventory templates"
     for name in template_names:
         resp = client.get(f"/static/inventory/{name}")
         assert resp.status_code != 200, (
-            f"/static/inventory/{name} is a server template and must not be served statically "
-            f"(got {resp.status_code})"
+            f"/static/inventory/{name} is a server template and must not be served statically (got {resp.status_code})"
         )
 
     svg = client.get("/static/inventory/inventory-icon.svg")
