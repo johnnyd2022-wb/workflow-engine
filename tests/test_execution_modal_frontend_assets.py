@@ -143,7 +143,9 @@ def test_select_prompts_render_configured_choices_with_legacy_fallback():
     prompt_renderer = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
         encoding="utf-8"
     )
-    builder = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "create-process-modal.js").read_text(encoding="utf-8")
+    builder = (
+        _REPO_ROOT / "app" / "features" / "process_design" / "frontend" / "js" / "create-process-modal.js"
+    ).read_text(encoding="utf-8")
     assert "guided-prompt-options" in builder
     assert "normalisePromptOptions" in builder
     assert "prompt.options" in prompt_renderer

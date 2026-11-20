@@ -5,17 +5,17 @@ from pathlib import Path
 from uuid import UUID
 
 from app.core.backend.event_writer import EventWriter
-from app.core.backend.process_docs.process_docs_storage import (
+from app.core.db import db_session
+from app.core.db.models.step import Step
+from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
+from app.features.process_design.process_docs.process_docs_storage import (
     delete_file as storage_delete_file,
 )
-from app.core.backend.process_docs.process_docs_storage import (
+from app.features.process_design.process_docs.process_docs_storage import (
     finalize_from_temp,
     prepare_final_path,
     read_file_path,
 )
-from app.core.db import db_session
-from app.core.db.models.step import Step
-from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
 from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)

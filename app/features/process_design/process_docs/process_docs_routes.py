@@ -5,23 +5,23 @@ from uuid import UUID
 
 from flask import g, jsonify, request, send_file
 
-from app.core.backend.process_docs.process_docs_service import (
+from app.core.db.models.user import UserRole
+from app.core.security.permissions import requires_auth, requires_role
+from app.core.utils.log_action import log_action
+from app.features.process_design.process_docs.process_docs_service import (
     create_or_update_inline,
     delete_document,
     get_file_for_download,
     list_docs_for_step,
     upload_sop_file,
 )
-from app.core.backend.process_docs.process_docs_validation import (
+from app.features.process_design.process_docs.process_docs_validation import (
     get_allowed_mime_types,
     get_max_file_size_bytes,
     validate_file_streaming,
     validate_inline_request,
     validate_upload_request,
 )
-from app.core.db.models.user import UserRole
-from app.core.security.permissions import requires_auth, requires_role
-from app.core.utils.log_action import log_action
 from app.observability import get_logger
 
 logger = get_logger(__name__)

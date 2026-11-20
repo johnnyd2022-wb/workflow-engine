@@ -640,14 +640,14 @@ def test_ac9_reorder_writes_process_version_and_emits_event(authed_client, db):
 
 
 def test_next_step_position_first_step_defaults_to_1000(authed_client):
-    from app.core.backend.process_design_routes import _next_step_position
+    from app.features.process_design.process_design_routes import _next_step_position
 
     pid = _create_process(authed_client)["id"]
     assert _next_step_position(pid) == Decimal("1000")
 
 
 def test_next_step_position_continues_the_1000_grid(authed_client):
-    from app.core.backend.process_design_routes import _next_step_position
+    from app.features.process_design.process_design_routes import _next_step_position
 
     pid = _create_process(authed_client)["id"]
     _add_step(authed_client, pid, 1, "First")
@@ -659,7 +659,7 @@ def test_next_step_position_rounds_up_when_current_max_is_not_grid_aligned():
     never actually persist (see the AC9 GAP notes on reorder for the one place that
     tries and 500s) — so this defensive rounding branch is exercised here by mocking
     the position lookup rather than seeding an impossible row."""
-    from app.core.backend import process_design_routes
+    from app.features.process_design import process_design_routes
 
     with patch.object(process_design_routes.db_session, "query") as mock_query:
         mock_query.return_value.filter.return_value.order_by.return_value.limit.return_value.scalar.return_value = (
@@ -685,47 +685,47 @@ class TestDetectMimeFromPath:
         return p
 
     def test_pdf_magic_bytes(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"%PDF-1.4 rest of file")
         assert _detect_mime_from_path(path) == "application/pdf"
 
     def test_doc_magic_bytes(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"\xd0\xcf\x11\xe0" + b"\x00" * 20)
         assert _detect_mime_from_path(path) == "application/msword"
 
     def test_zip_based_docx_extension_inference(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"PK\x03\x04" + b"\x00" * 20)
         mime = _detect_mime_from_path(path, original_filename="sop.docx")
         assert mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     def test_zip_based_md_extension_inference(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"PK\x03\x04" + b"\x00" * 20)
         mime = _detect_mime_from_path(path, original_filename="notes.md")
         assert mime == "text/markdown"
 
     def test_zip_based_txt_extension_inference(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"PK\x03\x04" + b"\x00" * 20)
         mime = _detect_mime_from_path(path, original_filename="readme.txt")
         assert mime == "text/plain"
 
     def test_zip_based_unknown_extension_falls_back_to_octet_stream(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"PK\x03\x04" + b"\x00" * 20)
         mime = _detect_mime_from_path(path, original_filename="archive.zip")
         assert mime == "application/octet-stream"
 
     def test_no_magic_match_returns_none(self, tmp_path):
-        from app.core.backend.process_docs.process_docs_validation import _detect_mime_from_path
+        from app.features.process_design.process_docs.process_docs_validation import _detect_mime_from_path
 
         path = self._write(tmp_path, b"just some plain bytes with no magic header")
         assert _detect_mime_from_path(path) is None
@@ -733,24 +733,24 @@ class TestDetectMimeFromPath:
 
 class TestNormalizeContentType:
     def test_strips_charset_parameter(self):
-        from app.core.backend.process_docs.process_docs_validation import _normalize_content_type
+        from app.features.process_design.process_docs.process_docs_validation import _normalize_content_type
 
         assert _normalize_content_type("application/pdf; charset=utf-8") == "application/pdf"
 
     def test_lowercases_and_strips_whitespace(self):
-        from app.core.backend.process_docs.process_docs_validation import _normalize_content_type
+        from app.features.process_design.process_docs.process_docs_validation import _normalize_content_type
 
         assert _normalize_content_type("  APPLICATION/PDF  ") == "application/pdf"
 
     def test_none_and_empty_return_empty_string(self):
-        from app.core.backend.process_docs.process_docs_validation import _normalize_content_type
+        from app.features.process_design.process_docs.process_docs_validation import _normalize_content_type
 
         assert _normalize_content_type(None) == ""
         assert _normalize_content_type("") == ""
 
 
 def test_validate_process_and_step_rejects_step_not_in_process(db):
-    from app.core.backend.process_docs.process_docs_validation import validate_process_and_step
+    from app.features.process_design.process_docs.process_docs_validation import validate_process_and_step
 
     org = OrganisationFactory()
     db.commit()
