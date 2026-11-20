@@ -111,6 +111,11 @@ RULES = (
         ),
     ),
     Rule(
+        "Core slice import boundaries",
+        tuple(f"app/features/{name}/*.py" for name in ("inventory", "process_design", "execution", "traceability")),
+        ("tests/test_core_feature_boundaries.py",),
+    ),
+    Rule(
         "Core API routes",
         ("app/api/routes/**", "app/features/compliance_checks/checks/**"),
         (
