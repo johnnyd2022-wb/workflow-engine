@@ -11,8 +11,7 @@ archaeology, and rerun it after a page/flow changes so the checklist stays curre
 Design rules (same as preflight.py / e2e_coverage.py / error_scan.py):
 - stdlib only, except importing the app's url_map via scripts/e2e_coverage.py (the only
   accurate source of the route surface) and shelling out to semgrep if it is on PATH.
-- machine-readable first (`--json`); humans get the summary; `--write-index` regenerates
-  the checklist markdown so the index is a build product, not hand-maintained prose.
+- machine-readable first (`--json`); humans get the summary; `--markdown` renders the checklist on stdout.
 - it reports and ranks; fixing a finding is the calling skill's decision.
 - an absent tool degrades honestly: no semgrep means `static: unavailable` in the
   output, never a silently empty finding list.
@@ -26,7 +25,7 @@ Inputs:
 Usage:
     python scripts/perf_triage.py                 # human summary + checklist
     python scripts/perf_triage.py --json          # full machine-readable output
-    python scripts/perf_triage.py --write-index   # also regenerate the checklist markdown
+    python scripts/perf_triage.py --markdown      # print the checklist as Markdown
     python scripts/perf_triage.py --check         # exit 1 on ceiling breach or an
                                                   #   unmeasured area with WARNING findings
 """
@@ -38,12 +37,11 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUDGETS_FILE = REPO_ROOT / ".agents" / "perf" / "budgets.json"
-INDEX_FILE = REPO_ROOT / ".agents" / "reports" / "perf" / "priority-checklist.md"
 PERF_RULES = REPO_ROOT / ".semgrep" / "rules" / "performance.yml"
 
 SEVERITY_WEIGHT = {"ERROR": 5, "WARNING": 3, "INFO": 1}
@@ -268,7 +266,7 @@ def build_triage() -> dict:
 
     ceiling_breaches = [i for i in items if i["kind"] == "ceiling-breach"]
     return {
-        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated": datetime.now(UTC).isoformat(timespec="seconds"),
         "static": {"status": static["status"], **({"reason": static["reason"]} if "reason" in static else {})},
         "summary": {
             "routes_considered": len(routes),
@@ -317,10 +315,7 @@ def render_index(data: dict) -> str:
     lines = [
         "# Performance priority checklist — GENERATED",
         "",
-        f"Generated {data['generated']} by `scripts/perf_triage.py --write-index`. Do not",
-        "hand-edit; rerun the script after a page/flow changes or after a perf-test run.",
-        "Budgets: `.agents/perf/budgets.json`; measurements: `tests/e2e/test_perf_budgets.py`;",
-        "raw last run: `perf_runs` / `perf_results` in the `bize_dev` metrics DB. Owned by the **perf-guardrails** skill.",
+        f"Generated {data['generated']} from the metrics database and current Semgrep scan.",
         "",
         f"- static rules: **{data['static']['status']}** ({s['static_findings']} findings, "
         f"shared-frontend score {s['global_shared_frontend_score']})",
@@ -344,7 +339,7 @@ def render_index(data: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Deterministic performance triage checklist.")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
-    parser.add_argument("--write-index", action="store_true", help=f"regenerate {INDEX_FILE.name}")
+    parser.add_argument("--markdown", action="store_true", help="print the checklist as Markdown")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -359,11 +354,12 @@ def main() -> int:
         print(json.dumps(msg) if args.json else f"perf_triage: {msg['error']}", file=sys.stderr)
         return 2
 
-    if args.write_index:
-        INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
-        INDEX_FILE.write_text(render_index(data), encoding="utf-8")
-
-    print(json.dumps(data, indent=2) if args.json else render_human(data))
+    if args.json:
+        print(json.dumps(data, indent=2))
+    elif args.markdown:
+        print(render_index(data))
+    else:
+        print(render_human(data))
 
     if args.check and (data["summary"]["ceiling_breaches"] or data["summary"]["unmeasured_hot_areas"]):
         return 1

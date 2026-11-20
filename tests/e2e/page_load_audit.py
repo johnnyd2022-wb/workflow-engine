@@ -1,12 +1,12 @@
 """Collect paired navigation metrics from Chromium without changing test fixtures."""
 
-import json
 import os
 from contextlib import contextmanager
-from pathlib import Path
 from urllib.parse import urlsplit
 
-from tests.e2e.test_perf_budgets import REGISTRY, instrument_performance
+from tests.e2e.test_perf_budgets import REGISTRY, instrument_performance, metrics_db
+
+SAMPLES: list[dict] = []
 
 METRICS = """async () => {
     const navigation = performance.getEntriesByType('navigation')[0];
@@ -34,8 +34,7 @@ METRICS = """async () => {
 
 
 def measure_page(browser, app_url, route, storage_state=None, *, label=None):
-    report = os.environ.get("PAGE_LOAD_REPORT")
-    if not report:
+    if os.environ.get("PAGE_LOAD_AUDIT") != "1":
         return
     label = label or route
     selected = os.environ.get("PAGE_LOAD_ROUTES", "").split()
@@ -71,16 +70,22 @@ def measure_page(browser, app_url, route, storage_state=None, *, label=None):
                     "document_queries": document_queries,
                     **metrics,
                 }
-                with Path(report).open("a", encoding="utf-8") as stream:
-                    print(json.dumps(row), file=stream)
+                SAMPLES.append(row)
 
 
 def audit_current_page(page, label, *, url=None):
     """Measure a page reached using the state built by an existing browser journey."""
-    if not os.environ.get("PAGE_LOAD_REPORT"):
+    if os.environ.get("PAGE_LOAD_AUDIT") != "1":
         return
     target = url or page.url
     location = urlsplit(page.url)
     origin = f"{location.scheme}://{location.netloc}"
     with contextmanager(instrument_performance)():
         measure_page(page.context.browser, origin, target, page.context.storage_state(), label=label)
+
+
+def save_page_load_run() -> None:
+    if not SAMPLES:
+        return
+    run_id = metrics_db.record_page_load(SAMPLES, label=os.environ.get("PAGE_LOAD_LABEL"))
+    print(f"\nPage load metrics recorded in run {run_id} ({len(SAMPLES)} samples)")

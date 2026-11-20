@@ -181,3 +181,25 @@ def test_spool_flush_adopts_a_dead_flushers_claim(outage, monkeypatch):
     assert inserted == ["stranded"]
     assert not orphan.exists()
     assert live.exists()  # a live flusher's claim is left alone
+
+
+def test_page_load_medians_keep_modes_and_missing_values_separate():
+    samples = [
+        {"route": "/core", "cache": "cold", "sample": 0, "transferred_bytes": 500, "lcp_ms": None},
+        {"route": "/core", "cache": "cold", "sample": 1, "transferred_bytes": 700, "lcp_ms": 90},
+        {"route": "/core", "cache": "warm", "sample": 0, "transferred_bytes": 100, "lcp_ms": None},
+    ]
+    summary = metrics_db.summarize_page_load(samples)
+    assert summary["/core", "cold"]["sample_count"] == 2
+    assert summary["/core", "cold"]["transferred_bytes"] == 600
+    assert summary["/core", "cold"]["lcp_ms"] == 90
+    assert summary["/core", "warm"]["sample_count"] == 1
+    assert summary["/core", "warm"]["transferred_bytes"] == 100
+    assert summary["/core", "warm"]["lcp_ms"] is None
+
+
+def test_page_load_audit_reports_database_outage_without_spooling(outage):
+    sample = {"route": "/core", "cache": "cold", "sample": 0, "transferred_bytes": 500}
+    with pytest.raises(metrics_db.MetricsDBUnavailableError):
+        metrics_db.record_page_load([sample])
+    assert not outage.exists()

@@ -614,3 +614,12 @@ def perf_instrumentation(app_url):
     from tests.e2e.test_perf_budgets import instrument_performance
 
     yield from instrument_performance()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def record_page_load_metrics():
+    yield
+    if os.environ.get("PAGE_LOAD_AUDIT") == "1":
+        from tests.e2e.page_load_audit import save_page_load_run
+
+        save_page_load_run()
