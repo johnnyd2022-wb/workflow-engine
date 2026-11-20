@@ -12,6 +12,12 @@ Transfer size comes from the document and same-origin resource timing entries. R
 
 The largest remaining cold bundles are on Live Executions, Workflow detail, Live Inventory, Core and the Process wizard. For the first four, separate execution modal and page bootstrap work by initial tab before tuning smaller resources. For the wizard, the 167 KB create-process script is the largest observed resource and gives the next target. On the rest of the signed-in pages, verify usage and navigation behavior before removing the remaining globally included Core and CRM assets. Public pages carry substantially less transfer. A production-shaped seed with deep stock and batch history is needed to rank back-end API costs.
 
+## Dashboard API follow-up
+
+The existing budget suite showed the Dashboard summary issuing 52 SQL statements on a fresh test organisation. The daily and weekly operation counters made nine independent calls, including a duplicate active-execution count. They now share one SQL statement. Each count keeps its own tenant, status and time filters, so PostgreSQL can still choose separate index scans.
+
+The controlled rerun measured 44 statements for `/api/core/dashboard/summary`. Its local median was 197 ms before and 199 ms after, so the measured result is eight fewer database round trips. A PostgreSQL regression test asserts that both summaries use one statement per tenant and verifies the daily and weekly counts across two tenants.
+
 ## Per-page measurements
 
 Transfer is decimal KB. LCP and TTFB are median milliseconds. Queries report the after-run document count on a cold navigation. An em dash means Chromium did not emit an LCP entry.

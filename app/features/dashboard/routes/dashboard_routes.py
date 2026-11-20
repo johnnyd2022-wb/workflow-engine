@@ -9,7 +9,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from flask import g, jsonify, render_template, request
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
@@ -329,37 +329,6 @@ def _dashboard_event_log_period(
     }
 
 
-def _dashboard_operations_summary(
-    org_id: UUID, session, day_start: datetime, next_day_start: datetime
-) -> dict[str, int]:
-    active_executions = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
-        .count()
-    )
-    completed_today = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status == ExecutionStatus.COMPLETED)
-        .filter(Execution.completed_at.isnot(None))
-        .filter(Execution.completed_at >= day_start, Execution.completed_at < next_day_start)
-        .count()
-    )
-    failed_or_cancelled_today = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status.in_([ExecutionStatus.FAILED, ExecutionStatus.CANCELLED]))
-        .filter(Execution.updated_at >= day_start, Execution.updated_at < next_day_start)
-        .count()
-    )
-    return {
-        "active_executions": active_executions,
-        "completed_today": completed_today,
-        "failed_or_cancelled_today": failed_or_cancelled_today,
-    }
-
-
 def _dashboard_week_boundaries(today: date) -> tuple[datetime, datetime, datetime]:
     week_start_date = today - timedelta(days=today.weekday())
     # each boundary built from its own date so a DST change inside the window can't skew it
@@ -524,65 +493,70 @@ def _dashboard_open_action_item_dates(
     return dates
 
 
-def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime, today: date) -> dict[str, Any]:
+def _dashboard_operations_summaries(
+    org_id: UUID, session, now_dt: datetime, today: date
+) -> tuple[dict[str, int], dict[str, Any]]:
+    day_start = _local_midnight(today)
+    next_day_start = _local_midnight(today + timedelta(days=1))
     week_start, next_week_start, prev_week_start = _dashboard_week_boundaries(today)
 
-    active_executions = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
-        .count()
-    )
-    started_this_week = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.started_at >= week_start, Execution.started_at < next_week_start)
-        .count()
-    )
-    completed_this_week = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status == ExecutionStatus.COMPLETED)
-        .filter(Execution.completed_at.isnot(None))
-        .filter(Execution.completed_at >= week_start, Execution.completed_at < next_week_start)
-        .count()
-    )
-    completed_last_week = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status == ExecutionStatus.COMPLETED)
-        .filter(Execution.completed_at.isnot(None))
-        .filter(Execution.completed_at >= prev_week_start, Execution.completed_at < week_start)
-        .count()
-    )
-    failed_or_cancelled_this_week = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status.in_([ExecutionStatus.FAILED, ExecutionStatus.CANCELLED]))
-        .filter(Execution.updated_at >= week_start, Execution.updated_at < next_week_start)
-        .count()
-    )
-    stalled_active_over_48h = (
-        session.query(Execution)
-        .filter(Execution.org_id == org_id)
-        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
-        .filter(Execution.started_at < (now_dt - timedelta(hours=48)))
-        .count()
-    )
-    completed_vs_last_week_pct = None
-    if completed_last_week > 0:
-        completed_vs_last_week_pct = round(((completed_this_week - completed_last_week) / completed_last_week) * 100, 1)
+    # Keep each date and status filter independent so PostgreSQL can use its existing
+    # indexes, while sending the daily and weekly counters in one round trip.
+    org_executions = select(func.count()).select_from(Execution).where(Execution.org_id == org_id)
 
-    return {
-        "window": "week_to_date",
-        "active_executions": active_executions,
-        "started_this_week": started_this_week,
-        "completed_this_week": completed_this_week,
-        "failed_or_cancelled_this_week": failed_or_cancelled_this_week,
-        "stalled_active_over_48h": stalled_active_over_48h,
-        "completed_last_week": completed_last_week,
-        "completed_vs_last_week_pct": completed_vs_last_week_pct,
-    }
+    def count_where(*criteria):
+        return org_executions.where(*criteria).scalar_subquery()
+
+    active = Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS])
+    completed = Execution.status == ExecutionStatus.COMPLETED
+    unsuccessful = Execution.status.in_([ExecutionStatus.FAILED, ExecutionStatus.CANCELLED])
+    counts = session.execute(
+        select(
+            count_where(active).label("active_executions"),
+            count_where(completed, Execution.completed_at >= day_start, Execution.completed_at < next_day_start).label(
+                "completed_today"
+            ),
+            count_where(unsuccessful, Execution.updated_at >= day_start, Execution.updated_at < next_day_start).label(
+                "failed_or_cancelled_today"
+            ),
+            count_where(Execution.started_at >= week_start, Execution.started_at < next_week_start).label(
+                "started_this_week"
+            ),
+            count_where(
+                completed, Execution.completed_at >= week_start, Execution.completed_at < next_week_start
+            ).label("completed_this_week"),
+            count_where(
+                completed, Execution.completed_at >= prev_week_start, Execution.completed_at < week_start
+            ).label("completed_last_week"),
+            count_where(unsuccessful, Execution.updated_at >= week_start, Execution.updated_at < next_week_start).label(
+                "failed_or_cancelled_this_week"
+            ),
+            count_where(active, Execution.started_at < now_dt - timedelta(hours=48)).label("stalled_active_over_48h"),
+        )
+    ).one()
+    completed_vs_last_week_pct = None
+    if counts.completed_last_week > 0:
+        completed_vs_last_week_pct = round(
+            ((counts.completed_this_week - counts.completed_last_week) / counts.completed_last_week) * 100, 1
+        )
+
+    return (
+        {
+            "active_executions": counts.active_executions,
+            "completed_today": counts.completed_today,
+            "failed_or_cancelled_today": counts.failed_or_cancelled_today,
+        },
+        {
+            "window": "week_to_date",
+            "active_executions": counts.active_executions,
+            "started_this_week": counts.started_this_week,
+            "completed_this_week": counts.completed_this_week,
+            "failed_or_cancelled_this_week": counts.failed_or_cancelled_this_week,
+            "stalled_active_over_48h": counts.stalled_active_over_48h,
+            "completed_last_week": counts.completed_last_week,
+            "completed_vs_last_week_pct": completed_vs_last_week_pct,
+        },
+    )
 
 
 def _dashboard_module_milestone(value: Any) -> dict[str, Any] | None:
@@ -947,8 +921,7 @@ def get_dashboard_summary():
     system_status = build_system_status_payload(org_id, db_session, check_results)
     compliance = _dashboard_build_compliance_summary(check_results, system_status)
 
-    operations_day_summary = _dashboard_operations_summary(org_id, db_session, day_start, next_day_start)
-    operations_week_summary = _dashboard_operations_weekly_summary(org_id, db_session, now_dt, today)
+    operations_day_summary, operations_week_summary = _dashboard_operations_summaries(org_id, db_session, now_dt, today)
     operator_actions_this_week = (
         db_session.query(EntityEvent)
         .filter(EntityEvent.org_id == org_id)
