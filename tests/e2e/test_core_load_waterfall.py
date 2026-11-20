@@ -10,7 +10,10 @@ data call (`/api/core/hub/overview`), and the Inventory / Workflows tab data mus
 until its tab is actually opened -- and must not reload on a second visit.
 """
 
+from urllib.parse import urlsplit
+
 import pytest
+from playwright.sync_api import expect
 
 pytestmark = [pytest.mark.e2e]
 
@@ -247,7 +250,7 @@ def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in
     """flows2 first paint renders Structure only; Batches (execution list) and Inventory
     load the first time their tab is shown, and re-opening a tab is 0 fetches."""
     page = logged_in_page
-    page.goto("/core")
+    page.goto("/core/dashboard")
     _wait(page)
     hdrs = {"X-CSRFToken": _csrf(page), "Content-Type": "application/json", "Referer": page.url}
     proc = page.request.post(
@@ -255,9 +258,17 @@ def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in
     )
     assert proc.status == 201, proc.text()
     pid = proc.json()["id"]
-    page.request.post(f"/api/core/processes/{pid}/steps", headers=hdrs, data='{"step_number": 1, "name": "Mix"}')
+    step = page.request.post(f"/api/core/processes/{pid}/steps", headers=hdrs, data='{"step_number": 1, "name": "Mix"}')
+    assert step.ok, step.text()
 
     calls = _core_api_calls(page)
+    scripts = []
+
+    def record_script(request):
+        if request.resource_type == "script":
+            scripts.append(urlsplit(request.url).path)
+
+    page.on("request", record_script)
     page.goto(f"/core/flows?id={pid}")
     page.wait_for_selector('[data-flows2-target="batches"]')
     _wait(page)
@@ -281,6 +292,16 @@ def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in
     page.click('[data-flows2-target="batches"]')
     _wait(page)
     assert sum(1 for c in calls if c.startswith("executions?") and "status=completed" in c) == n_exec, calls
+
+    editor_script = "/static/js/execution-render-inputs.js"
+    assert editor_script not in scripts
+    assert page.locator("#execute-step-modal").count() == 0
+
+    # The workflow action opens the editor via an HTMX swap and loads its assets there.
+    page.locator("#start-execution-btn").click()
+    expect(page.locator("#exec-step-subtitle")).to_contain_text("Mix")
+    assert urlsplit(page.url).path == "/core/flows/batches/start"
+    assert editor_script in scripts
 
 
 def _csrf(page):

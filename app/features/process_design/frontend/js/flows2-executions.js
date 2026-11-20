@@ -847,12 +847,6 @@
     };
     
     // ============================================================
-    // EXECUTION MODAL FUNCTIONS
-    // ============================================================
-    // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
-    // Configuration is set above in ExecutionModalConfig
-    
-    // ============================================================
     // START NEXT STEP
     // ============================================================
     window.startNextStep = async function(executionId) {

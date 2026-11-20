@@ -1,8 +1,8 @@
 // ============================================================
 // SHARED EXECUTION MODAL FUNCTIONS
 // ============================================================
-// This file provides openExecutionModal and submitExecution functions
-// that can be used in both flows2.html and core2.html
+// This file provides openExecutionModal and submitExecution for screens
+// that open the shared step editor.
 //
 // Configuration:
 // Set window.ExecutionModalConfig before loading this script:
