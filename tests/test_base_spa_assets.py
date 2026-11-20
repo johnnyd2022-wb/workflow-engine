@@ -123,3 +123,26 @@ def test_core_shell_marks_cases_unavailable_when_cases_registration_fails(monkey
         html = render_template("dashboard/dashboard.html", active_page="dashboard")
 
     assert 'name="operational-cases-enabled" content="false"' in html
+
+
+@pytest.mark.parametrize(
+    ("template", "stylesheet"),
+    [
+        ("dashboard/dashboard.html", "dashboard_spa.css"),
+        ("inventory/view.html", "inventory-view.css"),
+        ("processes/flows2.html", "flows2.css"),
+        ("processes/list.html", "processes-list.css"),
+        ("settings/settings.html", "settings_spa.css"),
+        ("sourcemap/sourcemap.html", "sourcemap.css"),
+        ("suppliers/suppliers.html", "suppliers.css"),
+    ],
+)
+def test_page_stylesheets_stay_out_of_the_shared_shell(template, stylesheet):
+    from app.api.app_factory import create_app
+
+    app = create_app()
+    env = app.jinja_env
+    shell, *_ = env.loader.get_source(env, "shared/base_spa.html")
+    page, *_ = env.loader.get_source(env, template)
+    assert stylesheet not in shell
+    assert stylesheet in page.split("{% block head_extras %}", 1)[1].split("{% endblock %}", 1)[0]

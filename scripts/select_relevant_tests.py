@@ -159,6 +159,11 @@ RULES = (
         ),
     ),
     Rule(
+        "Page asset ownership",
+        ("app/core/frontend/shared/base_spa.html",),
+        ("tests/test_base_spa_assets.py",),
+    ),
+    Rule(
         "Shared frontend UI",
         (
             "app/core/frontend/css/**",

@@ -21,6 +21,7 @@ from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.modules.nz_alcohol import premises
 from app.features.compliant.platform.stock_movements import evaluate_stock_movement, movement_requirements
 from app.features.site_transfers import routes
+from tests.e2e.page_load_audit import audit_current_page
 from tests.factories import DEFAULT_TEST_PASSWORD
 from tests.test_customs_premises import coverage_data, licence_data
 from tests.test_site_operations import released  # noqa: F401
@@ -109,6 +110,8 @@ def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, 
         expect(docket.locator("body")).to_contain_text("BROWSER-0")
         expect(docket.locator("body")).to_contain_text("BROWSER-1")
         assert docket.evaluate("document.documentElement.scrollWidth") <= width
+        if width == 1440:
+            audit_current_page(docket, "/core/site-transfers/<transfer_id>/docket")
         if directory := os.environ.get("MOBILE_AUDIT_SCREENSHOTS"):
             Path(directory).mkdir(parents=True, exist_ok=True)
             docket.screenshot(path=str(Path(directory) / f"core__site-transfers__docket-{width}.png"), full_page=True)

@@ -7,9 +7,10 @@
 {% block body_class %}settings-page{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings_spa.css') }}">
+
   <meta name="description" content="Configure your account and preferences">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings-design.css') }}">
-  {# CSS moved to settings_spa.css and inventory-spa-header.css — both loaded globally in base_spa.html. #}
 {% endblock %}
 
 {% block content %}

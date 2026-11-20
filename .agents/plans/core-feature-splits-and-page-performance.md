@@ -23,3 +23,5 @@ Each MR updates the route ledger, compares the composed URL map with its base an
 3. Save sample counts, TTFB, LCP, transfer sizes, request and query counts, and ready-state timings where the page exposes a readiness assertion. Track navigation errors and unavailable variants separately. Use a seeded small fixture for coverage, then exercise expensive surfaces with representative data volumes. Keep timing comparisons on the same runner.
 4. Publish results by page, with the largest measured opportunity first on each page. Prioritize shared fixes by total impact across pages, and use focused before-and-after runs to verify savings and functional equivalence.
 5. Add regression checks alongside each fix. Favor request counts, query ceilings, asset inclusion and bytes as stable CI checks. Reuse current Semgrep rules for known static patterns and the existing budget runner for repeatable runtime checks. Keep noisy browser timings advisory unless an existing generous ceiling already applies.
+
+The [20 November page load assessment](../../docs/page-load-assessment-2026-11-20.md) records the measurements, shipped changes under review and remaining tuning priorities.

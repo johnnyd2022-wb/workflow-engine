@@ -285,3 +285,15 @@ def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in
 
 def _csrf(page):
     return page.evaluate("() => document.querySelector('meta[name=csrf-token]').content")
+
+
+@pytest.mark.parametrize("path", ["/core", "/core/inventory/live", "/core/executions/live"])
+def test_core_page_code_is_a_cacheable_asset(logged_in_page, path):
+    response = logged_in_page.goto(path)
+    assert response and response.ok
+    assert len(response.body()) < 150_000
+    script = logged_in_page.locator('script[src*="/static/js/core2-page.js"]').get_attribute("src")
+    assert script and "?v=" in script
+    cached = logged_in_page.request.get(script)
+    assert cached.ok
+    assert "max-age=3600" in cached.headers["cache-control"]

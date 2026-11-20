@@ -5,6 +5,8 @@
 {% block title %}Home{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='dashboard_spa.css') }}">
+
   <meta name="description" content="Single-pane operational insights for action, audit, throughput, and commitments">
 {% endblock %}
 
