@@ -1102,9 +1102,9 @@ class TestCustomExpiryWarningNotExceedDuration:
 
     def test_warning_exceeds_duration_returns_error(self):
         """warning_value > duration_value must produce 'warning period cannot exceed expiry period'."""
-        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+        from app.core.domain.expiry_rules import assert_warning_within_expiry
 
-        errors = validate_custom_expiry_warning_not_exceed_duration(
+        errors = assert_warning_within_expiry(
             output_name="Batch Output",
             duration_value=5,
             duration_unit="days",
@@ -1117,9 +1117,9 @@ class TestCustomExpiryWarningNotExceedDuration:
 
     def test_warning_equals_duration_allowed(self):
         """warning_value == duration_value is valid (no error)."""
-        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+        from app.core.domain.expiry_rules import assert_warning_within_expiry
 
-        errors = validate_custom_expiry_warning_not_exceed_duration(
+        errors = assert_warning_within_expiry(
             output_name="Out",
             duration_value=7,
             duration_unit="days",
@@ -1130,9 +1130,9 @@ class TestCustomExpiryWarningNotExceedDuration:
 
     def test_warning_less_than_duration_allowed(self):
         """warning_value < duration_value is valid (no error)."""
-        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+        from app.core.domain.expiry_rules import assert_warning_within_expiry
 
-        errors = validate_custom_expiry_warning_not_exceed_duration(
+        errors = assert_warning_within_expiry(
             output_name="Out",
             duration_value=10,
             duration_unit="days",
@@ -1143,10 +1143,10 @@ class TestCustomExpiryWarningNotExceedDuration:
 
     def test_different_units_warning_exceeds_duration_returns_error(self):
         """When units differ, warning period > expiry period still triggers error."""
-        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+        from app.core.domain.expiry_rules import assert_warning_within_expiry
 
         # 2 weeks = 14 days > 5 days expiry
-        errors = validate_custom_expiry_warning_not_exceed_duration(
+        errors = assert_warning_within_expiry(
             output_name="Out",
             duration_value=5,
             duration_unit="days",
@@ -1758,7 +1758,7 @@ def flask_app():
 class TestFlowProcessAccessObservability:
     """[REGRESSION] A rejected cross-tenant /core/flows* access must be observable.
 
-    _assert_flow_process_access turns the refusal into an ordinary 404 (no ID
+    assert_flow_process_access turns the refusal into an ordinary 404 (no ID
     enumeration), so without an explicit log line a tenant-boundary probe against a
     process/execution page leaves no trace. Same access_denied event name the auth
     decorators and inventory_repo.py's provenance-FK guard emit, per the observability

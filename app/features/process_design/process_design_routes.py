@@ -49,7 +49,7 @@ _FLOW_WIZARD_STEP_TO_PATH = {
 }
 
 
-def _flow_process_id_from_request() -> UUID | None:
+def flow_process_id_from_request() -> UUID | None:
     """Parse and validate ?id= as a UUID. If present but invalid, abort 400."""
     raw = request.args.get("id")
     if raw is None or raw == "":
@@ -75,7 +75,7 @@ def _log_process_access_denied(org_id: UUID, process_id: UUID) -> None:
     )
 
 
-def _assert_flow_process_access(process_id: UUID) -> None:
+def assert_flow_process_access(process_id: UUID) -> None:
     """
     Object-level authorization for flow pages.
     We scope access to the current tenant org; return 404 when not found to avoid ID enumeration.
@@ -194,9 +194,9 @@ def _filtered_flow_query_args() -> dict[str, str]:
     """Return a safe allowlisted query dict for flow routes."""
     args: dict[str, str] = {}
 
-    pid = _flow_process_id_from_request()
+    pid = flow_process_id_from_request()
     if pid is not None:
-        _assert_flow_process_access(pid)
+        assert_flow_process_access(pid)
         args["id"] = str(pid)
 
     if request.args.get("fresh") is not None:
@@ -380,9 +380,9 @@ def register_routes(bp):
     @requires_auth
     def flows():
         """Serve the process workspace page (processes/flows2.html)."""
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
     @bp.route("/core/flows/create/start", methods=["GET"])
@@ -411,7 +411,7 @@ def register_routes(bp):
             args["fresh"] = "1"
 
         # Initialize sequencing state (keyed by process id or "new").
-        pid = _flow_process_id_from_request()
+        pid = flow_process_id_from_request()
         if args.get("fresh") == "1" or not _flow_state_get(pid).get("started"):
             _flow_state_reset(pid)
 
@@ -442,9 +442,9 @@ def register_routes(bp):
     @requires_auth
     def flows_create_process_overview_page():
         """First wizard screen: process name + what a workflow is; then step-name."""
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("process-overview", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -459,9 +459,9 @@ def register_routes(bp):
     @bp.route("/core/flows/create/step-name", methods=["GET"])
     @requires_auth
     def flows_create_step_name_page():
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("step-name", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -476,9 +476,9 @@ def register_routes(bp):
     @bp.route("/core/flows/create/inputs", methods=["GET"])
     @requires_auth
     def flows_create_inputs_page():
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("inputs", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -493,9 +493,9 @@ def register_routes(bp):
     @bp.route("/core/flows/create/outputs", methods=["GET"])
     @requires_auth
     def flows_create_outputs_page():
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("outputs", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -510,9 +510,9 @@ def register_routes(bp):
     @bp.route("/core/flows/create/evidence-and-prompts", methods=["GET"])
     @requires_auth
     def flows_create_evidence_and_prompts_page():
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("evidence-and-prompts", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -527,9 +527,9 @@ def register_routes(bp):
     @bp.route("/core/flows/create/summary", methods=["GET"])
     @requires_auth
     def flows_create_summary_page():
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("summary", process_id)
         if maybe_redirect is not None:
             return maybe_redirect
@@ -545,9 +545,9 @@ def register_routes(bp):
     @requires_auth
     def flows_create_next_steps_page():
         """After saving a step: choose add another step or finish the process."""
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is not None:
-            _assert_flow_process_access(process_id)
+            assert_flow_process_access(process_id)
         maybe_redirect = _maybe_enforce_flow_wizard_step("next-steps", process_id)
         if maybe_redirect is not None:
             return maybe_redirect

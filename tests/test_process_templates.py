@@ -541,7 +541,7 @@ class TestCatalogPageAndResume:
     def test_ac13_wizard_resumes_on_copied_draft(self, compliant_app_client):
         """200 alone doesn't distinguish a genuine resume from a route that always
         returns 200 regardless of `id` (test-evaluator finding). Pairing it with a
-        random, never-created id — which `_assert_flow_process_access` 404s per
+        random, never-created id — which `assert_flow_process_access` 404s per
         process-design's own AC10/11 — proves this specific 200 required the real
         copied process to actually resolve, not a contentless catch-all render.
         """

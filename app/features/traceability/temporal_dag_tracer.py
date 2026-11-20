@@ -16,7 +16,7 @@ from app.observability import traced
 
 # Kept as a local copy rather than importing from dagtraversal.py — the two tracers are
 # siblings with no existing cross-import. Matches dagtraversal._TRACE_METADATA_INTERNAL_KEYS
-# / backend._EXECUTION_DATA_TRACE_KEYS exactly, so batch_id/custom_prompts mean the same
+# / execution_data.EXECUTION_DATA_TRACE_KEYS exactly, so batch_id/custom_prompts mean the same
 # thing whether they came from the current-state trace or this temporal one.
 _TRACE_METADATA_INTERNAL_KEYS = {
     "completed_by",

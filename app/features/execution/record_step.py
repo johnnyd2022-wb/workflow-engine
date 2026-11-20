@@ -40,7 +40,7 @@ def _status(value) -> str:
     return getattr(value, "value", value) or ""
 
 
-def _batch_label(steps: list[ExecutionStep]) -> str | None:
+def batch_label(steps: list[ExecutionStep]) -> str | None:
     """The batch code an operator recorded: the step's "Batch number" prompt (the convention the
     process builder and the trace use), else a batch or lot id typed on an output."""
     for step in steps:
@@ -78,7 +78,7 @@ def _batch_row(ex: Execution, names: dict, now: datetime) -> dict | None:
         "execution_id": str(ex.id),
         "process_id": str(ex.process_id),
         "workflow": names.get(ex.process_id) or "Untitled workflow",
-        "label": _batch_label(steps),
+        "label": batch_label(steps),
         "started_at": begun.isoformat() if begun else None,
         "step_name": (current.step.name if current.step is not None else None) or f"Step {current.step_number}",
         "step_number": steps.index(current) + 1,

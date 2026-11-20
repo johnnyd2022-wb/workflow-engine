@@ -32,7 +32,7 @@ def test_ac11_activity_tab_renders_org_events(browser, app_url, fresh_user):
 
 def test_activity_tab_shows_only_login_event_before_any_business_action(browser, app_url, fresh_user):
     """A fresh org has no inventory/process/execution activity yet, but logging in itself
-    emits a user.login EntityEvent (_human_summary handles it, _update_user_summary tracks
+    emits a user.login EntityEvent (human_summary handles it, _update_user_summary tracks
     login_count) -- so the feed is never truly empty for an authenticated session. This is
     a more accurate baseline than an "empty state" assertion would be, and doubles as a
     real-world exercise of the entity_type filter (AC12) narrowing to exactly that event."""

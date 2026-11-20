@@ -8,9 +8,10 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from flask import abort, g, jsonify, redirect, render_template, request
+from flask import abort, current_app, g, jsonify, redirect, render_template, request
 from pydantic import ValidationError
 
+from app.core.backend.pagination import encode_list_cursor, parse_page_params
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
@@ -21,7 +22,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.domain.execution_entry_timing import entry_timing
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates
-from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS
+from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
@@ -45,8 +46,9 @@ from app.features.execution.evidence.evidence_service import (
     list_evidence_for_execution,
     list_evidence_for_executions_batch,
 )
+from app.features.execution.execution_data import EXECUTION_DATA_TRACE_KEYS, split_execution_data
 from app.features.execution.step_outputs import apply_whole_unit_rules, parse_output_batch_number
-from app.features.process_design.process_design_routes import _assert_flow_process_access, _flow_process_id_from_request
+from app.features.process_design.process_design_routes import assert_flow_process_access, flow_process_id_from_request
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -54,15 +56,6 @@ logger = get_logger(__name__)
 
 _ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
 _RECORD_PICKER = "/core/record"  # keep in sync with RECORD_PICKER in batch-start-scripts.html
-_EXECUTION_DATA_TRACE_KEYS = {
-    "completed_by",
-    "completed_by_email",
-    "completed_by_user_id",
-    "completed_at",
-    "entered_at",
-    "execution_errors",
-    "execution_warnings",
-}
 
 
 def _safe_flow_return_to(value, process_id) -> str:
@@ -169,7 +162,7 @@ def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
         )
     if isinstance(obj, dict):
         return {
-            k: _strip_trace_keys_recursive(v, depth + 1) for k, v in obj.items() if k not in _EXECUTION_DATA_TRACE_KEYS
+            k: _strip_trace_keys_recursive(v, depth + 1) for k, v in obj.items() if k not in EXECUTION_DATA_TRACE_KEYS
         }
     if isinstance(obj, list):
         return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
@@ -188,18 +181,13 @@ def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     return cleaned if isinstance(cleaned, dict) else {}
 
 
-def register_routes(
-    bp,
-    *,
-    parse_page_params,
-    encode_list_cursor,
-    split_execution_data,
-    product_available,
-    validate_custom_expiry_warning_not_exceed_duration,
-):
-    """Register execution routes while keeping shared Core helpers injectable."""
+def _product_available(feature: str) -> bool:
+    return bool(current_app.extensions.get("product_availability", {}).get(feature, False))
+
+
+def register_routes(bp):
+    """Register execution routes on the existing Core endpoint namespace."""
     strip_incoming_execution_trace_keys = _strip_incoming_execution_trace_keys
-    expiry_warning_validator = validate_custom_expiry_warning_not_exceed_duration
     prompt_value_violation = _prompt_value_violation
 
     @bp.route("/core/executions/live", methods=["GET"])
@@ -248,10 +236,10 @@ def register_routes(
         - Existing execution: ?execution_id=<id>&id=<process_id>
         - Optional: return_to=<url>
         """
-        process_id = _flow_process_id_from_request()
+        process_id = flow_process_id_from_request()
         if process_id is None:
             abort(400)
-        _assert_flow_process_access(process_id)
+        assert_flow_process_access(process_id)
 
         execution_id = request.args.get("execution_id")
         step_id = request.args.get("step_id")
@@ -680,7 +668,7 @@ def register_routes(
             # own platform registry. Core knows only how to verify its own operational facts
             # (such as an active evidence file), never which industry or framework requested
             # the constraint.
-            if product_available("compliant"):
+            if _product_available("compliant"):
                 from app.features.compliant.platform.workflow_rules import completion_constraints
 
                 policy_step = (
@@ -1030,7 +1018,7 @@ def register_routes(
                                             f"Output '{output_name}': expiry duration must be positive."
                                         )
                                     elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
-                                        duration_errors = expiry_warning_validator(
+                                        duration_errors = assert_warning_within_expiry(
                                             output_name, dv_int, du_raw, warn_val_int, wu_raw
                                         )
                                         execution_errors.extend(duration_errors)

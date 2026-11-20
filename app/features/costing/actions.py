@@ -174,7 +174,7 @@ def deactivate_manual_prices(db: Session, org_id: UUID, item_id: UUID) -> None:
         entry.deactivated_at = now
 
 
-def _created_flow(db: Session, org_id: UUID, item_id: UUID) -> CostFlow | None:
+def get_created_cost_flow(db: Session, org_id: UUID, item_id: UUID) -> CostFlow | None:
     return (
         db.query(CostFlow)
         .filter(
@@ -263,7 +263,7 @@ def record(db: Session, org_id: UUID, line_id, rows: list, rest: str | None, use
             )
         except ValueError as error:
             raise CostingError(str(error)) from None
-        flow = _created_flow(db, org_id, item.id)
+        flow = get_created_cost_flow(db, org_id, item.id)
         db.add(
             PurchaseAllocation(
                 org_id=org_id,
@@ -347,7 +347,7 @@ def link(db: Session, org_id: UUID, line_id, lots: list, rest: str | None, user_
         problem = _link_problem(db, org_id, item)
         if problem:
             raise CostingError(problem)
-        flow = _created_flow(db, org_id, item.id)
+        flow = get_created_cost_flow(db, org_id, item.id)
         if flow is None:
             raise CostingError("This lot has no receipt to price; run the cost backfill")
         quantity = (

@@ -585,26 +585,26 @@ class FakeEvent:
 
 class TestHumanSummaryFallback:
     def test_ac16_unrecognized_event_type_falls_back_to_generic_rendering(self):
-        from app.features.activity_log.routes.activity_routes import _human_summary
+        from app.features.activity_log.routes.activity_routes import human_summary
 
         ev = FakeEvent("widget.frobnicated")
-        assert _human_summary(ev) == "Widget — frobnicated"
+        assert human_summary(ev) == "Widget — frobnicated"
 
     def test_ac16_unrecognized_event_type_does_not_raise(self):
-        from app.features.activity_log.routes.activity_routes import _event_diff_rows, _human_summary
+        from app.features.activity_log.routes.activity_routes import _event_diff_rows, human_summary
 
         ev = FakeEvent("totally.unknown_thing", payload={}, diff={"some_field": {"before": "a", "after": "b"}})
-        _human_summary(ev)  # must not raise
+        human_summary(ev)  # must not raise
         _event_diff_rows(ev)  # must not raise
 
     def test_known_event_type_inventory_created_summary(self):
-        from app.features.activity_log.routes.activity_routes import _human_summary
+        from app.features.activity_log.routes.activity_routes import human_summary
 
         ev = FakeEvent(
             "inventory_item.created",
             payload={"quantity": "10", "unit": "kg", "add_method": "manual", "inventory_type": "raw_material"},
         )
-        assert "Added 10 kg" in _human_summary(ev)
+        assert "Added 10 kg" in human_summary(ev)
 
     def test_build_diff_rows_skips_unchanged_fields(self):
         from app.features.activity_log.routes.activity_routes import _build_diff_rows
@@ -620,7 +620,7 @@ class TestHumanSummaryFallback:
 
 
 # --------------------------------------------------------------------------------------
-# _human_summary -- every event-type branch (~450 of this slice's 721 lines are this kind
+# human_summary -- every event-type branch (~450 of this slice's 721 lines are this kind
 # of diff-humanisation presentation logic, per .agents/feature-index.md; before this
 # review only "inventory_item.created" and the unrecognized-type fallback had any test
 # touching them at all).
@@ -722,11 +722,11 @@ class TestHumanSummaryFallback:
         ("org.settings_updated", {}, {}, "Organisation settings updated"),
     ],
 )
-def test_human_summary_every_known_event_type(event_type, payload, diff, expected_substring):
-    from app.features.activity_log.routes.activity_routes import _human_summary
+def testhuman_summary_every_known_event_type(event_type, payload, diff, expected_substring):
+    from app.features.activity_log.routes.activity_routes import human_summary
 
     ev = FakeEvent(event_type, payload=payload, diff=diff)
-    assert expected_substring in _human_summary(ev)
+    assert expected_substring in human_summary(ev)
 
 
 class TestEventDiffRowsDispatch:
@@ -1010,7 +1010,7 @@ class TestStepAddedDiffRowsMalformedEntries:
 
 class TestInventoryCreatedSummarySupplierBatch:
     def test_supplier_and_batch_appear_in_summary(self):
-        from app.features.activity_log.routes.activity_routes import _human_summary
+        from app.features.activity_log.routes.activity_routes import human_summary
 
         ev = FakeEvent(
             "inventory_item.created",
@@ -1022,7 +1022,7 @@ class TestInventoryCreatedSummarySupplierBatch:
                 "supplier_batch_number": "B-42",
             },
         )
-        summary = _human_summary(ev)
+        summary = human_summary(ev)
         assert "supplier: Acme Supplies" in summary
         assert "batch: B-42" in summary
 
