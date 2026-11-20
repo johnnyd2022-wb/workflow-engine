@@ -15,10 +15,10 @@ from datetime import date
 
 import pytest
 
-from app.core.backend.stocktake import start_stocktake
 from app.core.db import db_session
 from app.core.db.models.user import UserRole
 from app.core.services import lot_holds
+from app.features.inventory.stocktake import start_stocktake
 from tests.costing_helpers import complete, login, lot, price, produced_lots, workflow
 from tests.factories import FeatureSubscriptionFactory, OrganisationFactory, UserFactory
 from tests.mcp_oauth.support import RESOURCE, bearer, make_client, mint_grant, unique_addr  # noqa: F401

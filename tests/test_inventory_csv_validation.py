@@ -8,7 +8,8 @@ they belong here rather than behind an authenticated route call.
 
 from datetime import date
 
-from app.core.backend.inventory_upload_routes import (
+from app.core.utils.unit_conversion import CONVERSION_FACTORS
+from app.features.inventory.inventory_upload_routes import (
     _allowed_units_list,
     _parse_date,
     _parse_quantity,
@@ -16,7 +17,6 @@ from app.core.backend.inventory_upload_routes import (
     _unit_to_canonical,
     _validate_row,
 )
-from app.core.utils.unit_conversion import CONVERSION_FACTORS
 
 # --- _allowed_units_list ----------------------------------------------------------------
 

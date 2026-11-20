@@ -61,7 +61,7 @@ from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import is_count_unit, normalize_unit, whole_count_error
 from app.features.compliant.platform import stock_measures
 
-stocktake_bp = Blueprint("stocktake", __name__, template_folder="../frontend")
+stocktake_bp = Blueprint("stocktake", __name__, template_folder="frontend/templates")
 
 SHORTFALL_REASONS = ("found_elsewhere", "removed_unrecorded", "broken", "investigating", "unexplained_loss")
 SURPLUS_REASONS = ("returned", "removal_not_happened", "under_recorded", "unexplained_gain")

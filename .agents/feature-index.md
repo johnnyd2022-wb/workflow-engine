@@ -275,15 +275,13 @@ do not introduce reverse imports into existing domain code.
       - /api/core/suppliers
       - /api/core/suppliers/<supplier_id>
       - /api/core/suppliers/import-from-inventory
-    backend:  app/core/backend/backend.py:3055-3525 (list/read), :4012-4402 (CRUD+adjust)
-              app/core/backend/backend.py:3947-4011 (out-of-stock)
-              app/core/backend/inventory_upload_routes.py
-              app/core/backend/suppliers.py (supplier page and API)
+    backend:  app/features/inventory/{inventory_routes,inventory_upload_routes,suppliers}.py
+              app/features/inventory/{lot_holds_routes,stock_locations,stocktake}.py
               app/core/utils/{unit_conversion,inventory_quantity}.py
               app/core/domain/inventory_quantity_guard.py (169)
     models:   InventoryItem, InventoryMovement
     repos:    inventory_repo
-    frontend: frontend/inventory/*.html, js/inventory-*.js, js/add-inventory-reconciliation.js
+    frontend: app/features/inventory/frontend/{templates,js,css}/
     tests:    test_inventory, test_inventory_quantity_guard, test_unit_conversion,
               test_core_suppliers, test_multi_tenant_api, e2e/test_inventory_flow
 

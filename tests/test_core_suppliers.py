@@ -4,7 +4,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.core.backend.suppliers import (
+from app.core.db.models.audit_log import AuditLog
+from app.core.db.models.entity_event import EntityEvent
+from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.organisation import Organisation
+from app.core.db.models.user import User
+from app.features.inventory.suppliers import (
     SupplierError,
     create_supplier,
     delete_supplier,
@@ -12,11 +17,6 @@ from app.core.backend.suppliers import (
     list_suppliers,
     update_supplier,
 )
-from app.core.db.models.audit_log import AuditLog
-from app.core.db.models.entity_event import EntityEvent
-from app.core.db.models.inventory_item import InventoryItem
-from app.core.db.models.organisation import Organisation
-from app.core.db.models.user import User
 from tests.factories import InventoryItemFactory, OrganisationFactory, UserFactory
 
 
