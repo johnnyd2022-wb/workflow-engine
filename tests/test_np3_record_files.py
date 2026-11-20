@@ -10,11 +10,11 @@ from PIL import Image as PilImage
 from pypdf import PdfReader
 from reportlab.pdfgen.canvas import Canvas
 
-from app.core.backend.evidence.evidence_storage import get_storage_root
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.execution.evidence.evidence_storage import get_storage_root
 from tests.factories import DEFAULT_TEST_PASSWORD
 from tests.test_compliant_routes import _admin_client, flask_app  # noqa: F401
 

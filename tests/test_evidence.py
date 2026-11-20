@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-import app.core.backend.evidence.evidence_service as evidence_service_module
-import app.core.backend.evidence.evidence_validation as evidence_validation_module
+import app.features.execution.evidence.evidence_service as evidence_service_module
+import app.features.execution.evidence.evidence_validation as evidence_validation_module
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_evidence import ExecutionEvidence
@@ -606,28 +606,28 @@ class TestEvidenceUploadFailureCleanup:
 
 class TestEvidenceStorageHelpers:
     def test_is_safe_filename_accepts_uuid_and_allowed_extensions(self):
-        from app.core.backend.evidence.evidence_storage import is_safe_filename
+        from app.features.execution.evidence.evidence_storage import is_safe_filename
 
         assert is_safe_filename(f"{uuid4()}.png") is True
         assert is_safe_filename(f"{uuid4()}.pdf") is True
         assert is_safe_filename(f"{uuid4()}.jpeg") is True
 
     def test_is_safe_filename_rejects_path_traversal(self):
-        from app.core.backend.evidence.evidence_storage import is_safe_filename
+        from app.features.execution.evidence.evidence_storage import is_safe_filename
 
         assert is_safe_filename("../../etc/passwd") is False
         assert is_safe_filename(f"../{uuid4()}.png") is False
         assert is_safe_filename(f"{uuid4()}\\evil.png") is False
 
     def test_is_safe_filename_rejects_non_uuid_or_disallowed_extension(self):
-        from app.core.backend.evidence.evidence_storage import is_safe_filename
+        from app.features.execution.evidence.evidence_storage import is_safe_filename
 
         assert is_safe_filename("evidence.png") is False
         assert is_safe_filename(f"{uuid4()}.exe") is False
         assert is_safe_filename("") is False
 
     def test_extension_from_mime_maps_known_types(self):
-        from app.core.backend.evidence.evidence_storage import extension_from_mime
+        from app.features.execution.evidence.evidence_storage import extension_from_mime
 
         assert extension_from_mime("image/png") == ".png"
         assert extension_from_mime("image/jpeg") == ".jpg"
@@ -636,7 +636,7 @@ class TestEvidenceStorageHelpers:
         assert extension_from_mime("application/zip") == ".bin"
 
     def test_compute_checksum_and_verify_roundtrip(self, tmp_path):
-        from app.core.backend.evidence.evidence_storage import compute_checksum, verify_checksum_at_path
+        from app.features.execution.evidence.evidence_storage import compute_checksum, verify_checksum_at_path
 
         p = tmp_path / "f.bin"
         p.write_bytes(_PNG_BYTES)
@@ -647,7 +647,7 @@ class TestEvidenceStorageHelpers:
         assert verify_checksum_at_path(p, checksum) is False
 
     def test_finalize_from_temp_rejects_unsafe_filename(self, tmp_path):
-        from app.core.backend.evidence.evidence_storage import finalize_from_temp
+        from app.features.execution.evidence.evidence_storage import finalize_from_temp
 
         temp = tmp_path / "temp.bin"
         temp.write_bytes(_PNG_BYTES)
@@ -655,7 +655,7 @@ class TestEvidenceStorageHelpers:
             finalize_from_temp(temp, "org1", "exec1", "../evil.png")
 
     def test_finalize_from_temp_raises_if_temp_file_missing(self, tmp_path, monkeypatch):
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         missing = tmp_path / "missing.bin"
@@ -663,7 +663,7 @@ class TestEvidenceStorageHelpers:
             storage.finalize_from_temp(missing, "org1", "exec1", f"{uuid4()}.png")
 
     def test_finalize_from_temp_moves_file_to_final_path(self, tmp_path, monkeypatch):
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         temp = tmp_path / "temp_src.bin"
@@ -685,7 +685,7 @@ class TestEvidenceStorageHelpers:
         correctly."""
         import errno
 
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         temp = tmp_path / "temp_src.bin"
@@ -705,7 +705,7 @@ class TestEvidenceStorageHelpers:
     def test_finalize_from_temp_reraises_non_exdev_os_errors(self, tmp_path, monkeypatch):
         """Only EXDEV should trigger the copy fallback -- any other OSError (permissions,
         disk full) must still propagate, not be silently swallowed by the fallback path."""
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         temp = tmp_path / "temp_src.bin"
@@ -728,7 +728,7 @@ class TestEvidenceStorageHelpers:
         containment check ever runs) for a target that's merely absent — that would make
         this test pass for the wrong reason regardless of whether relative_to() works.
         """
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         filename = f"{uuid4()}.png"
@@ -754,19 +754,19 @@ class TestEvidenceStorageHelpers:
                 pass
 
     def test_read_file_path_returns_none_for_missing_file(self, tmp_path, monkeypatch):
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         assert storage.read_file_path("org1", "exec1", f"{uuid4()}.png") is None
 
     def test_delete_file_is_idempotent_when_missing(self, tmp_path, monkeypatch):
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         assert storage.delete_file("org1", "exec1", f"{uuid4()}.png") is True
 
     def test_delete_file_removes_existing_file(self, tmp_path, monkeypatch):
-        import app.core.backend.evidence.evidence_storage as storage
+        import app.features.execution.evidence.evidence_storage as storage
 
         monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
         filename = f"{uuid4()}.png"
@@ -780,7 +780,7 @@ class TestEvidenceStorageHelpers:
 
 class TestEvidenceValidationHelpers:
     def test_detect_mime_from_path_identifies_known_magic_bytes(self, tmp_path):
-        from app.core.backend.evidence.evidence_validation import detect_mime_from_path
+        from app.features.execution.evidence.evidence_validation import detect_mime_from_path
 
         png = tmp_path / "a.png"
         png.write_bytes(_PNG_BYTES)
@@ -795,42 +795,42 @@ class TestEvidenceValidationHelpers:
         assert detect_mime_from_path(pdf) == "application/pdf"
 
     def test_detect_mime_from_path_returns_none_for_unknown_bytes(self, tmp_path):
-        from app.core.backend.evidence.evidence_validation import detect_mime_from_path
+        from app.features.execution.evidence.evidence_validation import detect_mime_from_path
 
         unknown = tmp_path / "a.txt"
         unknown.write_bytes(b"not a recognised file signature")
         assert detect_mime_from_path(unknown) is None
 
     def test_validate_upload_request_requires_execution_id(self):
-        from app.core.backend.evidence.evidence_validation import validate_upload_request
+        from app.features.execution.evidence.evidence_validation import validate_upload_request
 
         ok, err = validate_upload_request(uuid4(), "", None)
         assert ok is False
         assert "execution_id" in err.lower()
 
     def test_validate_upload_request_rejects_malformed_execution_id(self):
-        from app.core.backend.evidence.evidence_validation import validate_upload_request
+        from app.features.execution.evidence.evidence_validation import validate_upload_request
 
         ok, err = validate_upload_request(uuid4(), "not-a-uuid", None)
         assert ok is False
         assert "execution_id" in err.lower()
 
     def test_validate_upload_request_rejects_malformed_step_id(self):
-        from app.core.backend.evidence.evidence_validation import validate_upload_request
+        from app.features.execution.evidence.evidence_validation import validate_upload_request
 
         ok, err = validate_upload_request(uuid4(), str(uuid4()), "not-a-uuid")
         assert ok is False
         assert "step_id" in err.lower()
 
     def test_validate_upload_request_accepts_valid_ids(self):
-        from app.core.backend.evidence.evidence_validation import validate_upload_request
+        from app.features.execution.evidence.evidence_validation import validate_upload_request
 
         ok, err = validate_upload_request(uuid4(), str(uuid4()), str(uuid4()))
         assert ok is True
         assert err == ""
 
     def test_validate_upload_request_accepts_missing_step_id(self):
-        from app.core.backend.evidence.evidence_validation import validate_upload_request
+        from app.features.execution.evidence.evidence_validation import validate_upload_request
 
         ok, _err = validate_upload_request(uuid4(), str(uuid4()), None)
         assert ok is True

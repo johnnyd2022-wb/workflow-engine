@@ -13,7 +13,8 @@ const secondaryPath = path.join(
   '..',
   '..',
   'app',
-  'core',
+  'features',
+  'execution',
   'frontend',
   'js',
   'execution-modal-secondary.js'

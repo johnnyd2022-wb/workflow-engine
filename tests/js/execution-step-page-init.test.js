@@ -7,7 +7,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const controller = fs.readFileSync(
-  path.join(__dirname, '../../app/core/frontend/js/execution-step-page.js'),
+  path.join(__dirname, '../../app/features/execution/frontend/js/execution-step-page.js'),
   'utf8'
 );
 

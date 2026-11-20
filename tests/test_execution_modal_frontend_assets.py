@@ -10,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_execution_modal_css_defines_inventory_picker_classes():
-    css_path = _REPO_ROOT / "app" / "core" / "frontend" / "css" / "execution-modal.css"
+    css_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "css" / "execution-modal.css"
     text = css_path.read_text(encoding="utf-8")
     assert ".exec-picker-card" in text
     assert ".exec-picker-chip--danger" in text
@@ -18,47 +18,47 @@ def test_execution_modal_css_defines_inventory_picker_classes():
 
 def test_execution_modal_js_does_not_inject_legacy_picker_style_tag():
     """Picker rules moved to execution-modal.css (no duplicate mega inline blob)."""
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "execution-modal-picker-styles" not in text
 
 
 def test_refresh_execution_inventory_handles_page_embed():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal-secondary.js"
     text = js_path.read_text(encoding="utf-8")
     assert "pageEmbed" in text
     assert "batch-start-spa" in text
 
 
 def test_execution_shared_utils_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-shared-utils.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-shared-utils.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "convertUnit" in body and "prettyLabel" in body
 
 
 def test_execution_ui_utils_defines_execution_ui():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-ui-utils.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-ui-utils.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionUI" in body and "setRenderMode" in body
 
 
 def test_execution_doc_overlay_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-doc-overlay.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-doc-overlay.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "openDocFullScreenOverlay" in body
 
 
 def test_execution_modal_does_not_define_doc_overlay_inline():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "openDocFullScreenOverlay" not in text
 
 
 def test_execution_session_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-session.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-session.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionSessionAPI" in body and "resetForOpen" in body and "WeakMap" in body
@@ -68,11 +68,29 @@ def test_batch_start_loads_session_before_execution_modal():
     """batch-start includes shared stack; stack order: … doc-overlay → render-docs → … execution-modal."""
     # The stack include lives in the batch-start-scripts.html partial (moved there so scripts
     # sit inside #page-content for HTMX swap compatibility).
-    scripts_path = _REPO_ROOT / "app" / "core" / "frontend" / "processes" / "batch-start-scripts.html"
+    scripts_path = (
+        _REPO_ROOT
+        / "app"
+        / "features"
+        / "execution"
+        / "frontend"
+        / "templates"
+        / "processes"
+        / "batch-start-scripts.html"
+    )
     assert scripts_path.is_file()
     batch_text = scripts_path.read_text(encoding="utf-8")
     assert "execution_modal_stack_scripts.html" in batch_text
-    stack_path = _REPO_ROOT / "app" / "core" / "frontend" / "shared" / "execution_modal_stack_scripts.html"
+    stack_path = (
+        _REPO_ROOT
+        / "app"
+        / "features"
+        / "execution"
+        / "frontend"
+        / "templates"
+        / "shared"
+        / "execution_modal_stack_scripts.html"
+    )
     text = stack_path.read_text(encoding="utf-8")
     i_utils = text.find("execution-shared-utils.js")
     i_session = text.find("execution-session.js")
@@ -112,13 +130,13 @@ def test_batch_start_loads_session_before_execution_modal():
 
 
 def test_execution_modal_calls_render_docs_api():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderDocs.renderStepDocumentation" in text
 
 
 def test_execution_open_step_module_calls_render_docs():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-open-step.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-open-step.js"
     assert js_path.is_file()
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionOpenStep" in text
@@ -126,23 +144,23 @@ def test_execution_open_step_module_calls_render_docs():
 
 
 def test_execution_modal_delegates_open_to_open_step():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionOpenStep.openExecutionModal" in text
     assert "loadOrgUsersMap" in text
 
 
 def test_execution_render_prompts_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-prompts.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderPrompts" in body and "renderExecutionPrompts" in body
 
 
 def test_select_prompts_render_configured_choices_with_legacy_fallback():
-    prompt_renderer = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
-        encoding="utf-8"
-    )
+    prompt_renderer = (
+        _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-prompts.js"
+    ).read_text(encoding="utf-8")
     builder = (
         _REPO_ROOT / "app" / "features" / "process_design" / "frontend" / "js" / "create-process-modal.js"
     ).read_text(encoding="utf-8")
@@ -154,9 +172,9 @@ def test_select_prompts_render_configured_choices_with_legacy_fallback():
 
 def test_compliant_workflow_extensions_are_additive_to_every_execution_prompt_surface():
     api_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "core-api.js").read_text(encoding="utf-8")
-    prompts_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
-        encoding="utf-8"
-    )
+    prompts_body = (
+        _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-prompts.js"
+    ).read_text(encoding="utf-8")
     assert "getCompliantWorkflowExtensions" in api_body
     assert "compliant_auto" in prompts_body
     assert "must never stop production" in prompts_body
@@ -164,7 +182,9 @@ def test_compliant_workflow_extensions_are_additive_to_every_execution_prompt_su
 
 
 def test_core_enforces_generic_compliance_requirements_without_module_knowledge():
-    execution_routes = (_REPO_ROOT / "app" / "core" / "backend" / "execution_routes.py").read_text(encoding="utf-8")
+    execution_routes = (_REPO_ROOT / "app" / "features" / "execution" / "execution_routes.py").read_text(
+        encoding="utf-8"
+    )
     assert "completion_constraints" in execution_routes
     assert 'requirement == "active_evidence"' in execution_routes
     assert "NP3" not in execution_routes
@@ -172,33 +192,33 @@ def test_core_enforces_generic_compliance_requirements_without_module_knowledge(
 
 
 def test_execution_modal_calls_render_prompts_api():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderPrompts.renderExecutionPrompts" in text
 
 
 def test_execution_render_outputs_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-outputs.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-outputs.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderOutputs" in body and "renderVariableOutputs" in body
 
 
 def test_execution_modal_calls_render_outputs_api():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderOutputs.renderVariableOutputs" in text
 
 
 def test_execution_submit_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-submit.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-submit.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionSubmit" in body and "submitExecution" in body
 
 
 def test_execution_modal_delegates_submit_to_execution_submit():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "window.ExecutionSubmit.submitExecution" in text
     assert "SessionAPI: SessionAPI" in text
@@ -207,7 +227,7 @@ def test_execution_modal_delegates_submit_to_execution_submit():
 
 
 def test_execution_modal_secondary_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal-secondary.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionModalSecondary" in body and "install" in body
@@ -215,13 +235,13 @@ def test_execution_modal_secondary_module_exists():
 
 
 def test_execution_modal_installs_secondary_flows():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionModalSecondary.install" in text
 
 
 def test_execution_render_docs_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-docs.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-docs.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderDocs" in body and "renderStepDocumentation" in body
@@ -241,7 +261,7 @@ def test_inventory_picker_controller_module_exists():
 
 
 def test_execution_inventory_picker_view_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-inventory-picker-view.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-inventory-picker-view.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionInventoryPickerView" in body and "buildPayload" in body and "buildDetailsFragment" in body
@@ -249,14 +269,14 @@ def test_execution_inventory_picker_view_module_exists():
 
 
 def test_execution_inventory_row_renderer_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-inventory-row-renderer.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-inventory-row-renderer.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionInventoryRowRenderer" in body and "createInputRow" in body
 
 
 def test_execution_render_inputs_module_exists():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-inputs.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-inputs.js"
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderInputs" in body and "renderVariableInventoryInputs" in body
@@ -265,20 +285,20 @@ def test_execution_render_inputs_module_exists():
 
 
 def test_inventory_refresh_clears_picker_card_cache_hook():
-    secondary = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    secondary = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal-secondary.js"
     text = secondary.read_text(encoding="utf-8")
     assert "clearInventoryPickerCardCaches" in text
 
 
 def test_open_step_clears_picker_card_cache_before_inputs_reset():
-    open_step = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-open-step.js"
+    open_step = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-open-step.js"
     text = open_step.read_text(encoding="utf-8")
     assert "clearInventoryPickerCardCaches" in text
 
 
 def test_execution_render_inputs_picker_cache_row_cap_branch():
     """Cache reuse gated by filtered list length vs PICKER_CARD_CACHE_MAX_ROWS (behavioral anchor, not exact formatting)."""
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-inputs.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-render-inputs.js"
     body = js_path.read_text(encoding="utf-8")
     assert "usePickerCardCache" in body
     assert "PICKER_CARD_CACHE_MAX_ROWS" in body
@@ -294,7 +314,7 @@ def test_inventory_refresh_clears_picker_cache_before_row_updates():
     Phase invariant inside refreshExecutionModalInventory only: invalidate picker Maps before
     querying rows (see flows-and-batches-review.md). Scoped slice avoids brittle global line order.
     """
-    secondary = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    secondary = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal-secondary.js"
     text = secondary.read_text(encoding="utf-8")
     marker = "window.refreshExecutionModalInventory = async function"
     start = text.find(marker)
@@ -309,7 +329,7 @@ def test_inventory_refresh_clears_picker_cache_before_row_updates():
 
 
 def test_execution_modal_calls_render_inputs_api():
-    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
+    js_path = _REPO_ROOT / "app" / "features" / "execution" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderInputs.renderVariableInventoryInputs" in text
     assert "ExecutionRenderInputs.renderConfirmExecutionInputs" in text

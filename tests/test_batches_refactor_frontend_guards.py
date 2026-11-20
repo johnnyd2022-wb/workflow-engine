@@ -7,11 +7,11 @@ These tests lock in key patterns; they are not browser E2E tests.
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
-_JS = _REPO / "app" / "core" / "frontend" / "js"
+_JS = _REPO / "app" / "features" / "execution" / "frontend" / "js"
 
 
 def _read(name: str) -> str:
-    p = _JS / name
+    p = (_REPO / "app/core/frontend/js" if name == "core-api.js" else _JS) / name
     assert p.is_file(), f"missing {p}"
     return p.read_text(encoding="utf-8")
 
@@ -112,7 +112,16 @@ def test_execution_modal_requires_security_utils():
 
 
 def test_jinja_execution_stack_include_order():
-    root = _REPO / "app" / "core" / "frontend" / "shared" / "execution_modal_stack_scripts.html"
+    root = (
+        _REPO
+        / "app"
+        / "features"
+        / "execution"
+        / "frontend"
+        / "templates"
+        / "shared"
+        / "execution_modal_stack_scripts.html"
+    )
     t = root.read_text(encoding="utf-8")
     assert "execution-open-step.js" in t
     assert "execution-modal.js" in t

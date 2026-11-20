@@ -13,7 +13,8 @@ const sessionPath = path.join(
   '..',
   '..',
   'app',
-  'core',
+  'features',
+  'execution',
   'frontend',
   'js',
   'execution-session.js'

@@ -220,15 +220,11 @@ do not introduce reverse imports into existing domain code.
       - /api/core/executions/<execution_id>/steps/<execution_step_id>/complete
       - /api/core/execution-metadata
       - /api/core/evidence/*
-    backend:  app/core/backend/backend.py:2007-3054 (executions API; complete_step is 2347-3054)
-              app/core/backend/backend.py:4649-4732 (execution metadata)
-              app/core/backend/dagtraversal.py (1008)
-              app/core/backend/complete_step_payload.py
-              app/core/backend/evidence/ (routes 180, service 332, validation 174, storage 145)
+    backend:  app/features/execution/{execution_routes,execution_record_routes,record_step,complete_step_payload,step_outputs}.py
+              app/features/execution/evidence/
     models:   Execution, ExecutionStep, ExecutionEvidence, ApiIdempotencyKey
     repos:    execution_repo, evidence_repo
-    frontend: frontend/processes/execution-step-*.html, shared/execution-modal.html
-              js/execution-*.js (~19 files, ~5000 lines), js/flows2-executions.js
+    frontend: app/features/execution/frontend/{templates,js,css}/
     storage:  app/core/evidence_storage/<org_id>/<execution_id>/ (on disk)
     tests:    test_executions, test_dag_traversal, test_complete_step_payload,
               test_batches_refactor_frontend_guards, test_execution_modal_frontend_assets,

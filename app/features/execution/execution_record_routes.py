@@ -7,7 +7,6 @@ from uuid import UUID
 from flask import g, jsonify, render_template, request
 from sqlalchemy.orm import joinedload
 
-from app.core.backend.complete_step_payload import validate_json_blob
 from app.core.backend.event_writer import EventWriter
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
@@ -15,6 +14,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.domain.execution_prompt_rules import validate_execution_prompts
 from app.core.security.permissions import requires_auth
+from app.features.execution.complete_step_payload import validate_json_blob
 from app.observability import get_logger
 
 logger = get_logger(__name__)

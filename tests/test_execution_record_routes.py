@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
-from app.core.backend import execution_record_routes as records
+from app.features.execution import execution_record_routes as records
 
 
 def test_prompt_data_excludes_server_owned_audit_fields():

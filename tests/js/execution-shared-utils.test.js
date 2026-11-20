@@ -13,7 +13,8 @@ const utilsPath = path.join(
   '..',
   '..',
   'app',
-  'core',
+  'features',
+  'execution',
   'frontend',
   'js',
   'execution-shared-utils.js'

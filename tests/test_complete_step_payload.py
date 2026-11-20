@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.core.backend.complete_step_payload import MAX_JSON_DEPTH, CompleteStepRequestBody, validate_json_blob
-from app.core.backend.execution_routes import _strip_incoming_execution_trace_keys
 from app.core.domain.execution_entry_timing import entry_timing
 from app.core.utils.internal_counters import inc_counter, reset_counters_for_tests
+from app.features.execution.complete_step_payload import MAX_JSON_DEPTH, CompleteStepRequestBody, validate_json_blob
+from app.features.execution.execution_routes import _strip_incoming_execution_trace_keys
 
 
 def test_complete_step_body_forbids_extra_keys():
@@ -59,7 +59,7 @@ def test_validate_json_blob_dict_width():
 
 
 def test_validate_json_blob_node_budget(monkeypatch):
-    monkeypatch.setattr("app.core.backend.complete_step_payload.MAX_JSON_NODES", 30)
+    monkeypatch.setattr("app.features.execution.complete_step_payload.MAX_JSON_NODES", 30)
     # Each validate_json_blob entry increments nodes; this tree exceeds 30 visits before depth/key limits.
     payload = {str(i): {f"k{j}": 1 for j in range(6)} for i in range(5)}
     with pytest.raises(ValueError, match="too large"):
