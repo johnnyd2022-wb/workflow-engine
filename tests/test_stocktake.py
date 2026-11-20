@@ -7,7 +7,6 @@ from decimal import Decimal
 
 import pytest
 
-from app.core.backend import stocktake
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -17,6 +16,7 @@ from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReaso
 from app.features.compliant.models.excise import ExciseLodgement
 from app.features.compliant.modules.nz_alcohol import excise
 from app.features.compliant.modules.nz_alcohol.module import stocktake_alerts
+from app.features.inventory import stocktake
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 from tests.test_excise import GIN, world  # noqa: F401 -- fixture re-export
 
