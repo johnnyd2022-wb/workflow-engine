@@ -18,6 +18,8 @@ The browser audit covers 91 distinct HTML pages and seeded entry states, includi
 
 6. Core, Live Inventory, and Live Executions defer the shared execution editor until the inventory action needs it. Browser tests check both direct and boosted entry, and a second open reuses the loaded editor.
 
+7. The stock entry, disposal, and Notifications pages now load their own page styles. The shared notifications menu keeps its stylesheet in the shell. Process wizard steps share a single cacheable stylesheet for the layout they previously repeated in every HTML response.
+
 The remaining largest cold bundles are on Live Executions, Workflow detail, Live Inventory, Core and the Process wizard. The audit identifies the largest resources for each navigation. Representative stock and batch history is needed to rank the remaining API costs.
 
 ## Repeat or inspect the assessment

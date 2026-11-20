@@ -357,3 +357,33 @@ def test_core_execution_editor_loads_on_inventory_action(logged_in_page, boosted
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    ("route", "stylesheet"),
+    [
+        ("/core/inventory/add/manual", "inventory-add-manual.css"),
+        ("/core/inventory/dispose", "inventory-dispose.css"),
+        ("/core/notifications", "notifications-page.css"),
+    ],
+)
+def test_page_stylesheet_loads_on_boosted_entry(logged_in_page, route, stylesheet):
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    link = page.locator(f'link[rel="stylesheet"][href*="/{stylesheet}"]')
+    assert link.count() == 0
+
+    with page.expect_response(f"**/{stylesheet}*") as response:
+        page.evaluate(
+            """route => htmx.ajax('GET', route, {
+                target: '#page-content', swap: 'innerHTML', select: '#page-content',
+                headers: {'HX-Boosted': 'true'}, pushURL: true,
+            })""",
+            route,
+        )
+    assert response.value.ok
+    expect(link).to_have_count(1)
+    page.wait_for_function(
+        "name => Array.from(document.styleSheets).some(sheet => sheet.href?.includes('/' + name))",
+        arg=stylesheet,
+    )

@@ -40,13 +40,8 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-light-theme.css') }}">
   {# Process wizard step content: .flow-mode-segmented + step 4 styles. Loaded globally so HTMX #page-content swaps don't need to re-inject them. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='create-process-step-content.css') }}">
-  {# Add-inventory manual: rules use :has(.add-inventory-manual-root); must be global for HTMX #page-content swaps. #}
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-add-manual.css') }}">
-  {# Notifications page styles. Global for HTMX swaps. #}
+  {# Shared notifications menu styles. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications.css') }}">
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications-page.css') }}">
-  {# Inventory dispose page styles. Global for HTMX swaps. #}
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-dispose.css') }}">
   {# Core2 page styles. Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='core2.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='tasks.css') }}">

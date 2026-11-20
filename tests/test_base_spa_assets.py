@@ -130,7 +130,12 @@ def test_core_shell_marks_cases_unavailable_when_cases_registration_fails(monkey
     [
         ("dashboard/dashboard.html", "dashboard_spa.css"),
         ("inventory/view.html", "inventory-view.css"),
+        ("inventory/add_manual.html", "inventory-add-manual.css"),
+        ("inventory/dispose.html", "inventory-dispose.css"),
+        ("inventory/dispose_confirm.html", "inventory-dispose.css"),
+        ("notifications/notifications.html", "notifications-page.css"),
         ("processes/flows2.html", "flows2.css"),
+        ("processes/process-flow-spa.html", "process-flow-wizard.css"),
         ("processes/list.html", "processes-list.css"),
         ("settings/settings.html", "settings_spa.css"),
         ("sourcemap/sourcemap.html", "sourcemap.css"),
