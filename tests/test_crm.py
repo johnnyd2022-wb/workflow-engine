@@ -1397,8 +1397,7 @@ class TestCRMAnalyticsAPI:
     def test_monthly_sales_empty(self, app_client):
         resp = app_client.get("/api/crm/analytics/monthly-sales?months=3")
         assert resp.status_code == 200
-        data = json.loads(resp.data)
-        assert "months" in data
+        assert resp.get_json() == {"monthly_sales": []}
 
     def test_customer_breakdown_empty(self, app_client):
         resp = app_client.get("/api/crm/analytics/customer-breakdown")
@@ -1864,11 +1863,28 @@ class TestCRMAnalyticsAPI:
         body = json.loads(app_client.get("/api/crm/analytics/monthly-sales?months=24").data)
 
         assert body["monthly_sales"] == [
-            _month_row("2025-03", "300.00", 1),
-            _month_row("2025-02", "200.00", 1),
-            _month_row("2025-01", "150.00", 2),
+            {**_month_row("2025-03", "300.00", 1), "period_complete": True},
+            {**_month_row("2025-02", "200.00", 1), "period_complete": True},
+            {**_month_row("2025-01", "150.00", 2), "period_complete": True},
         ]
-        assert body["months"] == body["monthly_sales"]
+        assert set(body) == {"monthly_sales"}
+
+    def test_monthly_sales_distinguishes_open_and_ended_calendar_months(self, app_client, db, org):
+        from datetime import timedelta
+
+        today = date.today()
+        prior_month = today.replace(day=1) - timedelta(days=1)
+        mine = self._customer(db, org, "Mine")
+        self._invoice(db, org, mine, today, [("Gin", 1, 100)])
+        self._invoice(db, org, mine, prior_month, [("Gin", 1, 200)])
+        db.commit()
+
+        body = app_client.get("/api/crm/analytics/monthly-sales?months=2").get_json()
+
+        assert [(row["month"], row["period_complete"]) for row in body["monthly_sales"]] == [
+            (today.strftime("%Y-%m"), False),
+            (prior_month.strftime("%Y-%m"), True),
+        ]
 
     @pytest.mark.parametrize(
         ("requested", "expected"),

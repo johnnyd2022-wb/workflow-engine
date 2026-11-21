@@ -31,7 +31,10 @@ Each invoice has line items. To be used for stock and unit figures a line must b
 ## Authoritative operations
 
 - `crm_crm_api_get_org_invoices`: invoices with their lines, newest first. `kind` is `all`, `this_month` or `outstanding`. Paged.
-- `crm_crm_api_monthly_sales`: per month, invoice revenue ex GST (`total`), the invoice count, and `invoiced_inc_gst` (Xero's GST-inclusive totals), most recent first.
+- `crm_crm_api_monthly_sales` returns `monthly_sales` with the most recent month first. Each row includes
+  invoice revenue ex GST (`total`), the invoice count, and Xero's GST-inclusive totals (`invoiced_inc_gst`).
+  Label the current month as partial when comparing it with ended months. `period_complete` tracks the
+  calendar period. Check the Xero sync separately for data freshness.
 - `costing_margins_report`: product revenue, cost and margin per product per month, with `unmapped` beside the rows.
 
 ## Do not assume

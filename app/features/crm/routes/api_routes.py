@@ -927,7 +927,7 @@ def monthly_sales():
     except ValueError:
         return jsonify({"error": "months must be an integer"}), 400
     data = _crm_service().monthly_sales(org_id, months=months)
-    return jsonify({"monthly_sales": data, "months": data}), 200
+    return jsonify({"monthly_sales": data}), 200
 
 
 @api_bp.route("/api/crm/analytics/customer-breakdown", methods=["GET"])

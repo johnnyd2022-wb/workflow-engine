@@ -100,8 +100,45 @@ def test_discover_filters_by_kind_domain_and_limit(mcp, admin_token):
     production = mcp.discover(admin_token, "list", domain="production", limit=20)
     assert production.data["operations"] and {r["domain"] for r in production.data["operations"]} == {"production"}
     assert len(mcp.discover(admin_token, "list", limit=2).data["operations"]) <= 2
-    assert mcp.discover(admin_token, "list", limit=21).is_error
-    assert mcp.discover(admin_token, "list", kind="everything").is_error
+    assert len(mcp.discover(admin_token, "list", limit=2.0).data["operations"]) <= 2
+
+
+def test_discover_advertises_supported_arguments_before_searching():
+    with Mcp(stub_app({})) as mcp:
+        discover = next(tool for tool in mcp.tools("bza_x") if tool["name"] == "discover")
+    assert "from 1 to 20" in discover["description"]
+    properties = discover["inputSchema"]["properties"]
+    assert (properties["limit"]["minimum"], properties["limit"]["maximum"], properties["limit"]["default"]) == (
+        1,
+        20,
+        10,
+    )
+    assert properties["query"]["maxLength"] == 300
+    assert properties["domain"]["maxLength"] == 60
+    assert properties["kind"]["enum"] == ["concepts", "operations", "all"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "hint"),
+    [
+        ({"limit": 0}, "limit must be between 1 and 20"),
+        ({"limit": 21}, "limit must be between 1 and 20"),
+        ({"limit": "10"}, "limit must be an integer from 1 to 20"),
+        ({"limit": 2.5}, "limit must be an integer from 1 to 20"),
+        ({"query": "x" * 301}, "query must be at most 300 characters long"),
+        ({"domain": "x" * 61}, "domain must be at most 60 characters long"),
+        ({"kind": "everything"}, "kind must be one of: concepts, operations, all"),
+    ],
+)
+def test_discover_invalid_arguments_explain_how_to_correct_the_call(arguments, hint):
+    transport = stub_app({})
+    with Mcp(transport) as mcp:
+        result = mcp.call("bza_x", "discover", arguments)
+    assert result.is_error
+    assert hint in result.text
+    assert result.data["error"]["kind"] == "invalid_input"
+    assert hint in result.data["error"]["message"]
+    assert not transport.requests
 
 
 def test_discover_says_when_nothing_matched(mcp, admin_token):
@@ -127,7 +164,7 @@ def test_ac27_docs_topic_returns_the_markdown_and_its_frontmatter_fields(mcp, ad
     assert data["related_operations"] == ["list_inventory", "get_stock_position"]
 
 
-def test_ac27_docs_operation_returns_its_schema_and_related_operations(mcp, admin_token):
+def test_ac27_docs_operation_defaults_to_a_guide_with_opt_in_response_schema(mcp, admin_token):
     result = mcp.docs(admin_token, operation_id="list_inventory")
     assert not result.is_error, result.text
     data = result.data
@@ -136,7 +173,13 @@ def test_ac27_docs_operation_returns_its_schema_and_related_operations(mcp, admi
     assert {"type", "site_id", "limit", "cursor"} == set(names)
     assert names["type"]["schema"]["enum"] == ["raw_material", "work_in_progress", "final_product"]
     assert names["limit"]["schema"]["maximum"] == 50
-    assert data["response_schema"]["type"] == "object"
+    assert data["response_fields"] == ["inventory_items", "has_more", "next_cursor"]
+    assert "response_schema" not in data
+    full = mcp.docs(admin_token, operation_id="list_inventory", include_response_schema=True)
+    assert not full.is_error
+    assert full.data["response_schema"]["type"] == "object"
+    assert full.data["response_schema"]["properties"]["inventory_items"] == {"type": "array"}
+    assert full.data["parameters"] == data["parameters"]
     assert data["concepts"] == ["inventory.availability"]
     assert data["concept_topics"] == ["inventory.availability"]
     assert data["related_operations"] == ["get_stock_position", "trace_inventory_backward"]

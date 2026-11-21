@@ -378,7 +378,7 @@ function crmAnalytics() {
         const data = await CRMAPI.getMonthlySales(this.monthsBack);
         // The API returns the newest month first; the chart reads left to right.
         // Money arrives as Decimal strings (ex GST); the chart and the period total add numbers.
-        this.salesData = (data.months || []).map((m) => ({ ...m, total: Number(m.total || 0) })).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+        this.salesData = (data.monthly_sales || []).map((m) => ({ ...m, total: Number(m.total || 0) })).sort((a, b) => String(a.month).localeCompare(String(b.month)));
       } catch (e) {
         this.error = e.message || 'Failed to load sales data.';
       } finally {
