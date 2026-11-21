@@ -17,6 +17,7 @@ _FEATURES_DIR = (_APP_DIR / "features").resolve()
 _CORE_FRONTEND_DIR = (_APP_DIR / "core" / "frontend").resolve()
 INVENTORY_STATIC_DIR = _FEATURES_DIR / "inventory/frontend/inventory_static"
 _KINDS = {"js": ".js", "css": ".css"}
+CORE_SLICE_FRONTENDS = ("inventory", "process_design", "execution", "traceability")
 _CORE_ASSET_FEATURES = frozenset(
     {
         "activity_log",
@@ -43,6 +44,10 @@ def _build_registry() -> dict[str, dict[str, Path]]:
             if not directory.is_dir():
                 continue
             for asset in directory.iterdir():
+                if not asset.is_symlink() and asset.is_file() and asset.suffix == ".gz":
+                    original = asset.with_suffix("")
+                    if original.suffix.lower() == extension and original.is_file() and not original.is_symlink():
+                        continue
                 if asset.is_symlink() or not asset.is_file() or asset.suffix.lower() != extension:
                     raise ValueError(f"Core {kind} asset directory contains a non-public entry: {asset}")
                 previous = registry[kind].get(asset.name)

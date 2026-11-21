@@ -103,21 +103,22 @@ def test_ac2_dashboard_shows_inline_error_when_summary_fetch_fails(logged_in_pag
 
 
 def test_home_requests_data_before_unrelated_shell_scripts_finish(logged_in_page: Page):
-    """A slow settings asset must not hold Home's live data behind DOMContentLoaded."""
+    """A slow session helper must not hold Home's live data behind DOMContentLoaded."""
     page = logged_in_page
     held = []
-    page.route("**/ui/shared/workflow-engine-settings.js", lambda route: held.append(route))
+    page.route("**/ui/shared/session-ended.js", lambda route: held.append(route))
     try:
         with page.expect_request("**/api/core/dashboard/summary*", timeout=5000):
             page.goto("/core/dashboard", wait_until="commit")
         expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
         expect(page.locator("[data-dashboard-error]")).to_be_hidden()
         expect(page.locator("[data-dashboard-core-summary]")).not_to_contain_text("Loading")
+        assert held, "the session helper was not requested"
         assert page.evaluate("document.readyState") == "loading"
     finally:
         for route in held:
             route.continue_()
-        page.unroute("**/ui/shared/workflow-engine-settings.js")
+        page.unroute("**/ui/shared/session-ended.js")
     page.wait_for_load_state("networkidle")
     assert_clean_page(page)
 

@@ -25,8 +25,12 @@ RUN uv sync --frozen
 # `--chmod` here (or a chown) to read its own code.
 COPY . .
 
+# Compress the public, cacheable JS and CSS once at build time.
+FROM base AS web
+RUN uv run --no-sync python -m scripts.compress_public_assets
+
 # Test environment stage
-FROM base AS test
+FROM web AS test
 ENV ENVIRONMENT=test
 # gunicorn.conf.py reads it; the app reads it too (app/api/ratelimit_store.py), so `docker exec ... workflow`
 # knows how many workers share the rate limits (design review S4).
@@ -62,7 +66,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 CMD ["uv", "run", "--no-sync", "uvicorn", "bize_mcp.server:app", "--host", "0.0.0.0", "--port", "8030"]
 
 # Production environment stage
-FROM base AS production
+FROM web AS production
 # `prod` selects app/config/prod.ini, the same name scripts/run_prod.sh uses.
 ENV ENVIRONMENT=prod
 # gunicorn.conf.py reads it; the app reads it too (app/api/ratelimit_store.py), so `docker exec ... workflow`

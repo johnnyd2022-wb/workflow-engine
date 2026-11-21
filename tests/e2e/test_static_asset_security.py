@@ -99,7 +99,9 @@ def test_ac6_inventory_static_serves_allowlisted_file(page):
     response = page.request.get("/static/inventory/inventory-icon.svg")
     assert response.status == 200
     # Public assets live in inventory_static/ (not inventory/, which holds server templates).
-    assert response.body() == _real_bytes("app", "core", "frontend", "inventory_static", "inventory-icon.svg")
+    assert response.body() == _real_bytes(
+        "app", "features", "inventory", "frontend", "inventory_static", "inventory-icon.svg"
+    )
 
 
 def test_ac6_inventory_static_rejects_non_allowlisted_filename_with_valid_extension(page):

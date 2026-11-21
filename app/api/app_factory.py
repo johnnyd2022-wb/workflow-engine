@@ -743,7 +743,7 @@ def create_app():
     # way (not via the Flask route) because the threaded test server was seen returning an
     # empty 200 for inventory-spa-header.css -> the browser retried to
     # ERR_TOO_MANY_RETRIES; WhiteNoise serves them the same robust way it serves js/css.
-    from whitenoise import WhiteNoise
+    from app.core.backend.public_static import PublicStaticFiles
 
     def _static_asset_headers(headers, path, url):
         # WhiteNoise bypasses Flask's after_request, so re-assert the header that matters
@@ -751,8 +751,11 @@ def create_app():
         # routes emit (asserted byte-for-byte by tests/e2e/test_static_asset_security.py).
         headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         headers["X-Content-Type-Options"] = "nosniff"
+        if os.path.isfile(path + ".gz"):
+            stat = os.stat(path)
+            headers["ETag"] = f'W/"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
 
-    app.wsgi_app = WhiteNoise(
+    app.wsgi_app = PublicStaticFiles(
         app.wsgi_app,
         add_headers_function=_static_asset_headers,
         # Re-scan the source dirs on each request only in local dev (edit-and-refresh);

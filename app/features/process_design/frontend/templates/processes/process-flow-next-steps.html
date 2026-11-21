@@ -425,5 +425,5 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('core.serve_core_js', filename='process-flow-next-steps-steps.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-flow-next-steps-steps.js') }}" defer></script>
 {% endblock %}
