@@ -22,7 +22,7 @@ from app.core.backend import (
     tasks,
 )
 from app.core.backend.feature_frontend import register_core_feature_frontend
-from app.core.backend.static_assets import core_asset_directory, core_asset_version
+from app.core.backend.static_assets import CORE_SLICE_FRONTENDS, core_asset_directory, core_asset_version
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryType
@@ -65,7 +65,7 @@ core_bp = Blueprint(
     static_url_path="/static",
 )
 
-register_core_feature_frontend(core_bp, "inventory", "process_design", "execution", "traceability")
+register_core_feature_frontend(core_bp, *CORE_SLICE_FRONTENDS)
 
 
 @functools.lru_cache(maxsize=1)
