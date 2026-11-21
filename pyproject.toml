@@ -22,7 +22,7 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pydantic>=2.5,<3",
     "pyotp>=2.9.0",
-    "pytest>=9.0.3",
+    "pytest>=9.2.0",
     "structlog>=24.1",
     "qrcode[pil]>=7.4.2",
     "requests==2.33.0",
