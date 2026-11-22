@@ -80,7 +80,8 @@ authlib's grant model fights the composite keys. Either way, behaviour is exactl
     Anything else is a `400` with `invalid_redirect_uri` or `invalid_client_metadata`.
 - **Verified clients** (design review S3): a short, reviewed list in code
   (`app/features/mcp_oauth/services/verified_clients.py`), the source of truth; the DB column only
-  caches it and is re-synced on every lookup and bearer request. A client matches an entry by
+  caches it and is re-synced on client lookup for consent. Verification only affects display
+  and audit metadata. A client matches an entry by
   *where its codes go*: every redirect URI must be one of the entry's exact vendor `https` URIs
   (and a metadata-URL client must be one of the entry's document URLs, when it lists any). Never by
   name; loopback redirects are never listed. Each entry cites the vendor's own docs. Today: Claude
@@ -103,7 +104,7 @@ authlib's grant model fights the composite keys. Either way, behaviour is exactl
 - **Consent page** (Style 1, works at 375 px). It shows:
   - the client name;
   - "Unverified app" when `verified=false`, a "Verified" mark when `verified=true`;
-  - the redirect host;
+  - the redirect host in ASCII, including the port if specified;
   - the org name and the signed-in user;
   - the access level: a radio with **Read only** selected and **Read and write**
     disabled, labelled "Coming later";
@@ -115,10 +116,8 @@ authlib's grant model fights the composite keys. Either way, behaviour is exactl
   - the org has MCP off: "Your organisation hasn't turned on AI assistant access. An admin can
     turn it on in Settings."
   - the user's role isn't allowed: "Your role can't use AI assistant access. Ask an admin."
-  - the client is disabled;
-  - the client is unverified and the org allows verified apps only (the default): "Your
-    organisation only allows apps Biz-E has verified, and this app isn't one. An admin can change
-    this in Settings." Posting an approval anyway is a `403`.
+  - the client is disabled.
+  Posting an approval while blocked returns `403`.
 - **`POST /oauth/token`**. Form-encoded; public client, so no secret.
   - `authorization_code`: `code`, `code_verifier`, `redirect_uri`, `client_id`, `resource`.
     Checks: single use, unexpired, PKCE S256 matches, and `redirect_uri`/`client_id`/`resource`
@@ -159,9 +158,7 @@ In `tenant_context`, only when the request has **no session user** and has
    `mcp_allowed_roles` (the custom role key if they have one, else the built-in one), checked on
    **every request**. Otherwise `403 {"error":"mcp_not_allowed"}`. The grant is not revoked, so
    turning the setting back on restores it.
-   The same `403`, checked on every request too, when the grant's client is unverified and the
-   org has not turned on `allow_unverified_clients` (design review S3). A client switched off by
-   Biz-E is `401 invalid_token`.
+   A client switched off by Biz-E gets `401 invalid_token`.
 4. Set `g.current_user`, `g.current_org`, the tenant filter, and `g.auth_via = "mcp"`, plus
    `g.mcp_scope`, `g.mcp_client_id` and `g.mcp_grant_id`. Bump `last_used_at` at most once a
    minute.
@@ -196,12 +193,11 @@ In `tenant_context`, only when the request has **no session user** and has
 
 ## MCP settings and connected apps API (8.2b backend, 8.2e UI)
 
-- `GET /api/core/mcp/settings` (users.manage) returns `{enabled, allow_unverified_clients,
-  allowed_roles: [role_key…], roles: [{key, label, custom}]}`.
-- `PUT /api/core/mcp/settings` (users.manage): body `{enabled: bool, allowed_roles: [...],
-  allow_unverified_clients?: bool}` (left out: kept as it is).
+- `GET /api/core/mcp/settings` (users.manage) returns
+  `{enabled, allowed_roles: [role_key…], roles: [{key, label, custom}]}`.
+- `PUT /api/core/mcp/settings` (users.manage): body `{enabled: bool, allowed_roles: [...]}`.
   An unknown key, or a custom key from another org, is a `400`. Writes an `audit_logs` row.
-  Default for a new org: `enabled=false`, no roles, `allow_unverified_clients=false`.
+  Default for a new org is `enabled=false` with no allowed roles.
 - `GET /api/core/mcp/grants`. With `users.manage` it lists all of the org's grants; without
   it, only your own. Each row: `{id, client_name, verified, user, scope, created_at,
   last_used_at}`; unrevoked only.
@@ -442,11 +438,6 @@ visible to users.manage for the switch and roles, to everyone for "Your connecti
 - Switch: "Let people connect their own AI assistant (Claude, ChatGPT, …) to read this
   organisation's data". Off by default.
 - Roles: a checkbox per built-in and custom role, disabled while the switch is off.
-- "Allow apps Biz-E hasn't verified" (design review S3): a second switch, off by default and
-  disabled while the main switch is off, with one line: "Off: only apps Biz-E has checked, such as
-  Claude and ChatGPT, can connect. On: any app can ask, and it's marked "Unverified app"."
-  Turning it on asks in a bottom sheet first; turning it off does not. While it is off, grants to
-  unverified apps get `403 mcp_not_allowed` on every request (kept, not revoked).
 - Connected apps: a row per grant, showing client, Unverified badge, person, connected and last
   used dates, and Revoke. Revoke asks in a bottom-sheet dialog.
 - "How to connect": the MCP URL, with a copy button.
@@ -559,13 +550,10 @@ visible to users.manage for the switch and roles, to everyone for "Your connecti
 - **M3.** An AUDITOR whose `access_expires_at` has passed gets 401, the same as their session would.
 - **M4.** Settings, users and exports are never reachable by a token, even with Read and write
   later; that's a separate decision.
-- **M5.** (Revised by design review S3, 2026-11-17.) Registration stays open (founder Q3), but an
-  organisation allows only *verified* clients unless an admin turns on "Allow apps Biz-E hasn't
-  verified". `verified` comes from a reviewed list in code, matched by redirect URIs and metadata
-  document URL, never by name (Claude and ChatGPT today). Not on the list yet, as follow-ups:
-  Claude Code and MCP Inspector (loopback redirects on varying ports, which any local process can
-  claim), ChatGPT's per-connector callback-ID redirects. A staff-facing admin site for the list is
-  still out of scope.
+- **M5.** Registration is open (founder Q3). The org switch and allowed roles control who
+  can approve any registered client. The reviewed list matches redirect URIs and metadata
+  document URLs for the verification label. Grants previously blocked only by client verification
+  can be used with valid tokens while the grant is active and the other access checks pass.
 
 ## Out of scope
 

@@ -67,17 +67,14 @@ class World:
         self.db.commit()
         return user
 
-    def enable(self, enabled=True, roles=ROLES, extra_keys=(), allow_unverified=True):
-        """Set the org's MCP switch, allowed roles and unverified-apps setting directly (what the
-        settings API does). ``allow_unverified`` defaults to True so the tests written before S3
-        keep exercising their unverified test client; the S3 tests pass False (the real default)."""
+    def enable(self, enabled=True, roles=ROLES, extra_keys=()):
+        """Set the org's MCP switch and allowed roles directly."""
         self.db.query(McpAllowedRole).filter(McpAllowedRole.org_id == self.org.id).delete()
         row = self.db.get(McpOrgSettings, self.org.id)
         if row is None:
             row = McpOrgSettings(org_id=self.org.id)
             self.db.add(row)
         row.enabled = enabled
-        row.allow_unverified_clients = allow_unverified
         for role in roles:
             self.db.add(McpAllowedRole(org_id=self.org.id, role_key=f"builtin:{role}"))
         for key in extra_keys:

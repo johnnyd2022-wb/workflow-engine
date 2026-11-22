@@ -1,32 +1,22 @@
-"""Design review S3: consent must tell a real client from an impostor.
-
-.agents/reports/design-review/2026-11-17-mcp-costing-planning-analytics.md §S3. Before the fix every
-client was created with ``verified=False`` and registration was open, so a DCR client named
-"Claude" with an attacker's redirect URI looked exactly like Claude on the consent page, and an
-admin who followed a crafted link granted rolling 30-day read access.
-
-Now a short list of verified clients lives in code (``services/verified_clients.py``), matched by
-redirect URIs (and the metadata document URL), never by name; and each organisation allows only
-verified clients unless an admin turns on ``allow_unverified_clients``.
-"""
+"""Client verification labels and access for clients outside the verified list."""
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from unittest import mock
 
 import pytest
 
-from app.core.db.models.audit_log import AuditLog
 from app.features.mcp_oauth.models import McpOrgSettings, OAuthClient, OAuthGrant
 from app.features.mcp_oauth.services import client_registry
 from tests.mcp_oauth.support import (
     authorize_params,
     authorize_url,
     bearer,
-    make_client,
     mint_grant,
     pkce_pair,
+    redirect_params,
 )
 
 CLAUDE_REDIRECT = "https://claude.ai/api/mcp/auth_callback"
@@ -34,7 +24,6 @@ CHATGPT_REDIRECT = "https://chatgpt.com/connector_platform_oauth_redirect"
 CHATGPT_CIMD = "https://chatgpt.com/oauth/client.json"
 ATTACKER_REDIRECT = "https://claude-ai.attacker.example.test/api/mcp/auth_callback"
 PUBLIC_IP = "93.184.216.34"
-UNVERIFIED_MESSAGE = "only allows apps Biz-E has verified"
 
 
 @pytest.fixture
@@ -76,23 +65,37 @@ def _row(db, client_id) -> OAuthClient:
 # --- the impostor (the finding itself) ----------------------------------------------------------
 
 
-def test_s3_a_dcr_client_named_claude_with_an_attacker_redirect_is_unverified_and_blocked_by_default(
-    world, db, created_clients
-):
-    world.enable(allow_unverified=False)  # the default for every organisation
+def test_a_dcr_client_named_claude_needs_consent_and_shows_its_callback_host(world, db, created_clients):
     body = _register(world, created_clients, "Claude", [ATTACKER_REDIRECT])
     row = _row(db, body["client_id"])
     assert row.verified is False
     assert row.client_name == "Claude"  # shown as-is, but only ever as an unverified app
 
     session, params, resp = _consent(world, body["client_id"], ATTACKER_REDIRECT)
-    assert resp.status_code == 403
+    assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert UNVERIFIED_MESSAGE in html
-    assert 'value="approve"' not in html
-    # Posting an approval anyway is refused too, and nothing is granted.
-    assert _approve(session, params).status_code == 403
-    assert db.query(OAuthGrant).filter_by(org_id=world.org.id, client_pk=row.id).count() == 0
+    assert "Unverified app" in html
+    assert "claude-ai.attacker.example.test" in html
+    assert "badge is-verified" not in html
+    grants = db.query(OAuthGrant).filter_by(org_id=world.org.id, client_pk=row.id)
+    assert grants.count() == 0
+
+    approved = _approve(session, params)
+    assert approved.status_code == 302
+    assert redirect_params(approved)["code"].startswith("bzc_")
+    assert grants.one().scope == "bize.read"
+
+
+def test_unverified_unicode_callback_is_displayed_as_punycode_with_port(world, created_clients):
+    redirect = "https://cl\u0430ude.example.test:8443/callback"
+    body = _register(world, created_clients, "Claude", [redirect])
+    session, params, resp = _consent(world, body["client_id"], redirect)
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert '<strong dir="ltr">xn--clude-5ve.example.test:8443</strong>' in html
+    assert f'name="redirect_uri" value="{redirect}"' in html
+    approved = _approve(session, params)
+    assert approved.headers["Location"].startswith("https://xn--clude-5ve.example.test:8443/callback?")
 
 
 def test_s3_a_claude_name_with_one_attacker_redirect_among_claudes_stays_unverified(world, db, created_clients):
@@ -100,25 +103,22 @@ def test_s3_a_claude_name_with_one_attacker_redirect_among_claudes_stays_unverif
     assert _row(db, body["client_id"]).verified is False
 
 
-def test_s3_a_new_organisation_allows_verified_clients_only(world, db, created_clients):
-    # No settings row yet, then an admin turns assistants on through the API without mentioning
-    # unverified apps: still verified only.
+def test_admin_can_enable_mcp_without_a_client_verification_setting(world, db, created_clients):
     db.query(McpOrgSettings).filter_by(org_id=world.org.id).delete()
     db.commit()
     admin = world.session("admin")
-    assert admin.get("/api/core/mcp/settings").get_json()["allow_unverified_clients"] is False
     saved = admin.put("/api/core/mcp/settings", json={"enabled": True, "allowed_roles": ["builtin:admin"]})
     assert saved.status_code == 200, saved.get_json()
-    assert saved.get_json()["allow_unverified_clients"] is False
-    body = _register(world, created_clients, "Claude", [ATTACKER_REDIRECT])
-    assert _consent(world, body["client_id"], ATTACKER_REDIRECT)[2].status_code == 403
+    body = _register(world, created_clients, "Custom connector", [ATTACKER_REDIRECT])
+    assert _consent(world, body["client_id"], ATTACKER_REDIRECT)[2].status_code == 200
+    assert _consent(world, body["client_id"], ATTACKER_REDIRECT, who="member")[2].status_code == 403
+    assert "allow_unverified_clients" not in saved.get_json()
 
 
 # --- the verified list --------------------------------------------------------------------------
 
 
 def test_s3_a_dcr_client_with_claudes_redirect_is_verified_and_named_from_the_list(world, db, created_clients):
-    world.enable(allow_unverified=False)
     body = _register(world, created_clients, "MCP connector", [CLAUDE_REDIRECT])
     row = _row(db, body["client_id"])
     assert row.verified is True
@@ -158,7 +158,6 @@ def _cimd(monkeypatch, doc):
 
 
 def test_s3_chatgpts_metadata_document_resolves_to_a_verified_client(world, db, monkeypatch, created_clients):
-    world.enable(allow_unverified=False)
     created_clients.append(CHATGPT_CIMD)
     _cimd(
         monkeypatch,
@@ -176,7 +175,6 @@ def test_s3_chatgpts_metadata_document_resolves_to_a_verified_client(world, db, 
 
 
 def test_s3_a_metadata_document_named_chatgpt_elsewhere_is_unverified(world, db, monkeypatch, created_clients):
-    world.enable(allow_unverified=False)
     url = "https://chatgpt.attacker.example.test/oauth/client.json"
     created_clients.append(url)
     _cimd(
@@ -184,129 +182,50 @@ def test_s3_a_metadata_document_named_chatgpt_elsewhere_is_unverified(world, db,
         {"client_id": url, "client_name": "ChatGPT", "redirect_uris": [ATTACKER_REDIRECT]},
     )
     resp = _consent(world, url, ATTACKER_REDIRECT)[2]
-    assert resp.status_code == 403
-    assert UNVERIFIED_MESSAGE in resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Unverified app" in resp.get_data(as_text=True)
     assert _row(db, url).verified is False
 
 
 def test_s3_the_code_list_not_the_database_decides_verified(world, db):
     # A row flagged verified in the database but matching no entry in the list is unverified.
-    world.enable(allow_unverified=False)
     world.client_row.verified = True
     db.commit()
     resp = _consent(world, world.client_row.client_id, world.client_row.redirect_uris[0])[2]
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert "Unverified app" in resp.get_data(as_text=True)
     assert _row(db, world.client_row.client_id).verified is False
 
 
-# --- the org setting: consent -------------------------------------------------------------------
+@pytest.mark.parametrize("revoked", [False, True])
+def test_legacy_unverified_grant_must_still_be_active(world, db, revoked):
+    settings = db.get(McpOrgSettings, world.org.id)
+    settings.allow_unverified_clients = True
+    grant, access, refresh = mint_grant(db, world.users["member"], world.client_row)
 
+    # Under the previous policy, this change blocked use of the grant without revoking it.
+    settings.allow_unverified_clients = False
+    if revoked:
+        grant.revoked_at = datetime.now(UTC)
+    db.commit()
 
-def test_s3_allowing_unverified_apps_lets_the_consent_through_and_turning_it_off_blocks_it(world, db):
-    client_id, redirect = world.client_row.client_id, world.client_row.redirect_uris[0]
-    world.enable(allow_unverified=True)
-    session, params, resp = _consent(world, client_id, redirect)
-    assert resp.status_code == 200
-    assert "Unverified app" in resp.get_data(as_text=True)
-
-    world.enable(allow_unverified=False)
-    resp = _consent(world, client_id, redirect)[2]
-    assert resp.status_code == 403
-    assert UNVERIFIED_MESSAGE in resp.get_data(as_text=True)
-    # The form rendered while it was allowed can't be posted now.
-    assert _approve(session, params).status_code == 403
-
-
-# --- the org setting: the bearer path ----------------------------------------------------------
-
-
-def test_s3_a_grant_to_an_unverified_client_gets_403_while_unverified_apps_are_off(world, db):
-    grant, access, _r = mint_grant(db, world.users["member"], world.client_row)
-    world.enable(allow_unverified=True)
-    assert world.anon().get("/api/core/inventory", headers=bearer(access)).status_code == 200
-
-    world.enable(allow_unverified=False)
-    off = world.anon().get("/api/core/inventory", headers=bearer(access))
-    assert off.status_code == 403
-    assert off.get_json() == {"error": "mcp_not_allowed"}
-    db.expire_all()
-    assert db.get(OAuthGrant, grant.id).revoked_at is None  # blocked, not revoked
-
-    world.enable(allow_unverified=True)
-    assert world.anon().get("/api/core/inventory", headers=bearer(access)).status_code == 200  # same token
-
-
-def test_s3_a_grant_to_a_verified_client_works_while_unverified_apps_are_off(world, db):
-    client = make_client(db, name="MCPTEST Claude", redirect_uris=[CLAUDE_REDIRECT])
-    _g, access, _r = mint_grant(db, world.users["member"], client)
-    world.enable(allow_unverified=False)
-    assert world.anon().get("/api/core/inventory", headers=bearer(access)).status_code == 200
-
-
-# --- the settings API ---------------------------------------------------------------------------
-
-
-def test_s3_the_settings_api_saves_the_setting_and_writes_an_audit_row(world, db):
-    world.enable(allow_unverified=False)
-    admin = world.session("admin")
-    resp = admin.put(
-        "/api/core/mcp/settings",
-        json={"enabled": True, "allowed_roles": ["builtin:admin"], "allow_unverified_clients": True},
+    anon = world.anon()
+    resp = anon.get("/api/core/inventory", headers=bearer(access))
+    refreshed = anon.post(
+        "/oauth/token",
+        data={"grant_type": "refresh_token", "refresh_token": refresh, "client_id": world.client_row.client_id},
     )
-    assert resp.status_code == 200, resp.get_json()
-    assert resp.get_json()["allow_unverified_clients"] is True
-    db.expire_all()
-    assert db.get(McpOrgSettings, world.org.id).allow_unverified_clients is True
-    audit = (
-        db.query(AuditLog)
-        .filter_by(org_id=world.org.id, action="mcp_settings_updated")
-        .order_by(AuditLog.timestamp.desc())
-        .first()
-    )
-    assert audit is not None
-    assert audit.user_id == world.users["admin"].id
-    assert audit.meta_data["allow_unverified_clients"] is True
-
-    # Saving without the key keeps the current value (older clients of the API).
-    kept = admin.put("/api/core/mcp/settings", json={"enabled": True, "allowed_roles": ["builtin:admin"]})
-    assert kept.get_json()["allow_unverified_clients"] is True
-    off = admin.put(
-        "/api/core/mcp/settings",
-        json={"enabled": True, "allowed_roles": ["builtin:admin"], "allow_unverified_clients": False},
-    )
-    assert off.get_json()["allow_unverified_clients"] is False
-
-
-@pytest.mark.parametrize("value", ["yes", 1, None, []])
-def test_s3_the_setting_must_be_a_boolean(world, value):
-    resp = world.session("admin").put(
-        "/api/core/mcp/settings",
-        json={"enabled": True, "allowed_roles": [], "allow_unverified_clients": value},
-    )
-    assert resp.status_code == 400
-
-
-def test_s3_only_users_manage_can_change_the_setting(world):
-    resp = world.session("member").put(
-        "/api/core/mcp/settings",
-        json={"enabled": True, "allowed_roles": [], "allow_unverified_clients": True},
-    )
-    assert resp.status_code == 403
-
-
-# --- the settings page --------------------------------------------------------------------------
-
-
-def test_s3_the_settings_page_gives_an_admin_the_unverified_apps_toggle_and_its_confirm(world):
-    html = world.session("admin").get("/core/ai-assistants").get_data(as_text=True)
-    assert "data-ai-unverified" in html
-    assert "Allow apps Biz-E hasn&#39;t verified" in html or "Allow apps Biz-E hasn't verified" in html
-    assert "data-ai-unverified-dialog" in html
-
-
-def test_s3_a_member_gets_no_unverified_apps_toggle(world):
-    html = world.session("member").get("/core/ai-assistants").get_data(as_text=True)
-    assert "data-ai-unverified" not in html
+    if revoked:
+        assert resp.status_code == 401
+        assert resp.get_json() == {"error": "invalid_token"}
+        assert refreshed.status_code == 400
+        assert refreshed.get_json()["error"] == "invalid_grant"
+    else:
+        assert resp.status_code == 200
+        assert "Org A Juniper" in resp.get_data(as_text=True)
+        assert "Org B Secret Botanical" not in resp.get_data(as_text=True)
+        assert refreshed.status_code == 200
+        assert refreshed.get_json()["scope"] == "bize.read"
 
 
 # --- review follow-ups ---------------------------------------------------------------------------

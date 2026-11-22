@@ -43,9 +43,7 @@
     var myId = root.getAttribute('data-user-id');
     var q = function (sel) { return root.querySelector(sel); };
     var els = {
-      sw: q('[data-ai-switch]'), unverified: q('[data-ai-unverified]'), unverifiedBox: q('[data-ai-unverified-box]'),
-      unverifiedDialog: q('[data-ai-unverified-dialog]'), unverifiedForm: q('[data-ai-unverified-form]'),
-      unverifiedCancel: q('[data-ai-unverified-cancel]'),
+      sw: q('[data-ai-switch]'),
       rolesBox: q('[data-ai-roles]'), rolesList: q('[data-ai-roles-list]'),
       rolesHint: q('[data-ai-roles-hint]'), save: q('[data-ai-save]'), status: q('[data-ai-status]'),
       settingsError: q('[data-ai-settings-error]'),
@@ -56,7 +54,7 @@
       dialogPerson: q('[data-ai-dialog-person]'), dialogError: q('[data-ai-dialog-error]'),
       cancel: q('[data-ai-dialog-cancel]'), confirm: q('[data-ai-dialog-confirm]')
     };
-    var saved = { enabled: false, roles: [], unverified: false };
+    var saved = { enabled: false, roles: [] };
     var roleChoices = [];
     var grants = [];
     var revoking = null;
@@ -78,10 +76,7 @@
       Array.prototype.forEach.call(els.rolesList.querySelectorAll('input[type=checkbox]'), function (c) { c.disabled = !on || busy; });
       els.rolesBox.classList.toggle('is-off', !on);
       els.rolesHint.hidden = !(on && ticked().length === 0);
-      els.unverified.disabled = !on || busy;
-      els.unverifiedBox.classList.toggle('is-off', !on);
-      var dirty = els.sw.checked !== saved.enabled || !sameRoles(ticked(), saved.roles) ||
-        els.unverified.checked !== saved.unverified;
+      var dirty = els.sw.checked !== saved.enabled || !sameRoles(ticked(), saved.roles);
       els.save.disabled = !dirty || busy;
     }
 
@@ -109,12 +104,10 @@
 
     function applySettings(data) {
       saved = {
-        enabled: !!data.enabled, roles: (data.allowed_roles || []).slice().sort(),
-        unverified: !!data.allow_unverified_clients
+        enabled: !!data.enabled, roles: (data.allowed_roles || []).slice().sort()
       };
       roleChoices = data.roles || [];
       els.sw.checked = saved.enabled;
-      els.unverified.checked = saved.unverified;
       els.sw.disabled = false;
       renderRoles();
       syncSettings();
@@ -134,7 +127,7 @@
       syncSettings();
       els.save.textContent = 'Saving…';
       call('PUT', SETTINGS, {
-        enabled: els.sw.checked, allowed_roles: ticked(), allow_unverified_clients: els.unverified.checked
+        enabled: els.sw.checked, allowed_roles: ticked()
       })
         .then(function (data) {
           busy = false;
@@ -282,37 +275,6 @@
       els.sw.addEventListener('change', function () { els.status.textContent = ''; syncSettings(); });
       els.rolesList.addEventListener('change', function () { els.status.textContent = ''; syncSettings(); });
       els.save.addEventListener('click', saveSettings);
-
-      /* Turning unverified apps on is asked in a bottom sheet; turning it off is not. */
-      var unverifiedConfirmed = false;
-      els.unverified.addEventListener('change', function () {
-        els.status.textContent = '';
-        if (els.unverified.checked) {
-          unverifiedConfirmed = false;
-          els.unverifiedDialog.showModal();
-          els.unverifiedCancel.focus();
-        }
-        syncSettings();
-      });
-      els.unverifiedForm.addEventListener('submit', function (event) {
-        event.preventDefault();
-        unverifiedConfirmed = true;
-        els.unverifiedDialog.close();
-      });
-      els.unverifiedCancel.addEventListener('click', function () { els.unverifiedDialog.close(); });
-      els.unverifiedDialog.addEventListener('click', function (event) {
-        // Only a click on the backdrop itself (a keyboard "click" on a button reports 0,0).
-        if (event.target !== els.unverifiedDialog) return;
-        var r = els.unverifiedDialog.getBoundingClientRect();
-        var outside = event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
-        if (outside) els.unverifiedDialog.close();
-      });
-      // Cancel, Escape or a tap outside all leave it off.
-      els.unverifiedDialog.addEventListener('close', function () {
-        if (!unverifiedConfirmed) els.unverified.checked = false;
-        syncSettings();
-        els.unverified.focus();
-      });
     }
 
     var work = [loadGrants()];

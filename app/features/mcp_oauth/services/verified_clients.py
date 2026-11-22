@@ -1,8 +1,8 @@
 """The OAuth clients Biz-E has verified (design review S3).
 
 This list in code is the source of truth. ``oauth_clients.verified`` only caches what it says, and is
-brought back in line every time a client is registered, resolved or used (``sync``), so removing an
-entry here ends that client's verified status on its next request.
+synced at registration and when the client is resolved for consent. The settings list reads
+the verification status directly from this list.
 
 A client matches an entry by **where its codes go**, never by its name: every redirect URI it
 registered (or its metadata document lists) must be one of the entry's exact, vendor-controlled
@@ -12,7 +12,7 @@ them. Loopback redirect URIs are never listed: any local process can listen on a
 to be the client (MCP authorization spec, "localhost redirect URI risks").
 
 Every identifier is cited from the vendor's own current documentation. Before adding one, cite it
-the same way; a client that cannot be cited stays unverified (the org can still allow it).
+the same way; a client that cannot be cited stays unverified.
 """
 
 from __future__ import annotations

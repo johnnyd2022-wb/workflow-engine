@@ -32,8 +32,7 @@ def assistant(fresh_user):
     person = fresh_user(UserRole.MEMBER)
     db = db_session()
     client_id = f"e2e-client-{secrets.token_hex(6)}"
-    # The test client is not on the verified list, so this org allows unverified apps (S3).
-    db.add(McpOrgSettings(org_id=person["org_id"], enabled=True, allow_unverified_clients=True))
+    db.add(McpOrgSettings(org_id=person["org_id"], enabled=True))
     db.add(McpAllowedRole(org_id=person["org_id"], role_key="builtin:member"))
     db.add(OAuthClient(client_id=client_id, client_name="E2E Assistant", redirect_uris=[REDIRECT], registration="dcr"))
     db.commit()
@@ -94,6 +93,7 @@ def test_signed_out_person_signs_in_and_lands_on_consent_then_approves(page: Pag
     page.wait_for_url(re.compile(r"/oauth/authorize\?"), timeout=15_000)
     expect(page.get_by_role("heading", name=re.compile("Connect E2E Assistant"))).to_be_visible()
     expect(page.get_by_text("Unverified app")).to_be_visible()
+    expect(page.get_by_text("assistant.example.test", exact=True)).to_be_visible()
     expect(page.get_by_label("Read only")).to_be_checked()
     expect(page.get_by_label(re.compile("Read and write"))).to_be_disabled()
 
@@ -138,34 +138,35 @@ def test_consent_is_blocked_with_a_message_when_the_org_has_assistants_off(page:
     expect(page.get_by_role("button", name="Allow read-only access")).to_have_count(0)
 
 
-def test_s3_consent_for_an_unverified_app_is_blocked_when_the_org_allows_verified_apps_only(page: Page, assistant):
+def test_consent_page_has_no_sideways_scroll_on_a_phone(browser, app_url, assistant):
     from app.core.db import db_session
-    from app.features.mcp_oauth.models import McpOrgSettings
+    from app.features.mcp_oauth.models import McpOrgSettings, OAuthClient
 
+    host = ".".join(["a" * 63, "b" * 63, "c" * 63, "example.test"])
+    redirect = f"https://{host}:8443/callback"
     db = db_session()
-    db.query(McpOrgSettings).filter(McpOrgSettings.org_id == assistant["org_id"]).update(
-        {"allow_unverified_clients": False}
-    )
+    client = db.query(OAuthClient).filter_by(client_id=assistant["client_id"]).one()
+    client.client_name = "E2E Assistant " + "A" * 58
+    client.redirect_uris = [redirect]
     db.commit()
 
-    page.goto(assistant["path"]())
-    _sign_in(page, assistant)
-    page.wait_for_url(re.compile(r"/oauth/authorize\?"), timeout=15_000)
-    expect(page.get_by_text("only allows apps Biz-E has verified")).to_be_visible()
-    expect(page.get_by_text("Unverified app")).to_be_visible()
-    expect(page.get_by_role("button", name="Allow read-only access")).to_have_count(0)
-
-
-def test_consent_page_has_no_sideways_scroll_on_a_phone(browser, app_url, assistant):
     context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": 390, "height": 844})
     page = context.new_page()
     try:
-        page.goto(assistant["path"]())
+        page.goto(assistant["path"](redirect_uri=redirect))
         _sign_in(page, assistant)
         page.wait_for_url(re.compile(r"/oauth/authorize\?"), timeout=15_000)
         expect(page.get_by_role("button", name="Allow read-only access")).to_be_visible()
+        expect(page.get_by_text(f"{host}:8443", exact=True)).to_be_visible()
         widths = page.evaluate("() => [document.documentElement.scrollWidth, window.innerWidth]")
         assert widths[0] <= widths[1], widths
         audit_current_page(page, "/oauth/authorize")
+
+        db.query(McpOrgSettings).filter_by(org_id=assistant["org_id"]).update({"enabled": False})
+        db.commit()
+        page.reload()
+        expect(page.get_by_role("alert")).to_contain_text("hasn't turned on AI assistant access")
+        widths = page.evaluate("() => [document.documentElement.scrollWidth, window.innerWidth]")
+        assert widths[0] <= widths[1], widths
     finally:
         context.close()
