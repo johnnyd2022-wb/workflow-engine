@@ -106,8 +106,7 @@ def showcase_world(flask_app):
     for feature in ("costing", "compliant"):
         FeatureSubscriptionFactory(org_id=org.id, feature_key=feature)
     admin = UserFactory(org_id=org.id, email=f"showcase-{org.id.hex[:8]}@example.test", role=UserRole.ADMIN)
-    # make_client's test client is not on the verified list, so allow unverified apps (S3).
-    db.add(McpOrgSettings(org_id=org.id, enabled=True, allow_unverified_clients=True))
+    db.add(McpOrgSettings(org_id=org.id, enabled=True))
     db.add(McpAllowedRole(org_id=org.id, role_key="builtin:admin"))
     db.commit()
     client_row = make_client(db)

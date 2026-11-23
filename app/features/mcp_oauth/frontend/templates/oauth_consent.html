@@ -16,11 +16,14 @@
   {% else %}
     <h1>Connect {{ app_name }} to Biz-E</h1>
     {% if req.client.verified %}
-    <p class="badges"><span class="badge is-verified" title="Biz-E has checked that this app is who it says it is">&#10003; Verified</span></p>
+    <p class="badges"><span class="badge is-verified" title="Biz-E recognizes the registered callback">&#10003; Verified</span></p>
     {% else %}
     <p class="badges"><span class="badge">Unverified app</span></p>
     {% endif %}
-    <p class="muted">After you choose, you're sent back to <strong>{{ host }}</strong>.</p>
+    <p>After you choose, Biz-E will send you back to <strong dir="ltr">{{ host }}</strong>.</p>
+    {% if not req.client.verified %}
+    <p class="muted">Anyone can choose this app name. Check the address above and approve only if you recognise it.</p>
+    {% endif %}
 
     <div class="who">
       <span class="muted">Signed in as</span>

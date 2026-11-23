@@ -38,14 +38,20 @@ def _message(error: jsonschema.ValidationError) -> str:
         extras = sorted(set(error.instance) - set(error.schema.get("properties", {})))
         return "unknown argument: " + ", ".join(name[:40] for name in extras[:5])
     if rule == "type":
-        return f"{field} must be {error.validator_value}"
+        if error.validator_value == "integer" and {"minimum", "maximum"} <= error.schema.keys():
+            return f"{field} must be an integer from {error.schema['minimum']} to {error.schema['maximum']}"
+        return f"{field} must be of type {error.validator_value}"
     if rule == "enum":
         return f"{field} must be one of: " + ", ".join(str(v) for v in error.validator_value)
     if rule in {"minimum", "maximum"}:
         low, high = error.schema.get("minimum"), error.schema.get("maximum")
-        return f"{field} must be between {low} and {high}"
+        if low is not None and high is not None:
+            return f"{field} must be between {low} and {high}"
+        bound = "at least" if rule == "minimum" else "at most"
+        return f"{field} must be {bound} {error.validator_value}"
     if rule in {"maxLength", "minLength"}:
-        return f"{field} has the wrong length"
+        bound = "at most" if rule == "maxLength" else "at least"
+        return f"{field} must be {bound} {error.validator_value} characters long"
     return f"{field} is not valid"
 
 

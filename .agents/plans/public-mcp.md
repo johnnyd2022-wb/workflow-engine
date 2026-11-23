@@ -151,7 +151,7 @@ security check.
   user, client and tool name (not arguments), as structured events (`mcp.tool_called`) with
   traces across the hop.
 - **Consent screen** shows the client's name *and* its redirect host, the org, and the access
-  level. A client registered by DCR is labelled unverified.
+  level. Clients outside the reviewed list are labelled "Unverified app".
 - **Kill switches:** org `mcp_enabled` off; `oauth_clients.disabled_at` per client; revoke per
   grant.
 - **Tests that must exist:**
@@ -202,7 +202,7 @@ security check.
    custom `org_roles`). A user whose role isn't ticked can't complete consent (clear message),
    and their existing grants stop working the moment their role is unticked or changed (checked
    on every request, not only at issue).
-3. **Client registration:** open (CIMD + DCR). A self-registered client is labelled unverified
+3. **Client registration:** open (CIMD + DCR). Clients outside the reviewed list are labelled unverified
    on consent; admins can disable a client.
 4. **Who may connect:** the roles ticked in 2.
 5. **First tools:** §6 as written.

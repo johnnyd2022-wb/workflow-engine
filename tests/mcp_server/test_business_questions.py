@@ -181,8 +181,8 @@ QUESTIONS = [
         "How much did we invoice in net sales excluding GST this month?",
         "sales.xero_invoices",
         "crm_crm_api_monthly_sales",
-        "months[0].total",
-        "100.00",
+        "monthly_sales[0].{total:total, period_complete:period_complete}",
+        {"total": "100.00", "period_complete": False},
         {"months": 1},
     ),
     Question(

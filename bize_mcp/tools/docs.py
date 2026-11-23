@@ -1,4 +1,4 @@
-"""``docs``: one concept's full document, or one operation's full contract."""
+"""``docs``: one concept's full document, or one operation's documentation."""
 
 from __future__ import annotations
 
@@ -15,9 +15,10 @@ from bize_mcp.validation import schema
 MAX_DOC_TEXT = 20_000
 
 DESCRIPTION = (
-    "Read the full document for one business concept (topic, e.g. inventory.availability) or the full "
-    "contract of one operation (operation_id: its parameters, response schema, related operations and a "
-    "worked example). Give exactly one of topic or operation_id, both taken from discover. Read the "
+    "Read the full document for one business concept (topic, e.g. inventory.availability) or an operation "
+    "guide with parameters, response fields, related operations and an example. Set include_response_schema "
+    "to true for the full response schema, including nested fields for select. Give exactly one of topic "
+    "or operation_id, both taken from discover. Read the "
     "concept before answering questions about stock, batches, costs or compliance: it says what to "
     "assume and what not to."
 )
@@ -30,6 +31,11 @@ INPUT = schema(
             "description": "A topic from discover, e.g. inventory.availability.",
         },
         "operation_id": {"type": "string", "maxLength": 120, "description": "An operation_id from discover."},
+        "include_response_schema": {
+            "type": "boolean",
+            "default": False,
+            "description": "For operation docs, include the full response JSON Schema.",
+        },
     }
 )
 
@@ -47,7 +53,6 @@ def _operation_doc(op: Operation, allowed: dict[str, Operation], topics: set[str
             {"name": p.name, "in": p.where, "required": p.required, "schema": p.schema, "description": p.description}
             for p in op.params
         ],
-        "response_schema": op.response_schema,
         "outside_text": None
         if op.outside_text is None
         else [{"path": path, "origin": origin} for path, origin in op.outside_text],
@@ -103,7 +108,12 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     op = allowed.get(operation_id)
     if op is None:
         raise ToolFailureError("Not found", kind="not_found")
-    return clip(_operation_doc(op, allowed, set(ctx.knowledge.topics)), MAX_DOC_TEXT)
+    document = _operation_doc(op, allowed, set(ctx.knowledge.topics))
+    if args.get("include_response_schema", False):
+        document["response_schema"] = op.response_schema
+    else:
+        document["response_fields"] = list((op.response_schema or {}).get("properties", {}))
+    return clip(document, MAX_DOC_TEXT)
 
 
 DOCS = Tool("docs", DESCRIPTION, INPUT, run)

@@ -10,10 +10,8 @@ order of the checks is the contract:
    not changed their password since they approved          -> else 401 ``invalid_token``
 4. the organisation has assistants on and the person's role is ticked -> else 403 ``mcp_not_allowed``
 5. the client is not switched off by Biz-E                  -> else 401 ``invalid_token``
-6. the client is verified, or the organisation allows unverified apps -> else 403 ``mcp_not_allowed``
-   (design review S3; the grant is kept, so turning the setting on restores it)
 
-Checks 3 to 6 run on every request, so a switch flipped in Settings, a role changed, or a password
+Checks 3 to 5 run on every request, so a switch flipped in Settings, a role changed, or a password
 reset takes effect on the next call. Nothing here logs the token.
 """
 
@@ -32,8 +30,8 @@ from app.core.security.auth_service import auth_stamp
 from app.core.security.tenant_scope import tenant_scope
 from app.features.mcp_oauth.models import OAuthClient, OAuthGrant
 from app.features.mcp_oauth.repositories.grant_repo import GrantRepository
-from app.features.mcp_oauth.services import rate_limit, token_service, verified_clients
-from app.features.mcp_oauth.services.settings_service import client_is_allowed, is_allowed_for
+from app.features.mcp_oauth.services import rate_limit, token_service
+from app.features.mcp_oauth.services.settings_service import is_allowed_for
 from app.features.mcp_oauth.services.tokens import ACCESS_PREFIX, CODE_PREFIX, REFRESH_PREFIX, hash_token, looks_like
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -125,10 +123,6 @@ def authenticate(db, raw: str, *, now: datetime | None = None, calculation: bool
         client = db.query(OAuthClient).filter(OAuthClient.id == grant.client_pk).one_or_none()
         if client is None or client.disabled_at is not None:
             raise _invalid("client_disabled")  # the kill switch ends live connections, not just new ones
-        verified_clients.sync(client)  # the code list decides; committed below with last_used
-        if not client_is_allowed(db, org_id, client):
-            db.commit()
-            raise BearerRejectedError(403, "mcp_not_allowed", reason="unverified_client_not_allowed")
 
         repo.touch_last_used(org_id, grant.id, now, now - LAST_USED_RESOLUTION)
         db.commit()

@@ -9,8 +9,8 @@ database credentials and no app secrets (its one secret is the shared rate-limit
 
 | Tool | What it does |
 |---|---|
-| `discover` | Searches business knowledge (`docs/knowledge/*.md`) and the operations this person may run. An empty query returns the overview and the topic list. |
-| `docs` | One concept's full Markdown, or one operation's full contract (parameters, response schema, related operations, example). |
+| `discover` | Searches business knowledge (`docs/knowledge/*.md`) and the operations this person may run. Search takes up to 300 characters of `query`, a `domain` up to 60 characters, `kind` of `concepts`, `operations`, or `all` (default), and `limit` of 1–20 per result group (default 10). An empty query returns the overview and full topic list. |
+| `docs` | One concept’s full Markdown, or one operation’s description, parameter schemas, top-level response fields, related operations and example. Pass `include_response_schema: true` with an `operation_id` for the full response schema. |
 | `execute` | Runs 1–5 allowlisted `GET` operations. A later call may use an earlier result (`{"$from": "a", "path": "inventory_items[0].id"}`); `select` trims a result (fields, `[n]`, `[*]`, `{name: path}`). No code is run. |
 
 The model works as discover → docs → execute → explain. Operations come from the app's OpenAPI document
@@ -33,6 +33,9 @@ tool descriptions tell the model to use them rather than do arithmetic.
   Inventory totals describe on-hand quantities by stored unit. Invoice revenue covers authorised and
   paid invoices before credits, in the organisation's base currency and excluding GST. Use these totals
   when reporting across pages.
+* Monthly invoice revenue uses the canonical `monthly_sales` list. Each row reports `period_complete`,
+  which is false for the current calendar month or a future month. It measures calendar coverage.
+  The `months` request parameter controls how many months with activity to return.
 * Trace, excise and stocktake reconciliation results are complete-or-fail. If a result exceeds the row
   or output limit, `execute` returns `incomplete`, collection counts where available, and a link to
   the relevant Biz-E page.
