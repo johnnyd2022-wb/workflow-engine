@@ -127,8 +127,9 @@ tbody tr:hover{background:color-mix(in srgb,var(--bg) 70%,var(--surface))}
 .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px}
 .pill--warn{background:var(--warn-soft);color:var(--warn)}
 .pill--plain{color:var(--muted);padding-left:0}
-.rec{opacity:.0;transition:opacity .15s}
-tbody tr:hover .rec,.rec:focus{opacity:1}
+.linkbtn.rec{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:7px;border:1px solid transparent;color:var(--muted);transition:all .15s}
+tbody tr:hover .linkbtn.rec,.linkbtn.rec:focus{border-color:var(--line);color:var(--accent);background:var(--surface)}
+tbody tr:first-child .linkbtn.rec{border-color:var(--accent);color:var(--accent-ink);background:var(--accent)}
 .linkbtn{font-weight:500;color:var(--accent);white-space:nowrap}
 
 .attn{list-style:none;margin:0;padding:6px 0}
@@ -291,12 +292,6 @@ tbody tr:hover .rec,.rec:focus{opacity:1}
               <li><a href="#"><span class="n n--warn num">2</span><div><b>Expiring within 30 days</b><span>None in the next 7 days</span></div><span class="chev">›</span></a></li>
               <li><a href="#"><span class="n n--ok">✓</span><div><b>Low stock</b><span>Every line above its reorder point</span></div><span class="chev">›</span></a></li>
             </ul>
-          </section>
-          <section class="card rise" style="animation-delay:.2s" aria-labelledby="t-more">
-            <div class="card__head"><h2 id="t-more">Go to</h2></div>
-            <div class="shortcuts">
-              <a class="chip" href="#">Batches</a><a class="chip" href="#">4 workflows</a><a class="chip" href="#">Contract orders</a><a class="chip" href="#">Suppliers</a><a class="chip" href="#">Production tasks</a>
-            </div>
           </section>
         </div>
       </div>

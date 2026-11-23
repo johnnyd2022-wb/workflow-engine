@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 5 Midnight</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Product-dark (Linear / Raycast / Vercel): near-black with a cool tint, elevation by small lightness
+   steps, 1px low-contrast borders instead of shadows, a faint top-light on cards, one violet accent.
+   Structure is list + detail: pick a batch on the left, act on it on the right. Light theme included. */
+:root{
+  --bg:#08090B; --s1:#0E0F12; --s2:#131418; --s3:#1A1B21; --hover:#1E2027;
+  --b1:rgba(255,255,255,.06); --b2:rgba(255,255,255,.10); --b3:rgba(255,255,255,.16);
+  --ink:#F7F8F8; --text:#C9CBD1; --muted:#8A8F98; --faint:#5B606A;
+  --accent:#8B7CFF; --accent-2:#B4A9FF; --accent-bg:rgba(139,124,255,.14); --accent-ink:#0B0A14;
+  --amber:#F2B04B; --amber-bg:rgba(242,176,75,.12); --red:#F2706A; --red-bg:rgba(242,112,106,.12); --green:#4CC38A; --green-bg:rgba(76,195,138,.12);
+  --toplight:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,0) 40%);
+  --glow:radial-gradient(600px 240px at 30% -60px,rgba(139,124,255,.16),transparent 70%);
+  --mono:"Geist Mono",ui-monospace,monospace;
+}
+:root[data-theme="light"]{
+  --bg:#FBFBFC; --s1:#F4F5F7; --s2:#FFFFFF; --s3:#F2F3F5; --hover:#EEEFF2;
+  --b1:rgba(15,18,30,.06); --b2:rgba(15,18,30,.09); --b3:rgba(15,18,30,.14);
+  --ink:#0F1115; --text:#3A3D45; --muted:#6B707A; --faint:#9AA0AA;
+  --accent:#5E4BFF; --accent-2:#7B6BFF; --accent-bg:rgba(94,75,255,.09); --accent-ink:#FFFFFF;
+  --amber:#B86E00; --amber-bg:rgba(201,122,0,.10); --red:#D0342C; --red-bg:rgba(208,52,44,.08); --green:#13895A; --green-bg:rgba(19,137,90,.09);
+  --toplight:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,0) 40%);
+  --glow:radial-gradient(600px 240px at 30% -60px,rgba(94,75,255,.08),transparent 70%);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:13.5px/1.5 Inter,system-ui,sans-serif;letter-spacing:.005em;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss03"}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num,.mono{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+kbd{font:500 11px var(--mono);color:var(--muted);border:1px solid var(--b2);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--s2)}
+
+.app{display:grid;grid-template-columns:232px minmax(0,1fr) 380px;height:100vh}
+
+/* Sidebar: quiet, small, counts on the right */
+.side{background:var(--s1);border-right:1px solid var(--b1);padding:12px 10px;display:flex;flex-direction:column;gap:1px;overflow:auto}
+.ws{display:flex;align-items:center;gap:9px;padding:6px 8px 12px}
+.ws i{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#8B7CFF,#4CC3C3);display:grid;place-items:center;font:700 11px Inter;color:#fff;font-style:normal}
+.ws b{color:var(--ink);font-weight:600}
+.ws span{margin-left:auto;color:var(--faint)}
+.find{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--b1);background:var(--s2);color:var(--faint);margin:0 0 10px}
+.find kbd{margin-left:auto}
+.side h4{margin:12px 8px 4px;font-size:11.5px;font-weight:500;color:var(--faint)}
+.side a{display:flex;align-items:center;gap:9px;height:30px;padding:0 8px;border-radius:7px;color:var(--muted);font-weight:500}
+.side a:hover{background:var(--hover);color:var(--text)}
+.side a[aria-current]{background:var(--s3);color:var(--ink);box-shadow:inset 0 0 0 1px var(--b1)}
+.side a svg{width:15px;height:15px;flex:none}
+.side a .c{margin-left:auto;font-size:12px;color:var(--faint)}
+.side .red{color:var(--red)!important}
+.side .grow{flex:1}
+
+/* Main column */
+.main{display:flex;flex-direction:column;min-width:0;background:var(--glow),var(--bg)}
+.top{height:52px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--b1)}
+.top h1{margin:0;font-size:14px;font-weight:600;color:var(--ink)}
+.tabs{display:flex;gap:2px;margin-left:12px}
+.tabs a{padding:5px 10px;border-radius:7px;color:var(--muted);font-weight:500}
+.tabs a:hover{color:var(--text)}
+.tabs a[aria-current]{color:var(--ink);background:var(--s3);box-shadow:inset 0 0 0 1px var(--b1)}
+.top__r{margin-left:auto;display:flex;gap:8px}
+.b{height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--b2);background:var(--s2);color:var(--text);font-weight:500;display:inline-flex;align-items:center;gap:7px;background-image:var(--toplight)}
+.b:hover{border-color:var(--b3);color:var(--ink)}
+.b--go{background:var(--accent);border-color:transparent;color:var(--accent-ink);font-weight:600;box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 6px 18px -6px var(--accent)}
+.b--go:hover{background:var(--accent-2);color:var(--accent-ink)}
+.b svg{width:14px;height:14px}
+.b kbd{background:transparent;border-color:rgba(0,0,0,.25);color:inherit;opacity:.7}
+
+.scroll{overflow:auto;padding:20px 20px 40px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--b1);border-radius:12px;background:var(--s2);background-image:var(--toplight);overflow:hidden}
+.stat{padding:14px 16px;border-left:1px solid var(--b1)}
+.stat:first-child{border-left:0}
+.stat span{font-size:12px;color:var(--muted);font-weight:500}
+.stat b{display:block;font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-.02em;margin-top:2px}
+.stat small{color:var(--faint);font-size:12px}
+.stat b.warn{color:var(--amber)}
+
+.alerts{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 18px}
+.al{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--b1);background:var(--s2);font-weight:500;color:var(--text)}
+.al:hover{border-color:var(--b3)}
+.al .d{width:7px;height:7px;border-radius:50%}
+.al b{color:var(--ink);font-weight:600}
+
+.group{margin-top:6px}
+.gh{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;background:var(--s1);border:1px solid var(--b1);color:var(--text);font-weight:600;font-size:13px}
+.gh .ring{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;position:relative}
+.gh .ring::after{content:"";position:absolute;inset:2px;border-radius:50%;background:currentColor;clip-path:inset(0 50% 0 0)}
+.gh small{color:var(--faint);font-weight:500}
+.gh .add{margin-left:auto;color:var(--faint)}
+.item{display:grid;grid-template-columns:16px minmax(0,1fr) auto 64px;gap:12px;align-items:center;height:44px;padding:0 10px;border-bottom:1px solid var(--b1);color:var(--text);transition:background .12s}
+.item:hover{background:var(--hover)}
+.item[aria-selected="true"]{background:var(--accent-bg);box-shadow:inset 2px 0 0 var(--accent)}
+.item .sw{width:9px;height:9px;border-radius:3px;justify-self:center}
+.item .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .nm b{color:var(--ink);font-weight:500}
+.item .nm span{color:var(--muted);margin-left:8px}
+.seg{display:flex;gap:2px}
+.seg i{width:14px;height:4px;border-radius:2px;background:var(--b3)}
+.seg i.d{background:var(--muted)} .seg i.n{background:var(--accent)}
+.item .age{text-align:right;color:var(--muted);font-size:12.5px}
+.item .age.hot{color:var(--amber)}
+.av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+
+/* Detail panel */
+.detail{border-left:1px solid var(--b1);background:var(--s1);display:flex;flex-direction:column;min-width:0;animation:slide .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes slide{from{opacity:0;transform:translateX(12px)}}
+.dt{height:52px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--b1);color:var(--muted)}
+.dt .id{font-family:var(--mono);font-size:12px}
+.dt .x{margin-left:auto;display:flex;gap:4px}
+.dt .x span{width:28px;height:28px;border-radius:7px;display:grid;place-items:center}
+.dt .x span:hover{background:var(--hover)}
+.dbody{padding:18px 18px 24px;overflow:auto;display:flex;flex-direction:column;gap:18px}
+.dh .tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--amber);background:var(--amber-bg);padding:2px 8px;border-radius:6px}
+.dh h2{margin:10px 0 2px;font-size:20px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.dh p{margin:0;color:var(--muted)}
+.card{border:1px solid var(--b1);border-radius:12px;background:var(--s2);background-image:var(--toplight)}
+.props{display:grid;grid-template-columns:100px 1fr;gap:8px 12px;padding:14px;margin:0;font-size:13px}
+.props dt{color:var(--muted)}
+.props dd{margin:0;color:var(--ink)}
+.steps{list-style:none;margin:0;padding:6px 14px}
+.steps li{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:start;padding:9px 0;position:relative}
+.steps li:not(:last-child)::before{content:"";position:absolute;left:9px;top:28px;bottom:-6px;width:1.5px;background:var(--b2)}
+.steps .dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;border:1.5px solid var(--b3);color:var(--faint);background:var(--s2);position:relative;z-index:1}
+.steps .done .dot{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.steps .now .dot{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.steps b{display:block;color:var(--ink);font-weight:500}
+.steps small{color:var(--muted)}
+.steps .when{color:var(--faint);font-size:12px}
+.cta{display:flex;flex-direction:column;gap:8px}
+.cta .b--go{height:38px;justify-content:center;font-size:14px}
+.cta .b{height:36px;justify-content:center}
+.note{display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:var(--red-bg);border:1px solid color-mix(in srgb,var(--red) 30%,transparent);color:var(--text);font-size:13px}
+.note b{color:var(--red)}
+.theme{position:fixed;right:16px;bottom:14px;z-index:30}
+.hint{margin:22px 0 0;color:var(--faint);font-size:12.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.group + .group{margin-top:10px}
+
+.mobile-bar{display:none}
+@media (max-width:1180px){.app{grid-template-columns:220px minmax(0,1fr)}.detail{display:none}}
+@media (max-width:720px){
+  .app{grid-template-columns:1fr;height:auto}
+  .side{display:none}
+  .top{padding:0 14px;position:sticky;top:0;background:var(--bg);z-index:5}
+  .tabs{display:none}
+  .top__r .b:not(.b--go){display:none}
+  .b--go kbd{display:none}
+  .scroll{padding:14px 14px 90px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stat:nth-child(3){border-left:0}
+  .stat:nth-child(n+3){border-top:1px solid var(--b1)}
+  .alerts{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-right:-14px;padding-right:14px}
+  .al{flex:none}
+  .item{grid-template-columns:16px minmax(0,1fr) 56px;height:auto;padding:10px}
+  .item .nm span{display:block;margin:0}
+  .item .seg,.item .av{display:none}
+  .mobile-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:10;justify-content:space-around;padding:8px 8px 18px;background:var(--s1);border-top:1px solid var(--b1)}
+  .mobile-bar a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--muted);min-width:60px}
+  .mobile-bar a[aria-current]{color:var(--ink)}
+  .theme{display:none}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="Main navigation">
+    <div class="ws"><i>W</i><b>Whistlebird</b><span>▾</span></div>
+    <div class="find"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search<kbd>⌘K</kbd></div>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg>Alerts<span class="c red num">4</span></a>
+    <h4>Production</h4>
+    <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg>Overview<span class="c num">7</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Planner</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5"/></svg>Workflows<span class="c num">4</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>Inventory<span class="c num">32</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Suppliers</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Tasks</a>
+    <h4>Workspace</h4>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16l-1.5 11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>Sales</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg>Compliance</a>
+    <span class="grow"></span>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings</a>
+  </aside>
+
+  <section class="main">
+    <header class="top">
+      <h1>Production</h1>
+      <nav class="tabs" aria-label="Views"><a href="#" aria-current="page">Under way</a><a href="#">Finished</a><a href="#">All batches</a></nav>
+      <div class="top__r">
+        <a class="b" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add stock</a>
+        <a class="b" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 7.5l8 9"/></svg>Trace</a>
+        <a class="b b--go" href="#"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5l13 7.5-13 7.5z"/></svg>Record step<kbd>R</kbd></a>
+      </div>
+    </header>
+
+    <div class="scroll">
+      <div class="stats">
+        <div class="stat"><span>Under way</span><b class="num">7</b><small>3 products</small></div>
+        <div class="stat"><span>Finished this week</span><b class="num">2</b><small>2 all time</small></div>
+        <div class="stat"><span>Longest running</span><b class="num warn">8d</b><small>Limoncello</small></div>
+        <div class="stat"><span>Stock moves today</span><b class="num">0</b><small>32 lines on hand</small></div>
+      </div>
+
+      <div class="alerts" aria-label="Needs attention">
+        <a class="al" href="#"><span class="d" style="background:var(--red)"></span><b class="num">3</b> expired raw materials</a>
+        <a class="al" href="#"><span class="d" style="background:var(--amber)"></span><b class="num">7</b> lines missing a trace link</a>
+        <a class="al" href="#"><span class="d" style="background:var(--amber)"></span><b class="num">2</b> expire within 30 days</a>
+        <a class="al" href="#"><span class="d" style="background:var(--green)"></span>No low stock</a>
+      </div>
+
+      <div class="group" role="list" aria-label="Last step">
+        <div class="gh" style="color:var(--green)"><span class="ring" style="--p:1"></span><span style="color:var(--ink)">Last step</span><small class="num">2</small><span class="add">+</span></div>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#EC5A92"></span><span class="nm"><b>Whistlebird Pink Gin</b><span>Bottle and label</span></span><span class="seg"><i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i></span><span class="age mono">5d</span></a>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#4F74F0"></span><span class="nm"><b>Whistlebird Navy Strength Gin</b><span>Bottle and label</span></span><span class="seg"><i class="d"></i><i class="d"></i><i class="n"></i></span><span class="age mono">3d</span></a>
+      </div>
+      <div class="group" role="list" aria-label="Mid-way">
+        <div class="gh" style="color:var(--accent)"><span class="ring"></span><span style="color:var(--ink)">Mid-way</span><small class="num">3</small><span class="add">+</span></div>
+        <a class="item" href="#" role="listitem" aria-selected="true"><span class="sw" style="background:#F3B70E"></span><span class="nm"><b>Limoncello</b><span>Blend and sweeten</span></span><span class="seg"><i class="d"></i><i class="n"></i><i></i></span><span class="age mono hot">8d</span></a>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#4F74F0"></span><span class="nm"><b>Whistlebird Navy Strength Gin</b><span>Distil</span></span><span class="seg"><i class="d"></i><i class="n"></i><i></i></span><span class="age mono">1d</span></a>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#EC5A92"></span><span class="nm"><b>Whistlebird Pink Gin</b><span>Distil</span></span><span class="seg"><i class="d"></i><i class="n"></i><i></i><i></i></span><span class="age mono">20h</span></a>
+      </div>
+      <div class="group" role="list" aria-label="First step">
+        <div class="gh" style="color:var(--muted)"><span class="ring" style="border-style:dashed"></span><span style="color:var(--ink)">First step</span><small class="num">2</small><span class="add">+</span></div>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#4F74F0"></span><span class="nm"><b>Whistlebird Navy Strength Gin</b><span>Macerate botanicals</span></span><span class="seg"><i class="n"></i><i></i><i></i></span><span class="age mono">2h</span></a>
+        <a class="item" href="#" role="listitem"><span class="sw" style="background:#F3B70E"></span><span class="nm"><b>Limoncello</b><span>Infuse lemon peel</span></span><span class="seg"><i class="n"></i><i></i><i></i></span><span class="age mono">now</span></a>
+      </div>
+      <div class="group" role="list" aria-label="Finished this week">
+        <a class="gh" href="#" style="color:var(--green)"><span style="width:14px;text-align:center">✓</span><span style="color:var(--ink)">Finished this week</span><small class="num">2</small><span class="add">Show ›</span></a>
+      </div>
+      <p class="hint">Select a batch to see its steps. <kbd>↑</kbd> <kbd>↓</kbd> to move, <kbd>R</kbd> to record.</p>
+    </div>
+  </section>
+
+  <aside class="detail" aria-label="Selected batch">
+    <div class="dt"><span>Batch · Limoncello</span><span class="x"><span aria-label="Previous">↑</span><span aria-label="Next">↓</span><span aria-label="Close">✕</span></span></div>
+    <div class="dbody">
+      <div class="dh">
+        <span class="tag">● Waiting 8 days · longest</span>
+        <h2>Blend and sweeten</h2>
+        <p>Limoncello · step 2 of 3</p>
+      </div>
+      <div class="cta">
+        <a class="b b--go" href="#"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5l13 7.5-13 7.5z"/></svg>Record step 2<kbd>R</kbd></a>
+        <a class="b" href="#">Open batch</a>
+      </div>
+      <div class="card">
+        <ol class="steps">
+          <li class="done"><span class="dot">✓</span><div><b>Infuse lemon peel</b><small>Recorded</small></div><span class="when mono">15 Nov</span></li>
+          <li class="now"><span class="dot">2</span><div><b>Blend and sweeten</b><small>Ready since 15 Nov</small></div><span class="when mono">now</span></li>
+          <li><span class="dot">3</span><div><b>Bottle and label</b><small>Not started</small></div><span class="when mono">–</span></li>
+        </ol>
+      </div>
+      <div class="card">
+        <dl class="props">
+          <dt>Started</dt><dd class="mono">15 Nov, 09:42</dd>
+          <dt>Workflow</dt><dd>Limoncello</dd>
+          <dt>Steps</dt><dd>3 · 1 done</dd>
+        </dl>
+      </div>
+      <div class="note"><span>⚠</span><span><b>Check inputs first.</b> 3 expired raw materials feed products in production; confirm none are in this batch.</span></div>
+    </div>
+  </aside>
+</div>
+
+<button class="b theme" type="button" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'">◐ Theme</button>
+
+<nav class="mobile-bar" aria-label="Main">
+  <a href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></a><a href="#" aria-current="page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg><span>Production</span></a><a href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg><span>Stock</span></a><a href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span>Search</span></a><a href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>More</span></a>
+</nav>
+<script>
+  // Follow the OS theme unless the viewer flips it (dark is the default look).
+  if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme = 'light';
+</script>
+</body>
+</html>

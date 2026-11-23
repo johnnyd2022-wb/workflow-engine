@@ -95,8 +95,8 @@ main{max-width:1320px;margin:0 auto;padding:28px 24px 48px}
 .card__foot{display:flex;align-items:center;gap:8px}
 .age{font-size:12px;font-weight:700;padding:3px 8px;border-radius:8px;background:var(--bg);color:var(--muted)}
 .age--hot{background:var(--coral-soft);color:var(--coral)}
-.go{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--violet);padding:6px 10px;border-radius:9px;background:var(--violet-soft);opacity:.0;transition:opacity .15s}
-.card:hover .go,.go:focus{opacity:1}
+.go{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--violet);padding:6px 10px;border-radius:9px;background:var(--violet-soft);transition:background .15s,color .15s}
+.card:hover .go,.go:focus{background:var(--violet);color:#fff}
 .done-card{background:transparent;box-shadow:none;border:1.5px dashed var(--line)}
 .done-card h3{color:var(--muted)}
 .check{width:20px;height:20px;border-radius:50%;background:var(--mint);color:#fff;display:grid;place-items:center;font-size:11px}
@@ -147,7 +147,7 @@ main{max-width:1320px;margin:0 auto;padding:28px 24px 48px}
   <div class="hero">
     <div>
       <h1>Production</h1>
-      <p>7 batches moving · 2 finished this week</p>
+      <p>7 batches moving · longest 8 days · 2 finished this week · 32 stock lines</p>
     </div>
     <div class="hero__actions">
       <a class="b" href="#">Trace</a>
@@ -164,13 +164,6 @@ main{max-width:1320px;margin:0 auto;padding:28px 24px 48px}
       <a class="chip chip--warn" href="#"><b class="num">2</b>Expiring in 30 days</a>
       <a class="chip chip--ok" href="#"><b>✓</b>Stock levels fine</a>
     </div>
-  </div>
-
-  <div class="stats">
-    <a class="stat" href="#"><span class="stat__ico" style="background:var(--violet-soft);color:var(--violet)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg></span><div><b class="num">7</b><span>Active batches</span></div></a>
-    <a class="stat" href="#"><span class="stat__ico" style="background:var(--coral-soft);color:var(--coral)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div><b class="num">8 days</b><span>Longest running</span></div></a>
-    <a class="stat" href="#"><span class="stat__ico" style="background:var(--mint-soft);color:var(--mint)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg></span><div><b class="num">2</b><span>Finished this week</span></div></a>
-    <a class="stat" href="#"><span class="stat__ico" style="background:var(--amber-soft);color:var(--amber)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4"/></svg></span><div><b class="num">32</b><span>Stock lines</span></div></a>
   </div>
 
   <div class="board">
