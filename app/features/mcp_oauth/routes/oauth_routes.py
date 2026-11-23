@@ -10,10 +10,11 @@ an ordinary CSRF-protected form.
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request
 from flask_limiter.util import get_remote_address
+from werkzeug.urls import iri_to_uri
 
 from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
@@ -124,6 +125,15 @@ def _blocked_page(req, message: str):
     )
 
 
+def _callback_host(redirect_uri: str) -> str:
+    """Show the ASCII authority Flask uses in the redirect response, including its port."""
+    try:
+        return urlsplit(iri_to_uri(redirect_uri)).netloc
+    except UnicodeError:
+        # Some stored callback hostnames cannot be encoded as IDNA.
+        return quote(urlsplit(redirect_uri).netloc, safe="[]:%")
+
+
 def _login_redirect():
     """Send a signed-out visitor to the normal sign-in page; the request waits in their session.
 
@@ -165,7 +175,7 @@ def authorize():
         user=g.current_user,
         org=g.current_org,
         fields=req.form_fields(),
-        host=urlsplit(req.redirect_uri).netloc,
+        host=_callback_host(req.redirect_uri),
         covers=authorization.readable_summary(g.current_user),
     )
 

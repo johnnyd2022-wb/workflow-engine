@@ -2,8 +2,7 @@
 
 Two ways a client exists, both open (founder decision Q3). Either is *verified* only when it matches
 an entry in ``verified_clients`` by its redirect URIs (and metadata URL), never by its name; any
-other client is labelled "Unverified app" and is refused unless its organisation allows unverified
-apps (design review S3):
+other client is labelled "Unverified app". Verification is informational.
 
 * **Dynamic registration**: ``POST /oauth/register`` with a name and 1-5 redirect URIs.
 * **Client ID metadata document**: the ``client_id`` is an ``https://`` URL; the app fetches that

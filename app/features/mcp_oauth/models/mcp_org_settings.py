@@ -22,7 +22,7 @@ class McpOrgSettings(TenantScoped, Base):
     # One row per organisation: the org id is the key.
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), primary_key=True)
     enabled = Column(Boolean, nullable=False, default=False, server_default="false")
-    # Off by default: only clients on the verified list may connect (design review S3).
+    # Retained for compatibility with older deployments. Current policy does not read this flag.
     allow_unverified_clients = Column(Boolean, nullable=False, default=False, server_default="false")
     updated_by_user_id = Column(UUID(as_uuid=True), nullable=True)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

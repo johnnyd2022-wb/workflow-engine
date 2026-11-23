@@ -25,8 +25,10 @@ curl -s -X POST "$ISSUER/oauth/register" -H 'Content-Type: application/json' \
 # {"client_id":"…", …}
 ```
 
-A client registered this way is shown as **Unverified app** on the consent page. A `client_id` that is
-an `https://` URL is treated as a client ID metadata document instead (fetched once, cached 24 hours).
+People in allowed roles can approve any registered client when their organisation has AI assistant
+access enabled. The consent page shows the callback host in ASCII and labels clients outside the reviewed
+list **Unverified app**. An HTTPS `client_id` identifies a client ID metadata document, which Biz-E
+fetches and caches for 24 hours.
 
 ## 3. Sign in and approve
 
