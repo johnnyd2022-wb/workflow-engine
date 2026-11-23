@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 8 Spaces</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Product spaces (Arc): each product is a space with its own colour; the sidebar carries that colour as a
+   soft gradient and the whole page re-tints when you switch. Structure is product-first: every workflow
+   is a line of steps with its batches sitting on the step they are at. */
+:root{
+  --h1:#E9E4DC; --h2:#D9E2EC; --tint:#5B6B82; --tint-soft:rgba(91,107,130,.12);
+  --bg:#F6F5F2; --card:#FFFFFF; --ink:#18181B; --text:#3D3D44; --muted:#7D7D86; --line:#E7E6E2;
+  --red:#D92D20; --amber:#B54708;
+  --lim:#E3A600; --pink:#E0457B; --navy:#3559D6; --honey:#B7791F;
+}
+body[data-space="pink"]{--h1:#FBD3E2;--h2:#F7E3D6;--tint:#C2185B;--tint-soft:rgba(194,24,91,.10)}
+body[data-space="navy"]{--h1:#CBD7FA;--h2:#D9EEF4;--tint:#2F4FC0;--tint-soft:rgba(47,79,192,.10)}
+body[data-space="lim"]{--h1:#FBEAB0;--h2:#E9F3C9;--tint:#9A6B00;--tint-soft:rgba(154,107,0,.12)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--h1:#2A2723;--h2:#1E2530;--tint:#A7B4C8;--tint-soft:rgba(167,180,200,.12);--bg:#121214;--card:#1B1B1F;--ink:#F2F2F3;--text:#D0D0D6;--muted:#8D8D96;--line:#2A2A30;--red:#FF6B5E;--amber:#F5A35C}
+  :root:not([data-theme="light"]) body[data-space="pink"]{--h1:#3D1626;--h2:#2E1E19;--tint:#FF7FAF}
+  :root:not([data-theme="light"]) body[data-space="navy"]{--h1:#17234D;--h2:#14282E;--tint:#8EA8FF}
+  :root:not([data-theme="light"]) body[data-space="lim"]{--h1:#3A2E0B;--h2:#25300F;--tint:#F2C94C}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14.5px/1.45 "Hanken Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .4s}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+
+.app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh;padding:8px;gap:8px}
+/* The sidebar is the space: a gradient in the space colour, with the window framed by it */
+.side{border-radius:16px;background:linear-gradient(165deg,var(--h1),var(--h2));padding:14px 12px;display:flex;flex-direction:column;gap:4px;position:sticky;top:8px;height:calc(100vh - 16px);transition:background .5s}
+.side .top{display:flex;align-items:center;gap:8px;padding:2px 6px 12px}
+.side .top b{font-weight:800;color:var(--ink);letter-spacing:-.01em}
+.side .top span{margin-left:auto;color:var(--muted)}
+.url{display:flex;align-items:center;gap:8px;height:34px;border-radius:10px;padding:0 10px;background:rgba(255,255,255,.55);color:var(--muted);margin-bottom:10px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .url{background:rgba(255,255,255,.07)}}
+.pins{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.pins a{height:44px;border-radius:12px;background:rgba(255,255,255,.5);display:grid;place-items:center;color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pins a{background:rgba(255,255,255,.07)}}
+.pins a[aria-current]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.pins svg{width:18px;height:18px}
+.side h4{margin:10px 8px 4px;font-size:12px;font-weight:600;color:var(--muted)}
+.side .item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:9px;color:var(--text);font-weight:500}
+.side .item:hover{background:rgba(255,255,255,.45)}
+.side .item i{width:8px;height:8px;border-radius:50%}
+.side .item .c{margin-left:auto;font-size:12px;color:var(--muted)}
+.spaces{margin-top:auto;display:flex;justify-content:center;gap:10px;padding-top:12px}
+.spaces button{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;transition:transform .2s}
+.spaces button i{width:12px;height:12px;border-radius:50%;border:2px solid var(--muted)}
+.spaces button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);transform:scale(1.1)}
+.spaces button[aria-pressed="true"] i{border-color:transparent}
+
+.page{background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--line);padding:26px 30px 40px;min-width:0}
+.ph{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.ph small{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--tint);background:var(--tint-soft);padding:4px 10px;border-radius:99px;transition:color .4s,background .4s}
+.ph h1{margin:10px 0 2px;font-size:32px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+.ph p{margin:0;color:var(--muted)}
+.ph__r{margin-left:auto;display:flex;gap:8px}
+.btn{height:40px;padding:0 16px;border-radius:11px;border:1px solid var(--line);font-weight:600;display:inline-flex;align-items:center;gap:7px;color:var(--ink)}
+.btn--go{background:var(--tint);border-color:var(--tint);color:#fff;transition:background .4s}
+body:not([data-space]) .btn--go{background:var(--ink);border-color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn--go{color:#111}}
+
+.strip{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0 8px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:var(--bg);font-weight:600;color:var(--text)}
+.pill b{font-weight:800;color:var(--ink)}
+.pill.bad b{color:var(--red)} .pill.warn b{color:var(--amber)}
+
+/* A workflow as a line of stations, batches sitting on their step */
+.wf{margin-top:22px;padding:18px 20px 20px;border-radius:16px;border:1px solid var(--line);transition:opacity .35s,transform .35s}
+.wf[hidden]{display:none}
+.wf h2{margin:0;font-size:17px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:10px}
+.wf h2 i{width:12px;height:12px;border-radius:4px}
+.wf h2 span{font-weight:600;font-size:13.5px;color:var(--muted)}
+.wf h2 a{margin-left:auto;font-size:13px;color:var(--tint);font-weight:700}
+.line{display:grid;gap:0;margin-top:18px;position:relative}
+.line::before{content:"";position:absolute;left:0;right:0;top:15px;height:2px;background:var(--line)}
+.st{position:relative;padding-right:10px;min-width:0}
+.st .dot{width:32px;height:32px;border-radius:50%;background:var(--card);border:2px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--muted);position:relative}
+.st h3{margin:10px 0 8px;font-size:13.5px;font-weight:700;color:var(--ink)}
+.st.has .dot{border-color:var(--c);color:var(--c)}
+.tok{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:11px;background:color-mix(in srgb,var(--c) 10%,var(--card));border:1px solid color-mix(in srgb,var(--c) 30%,transparent);margin-bottom:6px;font-size:13px;font-weight:600;color:var(--ink);transition:transform .2s;animation:drop .5s cubic-bezier(.2,.9,.3,1.2) both}
+.tok:hover{transform:translateY(-2px)}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}}
+.tok em{font-style:normal;margin-left:auto;font-size:12px;color:var(--muted);font-weight:700}
+.tok em.hot{color:var(--amber)}
+.tok .go{font-size:12px;color:var(--c);font-weight:800}
+.empty{font-size:12.5px;color:var(--muted)}
+.glance{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:22px}
+.glance[hidden]{display:none}
+.glance div{padding:16px 18px;border-radius:14px;background:var(--tint-soft);transition:background .4s}
+.glance b{display:block;font-size:28px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+.glance span{font-size:13px;font-weight:600;color:var(--muted)}
+.links{display:flex;gap:16px;flex-wrap:wrap;margin-top:26px;font-weight:600;color:var(--muted)}
+.links a:hover{color:var(--ink)}
+
+.mbar{display:none}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;padding:0}
+  .side{display:none}
+  .page{border-radius:0;box-shadow:none;padding:0 16px 100px;background:var(--bg)}
+  .mhead{display:block!important;margin:0 -16px 0;padding:14px 16px 16px;background:linear-gradient(165deg,var(--h1),var(--h2));transition:background .5s}
+  .mhead .sp{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+  .mhead .sp button{flex:none;padding:7px 12px;border-radius:99px;background:rgba(255,255,255,.55);font-weight:600;font-size:13px;display:flex;gap:6px;align-items:center}
+  .mhead .sp button i{width:8px;height:8px;border-radius:50%}
+  .mhead .sp button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .ph{margin-top:16px}
+  .ph h1{font-size:28px}
+  .ph__r{width:100%;margin:0}
+  .ph__r .btn:not(.btn--go){display:none}
+  .btn--go{flex:1;justify-content:center;height:46px}
+  .strip{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .pill{flex:none}
+  .wf{background:var(--card);padding:16px}
+  .wf h2 span{display:none}
+  .glance{grid-template-columns:1fr 1fr}
+  .wf h2{font-size:16px}
+  .line{grid-template-columns:1fr!important;gap:0}
+  .line::before{left:15px;right:auto;top:0;bottom:0;width:2px;height:auto}
+  .st{display:grid;grid-template-columns:32px 1fr;gap:0 12px;padding:0 0 14px}
+  .st h3{margin:6px 0 6px}
+  .st .tok,.st .empty{grid-column:2}
+  .mbar{display:flex;position:fixed;left:12px;right:12px;bottom:12px;z-index:10;justify-content:space-around;padding:8px;border-radius:18px;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 8px 30px -10px rgba(0,0,0,.3)}
+  .mbar a{font-size:11px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;min-width:56px}
+  .mbar a[aria-current]{color:var(--ink)}
+}
+.mhead{display:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="Main navigation">
+    <div class="top"><b>Whistlebird</b><span>⋯</span></div>
+    <div class="url"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search or jump to…</div>
+    <div class="pins">
+      <a href="#" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9H3z"/></svg></a>
+      <a href="#" aria-label="Production" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg></a>
+      <a href="#" aria-label="Sales"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16l-1.5 11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg></a>
+    </div>
+    <h4>Production</h4>
+    <a class="item" href="#" data-go=""><i style="background:var(--ink)"></i>All products<span class="c num">7</span></a>
+    <a class="item" href="#" data-go="navy"><i style="background:var(--navy)"></i>Navy Strength Gin<span class="c num">3</span></a>
+    <a class="item" href="#" data-go="pink"><i style="background:var(--pink)"></i>Pink Gin<span class="c num">2</span></a>
+    <a class="item" href="#" data-go="lim"><i style="background:var(--lim)"></i>Limoncello<span class="c num">2</span></a>
+    <a class="item" href="#"><i style="background:var(--honey)"></i>Manuka Honey Liqueur<span class="c num">0</span></a>
+    <h4>Everything else</h4>
+    <a class="item" href="#">Inventory<span class="c num">32</span></a>
+    <a class="item" href="#">Suppliers</a>
+    <a class="item" href="#">Compliance</a>
+    <div class="spaces" role="group" aria-label="Spaces">
+      <button aria-pressed="true" data-go="" aria-label="All products"><i style="background:var(--ink)"></i></button>
+      <button aria-pressed="false" data-go="navy" aria-label="Navy Strength"><i style="background:var(--navy)"></i></button>
+      <button aria-pressed="false" data-go="pink" aria-label="Pink Gin"><i style="background:var(--pink)"></i></button>
+      <button aria-pressed="false" data-go="lim" aria-label="Limoncello"><i style="background:var(--lim)"></i></button>
+    </div>
+  </aside>
+
+  <main class="page" data-demo>
+    <div class="mhead">
+      <div class="sp" role="group" aria-label="Spaces">
+        <button aria-pressed="true" data-go=""><i style="background:var(--ink)"></i>All</button>
+        <button aria-pressed="false" data-go="navy"><i style="background:var(--navy)"></i>Navy</button>
+        <button aria-pressed="false" data-go="pink"><i style="background:var(--pink)"></i>Pink Gin</button>
+        <button aria-pressed="false" data-go="lim"><i style="background:var(--lim)"></i>Limoncello</button>
+      </div>
+    </div>
+
+    <div class="ph">
+      <div>
+        <small data-label>● All products</small>
+        <h1 data-title>Production</h1>
+        <p data-sub>7 batches across 3 workflows · Limoncello has waited longest, 8 days</p>
+      </div>
+      <div class="ph__r"><a class="btn" href="#">Add stock</a><a class="btn" href="#">Trace</a><a class="btn btn--go" href="#">▶ Record a step</a></div>
+    </div>
+
+    <div class="strip">
+      <a class="pill bad" href="#"><b class="num">3</b>expired raw materials</a>
+      <a class="pill warn" href="#"><b class="num">7</b>lines missing a trace link</a>
+      <a class="pill warn" href="#"><b class="num">2</b>expire within 30 days</a>
+      <a class="pill" href="#"><b class="num">2</b>finished this week</a>
+    </div>
+
+    <div class="glance" hidden></div>
+
+    <section class="wf" data-p="navy" style="--c:var(--navy)">
+      <h2><i style="background:var(--navy)"></i>Navy Strength Gin <span class="num">3 batches</span><a href="#">Open workflow</a></h2>
+      <div class="line" style="grid-template-columns:repeat(3,1fr)">
+        <div class="st has"><span class="dot">1</span><h3>Macerate botanicals</h3><a class="tok" href="#">Batch · just started<em class="num">2 h</em></a></div>
+        <div class="st has"><span class="dot">2</span><h3>Distil</h3><a class="tok" href="#" style="animation-delay:.05s">Batch<em class="num">1 day</em></a></div>
+        <div class="st has"><span class="dot">3</span><h3>Bottle and label</h3><a class="tok" href="#" style="animation-delay:.1s">Batch · last step<em class="num">3 days</em></a></div>
+      </div>
+    </section>
+
+    <section class="wf" data-p="pink" style="--c:var(--pink)">
+      <h2><i style="background:var(--pink)"></i>Pink Gin <span class="num">2 batches</span><a href="#">Open workflow</a></h2>
+      <div class="line" style="grid-template-columns:repeat(4,1fr)">
+        <div class="st"><span class="dot">1</span><h3>Macerate botanicals</h3><span class="empty">Nothing here</span></div>
+        <div class="st has"><span class="dot">2</span><h3>Distil</h3><a class="tok" href="#" style="animation-delay:.05s">Batch<em class="num">20 h</em></a></div>
+        <div class="st"><span class="dot">3</span><h3>Infuse raspberry</h3><span class="empty">Nothing here</span></div>
+        <div class="st has"><span class="dot">4</span><h3>Bottle and label</h3><a class="tok" href="#" style="animation-delay:.1s">Batch · last step<em class="num">5 days</em></a></div>
+      </div>
+    </section>
+
+    <section class="wf" data-p="lim" style="--c:var(--lim)">
+      <h2><i style="background:var(--lim)"></i>Limoncello <span class="num">2 batches</span><a href="#">Open workflow</a></h2>
+      <div class="line" style="grid-template-columns:repeat(3,1fr)">
+        <div class="st has"><span class="dot">1</span><h3>Infuse lemon peel</h3><a class="tok" href="#">Batch · just started<em>now</em></a></div>
+        <div class="st has"><span class="dot">2</span><h3>Blend and sweeten</h3><a class="tok" href="#" style="animation-delay:.05s">Waiting longest<em class="hot num">8 days</em></a></div>
+        <div class="st"><span class="dot">3</span><h3>Bottle and label</h3><span class="empty">Nothing here</span></div>
+      </div>
+    </section>
+
+    <nav class="links" aria-label="More"><a href="#">Batches</a><a href="#">Planner</a><a href="#">Contract orders</a><a href="#">Production tasks</a><a href="#">4 workflows</a></nav>
+  </main>
+</div>
+
+<nav class="mbar" aria-label="Main"><a href="#">Home</a><a href="#" aria-current="page">Production</a><a href="#">Stock</a><a href="#">Sales</a><a href="#">More</a></nav>
+
+<script>
+  const NAMES = {"": ["All products", "Production", "7 batches across 3 workflows · Limoncello has waited longest, 8 days"],
+    navy: ["Navy Strength Gin space", "Navy Strength Gin", "3 batches under way · one at every step"],
+    pink: ["Pink Gin space", "Pink Gin", "2 batches under way · the bottling batch has waited 5 days"],
+    lim: ["Limoncello space", "Limoncello", "2 batches under way · blend and sweeten has waited 8 days"]};
+  const GLANCE = {navy: [["3","batches under way"],["3","steps in the workflow"],["3 d","longest wait"],["1","on its last step"]],
+    pink: [["2","batches under way"],["4","steps in the workflow"],["5 d","longest wait"],["1","on its last step"]],
+    lim: [["2","batches under way"],["3","steps in the workflow"],["8 d","longest wait"],["0","on its last step"]]};
+  function go(space) {
+    if (space) document.body.dataset.space = space; else delete document.body.dataset.space;
+    document.querySelectorAll('[data-go]').forEach(b => b.matches('button') && b.setAttribute('aria-pressed', String(b.dataset.go === space)));
+    document.querySelectorAll('.wf').forEach(w => { w.hidden = !!space && w.dataset.p !== space; });
+    const g = document.querySelector('.glance'); g.replaceChildren(); g.hidden = !space;
+    (GLANCE[space] || []).forEach(([n, t]) => { const d = document.createElement('div'); const b = document.createElement('b'); b.className = 'num'; b.textContent = n; const s = document.createElement('span'); s.textContent = t; d.append(b, s); g.append(d); });
+    const [label, title, sub] = NAMES[space];
+    document.querySelector('[data-label]').textContent = '● ' + label;
+    document.querySelector('[data-title]').textContent = title;
+    document.querySelector('[data-sub]').textContent = sub;
+  }
+  document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); go(el.dataset.go); }));
+  window.demo = () => go('pink');  // used by the screenshot script
+</script>
+</body>
+</html>

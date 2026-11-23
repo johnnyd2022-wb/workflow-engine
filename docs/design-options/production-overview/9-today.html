@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 9 Today</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed;
+     the untraced stock lines are the real names the overview API returns. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
+<style>
+/* The overview as a to-do list (Things 3 "Today"): everything that needs a person, in the order to do it,
+   each with one action. Ticking an item is the action. Quiet chrome, generous rows, a blue that means "do". */
+:root{
+  --bg:#FFFFFF; --side:#F7F7F8; --ink:#1B1C1F; --text:#45474D; --muted:#8B8D94; --faint:#C3C5CB; --line:#EEEEF0;
+  --blue:#2F7BF6; --blue-soft:#EAF2FF; --star:#F6B400; --red:#E5484D; --red-soft:#FDECEC; --amber:#C77A00; --amber-soft:#FFF4DB; --green:#30A46C;
+  --lim:#E9AE00; --pink:#E54683; --navy:#3E63DD;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#1C1C1F;--side:#232327;--ink:#EDEDEF;--text:#C9CAD0;--muted:#8E9097;--faint:#4E5057;--line:#2D2D32;--blue:#4C8DFF;--blue-soft:#1C2A45;--red:#FF6369;--red-soft:#3A1C1E;--amber:#FFB224;--amber-soft:#3A2B10;--green:#4CC38A}
+}
+:root[data-theme="dark"]{--bg:#1C1C1F;--side:#232327;--ink:#EDEDEF;--text:#C9CAD0;--muted:#8E9097;--faint:#4E5057;--line:#2D2D32;--blue:#4C8DFF;--blue-soft:#1C2A45;--red:#FF6369;--red-soft:#3A1C1E;--amber:#FFB224;--amber-soft:#3A2B10;--green:#4CC38A}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 "Nunito Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+.num{font-variant-numeric:tabular-nums}
+
+.app{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}
+.side{background:var(--side);padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
+.side a{display:flex;align-items:center;gap:11px;padding:7px 10px;border-radius:8px;font-weight:600;color:var(--text)}
+.side a:hover{background:var(--line)}
+.side a[aria-current]{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--ink)}
+.side a .c{margin-left:auto;font-size:13px;color:var(--muted);font-weight:600}
+.side a .c.red{color:#fff;background:var(--red);border-radius:99px;padding:0 7px}
+.side svg{width:18px;height:18px;flex:none}
+.side .gap{height:14px}
+.side h4{margin:6px 10px 4px;font-size:12px;font-weight:700;color:var(--muted)}
+.side .dot{width:10px;height:10px;border-radius:50%;margin:0 4px;flex:none}
+.side .grow{flex:1}
+
+main{padding:52px 64px 80px;max-width:900px;width:100%;margin:0 auto}
+h1{margin:0;display:flex;align-items:center;gap:12px;font-size:32px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+h1 svg{width:30px;height:30px;color:var(--star)}
+.sub{margin:6px 0 0 42px;color:var(--muted);font-weight:600}
+.bar{display:flex;gap:8px;margin:22px 0 6px 42px;flex-wrap:wrap}
+.bar a{height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--line);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:6px;color:var(--text)}
+.bar a:hover{border-color:var(--faint)}
+.progress{display:flex;align-items:center;gap:10px;margin:16px 0 0 42px;color:var(--muted);font-weight:600;font-size:13.5px}
+.progress .pie{width:18px;height:18px;border-radius:50%;background:conic-gradient(var(--blue) 0 calc(var(--p)*1%),var(--line) 0)}
+
+.grp{margin-top:34px}
+.grp h2{margin:0 0 4px 42px;display:flex;align-items:center;gap:10px;font-size:15px;font-weight:800;color:var(--blue);padding-bottom:8px;border-bottom:1px solid var(--line)}
+.grp h2.red{color:var(--red)} .grp h2.amber{color:var(--amber)}
+.grp h2 span{color:var(--muted);font-weight:700}
+.grp h2 a{margin-left:auto;color:var(--muted);font-weight:700;font-size:13px}
+
+.todo{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 20px;align-items:start;padding:11px 14px 11px 10px;margin:2px 0 2px 10px;border-radius:12px;transition:background .15s,opacity .4s,transform .4s}
+.todo:hover{background:var(--side)}
+.check{width:22px;height:22px;border-radius:50%;border:1.8px solid var(--faint);display:grid;place-items:center;margin-top:1px;transition:all .2s;color:transparent}
+.check:hover{border-color:var(--blue)}
+.todo.done .check{background:var(--blue);border-color:var(--blue);color:#fff;transform:scale(1.08)}
+.todo.done .t b{color:var(--muted);text-decoration:line-through}
+.todo.done{opacity:.5}
+.t b{display:block;font-weight:700;color:var(--ink)}
+.t small{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:13.5px;font-weight:600;margin-top:2px;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:5px}
+.tag i{width:8px;height:8px;border-radius:50%}
+.when{font-size:13px;font-weight:800;padding:3px 9px;border-radius:8px;color:var(--muted);background:var(--side);white-space:nowrap}
+.when.hot{background:var(--amber-soft);color:var(--amber)}
+.when.red{background:var(--red-soft);color:var(--red)}
+.steps{display:inline-flex;gap:3px}
+.steps i{width:12px;height:4px;border-radius:2px;background:var(--line)}
+.steps i.d{background:var(--muted)} .steps i.n{background:var(--blue)}
+.more{margin:6px 0 0 52px;font-weight:700;color:var(--muted);font-size:14px}
+.logbook{margin:40px 0 0 42px;padding-top:16px;border-top:1px solid var(--line);display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-weight:600;font-size:14px}
+.logbook b{color:var(--ink)}
+.logbook a:hover{color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;transition:all .25s;pointer-events:none}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+.mbar{display:none}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  .side{display:none}
+  main{padding:28px 16px 110px}
+  h1{font-size:28px}
+  .sub,.bar,.progress,.grp h2,.logbook{margin-left:0}
+  .todo{margin-left:-6px;padding:12px 6px;grid-template-columns:24px minmax(0,1fr) auto}
+  .more{margin-left:36px}
+  .bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .bar a{flex:none}
+  .mbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:10;justify-content:space-around;align-items:center;padding:8px 8px 20px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  .mbar a{font-size:11px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;min-width:56px}
+  .mbar a[aria-current]{color:var(--blue)}
+  .mbar svg{width:22px;height:22px}
+  .fab{position:fixed;right:18px;bottom:86px;width:56px;height:56px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;box-shadow:0 10px 24px -8px var(--blue);z-index:11}
+}
+.fab{display:none}
+@media (max-width:900px){.fab{display:grid}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="Main navigation">
+    <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="currentColor" style="color:var(--star)"><path d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7L2 9.5l7.1-.6z"/></svg>Today<span class="c num">16</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--blue)"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg>Under way<span class="c num">7</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--red)"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18"/></svg>Planner</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#7C66DC"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>Stock<span class="c num red">3</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--green)"><path d="M5 12l5 5L20 7"/></svg>Logbook<span class="c num">2</span></a>
+    <div class="gap"></div>
+    <h4>Workflows</h4>
+    <a href="#"><span class="dot" style="background:var(--navy)"></span>Navy Strength Gin<span class="c num">3</span></a>
+    <a href="#"><span class="dot" style="background:var(--pink)"></span>Pink Gin<span class="c num">2</span></a>
+    <a href="#"><span class="dot" style="background:var(--lim)"></span>Limoncello<span class="c num">2</span></a>
+    <a href="#"><span class="dot" style="background:#B7791F"></span>Manuka Honey Liqueur</a>
+    <span class="grow"></span>
+    <a href="#">Sales</a><a href="#">Compliance</a><a href="#">Settings</a>
+  </aside>
+
+  <main data-demo>
+    <h1><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7L2 9.5l7.1-.6z"/></svg>Today</h1>
+    <p class="sub">Monday 23 November · production</p>
+    <div class="bar"><a href="#">＋ Add stock</a><a href="#">⤳ Trace and recall</a><a href="#">▦ Production board</a></div>
+    <div class="progress" style="--p:35"><span class="pie" aria-hidden="true"></span>8 of 23 steps done across 7 batches · 2 finished this week</div>
+
+    <section class="grp" aria-labelledby="g1">
+      <h2 id="g1">Record the next step <span class="num">7</span><a href="#">Longest first</a></h2>
+      <div class="todo"><button class="check" aria-label="Record Limoncello step 2">✓</button><div class="t"><b>Blend and sweeten the Limoncello</b><small><span class="tag"><i style="background:var(--lim)"></i>Limoncello</span><span class="steps"><i class="d"></i><i class="n"></i><i></i></span>Step 2 of 3</small></div><span class="when hot num">8 days</span></div>
+      <div class="todo"><button class="check" aria-label="Record Pink Gin step 4">✓</button><div class="t"><b>Bottle and label the Pink Gin</b><small><span class="tag"><i style="background:var(--pink)"></i>Pink Gin</span><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i></span>Last step</small></div><span class="when num">5 days</span></div>
+      <div class="todo"><button class="check" aria-label="Record Navy Strength step 3">✓</button><div class="t"><b>Bottle and label the Navy Strength</b><small><span class="tag"><i style="background:var(--navy)"></i>Navy Strength</span><span class="steps"><i class="d"></i><i class="d"></i><i class="n"></i></span>Last step</small></div><span class="when num">3 days</span></div>
+      <div class="todo"><button class="check" aria-label="Record Navy Strength step 2">✓</button><div class="t"><b>Distil the Navy Strength</b><small><span class="tag"><i style="background:var(--navy)"></i>Navy Strength</span><span class="steps"><i class="d"></i><i class="n"></i><i></i></span>Step 2 of 3</small></div><span class="when num">1 day</span></div>
+      <div class="todo"><button class="check" aria-label="Record Pink Gin step 2">✓</button><div class="t"><b>Distil the Pink Gin</b><small><span class="tag"><i style="background:var(--pink)"></i>Pink Gin</span><span class="steps"><i class="d"></i><i class="n"></i><i></i><i></i></span>Step 2 of 4</small></div><span class="when num">20 h</span></div>
+      <div class="todo"><button class="check" aria-label="Record Navy Strength step 1">✓</button><div class="t"><b>Macerate botanicals for the Navy Strength</b><small><span class="tag"><i style="background:var(--navy)"></i>Navy Strength</span><span class="steps"><i class="n"></i><i></i><i></i></span>Step 1 of 3</small></div><span class="when num">2 h</span></div>
+      <div class="todo"><button class="check" aria-label="Record Limoncello step 1">✓</button><div class="t"><b>Infuse lemon peel for the Limoncello</b><small><span class="tag"><i style="background:var(--lim)"></i>Limoncello</span><span class="steps"><i class="n"></i><i></i><i></i></span>Step 1 of 3</small></div><span class="when">Now</span></div>
+    </section>
+
+    <section class="grp" aria-labelledby="g2">
+      <h2 id="g2" class="red">Sort out stock <span class="num">8</span><a href="#">Inventory</a></h2>
+      <div class="todo"><button class="check" aria-label="Review expired stock">✓</button><div class="t"><b>Remove or assess 3 expired raw materials</b><small>They are inputs to 3 products · check before the next run</small></div><span class="when red">Expired</span></div>
+      <div class="todo"><button class="check" aria-label="Link Rested gin">✓</button><div class="t"><b>Add a trace link to Rested gin 42%</b><small>412 L on hand · no supplier batch or production link</small></div><span class="when">Trace</span></div>
+      <div class="todo"><button class="check" aria-label="Link Navy Strength 700 mL">✓</button><div class="t"><b>Add a trace link to Whistlebird Navy Strength 700 mL</b><small>144 units on hand</small></div><span class="when">Trace</span></div>
+      <div class="todo"><button class="check" aria-label="Link Manuka Honey Liqueur">✓</button><div class="t"><b>Add a trace link to Manuka Honey Liqueur 500 mL</b><small>96 units on hand</small></div><span class="when">Trace</span></div>
+      <a class="more" href="#">4 more lines to link: Honey liqueur base, Tamper seal, Demineralised water, and 1 other</a>
+    </section>
+
+    <section class="grp" aria-labelledby="g3">
+      <h2 id="g3" class="amber">Coming up <span class="num">2</span></h2>
+      <div class="todo"><button class="check" aria-label="Plan around expiring stock">✓</button><div class="t"><b>Use or replace 2 lines that expire within 30 days</b><small>None in the next 7 days</small></div><span class="when hot">30 days</span></div>
+    </section>
+
+    <div class="logbook"><span>Logbook: <b>2</b> batches finished this week</span><a href="#">Batches</a><a href="#">Contract orders</a><a href="#">Suppliers</a><a href="#">Production tasks</a></div>
+  </main>
+</div>
+
+<a class="fab" href="#" aria-label="Record a production step"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5l13 7.5-13 7.5z"/></svg></a>
+<nav class="mbar" aria-label="Main">
+  <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7L2 9.5l7.1-.6z"/></svg>Today</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg>Under way</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4"/></svg>Stock</a>
+  <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+<div class="toast" role="status" aria-live="polite"></div>
+
+<script>
+  // Ticking an item opens the real action; here it just shows the idea.
+  const toast = document.querySelector('.toast');
+  document.querySelectorAll('.check').forEach(c => c.addEventListener('click', () => {
+    const row = c.closest('.todo'); row.classList.toggle('done');
+    toast.textContent = row.classList.contains('done') ? 'Recorded: ' + row.querySelector('b').textContent : 'Undone';
+    toast.classList.add('on'); clearTimeout(window.__t); window.__t = setTimeout(() => toast.classList.remove('on'), 1800);
+  }));
+  window.demo = () => document.querySelector('.check').click();
+</script>
+</body>
+</html>

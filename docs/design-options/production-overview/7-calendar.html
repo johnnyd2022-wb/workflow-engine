@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 7 Calendar</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed.
+     Block positions use each batch's real start time; step boundaries inside a block are spaced evenly
+     because the overview API does not return step completion times. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Time first (Notion Calendar / Cron): batches are blocks on a day grid, a red line is now,
+   a mini month and an "up next" rail sit on the left. Swiss-calm: hairlines, one red, product tints. */
+:root{
+  --bg:#FFFFFF; --rail:#FAFAF9; --ink:#1A1A19; --text:#3F3F3C; --muted:#8B8A86; --faint:#B9B8B3; --line:#EDEDEA; --line-2:#E2E2DE; --today:#FFF8F6;
+  --now:#EB4D3D; --accent:#2F6FEB;
+  --lim:#E9A800; --lim-bg:#FFF6D9; --pink:#E0457B; --pink-bg:#FDE7EF; --navy:#3559D6; --navy-bg:#E7EDFD;
+  --day:calc((100% - 0px) / 9);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#191919;--rail:#1F1F1F;--ink:#EDEDEC;--text:#CFCFCC;--muted:#8F8F8B;--faint:#5E5E5B;--line:#2A2A2A;--line-2:#333;--today:#241B1A;--now:#FF6B5B;--accent:#5B8EF5;--lim:#F2C230;--lim-bg:#3A3015;--pink:#F06B98;--pink-bg:#3D1F2A;--navy:#7092FF;--navy-bg:#1E2747}
+}
+:root[data-theme="dark"]{--bg:#191919;--rail:#1F1F1F;--ink:#EDEDEC;--text:#CFCFCC;--muted:#8F8F8B;--faint:#5E5E5B;--line:#2A2A2A;--line-2:#333;--today:#241B1A;--now:#FF6B5B;--accent:#5B8EF5;--lim:#F2C230;--lim-bg:#3A3015;--pink:#F06B98;--pink-bg:#3D1F2A;--navy:#7092FF;--navy-bg:#1E2747}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:13.5px/1.45 Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+kbd{font:500 11px Geist;color:var(--muted);border:1px solid var(--line-2);border-radius:4px;padding:0 4px}
+
+.app{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}
+.rail{background:var(--rail);border-right:1px solid var(--line);padding:16px 16px 24px;display:flex;flex-direction:column;gap:20px}
+.who{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--ink)}
+.who i{width:26px;height:26px;border-radius:7px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-style:normal;font-size:12px}
+.who span{margin-left:auto;color:var(--muted);font-weight:500}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav a{padding:6px 8px;border-radius:6px;color:var(--muted);font-weight:500;display:flex;gap:8px;align-items:center}
+.nav a:hover{background:var(--line);color:var(--ink)}
+.nav a[aria-current]{background:var(--line);color:var(--ink)}
+.nav a .c{margin-left:auto;font-size:12px}
+
+.month h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink);display:flex}
+.month h3 span{margin-left:auto;color:var(--muted);font-weight:500}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11.5px}
+.cal b{color:var(--faint);font-weight:500;padding-bottom:4px}
+.cal span{aspect-ratio:1;display:grid;place-items:center;border-radius:50%;color:var(--text);position:relative}
+.cal span.o{color:var(--faint)}
+.cal span.wk{background:var(--line)}
+.cal span.t{background:var(--now);color:#fff;font-weight:600}
+.cal span.d::after{content:"";position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.cal span.t.d::after{background:#fff}
+
+.next h3,.attn h3{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.ev{display:grid;grid-template-columns:3px 1fr;gap:10px;padding:8px 0}
+.ev i{border-radius:2px}
+.ev b{display:block;color:var(--ink);font-weight:600}
+.ev small{color:var(--muted)}
+.ev .go{display:inline-block;margin-top:6px;padding:4px 10px;border-radius:6px;background:var(--ink);color:var(--bg);font-weight:600;font-size:12.5px}
+.attn a{display:flex;gap:8px;align-items:center;padding:5px 0;color:var(--text)}
+.attn a b{min-width:22px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:11.5px;font-weight:700}
+
+.main{display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:10px;padding:14px 22px;border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:20px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+.top h1 span{color:var(--muted);font-weight:500}
+.pg{display:flex;gap:2px;margin-left:8px}
+.pg a{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line-2)}
+.chip{padding:4px 10px;border-radius:6px;border:1px solid var(--line-2);font-weight:500;color:var(--text)}
+.top__r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{height:32px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);font-weight:600;display:inline-flex;align-items:center;gap:6px;color:var(--ink)}
+.btn--go{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn--go kbd{border-color:rgba(127,127,127,.5);color:inherit;opacity:.7}
+
+.board{position:relative;margin:0 22px;flex:1}
+.days{display:grid;grid-template-columns:repeat(9,1fr);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:2}
+.days div{padding:12px 8px 10px;text-align:left;font-size:11.5px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.days div b{display:block;font-size:22px;font-weight:500;color:var(--ink);letter-spacing:-.02em;text-transform:none}
+.days .t b{width:36px;height:36px;border-radius:50%;background:var(--now);color:#fff;display:grid;place-items:center;font-size:18px;margin-left:-4px}
+.days .t{color:var(--now)}
+.lanes{position:relative;padding:8px 0 20px}
+.lanes::before{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,transparent 0 calc(100%/9 - 1px),var(--line) calc(100%/9 - 1px) calc(100%/9));pointer-events:none}
+.lanes::after{content:"";position:absolute;top:0;bottom:0;left:calc(100%/9*8);width:calc(100%/9);background:var(--today);z-index:0}
+.lane{position:relative;height:68px;z-index:1}
+.blk{position:absolute;top:6px;bottom:6px;border-radius:8px;display:flex;overflow:hidden;font-size:12.5px;animation:in .5s cubic-bezier(.2,.8,.2,1) both;transform-origin:left;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+@keyframes in{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.blk .s{flex:1;padding:5px 9px;min-width:0;border-left:3px solid;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk .s b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.blk .s small{opacity:.8}
+.blk .s.done{opacity:.55}
+.lim{background:var(--lim-bg)} .lim .s{border-color:var(--lim);color:color-mix(in srgb,var(--lim) 45%,var(--ink))}
+.pink{background:var(--pink-bg)} .pink .s{border-color:var(--pink);color:color-mix(in srgb,var(--pink) 55%,var(--ink))}
+.navy{background:var(--navy-bg)} .navy .s{border-color:var(--navy);color:color-mix(in srgb,var(--navy) 55%,var(--ink))}
+.ghost{position:absolute;top:6px;bottom:6px;border-radius:8px;border:1.5px dashed var(--line-2);color:var(--muted);font-size:12px;padding:5px 9px;white-space:nowrap;overflow:hidden}
+.now{position:absolute;top:-6px;bottom:0;left:calc(100%/9*8 + 100%/9*.40);width:2px;background:var(--now);z-index:3}
+.now::before{content:"";position:absolute;top:0;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--now)}
+.warn{outline:2px solid color-mix(in srgb,var(--lim) 70%,transparent);outline-offset:1px}
+.foot{display:flex;gap:14px;flex-wrap:wrap;padding:14px 22px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+.foot a{color:var(--text);font-weight:500}
+
+.agenda{display:none}
+@media (max-width:980px){.app{grid-template-columns:1fr}.rail{display:none}}
+@media (max-width:640px){
+  .top{flex-wrap:wrap;padding:12px 16px}
+  .pg,.top .chip,.top__r .btn:not(.btn--go),.btn--go kbd{display:none}
+  .board{display:none}
+  .foot{display:none}
+  .agenda{display:block;padding:0 16px 40px}
+  .ag-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:12px 0;border-bottom:1px solid var(--line);text-align:center;font-size:11px;color:var(--muted);font-weight:500}
+  .ag-strip b{display:grid;place-items:center;width:34px;height:34px;margin:4px auto 0;border-radius:50%;font-size:15px;color:var(--ink);font-weight:500}
+  .ag-strip .t b{background:var(--now);color:#fff}
+  .ag-strip .d b{box-shadow:inset 0 -3px 0 var(--accent)}
+  .ag-sum{display:flex;gap:8px;overflow-x:auto;padding:12px 0;scrollbar-width:none}
+  .ag-sum a{flex:none;padding:6px 11px;border-radius:99px;border:1px solid var(--line-2);font-weight:500}
+  .ag-sum b{color:var(--now)}
+  .ag-h{margin:18px 0 6px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .ag{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;margin-bottom:6px;border-left:3px solid}
+  .ag time{font-size:12px;color:var(--muted);font-weight:500}
+  .ag b{display:block;color:var(--ink);font-weight:600}
+  .ag small{color:var(--muted)}
+  .ag em{font-style:normal;font-size:12.5px;font-weight:600;color:var(--muted)}
+  .ag em.hot{color:var(--now)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail" aria-label="Navigation and summary">
+    <div class="who"><i>W</i>Whistlebird<span>▾</span></div>
+    <nav class="nav" aria-label="Main">
+      <a href="#">Home</a><a href="#" aria-current="page">Production<span class="c num">7</span></a><a href="#">Inventory<span class="c num">32</span></a><a href="#">Sales</a><a href="#">Compliance</a>
+    </nav>
+    <div class="month">
+      <h3>November 2026<span>‹ ›</span></h3>
+      <div class="cal" aria-hidden="true">
+        <b>M</b><b>T</b><b>W</b><b>T</b><b>F</b><b>S</b><b>S</b>
+        <span class="o">26</span><span class="o">27</span><span class="o">28</span><span class="o">29</span><span class="o">30</span><span class="o">31</span><span>1</span>
+        <span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span>
+        <span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span class="wk d">15</span>
+        <span class="wk">16</span><span class="wk">17</span><span class="wk d">18</span><span class="wk">19</span><span class="wk d">20</span><span class="wk">21</span><span class="wk d">22</span>
+        <span class="t d">23</span><span>24</span><span>25</span><span>26</span><span>27</span><span>28</span><span>29</span>
+        <span>30</span><span class="o">1</span><span class="o">2</span><span class="o">3</span><span class="o">4</span><span class="o">5</span><span class="o">6</span>
+      </div>
+    </div>
+    <div class="next">
+      <h3>Up next</h3>
+      <div class="ev"><i style="background:var(--lim)"></i><div><b>Limoncello · Blend and sweeten</b><small>Ready since Sun 15 Nov · 8 days</small><br><a class="go" href="#">Record step 2</a></div></div>
+      <div class="ev"><i style="background:var(--pink)"></i><div><b>Pink Gin · Bottle and label</b><small>Last step · 5 days</small></div></div>
+    </div>
+    <div class="attn">
+      <h3>Stock</h3>
+      <a href="#"><b class="num" style="background:color-mix(in srgb,var(--now) 14%,transparent);color:var(--now)">3</b>Expired raw materials</a>
+      <a href="#"><b class="num" style="background:var(--lim-bg);color:color-mix(in srgb,var(--lim) 50%,var(--ink))">7</b>Lines missing a trace link</a>
+      <a href="#"><b class="num" style="background:var(--lim-bg);color:color-mix(in srgb,var(--lim) 50%,var(--ink))">2</b>Expire within 30 days</a>
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="top">
+      <h1>Production <span>· 15–23 November</span></h1>
+      <span class="pg"><a href="#" aria-label="Earlier">‹</a><a href="#" aria-label="Later">›</a></span>
+      <a class="chip" href="#">Today</a>
+      <a class="chip" href="#">9 days ▾</a>
+      <div class="top__r">
+        <a class="btn" href="#">Add stock</a><a class="btn" href="#">Trace</a>
+        <a class="btn btn--go" href="#">▶ Record step <kbd>R</kbd></a>
+      </div>
+    </header>
+
+    <div class="board">
+      <div class="days">
+        <div>Sun<b>15</b></div><div>Mon<b>16</b></div><div>Tue<b>17</b></div><div>Wed<b>18</b></div><div>Thu<b>19</b></div><div>Fri<b>20</b></div><div>Sat<b>21</b></div><div>Sun<b>22</b></div><div class="t">Mon<b>23</b></div>
+      </div>
+      <div class="lanes">
+        <div class="lane" data-p="Limoncello"><div class="blk lim warn" style="left:4.5%;right:calc(100%/9*.6 - 2px)"><span class="s done"><b>Infuse lemon peel</b><small>Limoncello</small></span><span class="s" style="flex:7"><b>Blend and sweeten · waiting 8 days</b><small>Limoncello · step 2 of 3</small></span></div></div>
+        <div class="lane" data-p="Pink Gin"><div class="blk pink" style="left:calc(100%/9*3 + 3.5%);right:calc(100%/9*.6 - 2px);animation-delay:.05s"><span class="s done"><b>Macerate</b></span><span class="s done"><b>Distil</b></span><span class="s done"><b>Infuse raspberry</b></span><span class="s"><b>Bottle and label</b><small>Pink Gin · 4 of 4</small></span></div></div>
+        <div class="lane" data-p="Navy Strength"><div class="blk navy" style="left:calc(100%/9*5 + 3.5%);right:calc(100%/9*.6 - 2px);animation-delay:.1s"><span class="s done"><b>Macerate</b></span><span class="s done"><b>Distil</b></span><span class="s"><b>Bottle and label</b><small>Navy Strength · 3 of 3</small></span></div></div>
+        <div class="lane" data-p="Navy Strength"><div class="blk navy" style="left:calc(100%/9*7 + 2%);right:calc(100%/9*.6 - 2px);animation-delay:.15s"><span class="s done"><b>Macerate</b></span><span class="s"><b>Distil</b><small>Navy · 2 of 3</small></span></div><div class="ghost" style="left:calc(100%/9*8.42);right:0">Next: bottle</div></div>
+        <div class="lane" data-p="Pink Gin"><div class="blk pink" style="left:calc(100%/9*7 + 5.4%);right:calc(100%/9*.6 - 2px);animation-delay:.2s"><span class="s done"><b>Mac.</b></span><span class="s"><b>Distil</b><small>Pink · 2 of 4</small></span></div></div>
+        <div class="lane" data-p="Navy Strength"><div class="blk navy" style="left:calc(100%/9*8 + 2.4%);right:calc(100%/9*.6 - 2px);animation-delay:.25s"><span class="s"></span></div><div class="ghost" style="left:calc(100%/9*8.42);right:0">Navy · macerate · 2 h</div></div>
+        <div class="lane" data-p="Limoncello"><div class="blk lim" style="left:calc(100%/9*8 + 4.3%);right:calc(100%/9*.6 - 2px);min-width:8px;animation-delay:.3s"><span class="s"></span></div><div class="ghost" style="left:calc(100%/9*8.42);right:0">Limoncello · infuse · now</div></div>
+        <span class="now" aria-hidden="true"></span>
+      </div>
+    </div>
+    <div class="foot"><span>Press <kbd>1</kbd>–<kbd>9</kbd> to change the number of days.</span><a href="#">Batches</a><a href="#">Workflows</a><a href="#">Suppliers</a><a href="#">Contract orders</a><a href="#">Production tasks</a></div>
+
+    <div class="agenda">
+      <div class="ag-strip" aria-hidden="true"><div class="d">Tue<b>17</b></div><div class="d">Wed<b>18</b></div><div>Thu<b>19</b></div><div class="d">Fri<b>20</b></div><div>Sat<b>21</b></div><div class="d">Sun<b>22</b></div><div class="t d">Mon<b>23</b></div></div>
+      <div class="ag-sum"><a href="#"><b>3</b> expired</a><a href="#">7 untraced</a><a href="#">2 expire soon</a><a href="#">2 finished this week</a></div>
+      <div class="ag-h">Waiting on you</div>
+      <a class="ag lim" href="#" style="border-color:var(--lim)"><time>15 Nov</time><div><b>Limoncello</b><small>Blend and sweeten · 2 of 3</small></div><em class="hot">8 d</em></a>
+      <a class="ag pink" href="#" style="border-color:var(--pink)"><time>18 Nov</time><div><b>Pink Gin</b><small>Bottle and label · 4 of 4</small></div><em>5 d</em></a>
+      <a class="ag navy" href="#" style="border-color:var(--navy)"><time>20 Nov</time><div><b>Navy Strength</b><small>Bottle and label · 3 of 3</small></div><em>3 d</em></a>
+      <div class="ag-h">Started this weekend</div>
+      <a class="ag navy" href="#" style="border-color:var(--navy)"><time>Sun</time><div><b>Navy Strength</b><small>Distil · 2 of 3</small></div><em>1 d</em></a>
+      <a class="ag pink" href="#" style="border-color:var(--pink)"><time>Sun</time><div><b>Pink Gin</b><small>Distil · 2 of 4</small></div><em>20 h</em></a>
+      <div class="ag-h">Today</div>
+      <a class="ag navy" href="#" style="border-color:var(--navy)"><time>Today</time><div><b>Navy Strength</b><small>Macerate botanicals · 1 of 3</small></div><em>2 h</em></a>
+      <a class="ag lim" href="#" style="border-color:var(--lim)"><time>Today</time><div><b>Limoncello</b><small>Infuse lemon peel · 1 of 3</small></div><em>now</em></a>
+    </div>
+  </section>
+</div>
+</body>
+</html>

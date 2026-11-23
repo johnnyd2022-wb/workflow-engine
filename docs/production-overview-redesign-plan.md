@@ -101,6 +101,42 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 4: five more, each built on one unique element
+
+The founder asked for five more options, from design-specific sources, each unique. These sit
+beside 1–5 (6–10), not instead of them. Sources: design galleries and libraries (Mobbin,
+SaaSFrame, Dribbble, Behance, Awwwards, Refero, Godly), and the products those galleries keep
+returning to. Galleries are image-led, so the searches mostly surfaced their commentary; the
+patterns below come from the products' own guidance where it exists.
+
+| Element | Where from | What it becomes here |
+|---|---|---|
+| Rings that close: three fixed goals, visual before numeric, glanceable | Apple Activity rings (HIG, Macworld interview) | 6 Rings: batch progress 35 % (8 of 23 steps), traceable 77 % (24 of 31), in date 90 % (28 of 31) |
+| Widgets in small/medium/large sizes, one fact per tile | iOS home-screen widgets | 6 Rings' grid of rounded tiles |
+| A multi-day timeline you scroll sideways, number keys set how many days | Notion Calendar (Cron), reviews in Efficient.app, NY Sun | 7 Calendar: 9-day grid, red now-line, mini month, "Up next"; phone becomes an agenda |
+| Spaces with their own colour; the sidebar carries it as a gradient | Arc browser (Arc help centre, design guides) | 8 Spaces: All / Navy / Pink / Limoncello, page re-tints, workflow lines with batches on their step |
+| Compact, glanceable progress; detail only when relevant | Apple Live Activities guidance | 8 and 10 keep each batch to one small token |
+| Today list: what needs you, in order, tick to do | Things 3 (Apple Design Awards 2009, 2017) | 9 Today: 7 steps to record, 8 stock jobs (with the real untraced line names), 1 coming up |
+| Progressive disclosure, calm by default, role-aware | SaaSFrame and SaaSUI 2026 dashboard write-ups | 9 shows only what needs a person; 10 hides room detail until tapped |
+| A live view of the plant, by line or machine | Contra production-planning case study (per-machine load view), MES dashboards on Dribbble | 10 Floor map: steeping, still house, blending, bottling, stores |
+
+| | 6 Rings | 7 Calendar | 8 Spaces | 9 Today | 10 Floor map |
+|---|---|---|---|---|---|
+| Unique element | Closing rings + widget sizes | Week timeline with now-line | Per-product colour spaces | To-do queue you tick | Distillery plan |
+| Navigation | Icon-over-label tab bar at the top; bottom on phone | Rail with mini month and up-next | Gradient sidebar with pinned sections and space dots | Things-style sidebar lists with counts | Plain top bar |
+| Batches as | Mini rings | Blocks on days | Tokens on workflow steps | Tasks ("Distil the Pink Gin") | Tokens in rooms |
+| Best at | The 2-second glance | Seeing how long things have taken | Owners who think per product | Getting through the day | Someone walking the floor |
+| Gives up | Rings need explaining once | Needs width; phone switches to agenda | Cross-product comparison | Charts and totals | Needs a station model |
+
+### Decisions that are the reader's (round 4)
+
+- **6 Rings' three goals** are a choice of what "healthy" means. Batch progress counts
+  steps done; a goal like "steps recorded today" would need completion times.
+- **7 Calendar** places blocks by real start times but spaces the steps inside a block
+  evenly, because the API does not return when each step finished.
+- **10 Floor map** maps steps to rooms by name. A real version needs a station (room or
+  equipment) on each workflow step, which the data model does not have.
+
 ## Decisions that are the reader's, not taste
 
 - **Sparklines and "+3 since last Monday" (Option 1)** need a daily history of active
