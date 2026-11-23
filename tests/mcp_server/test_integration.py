@@ -90,7 +90,7 @@ def test_a_sales_token_is_offered_no_cost_or_production_operations(world, real):
 
 
 def test_docs_for_an_operation_has_a_fully_resolved_schema_and_an_example(real, admin_token):
-    data = real.docs(admin_token, operation_id="core_list_inventory").data
+    data = real.docs(admin_token, operation_id="core_list_inventory", include_response_schema=True).data
     assert {p["name"] for p in data["parameters"]} >= {"type", "site_id", "limit", "cursor"}
     assert "$ref" not in json.dumps(data["response_schema"])
     assert data["example"] and "inventory_items" in data["example"]

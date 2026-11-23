@@ -421,6 +421,13 @@ def combine(result: dict, rules: list[str]) -> list[str]:
     return narrowed
 
 
+def order_pytest_targets(targets: list[str]) -> list[str]:
+    """Collect deeper paths first to preserve nested conftest fixtures in pytest 9.1."""
+    # A bare test file can cause pytest to recreate the collectors for sibling
+    # directories. Collect tests in those directories first (pytest-dev/pytest#14635).
+    return sorted(targets, key=lambda target: target.split("::", 1)[0].rstrip("/").count("/"), reverse=True)
+
+
 def select(args) -> int:
     out = Path(args.out)
     try:
@@ -463,7 +470,8 @@ def select(args) -> int:
             conn.close()
     if args.rules_targets:
         result["tests"] = combine(result, Path(args.rules_targets).read_text().split())
-    out.write_text("\n".join(result["tests"]) + ("\n" if result["tests"] else ""))
+    targets = order_pytest_targets(result["tests"])
+    out.write_text("\n".join(targets) + ("\n" if targets else ""))
     summary = {k: v for k, v in result.items() if k not in {"tests", "paths"}}
     summary["selected_tests"] = "all" if result["tests"] == FULL else len(result["tests"])
     print(json.dumps(summary, indent=2, default=str))

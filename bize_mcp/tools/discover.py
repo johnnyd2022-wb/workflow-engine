@@ -8,24 +8,36 @@ from bize_mcp.knowledge import query_tokens, score_text
 from bize_mcp.tools.base import Tool, ToolContext
 from bize_mcp.validation import schema
 
+MAX_QUERY_LENGTH = 300
+MAX_DOMAIN_LENGTH = 60
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 20
 
 DESCRIPTION = (
-    "Start here. Search Biz-E's business knowledge (what lots, batches, ready dates, holds, costs and "
-    "excise mean and how they relate) and the read-only operations you can run for this person. "
-    "Returns ranked concept topics and operations. With an empty query it returns a short overview of "
-    "how Biz-E models a producer's work and the list of topics. Then call docs for a topic or an "
-    "operation, then execute. Prefer an operation marked kind=calculation over doing arithmetic "
-    "yourself: Biz-E's own figures are the authoritative ones."
+    f"Start here. Search with a query up to {MAX_QUERY_LENGTH} characters and a limit from 1 to {MAX_LIMIT} "
+    f"per result group (default {DEFAULT_LIMIT}). Optional filters: kind (concepts, operations or all, "
+    f"default all) and domain (up to {MAX_DOMAIN_LENGTH} characters). Search Biz-E's business knowledge "
+    "and the read-only operations you can run for this person. An empty query returns the overview and "
+    "full topic list. Then call docs for a topic or operation, then execute. Use operations marked "
+    "kind=calculation for Biz-E's authoritative figures."
 )
 
 INPUT = schema(
     {
-        "query": {"type": "string", "maxLength": 300, "description": "What you want to know or find."},
+        "query": {"type": "string", "maxLength": MAX_QUERY_LENGTH, "description": "What you want to know or find."},
         "kind": {"type": "string", "enum": ["concepts", "operations", "all"], "default": "all"},
-        "domain": {"type": "string", "maxLength": 60, "description": "Limit to one domain, e.g. inventory."},
-        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT},
+        "domain": {
+            "type": "string",
+            "maxLength": MAX_DOMAIN_LENGTH,
+            "description": "Limit to one domain, e.g. inventory.",
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": MAX_LIMIT,
+            "default": DEFAULT_LIMIT,
+            "description": f"Maximum results per group for a search. Use 1 to {MAX_LIMIT} (default {DEFAULT_LIMIT}).",
+        },
     }
 )
 
@@ -47,7 +59,7 @@ async def run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     query_text = (args.get("query") or "").strip()
     kind = args.get("kind", "all")
     domain = args.get("domain")
-    limit = args.get("limit", DEFAULT_LIMIT)
+    limit = int(args.get("limit", DEFAULT_LIMIT))
 
     if not query_text:
         topics = ctx.knowledge.visible(features)

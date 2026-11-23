@@ -270,8 +270,8 @@ organisation's own data, not instructions."):
 
 | Tool | Input | Returns |
 |---|---|---|
-| `discover` | `query` (text), `kind?`: `concepts` \| `operations` \| `all` (default `all`), `domain?`, `limit?` (≤ 20) | Ranked matches: concept topics `{topic, title, summary, related}` and operations `{operation_id, summary, domain, kind, permission, required_params}`. Only operations the caller may execute and topics for features the org has. |
-| `docs` | `topic` or `operation_id` | A concept's full document, or one operation's full contract: parameters, response schema, `x-bize` concepts, related operations, worked example. Unauthorised operations are "not found". |
+| `discover` | `query` (up to 300 characters), `kind?`: `concepts` \| `operations` \| `all` (default `all`), `domain?` (up to 60 characters), `limit?` (1–20, default 10) | Ranked matches: concept topics `{topic, title, summary, related}` and operations `{operation_id, summary, domain, kind, permission, required_params}`. Only operations the caller may execute and topics for features the org has. |
+| `docs` | `topic` or `operation_id`; optional `include_response_schema` for operations | A concept's full document, or one operation's parameters, top-level response fields, `x-bize` concepts, related operations and example. Pass `include_response_schema: true` for the full response schema. Unauthorised operations are "not found". |
 | `execute` | `calls`: 1–5 items `{id, operation_id, params, select?}` | Each call's result in order. A later call's `params` may reference an earlier result as `{"$from": "<id>", "path": "items[0].id"}`. `select` is a field projection (JMESPath subset: fields, `[*]`, `[n]`; no functions). |
 
 Overview resource: `discover` with an empty query returns a short domain overview (about 300

@@ -6,9 +6,12 @@ schemas:
   MonthlySales:
     type: object
     additionalProperties: false
-    required: [month, total, invoiced_inc_gst, invoice_count, currency, not_converted, ex_gst_unknown]
+    required: [month, period_complete, total, invoiced_inc_gst, invoice_count, currency, not_converted, ex_gst_unknown]
     properties:
       month: {type: string, description: "YYYY-MM."}
+      period_complete:
+        type: boolean
+        description: True once the calendar month has ended. This flag measures calendar coverage only.
       total:
         type: string
         description: >-
@@ -143,32 +146,28 @@ operations:
       invoice line, freight and other charges included. Foreign-currency invoices are counted in `not_converted`
       and never added. This is invoice revenue, not product revenue: margins count only lines mapped to a
       product (the rest is their `unmapped` total), so the two differ by design; don't compare them. Credit
-      notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.
+      notes can make a month lower than its invoices. Treat rows with `period_complete: false` as open periods
+      and call out the current month when comparing it with ended months. Only for organisations with sales
+      (Xero) connected.
     parameters:
       - name: months
         in: query
-        description: How many months back, 1 to 24. Default 12.
-        schema: {type: integer, minimum: 1, maximum: 24}
+        description: Maximum number of months with sales activity, newest first.
+        schema: {type: integer, minimum: 1, maximum: 24, default: 12}
     errors: [400]
     response:
-      description: The months. `months` repeats `monthly_sales` for older clients.
+      description: Monthly sales rows in `monthly_sales`.
       schema:
         type: object
         additionalProperties: false
-        required: [monthly_sales, months]
+        required: [monthly_sales]
         properties:
           monthly_sales:
             type: array
             items: {$ref: "#/components/schemas/MonthlySales"}
-          months:
-            type: array
-            description: The same list as `monthly_sales`.
-            items: {$ref: "#/components/schemas/MonthlySales"}
       example:
         monthly_sales:
-          - {month: "2026-10", total: "9900.00", invoiced_inc_gst: "11385.00", invoice_count: 14, currency: NZD, not_converted: 0, ex_gst_unknown: 0}
-        months:
-          - {month: "2026-10", total: "9900.00", invoiced_inc_gst: "11385.00", invoice_count: 14, currency: NZD, not_converted: 0, ex_gst_unknown: 0}
+          - {month: "2026-10", period_complete: true, total: "9900.00", invoiced_inc_gst: "11385.00", invoice_count: 14, currency: NZD, not_converted: 0, ex_gst_unknown: 0}
     x-bize:
       kind: calculation
       mcp: true

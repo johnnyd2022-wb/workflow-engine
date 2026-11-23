@@ -431,7 +431,7 @@ def test_analytics_period_total_adds_decimal_string_months_ex_gst(browser, app_u
     try:
         page.route(
             "**/api/crm/analytics/monthly-sales*",
-            lambda route: route.fulfill(json={"monthly_sales": months[::-1], "months": months[::-1]}),
+            lambda route: route.fulfill(json={"monthly_sales": months[::-1]}),
         )
         page.goto("/crm/analytics")
         card = page.get_by_role("region", name="Monthly sales")

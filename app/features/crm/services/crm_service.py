@@ -863,7 +863,11 @@ class CRMService:
     # ------------------------------------------------------------------
 
     def monthly_sales(self, org_id: UUID, months: int = 12) -> list[dict]:
-        return self.invoice_repo.monthly_sales_totals(org_id, months=months)
+        current_month = date.today().strftime("%Y-%m")
+        return [
+            {**row, "period_complete": row["month"] < current_month}
+            for row in self.invoice_repo.monthly_sales_totals(org_id, months=months)
+        ]
 
     def daily_sales_for_period(self, org_id: UUID, start_date: date, end_date: date) -> list[dict]:
         return self.invoice_repo.daily_sales_totals_for_period(org_id, start_date, end_date)

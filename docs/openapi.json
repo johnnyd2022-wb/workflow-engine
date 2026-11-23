@@ -698,6 +698,10 @@
             "description": "Invoices and credit notes in another currency, left out of `total` (never added unconverted).",
             "type": "integer"
           },
+          "period_complete": {
+            "description": "True once the calendar month has ended. This flag measures calendar coverage only.",
+            "type": "boolean"
+          },
           "total": {
             "description": "Invoice revenue for the month as a Decimal string: ex GST, in the base currency, every invoice line (freight and other charges included), credit notes taken off ex GST.",
             "type": "string"
@@ -705,6 +709,7 @@
         },
         "required": [
           "month",
+          "period_complete",
           "total",
           "invoiced_inc_gst",
           "invoice_count",
@@ -15641,14 +15646,15 @@
     },
     "/api/crm/analytics/monthly-sales": {
       "get": {
-        "description": "Invoice revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most recent month first. Revenue (`total`) is ex GST, in the organisation's base currency, and counts every invoice line, freight and other charges included. Foreign-currency invoices are counted in `not_converted` and never added. This is invoice revenue, not product revenue: margins count only lines mapped to a product (the rest is their `unmapped` total), so the two differ by design; don't compare them. Credit notes can make a month lower than its invoices. Only for organisations with sales (Xero) connected.",
+        "description": "Invoice revenue and invoice count per month for authorised and paid sales invoices, less credit notes, most recent month first. Revenue (`total`) is ex GST, in the organisation's base currency, and counts every invoice line, freight and other charges included. Foreign-currency invoices are counted in `not_converted` and never added. This is invoice revenue, not product revenue: margins count only lines mapped to a product (the rest is their `unmapped` total), so the two differ by design; don't compare them. Credit notes can make a month lower than its invoices. Treat rows with `period_complete: false` as open periods and call out the current month when comparing it with ended months. Only for organisations with sales (Xero) connected.",
         "operationId": "crm_crm_api_monthly_sales",
         "parameters": [
           {
-            "description": "How many months back, 1 to 24. Default 12.",
+            "description": "Maximum number of months with sales activity, newest first.",
             "in": "query",
             "name": "months",
             "schema": {
+              "default": 12,
               "maximum": 24,
               "minimum": 1,
               "type": "integer"
@@ -15668,17 +15674,7 @@
                       "invoiced_inc_gst": "11385.00",
                       "month": "2026-10",
                       "not_converted": 0,
-                      "total": "9900.00"
-                    }
-                  ],
-                  "months": [
-                    {
-                      "currency": "NZD",
-                      "ex_gst_unknown": 0,
-                      "invoice_count": 14,
-                      "invoiced_inc_gst": "11385.00",
-                      "month": "2026-10",
-                      "not_converted": 0,
+                      "period_complete": true,
                       "total": "9900.00"
                     }
                   ]
@@ -15691,24 +15687,16 @@
                         "$ref": "#/components/schemas/MonthlySales"
                       },
                       "type": "array"
-                    },
-                    "months": {
-                      "description": "The same list as `monthly_sales`.",
-                      "items": {
-                        "$ref": "#/components/schemas/MonthlySales"
-                      },
-                      "type": "array"
                     }
                   },
                   "required": [
-                    "monthly_sales",
-                    "months"
+                    "monthly_sales"
                   ],
                   "type": "object"
                 }
               }
             },
-            "description": "The months. `months` repeats `monthly_sales` for older clients."
+            "description": "Monthly sales rows in `monthly_sales`."
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"

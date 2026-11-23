@@ -157,6 +157,26 @@ def test_combine_with_the_path_rules(decision, tests, rules, expected):
     assert tia.combine({"decision": decision, "tests": tests}, rules) == expected
 
 
+def test_pytest_targets_collect_nested_fixture_directories_before_parent_files():
+    targets = [
+        "tests/mcp_server/test_discover_docs.py",
+        "tests/test_crm.py::test_filter[a/b/c]",
+        "tests/mcp_server/test_error_mapping.py::test_adds_detail",
+        "tests/openapi/test_document.py",
+        "tests/openapi/nested/test_example.py",
+        "tests/test_tia.py",
+    ]
+
+    assert tia.order_pytest_targets(targets) == [
+        targets[4],
+        targets[0],
+        targets[2],
+        targets[3],
+        targets[1],
+        targets[5],
+    ]
+
+
 def test_coverage_contexts_become_per_test_line_sets(tmp_path):
     from coverage import CoverageData
 
