@@ -84,6 +84,8 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text:
+        - {path: "provenance.name", origin: xero}
       concepts: [costing.cost_status, costing.last_known_price]
       related_operations: [costing_get_execution_cost, costing_get_stock_value, core_list_inventory]
   costing_get_execution_cost:
@@ -139,6 +141,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [costing.cost_status, costing.joint_outputs]
       related_operations: [costing_get_lot_cost, core_get_execution, costing_readiness_list]
   costing_readiness_list:
@@ -174,6 +177,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [costing.readiness, costing.cost_status]
       related_operations: [costing_readiness_detail, costing_margins_report]
   costing_readiness_detail:
@@ -218,6 +222,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [costing.readiness, costing.last_known_price]
       related_operations: [costing_readiness_list, costing_get_lot_cost]
   costing_margins_report:
@@ -298,6 +303,8 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text:
+        - {path: "rows[].lines[].reference", origin: xero}
       concepts: [costing.cost_status, costing.joint_outputs, sales.fifo_matching]
       related_operations: [crm_crm_api_monthly_sales, costing_readiness_list, costing_get_stock_value]
   costing_get_stock_value:
@@ -373,6 +380,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [costing.stock_value, costing.cost_status, costing.xero_bridge]
       related_operations: [costing_get_lot_cost, costing_margins_report, core_list_inventory]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----

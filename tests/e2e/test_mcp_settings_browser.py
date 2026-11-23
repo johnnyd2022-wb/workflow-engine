@@ -339,6 +339,23 @@ def test_ac35_at_375px_the_page_has_no_sideways_scroll(world, page, theme):
     assert abs((box["y"] + box["height"]) - PHONE["height"]) <= 1, f"sheet is not at the bottom: {box}"
 
 
+def test_s6_the_notice_about_outside_text_sits_beside_the_switch_and_fits_a_phone(world, page):
+    """Design review S6: the switch's own card says what text comes from outside, readable at 375 px."""
+    _open(page, world.admin)
+    card = page.locator(".ai-access")
+    notice = card.locator("[data-ai-outside-text]")
+    expect(notice).to_be_visible()
+    expect(notice).to_contain_text("customer and supplier names")
+    expect(notice).to_contain_text("never shared with assistants")
+    switch_box = page.get_by_role("switch", name=SWITCH_NAME).bounding_box()
+    notice_box = notice.bounding_box()
+    assert switch_box["y"] < notice_box["y"] < _settled(_roles(page))["y"], "between the switch and the roles"
+    page.set_viewport_size(PHONE)
+    box = _settled(notice)
+    assert box["x"] >= -1 and box["x"] + box["width"] <= PHONE["width"] + 1, f"the notice sticks out: {box}"
+    _no_sideways_scroll(page, "settings with the outside-text notice")
+
+
 def test_ac35_the_member_view_at_375px_has_no_sideways_scroll(world, page):
     world.connect(world.member["user_id"], LONG_NAME)
     page.set_viewport_size(PHONE)

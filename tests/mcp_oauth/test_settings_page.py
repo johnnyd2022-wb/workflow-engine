@@ -43,6 +43,22 @@ def test_ac33_an_admin_gets_the_switch_and_the_role_picker(world):
     assert "Connected apps" in html
 
 
+def test_s6_the_admin_is_told_beside_the_switch_what_text_comes_from_outside(world):
+    """Design review S6: the person who turns assistants on is told, where they turn them on, what reaches them."""
+    html = _page(world, "admin")
+    switch = html.index("data-ai-switch")
+    notice = html.index("data-ai-outside-text")
+    assert switch < notice < html.index("data-ai-roles"), "the notice sits between the switch and the role picker"
+    text = html[notice : html.index("</p>", notice)]
+    assert "customer and supplier names" in text and "Xero" in text and "never instructions" in text
+    assert "portal are never shared with assistants" in text
+
+
+def test_s6_a_member_is_not_shown_the_admin_notice(world):
+    for who in ("member", "auditor"):
+        assert "data-ai-outside-text" not in _page(world, who), who
+
+
 def test_ac33_a_member_gets_no_admin_controls_in_the_page_at_all(world):
     """The switch and roles are not hidden with CSS: the server never sends them to a non-admin."""
     for who in ("member", "sales", "production", "compliance", "auditor"):

@@ -172,7 +172,7 @@ def _operation(op: Operation, entry: dict) -> dict:
     }
     if op.feature:
         bize["feature"] = op.feature
-    for key in ("kind", "concepts", "related_operations", "complete", "app_page"):
+    for key in ("kind", "concepts", "related_operations", "complete", "app_page", "outside_text"):
         if key in over:
             bize[key] = copy.deepcopy(over[key])
     result["x-bize"] = bize

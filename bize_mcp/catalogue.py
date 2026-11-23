@@ -59,6 +59,9 @@ class Operation:
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
     complete: bool = False
     app_page: str | None = None
+    # Response fields holding text written outside the organisation, as (path, origin) pairs: ``()`` means the
+    # operation says there are none, ``None`` means it did not say (treated as "all of it may be").
+    outside_text: tuple[tuple[str, str], ...] | None = None
 
     @property
     def required_params(self) -> list[str]:
@@ -114,6 +117,20 @@ def deref(document: dict, node: Any, depth: int = 0, seen: tuple[str, ...] = ())
     if isinstance(node, list):
         return [deref(document, item, depth, seen) for item in node]
     return node
+
+
+def _outside_text(value: Any) -> tuple[tuple[str, str], ...] | None:
+    """The declared fields; ``None`` (undeclared, so treat all text as outside) if the list is missing or malformed."""
+    if not isinstance(value, list):
+        return None
+    pairs = []
+    for entry in value:
+        if not (
+            isinstance(entry, dict) and isinstance(entry.get("path"), str) and isinstance(entry.get("origin"), str)
+        ):
+            return None  # a half-readable declaration must not read as "none"
+        pairs.append((entry["path"], entry["origin"]))
+    return tuple(pairs)
 
 
 def _permissions(value: Any) -> tuple[str, ...]:
@@ -198,6 +215,7 @@ def parse(document: Any) -> dict[str, Operation]:
                 raw=entry,
                 complete=extension.get("complete") is True,
                 app_page=extension.get("app_page"),
+                outside_text=_outside_text(extension.get("outside_text")),
             )
     return found
 

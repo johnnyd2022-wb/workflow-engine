@@ -194,6 +194,8 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text:
+        - {path: "inventory_items[].supplier", origin: xero}
       concepts: [inventory.lots, inventory.availability, inventory.units_and_packs]
       related_operations: [lot_holds_get_lot_holds, core_trace_inventory_backward, costing_get_lot_cost, stocktake_get_stock_position]
   stocktake_get_stock_position:
@@ -241,6 +243,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [inventory.availability, inventory.sites_and_locations, compliance.excise_position]
       related_operations: [core_list_inventory, stocktake_get_stocktake_reconciliation]
   stocktake_get_stocktake_reconciliation:
@@ -283,6 +286,7 @@ operations:
       app_page: /core/stocktake
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [inventory.stocktakes, compliance.excise_position]
       related_operations: [stocktake_get_stock_position, compliant_compliant_api_get_excise_position]
   lot_holds_list_open_holds:
@@ -330,6 +334,7 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text: []
       concepts: [inventory.holds, inventory.availability]
       related_operations: [lot_holds_get_lot_holds, core_list_inventory]
   lot_holds_get_lot_holds:
@@ -369,6 +374,7 @@ operations:
     x-bize:
       kind: record
       mcp: true
+      outside_text: []
       concepts: [inventory.holds, inventory.availability]
       related_operations: [lot_holds_list_open_holds, core_trace_inventory_backward]
   core_list_expired_materials:
@@ -401,6 +407,9 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text:
+        - {path: "expired_raw_materials[].supplier", origin: xero}
+        - {path: "impacted_items[].supplier", origin: xero}
       concepts: [inventory.expiry, traceability.forward]
       related_operations: [core_list_inventory, core_trace_raw_material]
   core_list_output_ready_date:
@@ -424,6 +433,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [inventory.ready_dates, inventory.availability]
       related_operations: [core_list_inventory, core_list_expired_materials]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----

@@ -82,6 +82,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [planning.stock_cover, inventory.availability]
       related_operations: [planning_get_planning_batches, core_list_inventory, crm_crm_api_monthly_sales]
   planning_get_planning_batches:
@@ -117,6 +118,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [planning.planned_batches, production.batches]
       related_operations: [planning_get_stock_cover, core_list_executions]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----
