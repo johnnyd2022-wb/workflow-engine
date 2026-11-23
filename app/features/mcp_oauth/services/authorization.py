@@ -121,7 +121,7 @@ def parse_authorize(db, args) -> AuthorizeRequest:
         raise PageError("We couldn't identify the app that sent you here, so we haven't sent you back to it.") from None
 
     redirect_uri = args.get("redirect_uri")
-    if not isinstance(redirect_uri, str) or redirect_uri not in client.redirect_uris:
+    if not client_registry.redirect_uri_matches(redirect_uri, client.redirect_uris):
         raise PageError("This app asked to return you to an address it hasn't registered, so we stopped.")
 
     state = args.get("state")
