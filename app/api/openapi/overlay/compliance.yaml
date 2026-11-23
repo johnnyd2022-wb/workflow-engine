@@ -39,6 +39,7 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text: []
       concepts: [compliance.nz_alcohol_records]
       related_operations: [compliant_compliant_api_get_excise_position, core_list_expired_materials]
   compliant_compliant_api_get_excise_position:
@@ -119,6 +120,7 @@ operations:
       app_page: /compliant/nz-alcohol/customs
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [compliance.excise_position, compliance.excise_periods]
       related_operations: [compliant_compliant_api_list_excise_periods, compliant_compliant_api_get_excise_period, stocktake_get_stocktake_reconciliation]
   compliant_compliant_api_list_excise_periods:
@@ -166,6 +168,7 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text: []
       concepts: [compliance.excise_periods]
       related_operations: [compliant_compliant_api_get_excise_period, compliant_compliant_api_get_excise_position]
   compliant_compliant_api_get_excise_period:
@@ -217,6 +220,12 @@ operations:
       app_page: /compliant/nz-alcohol/customs
       kind: calculation
       mcp: true
+      outside_text:
+        - {path: "draft.lines[].removals[].customer", origin: xero}
+        - {path: "draft.lines[].removals[].reference", origin: xero}
+        - {path: "draft.cca_transfers[].customer", origin: xero}
+        - {path: "draft.adjustments[].reference", origin: xero}
+        - {path: "draft.cca_transfers[].reference", origin: xero}
       concepts: [compliance.excise_periods, compliance.cca_movements]
       related_operations: [compliant_compliant_api_list_excise_periods, compliant_compliant_api_get_excise_position]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----

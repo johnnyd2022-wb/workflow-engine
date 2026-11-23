@@ -76,6 +76,7 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text: []
       concepts: [production.workflows, production.steps]
       related_operations: [core_get_process, core_list_executions]
   core_get_process:
@@ -121,6 +122,7 @@ operations:
     x-bize:
       kind: record
       mcp: true
+      outside_text: []
       concepts: [production.workflows, production.steps, production.inputs_and_outputs]
       related_operations: [core_list_processes, core_list_executions]
   core_list_executions:
@@ -190,6 +192,7 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text: []
       concepts: [production.batches, production.steps]
       related_operations: [core_get_execution, core_list_processes, costing_get_execution_cost]
   core_get_execution:
@@ -231,6 +234,7 @@ operations:
     x-bize:
       kind: record
       mcp: true
+      outside_text: []
       concepts: [production.batches, production.inputs_and_outputs, production.intermediates]
       related_operations: [core_list_executions, core_get_process, costing_get_execution_cost]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----

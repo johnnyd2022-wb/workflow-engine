@@ -133,6 +133,12 @@ operations:
     x-bize:
       kind: list
       mcp: true
+      outside_text:
+        - {path: "invoices[].contact_name", origin: xero}
+        - {path: "invoices[].invoice_number", origin: xero}
+        - {path: "invoices[].reference", origin: xero}
+        - {path: "invoices[].line_items[].description", origin: xero}
+        - {path: "invoices[].line_items[].item_code", origin: xero}
       concepts: [sales.xero_invoices, sales.fifo_matching]
       related_operations: [crm_crm_api_monthly_sales, core_trace_inventory_to_sale_graph, costing_margins_report]
   crm_crm_api_monthly_sales:
@@ -172,6 +178,7 @@ operations:
     x-bize:
       kind: calculation
       mcp: true
+      outside_text: []
       concepts: [sales.xero_invoices]
       related_operations: [crm_crm_api_get_org_invoices, costing_margins_report]
   # ---- skeleton summaries: generated starting points, replace as a route is documented ----

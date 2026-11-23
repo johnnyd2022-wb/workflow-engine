@@ -20,6 +20,8 @@ what the query string accepts or what the body looks like, so those live here, k
         x-bize:
           kind: list            # record | list | calculation
           mcp: true             # an assistant may call it
+          outside_text:         # an mcp operation lists the response fields written outside the organisation
+            - {path: "invoices[].contact_name", origin: xero}   # [] for none; "a.b[].c" is a field path
           concepts: [inventory.availability]
           related_operations: [core_get_process]
           domain: inventory     # only to override what the generator derives
@@ -33,6 +35,7 @@ typo cannot quietly leave a route undocumented.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -42,7 +45,12 @@ import yaml
 OVERLAY_DIR = Path(__file__).parent / "overlay"
 
 OPERATION_KEYS = frozenset({"summary", "description", "parameters", "response", "errors", "request_body", "x-bize"})
-XBIZE_KEYS = frozenset({"kind", "mcp", "concepts", "related_operations", "domain", "complete", "app_page"})
+XBIZE_KEYS = frozenset(
+    {"kind", "mcp", "concepts", "related_operations", "domain", "complete", "app_page", "outside_text"}
+)
+# Where text written outside the organisation comes from (design review S6). Portal-authored text has no
+# value here on purpose: an assistant never receives it, so no operation may declare it (see coverage.py).
+OUTSIDE_TEXT_ORIGINS = frozenset({"xero"})
 KINDS = frozenset({"record", "list", "calculation"})
 FILE_KEYS = frozenset({"operations", "schemas"})
 
@@ -103,6 +111,29 @@ def _stray_flow_keys(node, where: str) -> None:
             _stray_flow_keys(value, where)
 
 
+_FIELD_PATH = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\[\])?(\.[A-Za-z_][A-Za-z0-9_]*(\[\])?)*")
+
+
+def _check_outside_text(name: str, where: str, value) -> None:
+    """``outside_text`` is a list of ``{path, origin}``: a response field path, and who wrote the text."""
+    if not isinstance(value, list):
+        raise OverlayError(f"{where}: {name} x-bize.outside_text must be a list (empty when there is none)")
+    seen = set()
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {"path", "origin"}:
+            raise OverlayError(f"{where}: {name} x-bize.outside_text entries are {{path, origin}} mappings")
+        path, origin = entry["path"], entry["origin"]
+        if not isinstance(path, str) or not _FIELD_PATH.fullmatch(path):
+            raise OverlayError(f"{where}: {name} x-bize.outside_text path {path!r} is not a field path like a.b[].c")
+        if origin not in OUTSIDE_TEXT_ORIGINS:
+            raise OverlayError(
+                f"{where}: {name} x-bize.outside_text origin {origin!r} must be one of {sorted(OUTSIDE_TEXT_ORIGINS)}"
+            )
+        if path in seen:
+            raise OverlayError(f"{where}: {name} x-bize.outside_text lists {path!r} twice")
+        seen.add(path)
+
+
 def _check_operation(name: str, where: str, entry) -> None:
     if not isinstance(entry, dict):
         raise OverlayError(f"{where}: {name} must be a mapping")
@@ -119,6 +150,8 @@ def _check_operation(name: str, where: str, entry) -> None:
         raise OverlayError(f"{where}: {name} x-bize.kind must be one of {sorted(KINDS)}")
     if "mcp" in xbize and not isinstance(xbize["mcp"], bool):
         raise OverlayError(f"{where}: {name} x-bize.mcp must be true or false")
+    if "outside_text" in xbize:
+        _check_outside_text(name, where, xbize["outside_text"])
     response = entry.get("response")
     if response is not None and not (isinstance(response, dict) and "schema" in response):
         raise OverlayError(f"{where}: {name} response needs a schema")
