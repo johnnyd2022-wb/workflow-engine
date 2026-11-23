@@ -70,6 +70,7 @@ measurement or a decision before it counts as a defect.
       (`app/features/mcp_oauth/services/token_service.py:197`).
     - Impact: a client retrying after a lost response disconnects itself.
     - Fix: accept the previous token for 30–60 s and return the same successor.
+    - Status: fixed in !770 (one retry within 30 s of the rotation while the replacement is unused gets a fresh pair, since the raw successor is not stored; a second retry, a replay after the replacement was used, or one past the window still ends the grant; spec AC9 amended).
 - **S6. Security: text written outside the org reaches the model (data leak risk).** Risk; needs validation.
     - Problem: portal users, Xero payees/descriptions and customer names are third-party text; the
       only defence is a sentence in each tool description.
