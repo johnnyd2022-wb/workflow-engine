@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production overview options</title>
+<!-- DESIGN OPTIONS ONLY: open this file in a browser to flip between the five mockups. -->
+<style>
+:root{--bg:#F6F6F4;--ink:#141414;--muted:#6B6B66;--line:#E2E2DE;--card:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#111;--ink:#F2F2EE;--muted:#9A9A94;--line:#2A2A2A;--card:#1A1A1A}}
+:root[data-theme="dark"]{--bg:#111;--ink:#F2F2EE;--muted:#9A9A94;--line:#2A2A2A;--card:#1A1A1A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:40px 16px}
+h1{margin:0 0 6px;font-size:28px;letter-spacing:-.02em}
+p{color:var(--muted);margin:0 0 24px}
+ol{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+a.opt{display:grid;grid-template-columns:44px 1fr;gap:4px 16px;padding:18px 20px;background:var(--card);border:1px solid var(--line);border-radius:14px;color:inherit;text-decoration:none}
+a.opt:hover{border-color:var(--muted)}
+.n{grid-row:span 2;font:700 26px/1 system-ui;color:var(--muted)}
+b{font-size:17px}
+span{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Production overview: five directions</h1>
+  <p>Static mockups on the same data. Each changes navigation, layout, type, colour, shape and motion. Resize the window to see phone layouts; switch your OS to dark mode for the dark themes.</p>
+  <ol>
+    <li><a class="opt" href="1-ledger.html"><span class="n">1</span><b>Ledger</b><span>Calm fintech. Quiet left sidebar, one KPI strip with sparklines, a sortable table, attention list on the side. Inter, indigo.</span></a></li>
+    <li><a class="opt" href="2-control-room.html"><span class="n">2</span><b>Control Room</b><span>Andon board. Dark always, icon rail, bento tiles, every batch on one time axis. Plex + JetBrains Mono, cyan/amber. Works on a wall screen.</span></a></li>
+    <li><a class="opt" href="3-briefing.html"><span class="n">3</span><b>Briefing</b><span>Editorial. Top menus, one written paragraph says what matters, then quiet lists. Fraunces serif on paper, forest green. No motion.</span></a></li>
+    <li><a class="opt" href="4-flow.html"><span class="n">4</span><b>Flow</b><span>Kanban by stage. Floating pill nav, soft rounded cards that lift, attention as chips. Plus Jakarta Sans, violet/coral.</span></a></li>
+    <li><a class="opt" href="5-floor.html"><span class="n">5</span><b>Floor</b><span>Touch-first. Navigation behind a menu button and ⌘K, giant action tiles, progress rings, phone tab bar with a record button. Space Grotesk, black/orange.</span></a></li>
+  </ol>
+</main>
+</body>
+</html>

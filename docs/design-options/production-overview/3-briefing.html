@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 3 Briefing</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF7F1; --card:#FFFDF9; --ink:#1C1A16; --text:#3A362E; --muted:#7A7366; --rule:#E6DFD2; --rule-2:#D6CDBD;
+  --green:#1E4D3B; --green-soft:#E4EDE6; --clay:#B4532A; --clay-soft:#F6E6DC; --gold:#9A6B12;
+  --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#151411; --card:#1C1B17; --ink:#F3EEE4; --text:#D9D2C4; --muted:#9B9384; --rule:#2C2A24; --rule-2:#3A372F;
+    --green:#8CCBA8; --green-soft:#1E2B24; --clay:#E88E63; --clay-soft:#2F2019; --gold:#D9A94A;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#151411; --card:#1C1B17; --ink:#F3EEE4; --text:#D9D2C4; --muted:#9B9384; --rule:#2C2A24; --rule-2:#3A372F;
+  --green:#8CCBA8; --green-soft:#1E2B24; --clay:#E88E63; --clay-soft:#2F2019; --gold:#D9A94A;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--text);font:15.5px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.num{font-variant-numeric:tabular-nums lining-nums}
+
+/* Top menus, grouped by job (Xero 2025: Sales / Purchases / Reporting as top-level menus) */
+.topnav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}
+.topnav__in{max-width:1120px;margin:0 auto;height:60px;display:flex;align-items:center;gap:28px;padding:0 24px}
+.brand{font:600 19px var(--serif);color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.menus{display:flex;gap:4px}
+.menus a{padding:8px 12px;border-radius:6px;text-decoration:none;color:var(--muted);font-weight:500;font-size:14.5px}
+.menus a:hover{color:var(--ink);background:var(--rule)}
+.menus a[aria-current]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--green);border-radius:0}
+.menus .caret{font-size:10px;margin-left:3px;opacity:.6}
+.topnav__right{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font-size:14px}
+.org{display:flex;align-items:center;gap:8px}
+.org i{width:28px;height:28px;border-radius:50%;background:var(--green);color:var(--paper);display:grid;place-items:center;font:600 12px var(--sans);font-style:normal}
+.burger{display:none;margin-left:auto;background:none;border:0;color:var(--ink);padding:6px}
+
+.page{max-width:760px;margin:0 auto;padding:56px 24px 80px}
+.eyebrow{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+h1{font:500 44px/1.12 var(--serif);color:var(--ink);letter-spacing:-.012em;margin:14px 0 20px;font-variation-settings:"opsz" 144}
+h1 em{font-style:italic;color:var(--green)}
+.lede{font-size:18.5px;line-height:1.65;color:var(--text);margin:0}
+.lede a{color:var(--ink);text-decoration-color:var(--rule-2);text-underline-offset:3px;text-decoration-thickness:1.5px}
+.lede a:hover{text-decoration-color:var(--green)}
+.lede .flag{color:var(--clay);font-weight:600}
+.actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:30px 0 0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:999px;background:var(--green);color:var(--paper);text-decoration:none;font-weight:600;font-size:15px}
+.btn:hover{filter:brightness(1.1)}
+.tlink{color:var(--ink);font-weight:500;text-decoration:none;padding:10px 12px;border-radius:999px}
+.tlink:hover{background:var(--rule)}
+
+section{margin-top:64px}
+.sh{display:flex;align-items:baseline;gap:14px;border-bottom:1.5px solid var(--ink);padding-bottom:10px}
+.sh h2{font:500 26px var(--serif);color:var(--ink);margin:0;letter-spacing:-.01em}
+.sh span{color:var(--muted);font-size:14px}
+.sh a{margin-left:auto;font-size:14px;color:var(--green);font-weight:600;text-decoration:none}
+
+.floor{list-style:none;margin:0;padding:0}
+.floor li{display:grid;grid-template-columns:1fr auto;gap:2px 24px;padding:18px 0;border-bottom:1px solid var(--rule)}
+.floor h3{margin:0;font:500 19px var(--serif);color:var(--ink)}
+.floor .meta{color:var(--muted);font-size:14.5px}
+.floor .meta b{color:var(--text);font-weight:500}
+.steps{display:flex;gap:6px;align-items:center;margin-top:8px}
+.steps i{width:22px;height:3px;background:var(--rule-2)}
+.steps i.d{background:var(--green)}
+.steps i.n{background:var(--green);opacity:.4}
+.when{text-align:right;color:var(--muted);font-size:14px;align-self:start;padding-top:4px}
+.when.late{color:var(--clay);font-weight:600}
+.when a{display:block;margin-top:10px;color:var(--green);font-weight:600;text-decoration:none;font-size:14px}
+
+.ledger{display:grid;grid-template-columns:repeat(3,1fr);margin-top:6px}
+.ledger a{text-decoration:none;padding:22px 20px 22px 0;border-bottom:1px solid var(--rule)}
+.ledger a:not(:nth-child(3n+1)){padding-left:20px;border-left:1px solid var(--rule)}
+.ledger b{display:block;font:400 42px/1.05 var(--serif);color:var(--ink);letter-spacing:-.02em}
+.ledger span{color:var(--muted);font-size:14px}
+.ledger .warn b{color:var(--clay)}
+
+.notes{margin:0;padding:0;list-style:none;counter-reset:n}
+.notes li{display:grid;grid-template-columns:38px 1fr auto;gap:16px;align-items:baseline;padding:16px 0;border-bottom:1px solid var(--rule)}
+.notes li::before{counter-increment:n;content:counter(n,decimal-leading-zero);font:500 15px var(--serif);color:var(--muted)}
+.notes b{color:var(--ink);font-weight:600}
+.notes a{color:var(--green);font-weight:600;text-decoration:none;white-space:nowrap;font-size:14px}
+.notes .ok{color:var(--muted)}
+
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:6px 22px;font-size:14px}
+footer a{color:var(--muted);text-decoration:none}
+footer a:hover{color:var(--ink)}
+
+@media (max-width:820px){
+  .menus,.topnav__right{display:none}
+  .burger{display:block}
+  .topnav__in{padding:0 16px}
+  .page{padding:36px 16px 60px}
+  h1{font-size:33px}
+  .lede{font-size:17px}
+  .btn{width:100%;justify-content:center}
+  .ledger{grid-template-columns:1fr 1fr}
+  .ledger a:not(:nth-child(3n+1)){padding-left:0;border-left:0}
+  .ledger a:nth-child(even){padding-left:16px;border-left:1px solid var(--rule)}
+  .ledger b{font-size:34px}
+  .notes li{grid-template-columns:30px 1fr}
+  .notes li a{grid-column:2}
+  section{margin-top:48px}
+  .sh span{display:none}
+}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav__in">
+    <a class="brand" href="#">Whistlebird</a>
+    <nav class="menus" aria-label="Main">
+      <a href="#">Home</a>
+      <a href="#" aria-current="page">Production<span class="caret">▾</span></a>
+      <a href="#">Stock<span class="caret">▾</span></a>
+      <a href="#">Sales<span class="caret">▾</span></a>
+      <a href="#">Compliance<span class="caret">▾</span></a>
+      <a href="#">Reports</a>
+    </nav>
+    <div class="topnav__right">
+      <span>Search</span>
+      <span class="org"><i>JB</i></span>
+    </div>
+    <button class="burger" aria-label="Open menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+</header>
+
+<main class="page">
+  <div class="eyebrow">Production · Monday 23 November</div>
+  <h1>Seven batches are under way. <em>One has waited longest.</em></h1>
+  <p class="lede">
+    <a href="#">Limoncello</a> has been at <b>blend and sweeten</b> for <span class="flag">8 days</span>.
+    Pink Gin and Navy Strength are both on their last step, bottle and label.
+    Before the next run, <a href="#">assess the 3 expired raw materials</a>: they are inputs to 3 products.
+    Two batches finished this week.
+  </p>
+  <div class="actions">
+    <a class="btn" href="#">Record production step <span aria-hidden="true">→</span></a>
+    <a class="tlink" href="#">Add stock</a>
+    <a class="tlink" href="#">Trace and recall</a>
+  </div>
+
+  <section aria-labelledby="s-floor">
+    <div class="sh"><h2 id="s-floor">On the floor</h2><span class="num">7 batches, longest first</span><a href="#">Production board</a></div>
+    <ul class="floor">
+      <li><div><h3>Limoncello</h3><div class="meta"><b>Blend and sweeten</b> · step 2 of 3</div><div class="steps"><i class="d"></i><i class="n"></i><i></i></div></div><div class="when late">8 days<a href="#">Record</a></div></li>
+      <li><div><h3>Whistlebird Pink Gin</h3><div class="meta"><b>Bottle and label</b> · last step</div><div class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i></div></div><div class="when">5 days<a href="#">Record</a></div></li>
+      <li><div><h3>Whistlebird Navy Strength Gin</h3><div class="meta"><b>Bottle and label</b> · last step</div><div class="steps"><i class="d"></i><i class="d"></i><i class="n"></i></div></div><div class="when">3 days<a href="#">Record</a></div></li>
+      <li><div><h3>Whistlebird Navy Strength Gin</h3><div class="meta"><b>Distil</b> · step 2 of 3</div><div class="steps"><i class="d"></i><i class="n"></i><i></i></div></div><div class="when">1 day<a href="#">Record</a></div></li>
+      <li><div><h3>Whistlebird Pink Gin</h3><div class="meta"><b>Distil</b> · step 2 of 4</div><div class="steps"><i class="d"></i><i class="n"></i><i></i><i></i></div></div><div class="when">20 hours<a href="#">Record</a></div></li>
+      <li><div><h3>Whistlebird Navy Strength Gin</h3><div class="meta"><b>Macerate botanicals</b> · step 1 of 3</div><div class="steps"><i class="n"></i><i></i><i></i></div></div><div class="when">2 hours<a href="#">Record</a></div></li>
+      <li><div><h3>Limoncello</h3><div class="meta"><b>Infuse lemon peel</b> · step 1 of 3</div><div class="steps"><i class="n"></i><i></i><i></i></div></div><div class="when">Just now<a href="#">Record</a></div></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="s-house">
+    <div class="sh"><h2 id="s-house">Housekeeping</h2><span>what to tidy before it bites</span></div>
+    <ol class="notes">
+      <li><span><b>3 expired raw materials.</b> Remove or assess them before they are used.</span><a href="#">Review stock</a></li>
+      <li><span><b>7 stock lines have no trace link.</b> Add a supplier batch or production link so a recall can find them.</span><a href="#">Add links</a></li>
+      <li><span><b>2 lines expire within 30 days.</b> None in the next week.</span><a href="#">See them</a></li>
+      <li><span class="ok">No stock is below its reorder point.</span></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="s-numbers">
+    <div class="sh"><h2 id="s-numbers">The numbers</h2></div>
+    <div class="ledger">
+      <a href="#"><b class="num">7</b><span>batches in progress</span></a>
+      <a href="#"><b class="num">2</b><span>finished this week</span></a>
+      <a href="#" class="warn"><b class="num">8 d</b><span>longest running</span></a>
+      <a href="#"><b class="num">4</b><span>product workflows</span></a>
+      <a href="#"><b class="num">32</b><span>stock lines on hand</span></a>
+      <a href="#"><b class="num">0</b><span>movements in 24 hours</span></a>
+    </div>
+  </section>
+
+  <footer>
+    <a href="#">Batches</a><a href="#">Planner</a><a href="#">Workflows</a><a href="#">Inventory</a><a href="#">Contract orders</a><a href="#">Suppliers</a><a href="#">Production tasks</a>
+  </footer>
+</main>
+</body>
+</html>
