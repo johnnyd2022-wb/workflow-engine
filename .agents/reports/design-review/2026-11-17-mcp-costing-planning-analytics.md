@@ -76,6 +76,7 @@ measurement or a decision before it counts as a defect.
     - Impact: an assistant that also has email or web tools can be steered into sending data out.
     - Fix: list which fields in the 28 operations carry outside text; mark them by origin, leave
       portal-authored text out by default, and say so beside the enable switch.
+    - Status: fixed in !767 (`x-bize.outside_text` on all 28 operations, checked by a canary sweep; marked in `execute`/`docs`; portal text unreachable and pinned by a boundary test; notice beside the switch). Open: customer email/phone/address still reach the assistant via the to-sale graph (marked, not removed); excise CCA-transfer paths declared but unexercised.
 
 ## Cross-cutting findings
 
