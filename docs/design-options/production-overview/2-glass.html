@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · Option 2 Glass</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app. Data is a snapshot of the ui_shots "production" seed. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Glass is the controls layer only (Apple Liquid Glass): nav ornament, toolbar, action dock.
+   Content sits on near-opaque frosted panels so text never depends on what is behind it (NN/g). */
+:root{
+  --a1:#8EC5FF; --a2:#FFC8A8; --a3:#B8F0DC; --a4:#D9C8FF; --base:#EEF2F8;
+  --ink:#0D1424; --text:#2A3346; --muted:#637089;
+  --glass:rgba(255,255,255,.42); --glass-strong:rgba(255,255,255,.72); --panel:rgba(255,255,255,.80);
+  --rim:rgba(255,255,255,.85); --rim-dim:rgba(255,255,255,.35); --edge:rgba(13,20,36,.08);
+  --accent:#2563EB; --accent-2:#06B6D4; --ok:#059669; --warn:#C2410C; --bad:#DC2626;
+  --warn-soft:rgba(234,88,12,.12); --bad-soft:rgba(220,38,38,.10); --ok-soft:rgba(5,150,105,.12);
+  --shadow:0 1px 1px rgba(13,20,36,.04),0 12px 32px -12px rgba(13,40,90,.22);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --a1:#1E3A8A; --a2:#3730A3; --a3:#0F5257; --a4:#4C1D95; --base:#070B16;
+    --ink:#F1F5FF; --text:#CBD3E6; --muted:#8B96B0;
+    --glass:rgba(30,38,60,.38); --glass-strong:rgba(28,36,58,.66); --panel:rgba(18,24,42,.78);
+    --rim:rgba(255,255,255,.22); --rim-dim:rgba(255,255,255,.08); --edge:rgba(255,255,255,.06);
+    --accent:#60A5FA; --accent-2:#22D3EE; --ok:#34D399; --warn:#FB923C; --bad:#F87171;
+    --warn-soft:rgba(251,146,60,.14); --bad-soft:rgba(248,113,113,.14); --ok-soft:rgba(52,211,153,.14);
+    --shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --a1:#1E3A8A; --a2:#3730A3; --a3:#0F5257; --a4:#4C1D95; --base:#070B16;
+  --ink:#F1F5FF; --text:#CBD3E6; --muted:#8B96B0;
+  --glass:rgba(30,38,60,.38); --glass-strong:rgba(28,36,58,.66); --panel:rgba(18,24,42,.78);
+  --rim:rgba(255,255,255,.22); --rim-dim:rgba(255,255,255,.08); --edge:rgba(255,255,255,.06);
+  --accent:#60A5FA; --accent-2:#22D3EE; --ok:#34D399; --warn:#FB923C; --bad:#F87171;
+  --warn-soft:rgba(251,146,60,.14); --bad-soft:rgba(248,113,113,.14); --ok-soft:rgba(52,211,153,.14);
+  --shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14.5px/1.5 Manrope,system-ui,sans-serif;color:var(--text);background:var(--base);min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+
+/* The backdrop the glass refracts: soft, slow-moving colour fields */
+.aurora{position:fixed;inset:-20%;z-index:-1;filter:blur(70px) saturate(120%);opacity:.9}
+.aurora i{position:absolute;border-radius:50%;animation:drift 26s ease-in-out infinite alternate}
+.aurora i:nth-child(1){width:46vw;height:46vw;left:8%;top:2%;background:var(--a1)}
+.aurora i:nth-child(2){width:40vw;height:40vw;right:4%;top:10%;background:var(--a2);animation-delay:-8s}
+.aurora i:nth-child(3){width:44vw;height:44vw;left:30%;bottom:-6%;background:var(--a3);animation-delay:-14s}
+.aurora i:nth-child(4){width:30vw;height:30vw;right:22%;bottom:10%;background:var(--a4);animation-delay:-4s}
+@keyframes drift{to{transform:translate(4vw,-3vw) scale(1.08)}}
+
+/* One glass recipe: translucent fill, heavy blur, bright top rim, faint lower edge */
+.glass{background:var(--glass);backdrop-filter:blur(28px) saturate(170%);-webkit-backdrop-filter:blur(28px) saturate(170%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),inset 0 -1px 0 var(--edge),var(--shadow)}
+.panel{background:var(--panel);backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);border-radius:26px}
+
+/* Nav ornament: a vertical capsule floating at the left edge (visionOS tab ornament) */
+.ornament{position:fixed;left:18px;top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:999px}
+.ornament a{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;color:var(--muted);position:relative;transition:background .2s,color .2s}
+.ornament a:hover{color:var(--ink);background:var(--glass-strong)}
+.ornament a[aria-current]{background:var(--ink);color:var(--base)}
+.ornament a::after{content:attr(aria-label);position:absolute;left:58px;padding:6px 12px;border-radius:999px;background:var(--glass-strong);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--rim-dim);color:var(--ink);font-weight:600;font-size:13px;white-space:nowrap;opacity:0;transform:translateX(-6px);transition:.18s;pointer-events:none}
+.ornament a:hover::after{opacity:1;transform:none}
+.ornament svg{width:20px;height:20px}
+.ornament .sep{height:1px;margin:4px 8px;background:var(--rim-dim)}
+
+.shell{max-width:1240px;margin:0 auto;padding:18px 32px 140px 104px}
+.toolbar{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 18px;border-radius:999px;position:sticky;top:14px;z-index:15}
+.toolbar .org{font-weight:800;color:var(--ink);letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:#fff;font-size:13px}
+.tabs{margin:0 auto;display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--rim-dim)}
+.tabs a{padding:7px 16px;border-radius:999px;font-weight:600;font-size:13.5px;color:var(--muted)}
+.tabs a[aria-current]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),inset 0 1px 0 var(--rim)}
+.tool{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--text);background:var(--glass-strong);border:1px solid var(--rim-dim);position:relative}
+.tool .b{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--panel)}
+.me{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FDE68A,#F59E0B);display:grid;place-items:center;font-weight:800;font-size:13px;color:#4A2C00}
+
+.hero{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;margin-top:22px}
+.today{padding:26px 28px;display:flex;gap:26px;align-items:center}
+.today h1{margin:0;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.today .big{font:800 72px/1 Manrope;letter-spacing:-.05em;color:var(--ink);margin:6px 0 4px}
+.today p{margin:0;color:var(--text);font-weight:500}
+.today p b{color:var(--warn)}
+.orb{flex:none;width:150px;height:150px;position:relative}
+.orb svg{width:150px;height:150px;transform:rotate(-90deg)}
+.orb circle{fill:none;stroke-width:12;stroke-linecap:round}
+.orb .t{stroke:var(--edge)}
+.orb .s{animation:arc 1.2s cubic-bezier(.2,.7,.2,1) both}
+@keyframes arc{from{stroke-dasharray:0 999}}
+.orb span{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-size:12px;font-weight:600;color:var(--muted);line-height:1.3}
+.orb span b{display:block;font-size:22px;color:var(--ink);font-weight:800}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+
+.attn{padding:20px;display:flex;flex-direction:column;gap:10px}
+.attn h2,.sec h2{margin:0 0 2px;font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px}
+.attn h2 a,.sec h2 a{margin-left:auto;font-size:13px;font-weight:700;color:var(--accent)}
+.cap{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 10px;border-radius:18px;background:var(--glass-strong);border:1px solid var(--rim-dim);transition:transform .2s}
+.cap:hover{transform:translateX(3px)}
+.cap .n{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;font-weight:800;font-size:16px;flex:none}
+.cap b{display:block;color:var(--ink);font-weight:700;font-size:14px}
+.cap small{color:var(--muted);font-size:12.5px;font-weight:500}
+.cap .go{margin-left:auto;color:var(--muted);font-size:18px}
+.n-bad{background:var(--bad-soft);color:var(--bad)} .n-warn{background:var(--warn-soft);color:var(--warn)} .n-ok{background:var(--ok-soft);color:var(--ok)}
+
+.figs{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:18px}
+.fig{padding:16px 20px;border-radius:22px}
+.fig small{font-size:12.5px;font-weight:600;color:var(--muted)}
+.fig b{display:block;font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.03em;margin-top:2px}
+
+.sec{margin-top:18px;padding:20px 20px 12px}
+.rows{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 120px 92px;gap:16px;align-items:center;padding:12px 14px;border-radius:18px;transition:background .2s}
+.row:hover{background:var(--glass-strong)}
+.prod{display:flex;align-items:center;gap:12px;min-width:0}
+.dot{width:34px;height:34px;border-radius:12px;flex:none;display:grid;place-items:center;font-weight:800;font-size:12px;color:#fff}
+.prod > div{min-width:0}
+.today .wk{display:none}
+.prod b{display:block;color:var(--ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod small{color:var(--muted);font-weight:500}
+.track{height:8px;border-radius:99px;background:var(--edge);overflow:hidden;position:relative}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));animation:fill 1s cubic-bezier(.2,.7,.2,1) both}
+@keyframes fill{from{width:0!important}}
+.stepname{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
+.age{justify-self:start;font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--glass-strong);border:1px solid var(--rim-dim);color:var(--muted)}
+.age.hot{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.rec{justify-self:end;font-size:13px;font-weight:700;color:var(--accent);padding:7px 12px;border-radius:99px;opacity:0;transition:opacity .2s}
+.row:hover .rec,.rec:focus{opacity:1;background:var(--panel)}
+
+/* Action dock: the one floating control group, bottom centre */
+.dock{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:25;display:flex;gap:6px;padding:7px;border-radius:999px}
+.dock a{height:46px;padding:0 18px;border-radius:999px;display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ink);transition:background .2s}
+.dock a:hover{background:var(--glass-strong)}
+.dock .go{background:var(--ink);color:var(--base);padding:0 22px}
+.dock .go:hover{background:var(--ink);filter:brightness(1.2)}
+.dock svg{width:17px;height:17px}
+
+.more{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.more a{padding:9px 16px;border-radius:999px;font-weight:600;font-size:13.5px}
+
+@media (max-width:1000px){.hero{grid-template-columns:1fr}.figs{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:720px){
+  .ornament{display:none}
+  .shell{padding:12px 14px 130px}
+  .toolbar{padding:6px 6px 6px 14px;top:10px}
+  .tabs{display:none}
+  .toolbar .org{margin-right:auto}
+  .today{flex-direction:column;align-items:flex-start;padding:22px;gap:14px}
+  .orb{display:none}
+  .today .wk{display:inline}
+  .today{position:relative}
+  .today .big{font-size:52px}
+  .figs{gap:10px}
+  .fig{padding:14px 16px}
+  .fig b{font-size:22px}
+  .row{grid-template-columns:1fr auto;gap:8px 12px;padding:12px 8px}
+  .row .stepcol{grid-column:1 / -1;order:3}
+  .rec{display:none}
+  .dock{left:12px;right:12px;transform:none;bottom:14px;justify-content:space-between}
+  .dock a{padding:0 14px;font-size:13.5px}
+  .dock .go{flex:1;justify-content:center}
+  .dock .lbl{display:none}
+  .panel{border-radius:22px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-transparency:reduce){.glass,.panel{background:var(--panel);backdrop-filter:none;-webkit-backdrop-filter:none}}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<nav class="ornament glass" aria-label="Main">
+  <a href="#" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></a>
+  <a href="#" aria-label="Production" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9l5 3V9l5 3V5l6 4v11z"/></svg></a>
+  <a href="#" aria-label="Inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></a>
+  <a href="#" aria-label="Sales"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16l-1.5 11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg></a>
+  <a href="#" aria-label="Compliance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></a>
+  <span class="sep"></span>
+  <a href="#" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></a>
+</nav>
+
+<div class="shell">
+  <header class="toolbar glass">
+    <span class="org"><span class="mark">W</span>Production</span>
+    <nav class="tabs" aria-label="Production views"><a href="#" aria-current="page">Overview</a><a href="#">Planner</a><a href="#">Workflows</a><a href="#">Inventory</a></nav>
+    <a class="tool" href="#" aria-label="Search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></a>
+    <a class="tool" href="#" aria-label="Notifications, 4 unread"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span class="b"></span></a>
+    <span class="me">JB</span>
+  </header>
+
+  <div class="hero">
+    <section class="today panel" aria-labelledby="h-today">
+      <div>
+        <h1 id="h-today">Monday 23 November</h1>
+        <div class="big num">7 batches</div>
+        <p>under way. Limoncello has waited longest, <b>8 days</b> at blend and sweeten.<span class="wk"> 2 finished this week.</span></p>
+        <div class="legend"><span><i style="background:#94A3B8"></i>First step 2</span><span><i style="background:var(--accent)"></i>Mid-way 3</span><span><i style="background:var(--accent-2)"></i>Last step 2</span></div>
+      </div>
+      <div class="orb" aria-hidden="true">
+        <svg viewBox="0 0 150 150"><circle class="t" cx="75" cy="75" r="62"/>
+          <circle class="s" cx="75" cy="75" r="62" stroke="#94A3B8" stroke-dasharray="105 400" stroke-dashoffset="0"/>
+          <circle class="s" cx="75" cy="75" r="62" stroke="var(--accent)" stroke-dasharray="158 400" stroke-dashoffset="-111" style="animation-delay:.1s"/>
+          <circle class="s" cx="75" cy="75" r="62" stroke="var(--accent-2)" stroke-dasharray="100 400" stroke-dashoffset="-275" style="animation-delay:.2s"/></svg>
+        <span><b class="num">2</b>finished<br>this week</span>
+      </div>
+    </section>
+
+    <section class="attn panel" aria-labelledby="h-attn">
+      <h2 id="h-attn">Needs you <a href="#">All alerts</a></h2>
+      <a class="cap" href="#"><span class="n n-bad num">3</span><div><b>Expired stock</b><small>Inputs to 3 products</small></div><span class="go">›</span></a>
+      <a class="cap" href="#"><span class="n n-warn num">7</span><div><b>Missing trace links</b><small>Add a supplier batch or production link</small></div><span class="go">›</span></a>
+      <a class="cap" href="#"><span class="n n-ok">✓</span><div><b>Stock levels and expiry</b><small>None low · 2 expire within 30 days</small></div><span class="go">›</span></a>
+    </section>
+  </div>
+
+  <div class="figs">
+    <a class="fig glass" href="#"><small>Longest running</small><b class="num">8 days</b></a>
+    <a class="fig glass" href="#"><small>Product workflows</small><b class="num">4</b></a>
+    <a class="fig glass" href="#"><small>Stock lines</small><b class="num">32</b></a>
+    <a class="fig glass" href="#"><small>Movements today</small><b class="num">0</b></a>
+  </div>
+
+  <section class="sec panel" aria-labelledby="h-b">
+    <h2 id="h-b">Under way <a href="#">Production board</a></h2>
+    <div class="rows">
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#FACC15,#F59E0B)">LI</span><div><b>Limoncello</b><small>Step 2 of 3</small></div></div><div class="stepcol"><div class="stepname">Blend and sweeten</div><div class="track"><i style="width:50%"></i></div></div><span class="age hot num">8 days</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#F472B6,#E11D48)">PG</span><div><b>Whistlebird Pink Gin</b><small>Step 4 of 4</small></div></div><div class="stepcol"><div class="stepname">Bottle and label</div><div class="track"><i style="width:88%"></i></div></div><span class="age num">5 days</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#60A5FA,#1D4ED8)">NS</span><div><b>Whistlebird Navy Strength Gin</b><small>Step 3 of 3</small></div></div><div class="stepcol"><div class="stepname">Bottle and label</div><div class="track"><i style="width:83%"></i></div></div><span class="age num">3 days</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#60A5FA,#1D4ED8)">NS</span><div><b>Whistlebird Navy Strength Gin</b><small>Step 2 of 3</small></div></div><div class="stepcol"><div class="stepname">Distil</div><div class="track"><i style="width:50%"></i></div></div><span class="age num">1 day</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#F472B6,#E11D48)">PG</span><div><b>Whistlebird Pink Gin</b><small>Step 2 of 4</small></div></div><div class="stepcol"><div class="stepname">Distil</div><div class="track"><i style="width:37%"></i></div></div><span class="age num">20 hours</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#60A5FA,#1D4ED8)">NS</span><div><b>Whistlebird Navy Strength Gin</b><small>Step 1 of 3</small></div></div><div class="stepcol"><div class="stepname">Macerate botanicals</div><div class="track"><i style="width:16%"></i></div></div><span class="age num">2 hours</span><span class="rec">Record ›</span></a>
+      <a class="row" href="#"><div class="prod"><span class="dot" style="background:linear-gradient(135deg,#FACC15,#F59E0B)">LI</span><div><b>Limoncello</b><small>Step 1 of 3</small></div></div><div class="stepcol"><div class="stepname">Infuse lemon peel</div><div class="track"><i style="width:16%"></i></div></div><span class="age">Just now</span><span class="rec">Record ›</span></a>
+    </div>
+  </section>
+
+  <nav class="more" aria-label="More production pages">
+    <a class="glass" href="#">Batches</a><a class="glass" href="#">Contract orders</a><a class="glass" href="#">Suppliers</a><a class="glass" href="#">Production tasks</a>
+  </nav>
+</div>
+
+<nav class="dock glass" aria-label="Actions">
+  <a href="#" aria-label="Add stock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Add stock</span></a>
+  <a href="#" aria-label="Trace and recall"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 7.5l8 9"/></svg><span class="lbl">Trace</span></a>
+  <a class="go" href="#"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5l13 7.5-13 7.5z"/></svg>Record production step</a>
+</nav>
+</body>
+</html>

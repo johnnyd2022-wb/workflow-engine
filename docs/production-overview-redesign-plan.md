@@ -30,43 +30,61 @@ figures, the batch list, actions and links. Observed in `00-before` (1440 wide):
 
 | Pattern | Where from | What it changes here |
 |---|---|---|
-| Separate top-level menus by job; Reporting promoted to the main nav | Xero's 2025 navigation (Sales, Purchases, Tax, Reporting menus) | Option 3 uses grouped top menus (Production, Stock, Sales, Compliance, Reports) instead of a sidebar |
+| Separate top-level menus by job; Reporting promoted to the main nav | Xero's 2025 navigation (Sales, Purchases, Tax, Reporting menus) | Option 3 keeps a short top text nav (Home, Production, Sales, Compliance) instead of a sidebar |
 | Left sidebar for many sections, pinned shortcuts | Stripe Dashboard (May 2024 update, shortcuts); Shopify admin nav on the left, dropdown from the title bar on mobile | Option 1 keeps a full sidebar with Production's sub-pages nested under it |
 | Dim the sidebar once you have arrived; softer borders | Linear UI refresh, March 2026 ("navigation sidebar … dimmed") | Option 1's sidebar is low-contrast; the content has the only strong surfaces |
-| Horizontal tabs → resizable sidebar on desktop, floating bottom bar on mobile | Vercel dashboard navigation redesign | Options 2, 4 and 5 move navigation to a bottom bar on phones |
-| Left nav scales to many items and is scanned faster; keep nav visible | NN/g, *Left-side vertical navigation on desktop* | Why Options 1 and 2 use a sidebar/rail; why Option 5's hidden nav needs ⌘K and a visible tab bar to make up for it |
-| Cmd+K palette for pages, records and actions, as a supplement to visible nav | Linear, Raycast `cmdk`, SaaS pattern write-ups | Option 5's command palette mixes actions ("Record production step") and batches |
-| Andon: read at a distance, dark background, saturated status colours, red only for urgent | Vibe andon guide; Astro UXDS status system; Vorne | Option 2: always dark, mono numerals, red reserved for "Action required" |
+| Horizontal tabs → resizable sidebar on desktop, floating bottom bar on mobile | Vercel dashboard navigation redesign | Options 2, 4 and 5 move navigation or actions to a bar at the bottom on phones |
+| Left nav scales to many items and is scanned faster; keep nav visible | NN/g, *Left-side vertical navigation on desktop* | Why Options 1, 2 and 5 keep nav visible at the left edge (sidebar, glass capsule, key rail) |
+| Cmd+K palette for pages, records and actions, as a supplement to visible nav | Linear, Raycast `cmdk`, SaaS pattern write-ups | Options 1 and 2 put search in the top bar; a palette can sit behind it in any option (round 1's Floor tried it as the main nav, and lost) |
+| Andon: read at a distance, dark background, saturated status colours, red only for urgent | Vibe andon guide; Astro UXDS status system; Vorne | Every option reserves red for expired stock; round 1's dark Control Room was dropped |
 | One KPI card with hairline dividers, small sparklines | Stripe home | Option 1's figure strip: four figures in one card, not six cards |
 | Calm premium: restrained palette, hairlines, generous type | Mercury (via third-party design studies; type names unconfirmed) | Option 1's spacing and neutral surfaces |
 | Schedule ordered by priority; work grouped by resource or stage | Katana MRP Make screen | Option 4 groups batches into stage columns |
-| Touch tiles for the front of house, dashboard for the back office | Square for Retail item grid vs Square Dashboard | Option 5 is the front of house: big tiles, one tap per action |
+| Touch tiles for the front of house, dashboard for the back office | Square for Retail item grid vs Square Dashboard | Options 3 and 5 size their main controls for touch (52–68 px) |
 | Reduced motion: wrap animation in a media query; never convey meaning by motion alone | web.dev, GitHub Primer | Every animated option has `prefers-reduced-motion` handling or purely decorative motion; status is always words plus colour |
 
 Looked for and did not find: a manufacturing tool for small producers whose overview is
 widely praised for its design (Katana's help docs show the schedule, not an overview).
 The craft references therefore come from fintech and dev tools.
 
+## Round 2: three replaced
+
+The founder's first-round verdict: Control Room, Briefing and Floor were "not good". Ledger
+and Flow stay. The brief for the replacements was the finer finish of the surface: glass,
+soft edges, bold-but-simple. Extra research for that round:
+
+| Pattern | Where from | What it changes here |
+|---|---|---|
+| Glass is a separate layer for controls and navigation; content stays underneath; too much glass distracts | Apple, *Adopting Liquid Glass* and WWDC25 sessions | Option 2 puts glass only on the nav strip, toolbar and action dock; content panels are near-opaque |
+| Sidebars as a floating pane of glass; tab bar floats and can minimise | Apple Liquid Glass (macOS sidebar, iPhone tab bar), visionOS tab ornament | Option 2's vertical capsule nav floating at the left edge |
+| Glassmorphism needs heavy blur and a solid-enough fill for contrast; use it sparingly | NN/g *Glassmorphism*; Axess Lab | 28 px blur, 72–80 % fills behind text; `prefers-reduced-transparency` falls back to solid |
+| Users can reduce transparency and motion | Apple Liquid Glass accessibility settings | Both media queries honoured in Option 2 |
+| Hierarchy from size, not weight; one accent; Swiss minimalism | Ramp brand (TWK Lausanne, regular weight, yellow CTA) | Option 3: giant numerals, a single cobalt accent, no shadows |
+| Expressive design: shape, size, motion, containment; spring physics, shape morphing | Google *Material 3 Expressive* research (46 studies) | Option 3's buttons morph pill → rounded square on a spring; the current step is a scalloped "cookie" shape |
+| Neumorphism fails on contrast; keep 3:1 edges for controls, labels, visible focus and pressed states | BOIA, Axess Lab, Built In | Option 5 gives every raised surface a hairline edge, full-contrast text and labelled keys; red alerts get an outline as well as colour |
+| Soft rounded sheets and shadows as the craft signal | Things 3 (Apple Design Awards; 2025 refresh with more rounding and glassy buttons) | Option 5's 20–32 px radii and pressed-in current tab/key |
+
 ## Five directions
 
-| | 1 Ledger | 2 Control Room | 3 Briefing | 4 Flow | 5 Floor |
+| | 1 Ledger | 2 Glass | 3 Bold | 4 Flow | 5 Soft |
 |---|---|---|---|---|---|
-| Idea | Calm fintech dashboard | Andon board / ops console | A written morning briefing | Kanban board by stage | Touch-first floor terminal |
-| Navigation | Full left sidebar, dimmed, sub-pages nested | 64 px icon rail; bottom bar on phone | Top menus by job (Xero) | Floating pill nav; moves to the bottom on phone | Hidden: menu drawer + ⌘K palette; phone tab bar with a centre Record button |
-| Leads with | KPI strip, then one warning callout | Line status ("ACTION REQUIRED") | A sentence: what matters today | Attention chips + stage columns | Three giant action tiles |
-| Batches as | Table, actions on hover | Gantt timeline on one time axis | Quiet list, longest first | Cards in Just started / Middle / Final / Finished | Tiles with progress rings |
-| Type | Inter | IBM Plex Sans + JetBrains Mono | Fraunces + Instrument Sans | Plus Jakarta Sans | Space Grotesk + Inter |
-| Colour | Warm grey, indigo | Near-black, cyan / amber / red | Paper, forest green, clay | Lavender, violet, coral | Off-white, black, orange |
-| Shape | 8–10 px radius, hairlines | 4–6 px, square, 1 px lines | Rules, no boxes | 14–20 px, soft shadows | 20–24 px, pill buttons |
-| Motion | Sparklines draw, content rises | Live pulse, blinking alarm, marching current step | None | Cards pop in, lift on hover | Rings draw, palette and drawer slide |
-| Taken from | Stripe, Mercury, Linear 2026 | Grafana state timeline, andon boards, Astro UXDS | Xero 2025 nav, Linear Pulse, editorial sites | Katana, Linear boards, Notion | Square POS grid, Raycast/Linear ⌘K, Vercel mobile bar |
-| Best at | A laptop at a desk; scanning many batches | A TV on the wall; spotting a stuck batch | Starting the day in one read | Seeing flow and bottlenecks | A tablet on the floor; gloves, one tap |
-| Gives up | Personality; looks like many SaaS apps | Light theme; less approachable for an owner at a desk | Density; scales poorly past ~15 batches | Exact age ordering; columns are coarse | Information density; nav discoverability without ⌘K |
+| Idea | Calm fintech dashboard | Liquid-glass controls over a colour field | Bold yet simple, Swiss scale | Kanban board by stage | Tactile soft UI |
+| Navigation | Full left sidebar, dimmed, sub-pages nested | Floating glass capsule at the left edge, glass toolbar with view tabs | Plain top text nav, active as a black pill | Floating pill nav; moves to the bottom on phone | Rail of raised keys, current key pressed in; bottom key bar on phone |
+| Primary action | Indigo button, top right | Glass dock floating bottom centre | 68 px cobalt pill beside a giant 7 | Violet button, top right | Raised sage key, top right |
+| Leads with | KPI strip, then one warning callout | "7 batches" and a stage ring, beside "Needs you" | A giant 7, then a black alert band | Attention chips + stage columns | A dial of batches by stage beside four alert keys |
+| Batches as | Table, actions on hover | Rows with a gradient progress track | Large-type list, step pills with a scalloped current step | Cards in Just started / Middle / Final / Finished | Raised cards with a slider track and thumb |
+| Type | Inter | Manrope | Bricolage Grotesque + Geist | Plus Jakarta Sans | Outfit + DM Sans |
+| Colour | Warm grey, indigo | Pastel aurora, blue → cyan, ink dock | Off-white, ink, cobalt, red for expired only | Lavender, violet, coral | Warm stone, sage, apricot |
+| Shape | 8–10 px radius, hairlines | 22–28 px, capsules, specular rims | Pills, 32 px band, 3 px rules, no shadows | 14–20 px, soft shadows | 20–32 px, dual light/dark shadows plus hairline |
+| Motion | Sparklines draw, content rises | Slow aurora drift, ring and bars fill | Spring shape-morph on press, rows rise, current step slowly turns | Cards pop in, lift on hover | Dial arcs draw, keys press in |
+| Taken from | Stripe, Mercury, Linear 2026 | Apple Liquid Glass, visionOS, NN/g | Ramp, Material 3 Expressive | Katana, Linear boards, Notion | Things 3, accessible soft UI |
+| Best at | Scanning many batches at a desk | Feeling premium and current; one obvious action | Instant read: number, problem, action | Seeing flow and bottlenecks | Feeling friendly and physical; touch |
+| Gives up | Personality: looks like many SaaS apps | GPU cost of blur; legibility depends on the solid fallback | Density: one batch per 80 px row | Exact age ordering; columns are coarse | Density, and soft UI dates quickly if overdone |
 
 What all five share: Record production step is the single primary action; the 8-day
 Limoncello is flagged in words and colour; expired stock is the only red; every figure the
 current page shows is still reachable; phone width has no sideways scroll; all five have a
-dark theme (Option 2 is dark-only on purpose).
+dark theme and honour `prefers-reduced-motion`.
 
 ## Decisions that are the reader's, not taste
 
@@ -76,8 +94,9 @@ dark theme (Option 2 is dark-only on purpose).
   the API returns only the count.
 - **The stage columns (Option 4)** group by step position (first / middle / last), which
   is the only grouping the data supports without new workflow metadata.
-- **Hiding the navigation (Option 5)** trades discoverability for room. NN/g's guidance
-  is against hidden nav on desktop; the ⌘K palette and the phone tab bar are the mitigation.
+- **Glass (Option 2)** uses `backdrop-filter` blur on every panel. It is smooth on
+  current hardware, but a low-end tablet on the floor may stutter; the solid fallback
+  exists for that.
 
 ## Not in this change
 
@@ -88,7 +107,8 @@ than only on this page, and any new API figures listed above.
 
 ## Checks
 
-Five passes of Playwright screenshots (1440 × 900 light and dark, 390 × 844 viewport and
-full page, 1920 × 1080 for Option 2), each read in full; the shooter fails on console
+Round 1: six passes; round 2: three more passes on the new three, then one full pass on
+all five. Playwright screenshots at 1440 × 900 light and dark and 390 × 844 viewport and
+full page, each read in full; the shooter fails on console
 errors and on sideways scroll at every width. Defects fixed between passes are listed in
 the MR.
