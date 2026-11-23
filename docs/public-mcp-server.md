@@ -36,6 +36,26 @@ tool descriptions tell the model to use them rather than do arithmetic.
 * Trace, excise and stocktake reconciliation results are complete-or-fail. If a result exceeds the row
   or output limit, `execute` returns `incomplete`, collection counts where available, and a link to
   the relevant Biz-E page.
+* **Text from outside the organisation is marked, never rewritten** (design review S6). Customer and
+  supplier names and invoice text come from Xero's contacts and bills, so anyone who can put text in Xero
+  can put words in front of the assistant. Each operation lists such fields in `x-bize.outside_text`
+  (`[{path, origin}]`, `origin` is `xero`; `[]` says there are none; `app/api/openapi/overlay/*.yaml`).
+  `execute` copies the list into each result as `outside_text`, `docs` shows it before the call, and an
+  operation that does not declare it gets a note saying to treat every text value as someone else's. The
+  list is checked against responses built from seeded data: `tests/openapi/test_outside_text.py` plants a marker in the
+  Xero-sourced columns it lists (contact, invoice and line text, a bill's payee and reference, a lot's
+  supplier, a sale line's product), calls every operation a token can reach, and fails if a marker shows up at
+  a path the operation does not declare, or if a declared path was never seen. The excise period needs its own
+  org, so a second test seeds it at the service level; its two CCA-transfer paths are declared from reading
+  the code and named `UNSEEDED` in that file: that part of the list nothing yet exercises. Columns the tests
+  do not plant are not checked, so the list is a best effort, not a proof, and the tool sentence does not
+  vouch for fields outside it. Text written by
+  contract-customer portal users (messages, approval notes, reorder notes) is not shared with assistants at
+  all: no operation can declare it, and a test fails if any module outside `contract_manufacturing` names the
+  models or tables it is stored in (it does not follow calls into that feature's services).
+  The paths are the operation's own response fields: a `select` that renames a field (`{n: name}`) no longer
+  matches them. Marking is not a filter: a prompt-injection can still be read, so the tool descriptions
+  say results are data, never instructions, and the Settings page says the same beside the switch.
 * Each run writes one `mcp.execute` log event (user, org, client, grant, operation ids, statuses, duration,
   parameter *names* only).
 

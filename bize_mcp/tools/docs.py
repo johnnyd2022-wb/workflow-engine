@@ -48,6 +48,9 @@ def _operation_doc(op: Operation, allowed: dict[str, Operation], topics: set[str
             for p in op.params
         ],
         "response_schema": op.response_schema,
+        "outside_text": None
+        if op.outside_text is None
+        else [{"path": path, "origin": origin} for path, origin in op.outside_text],
         "concepts": list(op.concepts),
         "concept_topics": [c for c in op.concepts if c in topics],
         "related_operations": [r for r in op.related_operations if r in allowed],

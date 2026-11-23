@@ -14,7 +14,7 @@
           {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 200}}
         ],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object", "properties": {"inventory_items": {"type": "array"}, "has_more": {"type": "boolean"}, "next_cursor": {"type": ["string", "null"]}}}}}}},
-        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true,
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true, "outside_text": [{"path": "inventory_items[].supplier", "origin": "xero"}],
                    "concepts": ["inventory.availability"], "related_operations": ["get_stock_position", "trace_inventory_backward"],
                    "example": {"params": {"type": "raw_material", "limit": 10}}}
       },
@@ -22,7 +22,7 @@
         "operationId": "create_inventory_item",
         "summary": "Add a lot",
         "responses": {"201": {"description": "created"}},
-        "x-bize": {"permission": "inventory.adjust", "domain": "inventory", "kind": "record", "mcp": true}
+        "x-bize": {"permission": "inventory.adjust", "domain": "inventory", "kind": "record", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/inventory/trace-backward/{inventory_item_id}": {
@@ -31,7 +31,7 @@
         "summary": "Trace a lot back to its source materials",
         "parameters": [{"name": "inventory_item_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "inventory.view", "domain": "traceability", "kind": "calculation", "mcp": true,
+        "x-bize": {"permission": "inventory.view", "domain": "traceability", "kind": "calculation", "mcp": true, "outside_text": [{"path": "all_items[].supplier", "origin": "xero"}, {"path": "intermediates[].supplier", "origin": "xero"}, {"path": "raw_materials[].supplier", "origin": "xero"}, {"path": "traced_item.supplier", "origin": "xero"}],
                    "concepts": ["traceability.back"], "related_operations": ["list_inventory"],
                    "complete": true, "app_page": "/core/sourcemap"}
       }
@@ -41,7 +41,7 @@
         "operationId": "get_stock_position",
         "summary": "Stock position by place and batch, as at today",
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "calculation", "mcp": true, "concepts": ["inventory.availability"]}
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "calculation", "mcp": true, "outside_text": [], "concepts": ["inventory.availability"]}
       }
     },
     "/api/core/holds": {
@@ -49,7 +49,7 @@
         "operationId": "list_open_holds",
         "summary": "Lots on quality hold now",
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true}
+        "x-bize": {"permission": "inventory.view", "domain": "inventory", "kind": "list", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/processes": {
@@ -57,7 +57,7 @@
         "operationId": "list_processes",
         "summary": "List workflows (products and their steps)",
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true}
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/processes/{process_id}": {
@@ -66,7 +66,7 @@
         "summary": "One workflow with its steps",
         "parameters": [{"name": "process_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true}
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/executions": {
@@ -79,7 +79,7 @@
           {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 200}}
         ],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true, "concepts": ["production.batches"]}
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "list", "mcp": true, "outside_text": [], "concepts": ["production.batches"]}
       }
     },
     "/api/core/executions/{execution_id}": {
@@ -88,7 +88,7 @@
         "summary": "One batch with its steps",
         "parameters": [{"name": "execution_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true}
+        "x-bize": {"permission": "production.view", "domain": "production", "kind": "record", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/costing/lots/{item_id}/cost": {
@@ -98,7 +98,7 @@
         "description": "unit_cost is null while the cost is unknown; status says why.",
         "parameters": [{"name": "item_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-fA-F-]{36}$"}}],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object", "properties": {"unit_cost": {"type": ["string", "null"]}, "status": {"type": "string"}}}}}}},
-        "x-bize": {"permission": "costs.view", "domain": "costing", "kind": "calculation", "mcp": true, "feature": "costing", "concepts": ["costing.status"]}
+        "x-bize": {"permission": "costs.view", "domain": "costing", "kind": "calculation", "mcp": true, "outside_text": [], "feature": "costing", "concepts": ["costing.status"]}
       }
     },
     "/api/crm/invoices": {
@@ -111,7 +111,7 @@
           {"name": "page_size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
         ],
         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}}},
-        "x-bize": {"permission": "sales.view", "domain": "sales", "kind": "list", "mcp": true, "feature": "crm", "concepts": ["sales.invoices"]}
+        "x-bize": {"permission": "sales.view", "domain": "sales", "kind": "list", "mcp": true, "outside_text": [{"path": "invoices[].contact_name", "origin": "xero"}, {"path": "invoices[].invoice_number", "origin": "xero"}, {"path": "invoices[].reference", "origin": "xero"}, {"path": "invoices[].line_items[].description", "origin": "xero"}], "feature": "crm", "concepts": ["sales.invoices"]}
       }
     },
     "/api/org/users": {
@@ -119,7 +119,7 @@
         "operationId": "list_org_users",
         "summary": "List the people in the organisation",
         "responses": {"200": {"description": "ok"}},
-        "x-bize": {"permission": "users.manage", "domain": "people", "kind": "list", "mcp": true}
+        "x-bize": {"permission": "users.manage", "domain": "people", "kind": "list", "mcp": true, "outside_text": []}
       }
     },
     "/api/core/suppliers": {
