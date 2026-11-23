@@ -71,7 +71,7 @@ def test_ac2_dcr_needs_no_csrf_token_and_no_session(world, flask_app, monkeypatc
     [
         "javascript:alert(1)",
         "http://evil.example/callback",
-        "http://localhost/callback",  # a loopback redirect carries its port
+        "http://localhost.evil.example/callback",  # looks like loopback, is not
         "ftp://files.example/cb",
         "https://assistant.example.test/cb#fragment",
         "https://user:secret@assistant.example.test/cb",

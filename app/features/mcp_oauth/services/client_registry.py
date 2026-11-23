@@ -43,7 +43,7 @@ MAX_NAME_LENGTH = 100
 METADATA_TIMEOUT_SECONDS = 5
 METADATA_MAX_BYTES = 64 * 1024
 METADATA_CACHE_SECONDS = 24 * 3600
-LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1"})
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SUPPORTED_GRANT_TYPES = ("authorization_code", "refresh_token")
 SUPPORTED_RESPONSE_TYPES = ("code",)
 
@@ -70,18 +70,19 @@ class FetchResult:
 def validate_redirect_uri(uri) -> str:
     """The URI itself when it is a safe redirect target, else ``invalid_redirect_uri``.
 
-    ``https://`` with a host, or ``http://localhost|127.0.0.1:<port>/...`` (a native app listening
-    on loopback). No credentials, no fragment, no backslashes or whitespace. Returned unchanged:
-    redirect URIs are compared exactly.
+    ``https://`` with a host, or ``http://localhost|127.0.0.1|[::1][:<port>]/...`` (a native app
+    listening on loopback). No credentials, no fragment, no backslashes or whitespace. Returned
+    unchanged: redirect URIs are compared exactly, except that a loopback one matches on any port
+    (``redirect_uri_matches``).
     """
-    bad = ClientError("invalid_redirect_uri", "Redirect URIs must be https, or http on localhost with a port")
+    bad = ClientError("invalid_redirect_uri", "Redirect URIs must be https, or http on localhost")
     if not isinstance(uri, str) or not uri or len(uri) > MAX_URI_LENGTH:
         raise bad
     if "\\" in uri or any(ch.isspace() or unicodedata.category(ch).startswith("C") for ch in uri):
         raise bad
     try:
         parts = urlsplit(uri)
-        port = parts.port
+        parts.port  # noqa: B018 - raises ValueError for a malformed port
     except ValueError:
         raise bad from None
     host = (parts.hostname or "").lower()
@@ -89,9 +90,43 @@ def validate_redirect_uri(uri) -> str:
         raise bad
     if parts.scheme == "https":
         return uri
-    if parts.scheme == "http" and host in LOOPBACK_HOSTS and port is not None:
+    if parts.scheme == "http" and host in LOOPBACK_HOSTS:
+        # The port may be omitted: RFC 8252 7.3 has the native app pick a free one at request time.
         return uri
     raise bad
+
+
+def _loopback_key(uri: str) -> tuple[str, str, str] | None:
+    """(host, path, query) for an http loopback URI, the parts that must match whatever the port."""
+    try:
+        parts = urlsplit(uri)
+        parts.port  # noqa: B018 - raises ValueError for a malformed port
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "http" or host not in LOOPBACK_HOSTS:
+        return None
+    if parts.username is not None or parts.password is not None or parts.fragment:
+        return None
+    return host, parts.path, parts.query
+
+
+def redirect_uri_matches(requested, registered) -> bool:
+    """True when ``requested`` is one of the ``registered`` redirect URIs.
+
+    Exact string match, except an http loopback URI also matches a registered one that differs only
+    by port (RFC 8252 7.3): native apps such as Claude Code register ``http://localhost/callback``
+    and listen on whichever port is free when the user signs in.
+    """
+    if not isinstance(requested, str) or not requested:
+        return False
+    if "\\" in requested or any(ch.isspace() or unicodedata.category(ch).startswith("C") for ch in requested):
+        return False
+    registered = list(registered or ())
+    if requested in registered:
+        return True
+    key = _loopback_key(requested)
+    return key is not None and any(_loopback_key(uri) == key for uri in registered)
 
 
 def validate_redirect_uris(value) -> list[str]:
