@@ -47,7 +47,7 @@ are in `tests/mcp_oauth/` (`test_oauth_bcp.py` is new in 8.2h).
 | RFC 9207 | SHOULD send `iss`, and then MUST advertise the flag; clients reject a missing one | Done in 8.2h | OK (was a gap) |
 | Redirect URIs | https or localhost, exact match | Same | OK |
 | Tokens | Header only, never the query string; audience validated | Same | OK |
-| Refresh | Public-client rotation is an AS MUST | Rotating, with reuse detection | OK |
+| Refresh | Public-client rotation is an AS MUST | Rotating, with reuse detection. One retry is allowed within 30 s of a rotation while the replacement is unused (a lost response, S5); anything later ends the grant. Accepted limits: one retry only, and a stolen token replayed inside the window (before the real holder uses the replacement) is not detected | OK, with those two caveats |
 | Scope step-up | 403 `insufficient_scope` with `scope`; client SHOULD step up, cap retries | One scope (`bize.read`); a write or settings route can never be reached by a larger scope. The MCP server maps the app's 403 to a tool error, so no client sees a step-up challenge | **Not supported on purpose.** Revisit with `bize.write` |
 
 ### Follow-ups the check turned up (not fixed here: `bize_mcp/` is 8.2c's)

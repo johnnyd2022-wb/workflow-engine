@@ -7,8 +7,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.core.db.models.user import User
+from app.core.security.auth_service import AuthService
 from app.features.mcp_oauth.models import OAuthAuthorizationCode, OAuthGrant, OAuthToken
-from app.features.mcp_oauth.services.tokens import hash_token
+from app.features.mcp_oauth.services.tokens import REFRESH_REUSE_GRACE, hash_token
 from tests.mcp_oauth.support import (
     REDIRECT,
     RESOURCE,
@@ -44,6 +46,28 @@ def connect(world, who="member", client=None, **overrides):
 
 def token(world, form):
     return world.anon().post("/oauth/token", data=form)
+
+
+def refresh_form_for(world, raw_refresh_token):
+    return {
+        "grant_type": "refresh_token",
+        "refresh_token": raw_refresh_token,
+        "client_id": world.client_row.client_id,
+    }
+
+
+def rotated_seconds_ago(db, raw_refresh_token, seconds):
+    """Move a rotated-out refresh token's rotation back in time, as if ``seconds`` had passed."""
+    row = db.query(OAuthToken).filter_by(token_hash=hash_token(raw_refresh_token)).one()
+    assert row.replaced_by_id is not None, "only a rotated-out token has a rotation time to move"
+    row.revoked_at = datetime.now(UTC) - timedelta(seconds=seconds)
+    db.commit()
+
+
+# Literals, not derived from REFRESH_REUSE_GRACE: S5 asked for 30-60 s, and a test that moves with the
+# constant would stay green if someone widened the window to an hour.
+INSIDE_THE_GRACE = 20
+PAST_THE_GRACE = 65
 
 
 # --- AC7 ----------------------------------------------------------------------------------------
@@ -214,6 +238,8 @@ def test_ac9_refresh_rotates_the_token_and_reuse_revokes_the_grant(world, db):
     assert old.revoked_at is not None
     assert old.replaced_by_id == new.id
 
+    # Past the grace window a replayed token is reuse (inside it, it is a retry: the S5 tests below).
+    rotated_seconds_ago(db, first["refresh_token"], PAST_THE_GRACE)
     reuse = token(world, refresh_form)
     assert reuse.status_code == 400
     assert reuse.get_json()["error"] == "invalid_grant"
@@ -287,6 +313,139 @@ def test_ac9_refresh_cannot_widen_the_scope(world):
     assert resp.get_json()["error"] == "invalid_scope"
 
 
+# --- S5: a retry after a lost refresh response must not end the grant ------------------------------
+
+
+def _lost_response(world):
+    """Connect, then rotate once and 'lose' the response: returns (first pair, the unseen successor's hash)."""
+    _code, _verifier, form = connect(world)
+    first = token(world, form).get_json()
+    lost = token(world, refresh_form_for(world, first["refresh_token"]))
+    assert lost.status_code == 200, lost.get_json()
+    return first, hash_token(lost.get_json()["refresh_token"])
+
+
+def test_s5_the_window_is_between_30_and_60_seconds():
+    assert INSIDE_THE_GRACE < REFRESH_REUSE_GRACE.total_seconds() < PAST_THE_GRACE
+
+
+def test_s5_a_retry_just_after_a_rotation_gets_a_fresh_pair_and_the_grant_survives(world, db):
+    first, unseen_hash = _lost_response(world)
+    rotated_seconds_ago(db, first["refresh_token"], INSIDE_THE_GRACE)  # not instant: some of the window gone
+
+    retry = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert retry.status_code == 200, retry.get_json()
+    pair = retry.get_json()
+    assert pair["refresh_token"].startswith("bzr_") and pair["refresh_token"] != first["refresh_token"]
+    assert world.anon().get("/api/core/mcp/me", headers=bearer(pair["access_token"])).status_code == 200
+    db.expire_all()
+    grant = db.query(OAuthGrant).filter_by(org_id=world.org.id).one()
+    assert grant.revoked_at is None
+    unseen = db.query(OAuthToken).filter_by(token_hash=unseen_hash).one()
+    fresh = db.query(OAuthToken).filter_by(token_hash=hash_token(pair["refresh_token"])).one()
+    assert unseen.revoked_at is not None and unseen.replaced_by_id == fresh.id
+    assert fresh.revoked_at is None
+    # exactly one live refresh token is left, so the retry did not mint a second live copy
+    live = db.query(OAuthToken).filter_by(org_id=world.org.id, kind="refresh", revoked_at=None).count()
+    assert live == 1
+
+
+def test_s5_the_retried_pair_can_itself_be_refreshed(world, db):
+    first, _unseen = _lost_response(world)
+    pair = token(world, refresh_form_for(world, first["refresh_token"])).get_json()
+
+    again = token(world, refresh_form_for(world, pair["refresh_token"]))
+
+    assert again.status_code == 200, again.get_json()
+    assert world.anon().get("/api/core/mcp/me", headers=bearer(again.get_json()["access_token"])).status_code == 200
+
+
+def test_s5_a_retry_after_the_window_still_ends_the_grant(world, db):
+    # The successor is unseen and unused here, so only the clock tells this retry from reuse.
+    first, _unseen = _lost_response(world)
+    rotated_seconds_ago(db, first["refresh_token"], PAST_THE_GRACE)
+
+    late = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert late.status_code == 400 and late.get_json()["error"] == "invalid_grant"
+    db.expire_all()
+    grant = db.query(OAuthGrant).filter_by(org_id=world.org.id).one()
+    assert grant.revoked_at is not None and grant.revoked_reason == "refresh_reuse"
+
+
+def test_s5_a_replay_after_the_successor_has_been_used_still_ends_the_grant(world, db):
+    _code, _verifier, form = connect(world)
+    first = token(world, form).get_json()
+    second = token(world, refresh_form_for(world, first["refresh_token"])).get_json()
+    # The holder of the successor moved on, so the old token coming back is a second holder.
+    assert token(world, refresh_form_for(world, second["refresh_token"])).status_code == 200
+
+    replay = token(world, refresh_form_for(world, first["refresh_token"]))  # well inside the window
+
+    assert replay.status_code == 400 and replay.get_json()["error"] == "invalid_grant"
+    db.expire_all()
+    grant = db.query(OAuthGrant).filter_by(org_id=world.org.id).one()
+    assert grant.revoked_at is not None and grant.revoked_reason == "refresh_reuse"
+    assert db.query(OAuthToken).filter_by(org_id=world.org.id, revoked_at=None).count() == 0
+
+
+def test_s5_a_retry_cannot_widen_the_scope(world):
+    first, _unseen = _lost_response(world)
+
+    resp = token(world, {**refresh_form_for(world, first["refresh_token"]), "scope": "bize.read bize.write"})
+
+    assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_scope"
+
+
+def test_s5_a_retry_after_a_password_change_is_refused_and_ends_the_grant(world, db):
+    first, _unseen = _lost_response(world)
+    db.get(User, world.users["member"].id).password_hash = AuthService.hash_password("Another-Passw0rd!9")
+    db.commit()
+
+    resp = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_grant"
+    db.expire_all()
+    grant = db.query(OAuthGrant).filter_by(org_id=world.org.id).one()
+    assert grant.revoked_at is not None and grant.revoked_reason == "password_changed"
+
+
+def test_s5_a_retry_for_a_disabled_client_is_refused(world, db):
+    first, _unseen = _lost_response(world)
+    world.client_row.disabled_at = datetime.now(UTC)
+    db.commit()
+
+    resp = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_grant"
+
+
+def test_s5_a_retry_for_a_deactivated_user_is_refused(world, db):
+    first, _unseen = _lost_response(world)
+    db.get(User, world.users["member"].id).is_active = False
+    db.commit()
+
+    resp = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_grant"
+    db.expire_all()
+    assert db.query(OAuthToken).filter_by(org_id=world.org.id, kind="refresh", revoked_at=None).count() == 1, (
+        "nothing was issued, so the unseen successor is still the only live refresh token"
+    )
+
+
+def test_s5_a_retry_for_a_disconnected_grant_is_refused(world, db):
+    first, _unseen = _lost_response(world)
+    world.anon().post("/oauth/revoke", data={"token": first["refresh_token"], "client_id": world.client_row.client_id})
+
+    resp = token(world, refresh_form_for(world, first["refresh_token"]))
+
+    assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_grant"
+    db.expire_all()
+    assert db.query(OAuthToken).filter_by(org_id=world.org.id, revoked_at=None).count() == 0
+
+
 def test_reconnecting_the_same_client_replaces_the_grants_tokens(world, db):
     """Assumption M2: one grant per person per client."""
     _code, _verifier, form = connect(world)
@@ -353,7 +512,7 @@ def test_another_clients_revoke_does_not_end_the_grant(world, db):
 # --- AC10 ---------------------------------------------------------------------------------------
 
 
-def test_ac10_no_raw_token_is_logged_while_a_connection_is_made(world, caplog, capfd):
+def test_ac10_no_raw_token_is_logged_while_a_connection_is_made(world, db, caplog, capfd):
     caplog.set_level(logging.DEBUG)
     _code, _verifier, form = connect(world)
     pair = token(world, form).get_json()
@@ -365,6 +524,7 @@ def test_ac10_no_raw_token_is_logged_while_a_connection_is_made(world, caplog, c
     rotated = token(world, refresh_form).get_json()
     world.anon().get("/api/core/mcp/me", headers=bearer(rotated["access_token"]))
     world.anon().post("/oauth/revoke", data={"token": rotated["access_token"]})
+    rotated_seconds_ago(db, pair["refresh_token"], PAST_THE_GRACE)
     token(world, refresh_form)  # reuse, so the failure paths log too
 
     out = capfd.readouterr()

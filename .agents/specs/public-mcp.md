@@ -124,7 +124,16 @@ authlib's grant model fights the composite keys. Either way, behaviour is exactl
     equal those on the code. Returns `access_token`, `token_type=Bearer`, `expires_in=3600`,
     `refresh_token` and `scope`. Reusing a used code revokes the grant (RFC 6749 §10.5).
   - `refresh_token`: rotates, returning a new refresh token and revoking the old one.
-    Presenting a revoked refresh token revokes the whole grant.
+    Presenting a revoked refresh token revokes the whole grant, with one exception (S5 of the
+    2026-11-17 design review): within 30 s of the rotation, while the replacement has not been
+    used, the old token is read as a client retrying after a lost response. It gets a fresh
+    pair, and the unseen replacement is revoked. The window runs from the rotation and is
+    never extended; every other check (account, password, scope, client) still applies.
+    Two limits, accepted with the window: only one retry is covered (once the unseen replacement
+    is retired, a second presentation of the same old token reads as reuse), and a thief who
+    replays a stolen old token inside the window, before the real holder has used the
+    replacement, gets a live pair without the grant ending. Once either side refreshes after
+    the other, or the window closes, the grant ends as before.
   - Errors follow RFC 6749 JSON (`invalid_grant`, `invalid_request`, …), status 400. Rate limit:
     60/min per client per IP.
 - **`POST /oauth/revoke`** (RFC 7009): always `200`; revokes the token (and, for a refresh
@@ -463,7 +472,9 @@ visible to users.manage for the switch and roles, to everyone for "Your connecti
   same code twice: the second is `invalid_grant`, and the first's tokens are revoked.
 - AC8: A code older than 60 s is `invalid_grant`.
 - AC9: Refresh rotates the token. Reusing the old refresh token is `invalid_grant` and revokes the
-  grant, so the newest access token then gets 401.
+  grant, so the newest access token then gets 401. Reuse means later than 30 s after the rotation,
+  or after its replacement has been used; a retry sooner than that, with the replacement unused,
+  gets a fresh pair and leaves the grant live (S5).
 - AC10: The token endpoint's response and logs never contain a raw token outside the response
   body. A log line with a `bza_…` value is redacted.
 

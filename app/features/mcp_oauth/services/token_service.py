@@ -7,7 +7,8 @@ Rules that matter most (spec "OAuth", RFC 6749 §10.5, RFC 7009, OAuth 2.1 refre
   code was issued for. A wrong guess does not burn the code (a stranger must not be able to
   spoil a real person's connection by guessing).
 * A refresh token rotates: the old one is revoked and points at its replacement. Presenting a
-  revoked one ends the whole grant.
+  revoked one ends the whole grant, except for one retry shortly after the rotation whose
+  replacement has not been used yet (a lost response; see ``_unseen_successor``).
 * Everything is looked up by the SHA-256 of the presented value; the raw value is never stored or
   logged. Nothing here puts a token in a log line, an exception message or an audit row.
 """
@@ -24,13 +25,14 @@ from app.core.security.auth_service import auth_stamp
 from app.core.security.tenant_scope import tenant_scope, unscoped
 from app.core.utils.log_action import log_action
 from app.features.mcp_oauth import SUPPORTED_SCOPES
-from app.features.mcp_oauth.models import OAuthClient, OAuthGrant
+from app.features.mcp_oauth.models import OAuthClient, OAuthGrant, OAuthToken
 from app.features.mcp_oauth.repositories.grant_repo import GrantRepository
 from app.features.mcp_oauth.services.tokens import (
     ACCESS_PREFIX,
     ACCESS_TTL,
     CODE_PREFIX,
     REFRESH_PREFIX,
+    REFRESH_REUSE_GRACE,
     REFRESH_TTL,
     hash_token,
     looks_like,
@@ -174,6 +176,23 @@ def exchange_code(db, form) -> Issued:
         return _issue(db, repo, grant, now, via="authorization_code")
 
 
+def _unseen_successor(repo: GrantRepository, grant: OAuthGrant, token: OAuthToken, now: datetime) -> OAuthToken | None:
+    """The successor of a refresh token that was rotated out moments ago, if this is a retry.
+
+    A client that lost the response to a refresh presents the old token again (S5). That is told
+    apart from a stolen copy by three things, all required: the rotation was within
+    ``REFRESH_REUSE_GRACE`` (measured from the rotation, so retries never extend it); the successor
+    is still unused (nothing has refreshed from it, so no second holder has appeared); and it is
+    still a live refresh token of this same grant. Anything else is reuse and ends the grant.
+    """
+    if token.revoked_at is None or now - token.revoked_at > REFRESH_REUSE_GRACE:
+        return None
+    successor = repo.get_token(grant.org_id, grant.id, token.replaced_by_id)
+    if successor is None or successor.kind != "refresh" or successor.revoked_at is not None:
+        return None
+    return successor
+
+
 def refresh(db, form) -> Issued:
     raw = _text(form, "refresh_token")
     client = _client(db, _text(form, "client_id"))
@@ -193,15 +212,19 @@ def refresh(db, form) -> Issued:
         if grant is None or grant.client_pk != client.id:
             db.rollback()
             raise invalid
+        retry_of = None  # the unseen successor a retried rotation replaces (see _unseen_successor)
         if token.revoked_at is not None:
             if token.replaced_by_id is not None:
-                # A rotated-out refresh token coming back: someone has a copy. End the connection.
-                revoke(db, repo, grant, "refresh_reuse", now)
+                retry_of = _unseen_successor(repo, grant, token, now)
+                if retry_of is None:
+                    # A rotated-out refresh token coming back: someone has a copy. End the connection.
+                    revoke(db, repo, grant, "refresh_reuse", now)
+                    raise invalid
             else:
                 # Revoked by a reconnection (M2), not by rotation: that device is simply signed out.
                 # Not a theft signal, so the newer connection stays.
                 db.rollback()
-            raise invalid
+                raise invalid
         if grant.revoked_at is not None or client.disabled_at is not None or token.expires_at <= now:
             db.rollback()
             raise invalid
@@ -212,6 +235,10 @@ def refresh(db, form) -> Issued:
             db.rollback()
             raise TokenError("invalid_scope", "A refresh cannot widen the scope")
         _check_user_and_org(db, grant, repo, now)
+        if retry_of is not None:
+            # The raw successor is not stored, so it cannot be handed out again: retire it unseen
+            # and issue a fresh one in its place.
+            return _issue(db, repo, grant, now, replaces=retry_of, via="refresh_token_retry")
         return _issue(db, repo, grant, now, replaces=token, via="refresh_token")
 
 
