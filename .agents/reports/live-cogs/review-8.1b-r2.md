@@ -22,7 +22,7 @@
    `retire_account_lines` was added, but its caller fails when the account has a treatment override. See finding 2 below.
 
 8. **Resolved — unit-amount precision.**  
-   Model and migration use `NUMERIC(18,6)`; regression at `tests/test_costing_purchases.py:997-1003`.
+   Model and migration use `NUMERIC(18,6)`; regression at `tests/test_costing_purchases.py:997-1003`. Confirmed against current code and `test_r1_unit_amount_keeps_xero_precision`. (verified 2026-11-24 by findings-sweep)
 
 9. **Partially resolved — independently falsifiable acceptance tests.**  
    The new tests cover individual keywords, adversarial `NoTax`, positional history, LineItemID movement/recode, cross-org mutation, cursor arithmetic/counting, and foreign nulls. The requested downgrade-refusal test is still absent.

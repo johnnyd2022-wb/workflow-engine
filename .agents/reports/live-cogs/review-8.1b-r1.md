@@ -23,7 +23,7 @@
 5. **Medium — A sync where every phase fails is incorrectly marked `partial`.**  
    [xero_sync_service.py:48](</home/johnny/wt-live-cogs-xero/app/features/crm/services/xero_sync_service.py:48>), [test_costing_purchases.py:534](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:534>)  
    Scenario: contacts, invoices, and credit-note fetches all fail before processing anything, and purchases also fails. `purchases_status == "failed"` alone makes `result.partial` true, despite no successful phase or retained result. The job is marked partial rather than failed. The existing test only covers successful zero-row sales phases followed by purchase failure, so it cannot distinguish these cases.  
-   Fix: track per-phase completion independently of row counts. Define partial as at least one phase completing successfully or retaining results while another fails.
+   Fix: track per-phase completion independently of row counts. Define partial as at least one phase completing successfully or retaining results while another fails. Already fixed: `SyncResult.partial` in `xero_sync_service.py` counts a phase only when it had no errors; pinned by `test_r1_every_phase_failing_is_failed_not_partial`. (verified 2026-11-24 by findings-sweep)
 
 6. **Medium — Missing or invalid base-currency amounts are silently converted to zero.**  
    [purchase_sources.py:288](</home/johnny/wt-live-cogs-xero/app/features/costing/purchase_sources.py:288>)  
@@ -38,7 +38,7 @@
 8. **Medium — `source_unit_amount` loses the contracted “as sent” precision.**  
    [models.py:244](</home/johnny/wt-live-cogs-xero/app/features/costing/models.py:244>), [costing_purchases_001.py:94](</home/johnny/wt-live-cogs-xero/app/core/db/migrations/versions/costing_purchases_001.py:94>), [test_costing_purchases.py:55](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:55>)  
    Scenario: Xero sends a unit amount with more than four decimal places. PostgreSQL rounds it to `NUMERIC(18,4)`, even though the specification describes it as Xero’s value “as sent” and the broader data model assigns unit costs six decimal places. The test fixture never supplies or asserts `unit_amount`.  
-   Fix: use the contract’s unit-cost precision, at least `NUMERIC(18,6)`, consistently in migration and model; add a precision-preservation test.
+   Fix: use the contract’s unit-cost precision, at least `NUMERIC(18,6)`, consistently in migration and model; add a precision-preservation test. Already fixed: `Numeric(18, 6)` in `app/features/costing/models.py` and the migration; pinned by `test_r1_unit_amount_keeps_xero_precision`. (verified 2026-11-24 by findings-sweep)
 
 9. **Low — Several acceptance tests are not independently falsifiable.**  
    [test_costing_purchases.py:258](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:258>), [test_costing_purchases.py:318](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:318>), [test_costing_purchases.py:362](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:362>), [test_costing_purchases.py:380](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:380>), [test_costing_purchases.py:458](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:458>), [test_costing_purchases.py:797](</home/johnny/wt-live-cogs-xero/tests/test_costing_purchases.py:797>)  
@@ -48,9 +48,9 @@
    - `NoTax` supplies tax zero, so retaining a nonzero Xero tax would not be caught.
    - `A,X,B` does not assert that old B was superseded and both X and the new B were inserted.
    - LineItemID coverage does not exercise moving position, changing account, or other “whatever changed” fields.
-   - Cross-org account PUT does not assert that the target org’s line treatment stayed unchanged.
-   - Cursor coverage does not assert `started_at − RESUME_OVERLAP`, and counting coverage does not prove that a transaction with no storable lines contributes zero.
-   - Foreign-currency coverage omits assertions that both line tax and both document totals are null.
+   - Cross-org account PUT does not assert that the target org’s line treatment stayed unchanged. Already fixed: `test_r1_cross_org_put_leaves_the_other_orgs_lines_alone`. (verified 2026-11-24 by findings-sweep)
+   - Cursor coverage does not assert `started_at − RESUME_OVERLAP`, and counting coverage does not prove that a transaction with no storable lines contributes zero. Already fixed: `test_r1_cursor_is_started_at_minus_overlap_and_unstorable_counts_zero`. (verified 2026-11-24 by findings-sweep)
+   - Foreign-currency coverage omits assertions that both line tax and both document totals are null. Already fixed: `test_r1_foreign_tax_and_totals_are_null`. (verified 2026-11-24 by findings-sweep)
    - There is no downgrade-refusal test for an existing `treatment_override`.
 
    Fix: split keyword cases, use adversarial inputs, and assert row identity/history and every nullable amount explicitly.
