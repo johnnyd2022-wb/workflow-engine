@@ -23,6 +23,7 @@ from . import composition as comp_mod
 from . import roles, rules
 
 _MAX_STEPS = 60
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def _sum(entries, unit=None) -> tuple[Decimal, str | None, bool]:
@@ -149,6 +150,7 @@ def as_csv(trace: dict) -> str:
             src.get("variety") or "", src.get("vintage") or "", src.get("region") or "", src.get("spray_diary") or "",
             inputs, row["flag"] or "",
         ]  # fmt: skip
-        # A cell starting with = + - @ would run as a formula in a spreadsheet: quote it.
-        writer.writerow([f"'{c}" if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in cells])
+        writer.writerow(
+            [f"'{cell}" if isinstance(cell, str) and cell.startswith(_CSV_FORMULA_PREFIXES) else cell for cell in cells]
+        )
     return out.getvalue()
