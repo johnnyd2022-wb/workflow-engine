@@ -101,6 +101,46 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 5: Glass refined into three variants
+
+The founder picked Glass. These three keep its look (glass for controls, near-opaque frosted
+panels for content, one blue accent, Manrope) and differ in structure. All three use the real
+menus from `app/ui/page_registry.py` (Home, Production, Compliance, Sales, Settings; tabs
+Overview, Planner, Workflows, Inventory; Get to work: Record production step, Add to inventory
+with Manual entry / CSV upload / Barcode scan, Trace and recall; Manage production: Contract
+orders, Batches, Suppliers, Production tasks, View production board) and Whistlebird Ltd's
+data from `/api/core/hub/overview` on 24 Nov 2026: 5 batches under way (4 Wildflower gin, 1
+Solstice gin, all at Bottling or Labelling & packaging), longest running 124 days, 2 expired
+lines (Dried apple ring), 88 of 88 lines traceable, 7 workflows, 0 finished this week, 85 all time.
+
+| | 11 Glass A: Shell | 12 Glass B: Focus | 13 Glass C: Inspector |
+|---|---|---|---|
+| Idea | Today's page, rebuilt in glass | One next job, then the queue | List and inspector |
+| Navigation | Glass sidebar → icon rail (≤1180) → bottom tab bar (phone) | Floating ornament; phone: section switcher sheet | Sections across a top bar; phone: bottom tab bar |
+| Leads with | Health and At a glance | The batch waiting longest, with its steps | The batch list grouped by step |
+| Best at | Shipping first: no API change | Getting the oldest work moving | Seeing what a batch made and holds |
+| Gives up | Nothing new to learn, nothing new shown | Figures are smaller and lower | Needs per-batch detail in the payload |
+
+Production-ready details in all three: skip link, landmarks, `aria-current`, visible focus
+rings, 44px targets, status in words as well as colour, Record visible on every batch (never
+on hover only), Add to inventory as a menu on laptop and a bottom sheet on phone, Escape and
+outside-click close, `prefers-reduced-motion` and `prefers-reduced-transparency` honoured,
+and no element past the viewport at 320, 360 or 390 wide (checked per element, not only
+page width). Four screenshot passes; the last found nothing.
+
+### Decisions that are the reader's (round 5)
+
+- **Stock lines figure.** Today's page shows `metrics.inventory_items.total`: 467 for
+  Whistlebird, which counts used-up lines at zero. Lines with stock are 88
+  (`inventory.nonzero_lines`). The variants show 88; the live page should too.
+- **B and C need more data.** "Days at this step" needs the last completed step's
+  `completed_at`, and C's inspector needs each step's date and outputs and the batch's
+  stock on hand. Today's payload has only `started_at`. A uses nothing new.
+- **Telling batches apart.** Four Wildflower batches are under way and the app has no batch
+  code, so the variants use the start date ("Started 13 Sep").
+- **Recorded quantities look odd.** Two Wildflower batches record 1 L of aged gin and then
+  78 bottles. C shows this as recorded; it is worth checking at source.
+
 ## Round 4: five more, each built on one unique element
 
 The founder asked for five more options, from design-specific sources, each unique. These sit
