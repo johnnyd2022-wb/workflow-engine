@@ -245,7 +245,7 @@ class XeroOAuthService:
             scopes=token_data.get("scope"),
         )
         self.db.commit()
-        logger.info("Refreshed Xero token for org_id=%s", org_id)
+        logger.info("xero_refresh_completed", org_id=str(org_id))
         return updated
 
     # ------------------------------------------------------------------
@@ -263,8 +263,8 @@ class XeroOAuthService:
                     auth=(config.xero_client_id, config.xero_client_secret),
                     timeout=10,
                 )
-            except Exception as e:
-                logger.warning("Xero token revocation failed (continuing disconnect): %s", e)
+            except Exception as exc:
+                logger.warning("xero_revocation_failed", org_id=str(org_id), error_type=type(exc).__name__)
 
         self.token_repo.invalidate(org_id)
         self.tenant_repo.mark_disconnected(org_id)
