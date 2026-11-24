@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Production · Glass E Halo</title>
+<!-- DESIGN OPTION ONLY: a static mockup, not wired to the app.
+     Data: Whistlebird Ltd, /api/core/hub/overview on 24 Nov 2026. Menus: app/ui/page_registry.py.
+     Variant E brings back option 2's ring twice: a health halo (one arc per check) and a step ring on
+     every batch card. Uses only today's payload (checks, current step, started_at). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --a1:#9CCBFF; --a2:#FFD2B5; --a3:#BDEFE0; --a4:#DCCEFF; --base:#EEF2F8;
+  --ink:#0D1424; --text:#2A3346; --muted:#5D6A82;
+  --glass:rgba(255,255,255,.48); --glass-strong:rgba(255,255,255,.74); --panel:rgba(255,255,255,.84); --solid:#FFFFFF;
+  --rim:rgba(255,255,255,.9); --rim-dim:rgba(255,255,255,.4); --edge:rgba(13,20,36,.09); --line:rgba(13,20,36,.07);
+  --accent:#2563EB; --accent-ink:#FFFFFF; --accent-soft:rgba(37,99,235,.10); --ring:rgba(37,99,235,.45);
+  --ok:#047857; --warn:#B45309; --bad:#C81E1E;
+  --ok-soft:rgba(4,120,87,.10); --warn-soft:rgba(217,119,6,.13); --bad-soft:rgba(200,30,30,.10);
+  --wild:#8B5CF6; --sol:#F59E0B; --s-bot:#0891B2; --s-lab:#2563EB;
+  --shadow:0 1px 1px rgba(13,20,36,.04),0 12px 32px -14px rgba(13,40,90,.24);
+  --scrim:rgba(13,20,36,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --a1:#1D3A7A; --a2:#33307A; --a3:#0E4B50; --a4:#3F1F7A; --base:#070B16;
+    --ink:#F2F5FF; --text:#CDD5E7; --muted:#97A2BB;
+    --glass:rgba(30,38,60,.42); --glass-strong:rgba(34,43,68,.72); --panel:rgba(17,23,40,.84); --solid:#111827;
+    --rim:rgba(255,255,255,.2); --rim-dim:rgba(255,255,255,.08); --edge:rgba(255,255,255,.07); --line:rgba(255,255,255,.06);
+    --accent:#6EA8FF; --accent-ink:#06122B; --accent-soft:rgba(110,168,255,.14); --ring:rgba(110,168,255,.55);
+    --ok:#34D399; --warn:#FBBF24; --bad:#F87171;
+    --ok-soft:rgba(52,211,153,.13); --warn-soft:rgba(251,191,36,.14); --bad-soft:rgba(248,113,113,.15);
+    --wild:#A78BFA; --sol:#FBBF24; --s-bot:#22D3EE; --s-lab:#6EA8FF;
+    --shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -14px rgba(0,0,0,.7);
+    --scrim:rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --a1:#1D3A7A; --a2:#33307A; --a3:#0E4B50; --a4:#3F1F7A; --base:#070B16;
+  --ink:#F2F5FF; --text:#CDD5E7; --muted:#97A2BB;
+  --glass:rgba(30,38,60,.42); --glass-strong:rgba(34,43,68,.72); --panel:rgba(17,23,40,.84); --solid:#111827;
+  --rim:rgba(255,255,255,.2); --rim-dim:rgba(255,255,255,.08); --edge:rgba(255,255,255,.07); --line:rgba(255,255,255,.06);
+  --accent:#6EA8FF; --accent-ink:#06122B; --accent-soft:rgba(110,168,255,.14); --ring:rgba(110,168,255,.55);
+  --ok:#34D399; --warn:#FBBF24; --bad:#F87171;
+  --ok-soft:rgba(52,211,153,.13); --warn-soft:rgba(251,191,36,.14); --bad-soft:rgba(248,113,113,.15);
+  --wild:#A78BFA; --sol:#FBBF24; --s-bot:#22D3EE; --s-lab:#6EA8FF;
+  --shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -14px rgba(0,0,0,.7);
+  --scrim:rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14.5px/1.5 Manrope,system-ui,sans-serif;color:var(--text);background:var(--base);min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+h1,h2,h3,p{margin:0}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid var(--ring);outline-offset:2px;border-radius:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:fixed;left:12px;top:-60px;z-index:99;padding:10px 16px;border-radius:12px;background:var(--solid);color:var(--ink);font-weight:700;box-shadow:var(--shadow)}
+.skip:focus{top:12px}
+svg{flex:none}
+
+/* Backdrop the glass refracts. Clipped so it can never widen the page. */
+.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.aurora div{position:absolute;inset:-20%;filter:blur(72px) saturate(120%);opacity:.85}
+.aurora i{position:absolute;border-radius:50%;animation:drift 30s ease-in-out infinite alternate}
+.aurora i:nth-child(1){width:46vw;height:46vw;left:6%;top:0;background:var(--a1)}
+.aurora i:nth-child(2){width:40vw;height:40vw;right:4%;top:8%;background:var(--a2);animation-delay:-9s}
+.aurora i:nth-child(3){width:44vw;height:44vw;left:32%;bottom:-4%;background:var(--a3);animation-delay:-15s}
+.aurora i:nth-child(4){width:30vw;height:30vw;right:20%;bottom:12%;background:var(--a4);animation-delay:-4s}
+@keyframes drift{to{transform:translate(4vw,-3vw) scale(1.08)}}
+
+/* Glass is for controls (sidebar, tabs, menus); content sits on near-opaque panels. */
+.glass{background:var(--glass);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),inset 0 -1px 0 var(--edge),var(--shadow)}
+.panel{background:var(--panel);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);border-radius:24px}
+
+/* ---------- Sidebar: the app's five sections ---------- */
+.side{position:fixed;left:14px;top:14px;bottom:14px;width:236px;border-radius:26px;display:flex;flex-direction:column;padding:16px 12px;z-index:30}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 10px 14px;font-weight:800;color:var(--ink);font-size:17px;letter-spacing:-.01em}
+.brand i{width:11px;height:11px;border-radius:50%;background:#2DD4BF;box-shadow:0 0 0 4px rgba(45,212,191,.22)}
+.orgsw{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;background:var(--glass-strong);border:1px solid var(--rim-dim);margin-bottom:14px;min-height:52px}
+.orgsw .logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#1E3A5F,#3B6E8F);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+.orgsw b{display:block;color:var(--ink);font-size:13.5px;line-height:1.2}
+.orgsw small{color:var(--muted);font-size:12px;font-weight:600}
+.navlbl{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:4px 12px 6px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:14px;font-weight:600;color:var(--text);position:relative;transition:background .18s,color .18s}
+.nav a:hover{background:var(--glass-strong);color:var(--ink)}
+.nav a[aria-current]{background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.08),inset 0 1px 0 var(--rim)}
+.nav a[aria-current] svg{color:var(--accent)}
+.nav svg{width:20px;height:20px}
+.side .grow{flex:1}
+.acct{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;min-height:52px}
+.acct:hover{background:var(--glass-strong)}
+.av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#FDE68A,#F59E0B);display:grid;place-items:center;font-weight:800;font-size:13px;color:#4A2C00;flex:none}
+.acct b{display:block;color:var(--ink);font-size:13.5px;line-height:1.2}
+.acct small{color:var(--muted);font-size:12px}
+
+/* ---------- Main ---------- */
+.main{padding:22px 32px 48px 282px;max-width:1500px;margin:0 auto}
+.head{display:flex;align-items:flex-start;gap:16px}
+.head h1{font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.15}
+.head p{color:var(--muted);font-weight:500;margin-top:4px}
+.head .tools{margin-left:auto;display:flex;gap:8px;align-items:center}
+.iconbtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;position:relative;color:var(--text)}
+.iconbtn:hover{color:var(--ink)}
+.iconbtn .dot{position:absolute;top:10px;right:11px;width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--solid)}
+
+.bar{display:flex;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap}
+.tabs{display:flex;gap:2px;padding:4px;border-radius:999px}
+.tabs a{min-height:38px;display:flex;align-items:center;padding:0 18px;border-radius:999px;font-weight:700;font-size:13.5px;color:var(--muted)}
+.tabs a:hover{color:var(--ink)}
+.tabs a[aria-current]{background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1),inset 0 1px 0 var(--rim)}
+.acts{margin-left:auto;display:flex;gap:8px;align-items:center;position:relative}
+.btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 18px;border-radius:999px;font-weight:700;font-size:14px;white-space:nowrap;transition:filter .15s,background .15s}
+.btn svg{width:17px;height:17px}
+.btn-glass{background:var(--glass-strong);border:1px solid var(--rim-dim);color:var(--ink);box-shadow:inset 0 1px 0 var(--rim)}
+.btn-glass:hover{background:var(--solid)}
+.btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 20px -8px var(--accent)}
+.btn-primary:hover{filter:brightness(1.08)}
+.chev{transition:transform .18s}
+[aria-expanded="true"] .chev{transform:rotate(180deg)}
+
+.menu{position:absolute;top:calc(100% + 8px);left:0;min-width:236px;padding:6px;border-radius:18px;z-index:40;display:none}
+.menu.open{display:block;animation:pop .16s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}}
+.menu a{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:12px;font-weight:600;color:var(--ink)}
+.menu a:hover,.menu a:focus-visible{background:var(--solid)}
+.menu small{display:block;color:var(--muted);font-weight:500;font-size:12px;line-height:1.2}
+.menu .mi{width:30px;height:30px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.menu h3{display:none}
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:35;display:none}
+
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;margin-top:20px}
+.card{padding:22px}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-h h2{font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+.card-h a{margin-left:auto;font-size:13.5px;font-weight:700;color:var(--accent);min-height:32px;display:flex;align-items:center}
+.card-h a:hover{text-decoration:underline}
+
+.state{display:flex;gap:14px;align-items:flex-start;padding:14px;border-radius:18px;background:var(--warn-soft)}
+.state strong{display:block;color:var(--ink);font-size:17px;font-weight:800}
+.state p{color:var(--text);font-weight:500;font-size:13.5px;margin-top:2px}
+.checks{display:flex;flex-direction:column;margin-top:10px}
+.check{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 6px;border-radius:14px;min-height:56px}
+.check + .check{border-top:1px solid var(--line)}
+.check:hover{background:var(--glass-strong)}
+.check .n{width:40px;height:32px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:15px}
+.check b{display:block;color:var(--ink);font-weight:700;font-size:14px;line-height:1.3}
+.check small{color:var(--muted);font-size:12.5px;font-weight:500}
+.check .go{color:var(--muted)}
+.t-bad .n{background:var(--bad-soft);color:var(--bad)}
+.t-clear .n{background:var(--ok-soft);color:var(--ok)}
+.t-clear b{color:var(--text);font-weight:600}
+.healthfoot{margin-top:12px}
+.healthfoot .btn{width:100%}
+
+.glance{display:flex;flex-direction:column}
+
+.active{margin-top:18px}
+.caption{color:var(--muted);font-weight:500;font-size:13.5px;margin:-8px 0 10px}
+.m-sol{background:color-mix(in srgb,var(--sol) 18%,transparent);color:var(--sol)}
+.rec{min-height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 16px;border-radius:999px;font-weight:700;font-size:13.5px;color:var(--accent);background:var(--accent-soft);white-space:nowrap}
+.rec:hover{background:var(--accent);color:var(--accent-ink)}
+
+.manage{margin-top:18px}
+.links{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.links a{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 14px;border-radius:16px;background:var(--glass-strong);border:1px solid var(--rim-dim);font-weight:700;color:var(--ink)}
+.links a:hover{background:var(--solid)}
+.links a svg{width:18px;height:18px;color:var(--muted)}
+.links a .ext{margin-left:auto;color:var(--muted);font-weight:600}
+.board{margin-top:10px;width:100%}
+
+.foot{margin-top:18px;text-align:center;color:var(--muted);font-size:12.5px;font-weight:500}
+
+/* ---------- Halo: the health ring (one arc per check) ---------- */
+.grid{grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
+.glance .stats{flex:none}
+.hbody{display:grid;grid-template-columns:184px minmax(0,1fr);gap:26px;align-items:center}
+.halo{position:relative;width:184px;height:184px}
+.halo svg,.bring svg{width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.halo .t,.bring .t{fill:none;stroke:var(--edge)}
+.halo .s,.bring .s{fill:none;stroke-linecap:round;animation:arc 1.1s cubic-bezier(.2,.7,.2,1) both}
+@keyframes arc{from{stroke-dasharray:0 999}}
+.halo .c,.bring .c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.halo .c b{font-size:44px;font-weight:800;color:var(--ink);letter-spacing:-.05em;line-height:1}
+.halo .c b small{font-size:22px;color:var(--muted);letter-spacing:-.02em}
+.halo .c span{font-size:12.5px;font-weight:700;color:var(--muted);margin-top:4px}
+.health .state{display:block;padding:0;background:none}
+.health .state strong{display:flex;align-items:center;gap:9px;font-size:20px;letter-spacing:-.02em}
+.health .state strong i{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 5px var(--warn-soft)}
+.health .state p{margin-top:4px}
+.health .checks{margin-top:12px}
+.health .check{grid-template-columns:34px minmax(0,1fr) auto;min-height:52px;padding:8px 6px}
+.health .check .n{width:34px;height:28px;font-size:14px}
+
+/* At a glance: six compact tiles */
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;grid-auto-rows:1fr}
+.stat{padding:12px 14px;border-radius:16px;background:var(--glass-strong);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim);display:flex;flex-direction:column;min-height:84px;transition:background .18s}
+.stat:hover{background:var(--solid)}
+.stat span{font-size:12.5px;font-weight:700;color:var(--muted)}
+.stat strong{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.035em;line-height:1.2}
+.stat em{font-style:normal;font-size:12.5px;color:var(--muted);font-weight:500;margin-top:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- Batch cards, each with its own step ring ---------- */
+.group + .group{margin-top:20px}
+.group h3{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:800;color:var(--ink);margin-bottom:10px}
+.group h3 i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.group h3 small{font-size:13px;font-weight:600;color:var(--muted)}
+.bcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.bc{padding:16px;border-radius:22px;background:var(--glass-strong);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim);display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px 16px;align-items:center}
+.bring{position:relative;width:84px;height:84px}
+.bring .c b{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.03em;line-height:1}
+.bring .c span{font-size:11px;font-weight:700;color:var(--muted)}
+.bring .now{animation:arc 1.1s cubic-bezier(.2,.7,.2,1) both,breathe 2.4s ease-in-out 1.2s infinite}
+@keyframes breathe{50%{opacity:.45}}
+.binfo{min-width:0}
+.binfo .pn{display:flex;align-items:center;gap:7px;font-weight:800;color:var(--ink);font-size:15px}
+.binfo .pn svg{width:17px;height:17px}
+.binfo .pn.k-wild svg{color:var(--wild)} .binfo .pn.k-sol svg{color:var(--sol)}
+.binfo small{display:block;color:var(--muted);font-weight:500;font-size:12.5px}
+.binfo .age{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:99px;background:var(--solid);color:var(--text)}
+.binfo .age.hot{background:var(--warn-soft);color:var(--warn)}
+.bc .rec{grid-column:1 / -1;justify-content:center;min-height:44px}
+.bc.first .rec{background:var(--accent);color:var(--accent-ink)}
+/* Phone chrome (hidden on laptop) */
+.topbar,.tabbar{display:none}
+
+@media (max-width:1180px){
+  .side{width:76px;padding:14px 10px;align-items:center}
+  .side .brand{padding:6px 0 14px}.side .brand span,.orgsw div,.navlbl,.acct div,.nav a span{display:none}
+  .orgsw{padding:9px;min-height:0;background:none;border:0}
+  .nav a{width:52px;justify-content:center;padding:0}
+  .nav a::after{content:attr(data-label);position:absolute;left:62px;padding:6px 12px;border-radius:10px;background:var(--solid);color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap;box-shadow:var(--shadow);opacity:0;pointer-events:none;transform:translateX(-4px);transition:.15s}
+  .nav a:hover::after,.nav a:focus-visible::after{opacity:1;transform:none}
+  .acct{padding:8px}
+  .main{padding-left:116px}
+  .links{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:1040px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .acts{margin-left:0;width:100%}
+}
+@media (max-width:720px){
+  .side{display:none}
+  .main{padding:0 14px calc(96px + env(safe-area-inset-bottom))}
+  .topbar{display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:30;margin:0 -14px;padding:8px 8px 8px 16px;border-radius:0 0 22px 22px;border-top:0}
+  .topbar .brand{padding:0;font-size:16px;margin-right:auto}
+  .head{margin-top:16px}.head .tools{display:none}
+  .head h1{font-size:26px}
+  .bar{margin-top:14px;gap:10px}
+  .tabs{width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .tabs a{padding:0 4px;justify-content:center;font-size:13px}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .acts .btn-primary{grid-column:1 / -1;order:-1;min-height:50px;font-size:15px}
+  .acts .btn{padding:0 12px}
+  .acts .wrap,.acts .wrap .btn{width:100%}
+  .card{padding:18px 16px}
+  .panel{border-radius:22px}
+  .check{min-height:52px;padding:8px 4px}
+  .links{grid-template-columns:minmax(0,1fr)}
+  .tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;padding:6px;border-radius:24px}
+  .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:52px;border-radius:18px;font-size:11px;font-weight:700;color:var(--muted)}
+  .tabbar a svg{width:21px;height:21px}
+  .tabbar a[aria-current]{color:var(--accent);background:var(--solid)}
+  /* Add to inventory opens as a bottom sheet on a phone */
+  .menu{position:fixed;left:0;right:0;top:auto;bottom:0;min-width:0;border-radius:26px 26px 0 0;padding:10px 12px calc(18px + env(safe-area-inset-bottom));background:var(--solid);backdrop-filter:none;-webkit-backdrop-filter:none}
+  .menu.open{animation:rise .22s cubic-bezier(.2,.8,.2,1)}
+  @keyframes rise{from{transform:translateY(100%)}}
+  .menu::before{content:"";display:block;width:40px;height:5px;border-radius:9px;background:var(--edge);margin:2px auto 10px}
+  .menu h3{display:block;font-size:16px;font-weight:800;color:var(--ink);padding:0 12px 6px}
+  .menu a{min-height:56px}
+  .scrim.open{display:block}
+}
+@media (max-width:360px){.acts{grid-template-columns:minmax(0,1fr)}.stats{grid-template-columns:minmax(0,1fr)}.stat{min-height:0}}
+@media (max-width:720px){
+  .hbody{grid-template-columns:112px minmax(0,1fr);gap:14px 16px}
+  .halo{width:112px;height:112px}.halo .c b{font-size:28px}.halo .c b small{font-size:15px}.halo .c span{font-size:10.5px;margin-top:2px}
+  .hside{display:contents}
+  .health .state strong{font-size:17px}
+  .health .checks{grid-column:1 / -1;margin-top:0}
+  .bcards{grid-template-columns:minmax(0,1fr)}
+  .bc{grid-template-columns:72px minmax(0,1fr);padding:14px;gap:12px 14px}
+  .bring{width:72px;height:72px}
+}
+@media (max-width:360px){.hbody{grid-template-columns:92px minmax(0,1fr);gap:12px}.halo{width:92px;height:92px}.halo .c b{font-size:23px}.halo .c span{font-size:9.5px}.health .state strong{font-size:15px;gap:7px}.health .state p{font-size:13px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-transparency:reduce){.glass,.panel{background:var(--solid);backdrop-filter:none;-webkit-backdrop-filter:none}.aurora{display:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="aurora" aria-hidden="true"><div><i></i><i></i><i></i><i></i></div></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-prod" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 21V10l5 3v-3l5 3V6l8 4v11z"/><path fill="none" stroke="currentColor" stroke-width="2" d="M3 21h18"/></symbol>
+  <symbol id="i-comp" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path fill="none" stroke="currentColor" stroke-width="2" d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-sales" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 7h16l-1.5 11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path fill="none" stroke="currentColor" stroke-width="2" d="M9 7a3 3 0 0 1 6 0"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path fill="none" stroke="currentColor" stroke-width="2" d="M10 21a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trace" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M8.5 6h7M7.8 7.8l8.4 8.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M12 3.5l9.5 16.5h-19z"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 10v4.5M12 17.4v.1"/></symbol>
+  <symbol id="i-flower" viewBox="0 0 24 24"><g fill="currentColor" opacity=".55"><circle cx="12" cy="6.2" r="3.6"/><circle cx="17.5" cy="10.2" r="3.6"/><circle cx="15.4" cy="16.7" r="3.6"/><circle cx="8.6" cy="16.7" r="3.6"/><circle cx="6.5" cy="10.2" r="3.6"/></g><circle cx="12" cy="12" r="2.8" fill="currentColor"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h8l4 4v14H6z"/><path fill="none" stroke="currentColor" stroke-width="2" d="M14 3v4h4M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 4h14v16H5z"/><path fill="none" stroke="currentColor" stroke-width="2" d="M9 9h6M9 13h6M9 17h3"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 8l9-4 9 4-9 4zM3 13l9 4 9-4M3 17.5l9 4 9-4"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M2 6h12v10H2zM14 10h4l4 3v3h-8z"/><circle cx="6.5" cy="18" r="1.8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="18" r="1.8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></symbol>
+</svg>
+
+<aside class="side glass" aria-label="Main">
+  <div class="brand"><i aria-hidden="true"></i><span>biz-e</span></div>
+  <a class="orgsw" href="/core/settings" aria-label="Organisation: Whistlebird Ltd"><span class="logo" aria-hidden="true">WB</span><div><b>Whistlebird Ltd</b><small>Main site</small></div></a>
+  <div class="navlbl">Navigation</div>
+  <nav class="nav" aria-label="Sections">
+    <a href="/core/dashboard" data-label="Home"><svg><use href="#i-home"/></svg><span>Home</span></a>
+    <a href="/core" data-label="Production" aria-current="page"><svg><use href="#i-prod"/></svg><span>Production</span></a>
+    <a href="/compliant" data-label="Compliance"><svg><use href="#i-comp"/></svg><span>Compliance</span></a>
+    <a href="/crm" data-label="Sales"><svg><use href="#i-sales"/></svg><span>Sales</span></a>
+  </nav>
+  <div class="grow"></div>
+  <nav class="nav" aria-label="Settings"><a href="/core/settings" data-label="Settings"><svg><use href="#i-set"/></svg><span>Settings</span></a></nav>
+  <a class="acct" href="/core/settings" aria-label="Account: Johnny"><span class="av" aria-hidden="true">J</span><div><b>Johnny</b><small>Owner</small></div></a>
+</aside>
+
+<div class="main">
+  <header class="topbar glass">
+    <div class="brand"><i aria-hidden="true"></i><span>biz-e</span></div>
+    <a class="iconbtn" href="/core/notifications" aria-label="Notifications, 2 need attention"><svg width="21" height="21"><use href="#i-bell"/></svg><span class="dot"></span></a>
+    <a class="iconbtn" href="/core/settings" aria-label="Account: Johnny"><span class="av" aria-hidden="true">J</span></a>
+  </header>
+
+  <main id="main">
+    <div class="head">
+      <div>
+        <h1>Production</h1>
+        <p>Keep production moving, from stock to finished batches.</p>
+      </div>
+      <div class="tools">
+        <a class="iconbtn glass" href="/core/notifications" aria-label="Notifications, 2 need attention"><svg width="19" height="19"><use href="#i-bell"/></svg><span class="dot"></span></a>
+        <a class="iconbtn" href="/core/settings" aria-label="Account: Johnny"><span class="av" aria-hidden="true">J</span></a>
+      </div>
+    </div>
+
+    <div class="bar">
+      <nav class="tabs glass" aria-label="Production pages">
+        <a href="/core" aria-current="page">Overview</a>
+        <a href="/core/planner">Planner</a>
+        <a href="/core/processes">Workflows</a>
+        <a href="/core/inventory/view">Inventory</a>
+      </nav>
+      <div class="acts" role="group" aria-label="Get to work">
+        <div class="wrap" style="position:relative">
+          <button class="btn btn-glass" id="addinv" aria-haspopup="menu" aria-expanded="false" aria-controls="addmenu"><svg><use href="#i-plus"/></svg>Add to inventory<svg class="chev" width="15" height="15"><use href="#i-down"/></svg></button>
+          <div class="menu glass" id="addmenu" role="menu" aria-labelledby="addinv">
+            <h3>Add to inventory</h3>
+            <a role="menuitem" href="/core/inventory/add/manual"><span class="mi"><svg width="16" height="16"><use href="#i-pen"/></svg></span><span>Manual entry<small>One line at a time</small></span></a>
+            <a role="menuitem" href="/core/inventory/add/csv"><span class="mi"><svg width="16" height="16"><use href="#i-file"/></svg></span><span>CSV upload<small>Many lines from a file</small></span></a>
+            <a role="menuitem" href="/core/inventory/add/barcode"><span class="mi"><svg width="16" height="16"><use href="#i-scan"/></svg></span><span>Barcode / camera scan<small>Scan a label to add it</small></span></a>
+          </div>
+        </div>
+        <a class="btn btn-glass" href="/core/sourcemap"><svg><use href="#i-trace"/></svg>Trace and recall</a>
+        <a class="btn btn-primary" href="/core/record"><svg><use href="#i-play"/></svg>Record production step</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card panel health" aria-labelledby="h-health">
+        <div class="card-h"><h2 id="h-health">Production health</h2><a href="/core/notifications">View all alerts</a></div>
+        <div class="hbody">
+          <div class="halo" role="img" aria-label="3 of 4 health checks clear. Expired stock needs attention.">
+            <svg viewBox="0 0 200 200" id="halosvg" aria-hidden="true"></svg>
+            <div class="c" aria-hidden="true"><b class="num">3<small>/4</small></b><span>checks clear</span></div>
+          </div>
+          <div class="hside">
+            <div class="state" role="status"><strong><i aria-hidden="true"></i>Needs attention</strong><p>2 stock lines have expired. Review them before your next production step.</p></div>
+            <div class="checks" role="group" aria-label="Operational status">
+              <a class="check t-bad" href="/core/notifications"><span class="n num">2</span><span><b>Expired stock</b><small>Dried apple ring · 964 g, 568 g</small></span><svg class="go" width="16" height="16"><use href="#i-right"/></svg></a>
+              <a class="check t-clear" href="/core/inventory/live"><span class="n" aria-label="0"><svg width="14" height="14"><use href="#i-check"/></svg></span><span><b>Expires in 7 days</b><small>Next: Hibiscus flowers, 10 Jan</small></span><svg class="go" width="16" height="16"><use href="#i-right"/></svg></a>
+              <a class="check t-clear" href="/core/inventory/live"><span class="n" aria-label="0"><svg width="14" height="14"><use href="#i-check"/></svg></span><span><b>Low stock lines</b><small>None</small></span><svg class="go" width="16" height="16"><use href="#i-right"/></svg></a>
+              <a class="check t-clear" href="/core/notifications"><span class="n" aria-label="0"><svg width="14" height="14"><use href="#i-check"/></svg></span><span><b>Missing a trace link</b><small>All 88 lines linked</small></span><svg class="go" width="16" height="16"><use href="#i-right"/></svg></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card panel glance" aria-labelledby="h-glance">
+        <div class="card-h"><h2 id="h-glance">At a glance</h2></div>
+        <div class="stats" role="group" aria-label="Production metrics">
+          <a class="stat" href="/core/executions/live"><span>Active batches</span><strong class="num">5</strong><em>in progress now</em></a>
+          <a class="stat" href="/core/executions/live"><span>Longest running</span><strong class="num">124 days</strong><em>Wildflower gin</em></a>
+          <a class="stat" href="/core/executions/live"><span>Finished this week</span><strong class="num">0</strong><em>85 all time</em></a>
+          <a class="stat" href="/core/processes"><span>Product workflows</span><strong class="num">7</strong><em>ready to run</em></a>
+          <a class="stat" href="/core/inventory/view"><span>Stock lines</span><strong class="num">88</strong><em>on hand</em></a>
+          <a class="stat" href="/core/inventory/live"><span>Stock movements</span><strong class="num">0</strong><em>last 24 hours</em></a>
+        </div>
+      </section>
+    </div>
+
+    <section class="card panel active" aria-labelledby="h-active">
+      <div class="card-h"><h2 id="h-active">Active production</h2><a href="/core/executions/live">Production board</a></div>
+      <p class="caption">5 batches under way, grouped by the step they are at. Longest running first.</p>
+      <div id="groups"></div>
+    </section>
+
+    <section class="card panel manage" aria-labelledby="h-manage">
+      <div class="card-h"><h2 id="h-manage">Manage production</h2></div>
+      <div class="links">
+        <a href="/core/contracts"><svg><use href="#i-doc"/></svg>Contract orders<span class="ext" aria-hidden="true">↗</span></a>
+        <a href="/core/executions/live"><svg><use href="#i-layers"/></svg>Batches<span class="ext" aria-hidden="true">↗</span></a>
+        <a href="/core/suppliers"><svg><use href="#i-truck"/></svg>Suppliers<span class="ext" aria-hidden="true">↗</span></a>
+        <a href="/core/tasks"><svg><use href="#i-list"/></svg>Production tasks<span class="ext" aria-hidden="true">↗</span></a>
+      </div>
+      <a class="btn btn-glass board" href="/core/executions/live">View production board</a>
+    </section>
+    <p class="foot">Updated 9:12 pm</p>
+  </main>
+</div>
+
+<nav class="tabbar glass" aria-label="Sections">
+  <a href="/core/dashboard"><svg><use href="#i-home"/></svg>Home</a>
+  <a href="/core" aria-current="page"><svg><use href="#i-prod"/></svg>Production</a>
+  <a href="/compliant"><svg><use href="#i-comp"/></svg>Compliance</a>
+  <a href="/crm"><svg><use href="#i-sales"/></svg>Sales</a>
+  <a href="/core/settings"><svg><use href="#i-set"/></svg>Settings</a>
+</nav>
+<div class="scrim" id="scrim"></div>
+
+<script>
+(function () {
+  // ---------- Rings ----------
+  var NS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function ring(svg, size, r, w, segs, gap) {
+    var c = size / 2, C = 2 * Math.PI * r, per = C / segs.length;
+    svg.appendChild(svgEl('circle', { class: 't', cx: c, cy: c, r: r, 'stroke-width': w, fill: 'none', stroke: 'var(--edge)' }));
+    segs.forEach(function (s, i) {
+      var len = Math.max(per - gap - w, 0.01);
+      var a = svgEl('circle', { fill: 'none', 'stroke-linecap': 'round', class: 's' + (s.cls ? ' ' + s.cls : ''), cx: c, cy: c, r: r, 'stroke-width': w, stroke: s.color,
+        'stroke-dasharray': len + ' ' + (C - len), 'stroke-dashoffset': -(i * per + (gap + w) / 2) });
+      a.style.animationDelay = (s.delay || 0) + 's';
+      svg.appendChild(a);
+    });
+  }
+  // Health halo: Expired stock, Expires in 7 days, Low stock lines, Missing a trace link
+  ring(document.getElementById('halosvg'), 200, 84, 16, ['var(--bad)', 'var(--ok)', 'var(--ok)', 'var(--ok)'].map(function (c, i) { return { color: c, delay: i * 0.08 }; }), 8);
+
+  // Batch cards (Whistlebird Ltd, 24 Nov 2026), grouped by current step
+  var STEPS = { lab: { name: 'Labelling & packaging', n: 5 }, bot: { name: 'Bottling', n: 4 } };
+  var B = [
+    { p: 'Wildflower gin', k: 'wild', started: '23 Jul', days: 124, step: 'lab', ex: '72d9156b', wf: '884511db' },
+    { p: 'Wildflower gin', k: 'wild', started: '3 Sep', days: 82, step: 'lab', ex: 'e78f7ffb', wf: '884511db' },
+    { p: 'Wildflower gin', k: 'wild', started: '13 Sep', days: 72, step: 'bot', ex: 'abae373d', wf: '884511db' },
+    { p: 'Wildflower gin', k: 'wild', started: '17 Sep', days: 68, step: 'bot', ex: '8168d631', wf: '884511db' },
+    { p: 'Solstice gin', k: 'sol', started: '22 Sep', days: 63, step: 'bot', ex: '670701ed', wf: '1d7c16a2' }
+  ];
+  var groups = document.getElementById('groups');
+  ['lab', 'bot'].forEach(function (key, gi) {
+    var st = STEPS[key], list = B.filter(function (b) { return b.step === key; });
+    var g = el('section', 'group'); g.setAttribute('aria-labelledby', 'g-' + key);
+    var h = el('h3'); h.id = 'g-' + key;
+    var dot = el('i'); dot.setAttribute('aria-hidden', 'true'); h.appendChild(dot); h.style.setProperty('--c', 'var(--s-' + key + ')');
+    h.appendChild(document.createTextNode(st.name + ' '));
+    h.appendChild(el('small', 'num', list.length + ' batches · step ' + st.n + ' of 5'));
+    g.appendChild(h);
+    var grid = el('div', 'bcards');
+    list.forEach(function (b, i) {
+      var c = el('article', 'bc' + (gi === 0 && i === 0 ? ' first' : ''));
+      var br = el('div', 'bring'); br.setAttribute('role', 'img'); br.setAttribute('aria-label', 'Step ' + st.n + ' of 5, ' + (st.n - 1) + ' done');
+      var s = svgEl('svg', { viewBox: '0 0 84 84', 'aria-hidden': 'true' });
+      ring(s, 84, 34, 8, [1, 2, 3, 4, 5].map(function (n) {
+        return n < st.n ? { color: 'var(--accent)', delay: n * 0.06 } : n === st.n ? { color: 'var(--s-' + key + ')', cls: 'now', delay: n * 0.06 } : { color: 'var(--edge)' };
+      }), 5);
+      br.appendChild(s);
+      var cc = el('div', 'c'); cc.setAttribute('aria-hidden', 'true');
+      cc.appendChild(el('b', 'num', String(st.n))); cc.appendChild(el('span', null, 'of 5')); br.appendChild(cc);
+      c.appendChild(br);
+      var info = el('div', 'binfo');
+      var pn = el('div', 'pn k-' + b.k);
+      var ic = svgEl('svg', { 'aria-hidden': 'true' }); ic.appendChild(svgEl('use', { href: b.k === 'sol' ? '#i-sun' : '#i-flower' })); pn.appendChild(ic);
+      pn.appendChild(document.createTextNode(b.p)); info.appendChild(pn);
+      info.appendChild(el('small', null, 'Started ' + b.started));
+      info.appendChild(el('span', 'age num' + (b.days >= 90 ? ' hot' : ''), b.days + ' days running'));
+      c.appendChild(info);
+      var rec = el('a', 'rec'); rec.href = '/core/flows/batches/start?id=' + b.wf + '&execution_id=' + b.ex;
+      rec.appendChild(el('span', null, 'Record ' + (key === 'lab' ? 'labelling & packaging' : 'bottling')));
+      rec.appendChild(el('span', 'sr', ' for ' + b.p + ' started ' + b.started));
+      c.appendChild(rec);
+      grid.appendChild(c);
+    });
+    g.appendChild(grid);
+    groups.appendChild(g);
+  });
+  var btn = document.getElementById('addinv');
+  var menu = document.getElementById('addmenu');
+  var scrim = document.getElementById('scrim');
+  function set(open) {
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    menu.classList.toggle('open', open);
+    scrim.classList.toggle('open', open);
+    if (open) { var first = menu.querySelector('a'); if (first) first.focus({ preventScroll: true }); }
+  }
+  btn.addEventListener('click', function (e) { e.stopPropagation(); set(btn.getAttribute('aria-expanded') !== 'true'); });
+  scrim.addEventListener('click', function () { set(false); });
+  document.addEventListener('click', function (e) { if (!menu.contains(e.target)) set(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.classList.contains('open')) { set(false); btn.focus(); } });
+  document.querySelector('main').setAttribute('data-demo', '');
+  window.demo = function () { set(true); };
+})();
+</script>
+</body>
+</html>

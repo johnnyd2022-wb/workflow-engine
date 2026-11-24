@@ -101,6 +101,24 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 6: Glass with the ring
+
+The founder liked the ring in option 2's hero (one segmented circle, a figure in its middle).
+Two more Glass variants make it the centre of the page. Both use only today's payload
+(current step, `started_at`, the four health checks), so neither needs an API change.
+
+| | 14 Glass D: Orbit | 15 Glass E: Halo |
+|---|---|---|
+| The ring shows | One arc per batch, coloured by its current step; "0 finished this week" in the middle | One arc per health check (red for expired stock); "3/4 checks clear" in the middle |
+| Also | The ring's key (All 5 · Bottling 3 · Labelling & packaging 2) filters the batch list; each row has a small five-step ring | Each batch is a card with its own five-step ring, cards grouped by step |
+| Navigation | Option 2's floating nav strip and action dock; phone: section switcher sheet | A's glass sidebar → icon rail → bottom tab bar |
+| Best at | Seeing where every batch is, at one look | Health first, then each batch's progress |
+| Gives up | A filter is one more thing to learn | Cards take more height than rows |
+
+Checked like 11–13: each element against the viewport edge at 320, 360, 390, 900, 1280 and
+1440, light and dark, with the filter and the Add to inventory sheet open. Five passes; the
+last found nothing.
+
 ## Round 5: Glass refined into three variants
 
 The founder picked Glass. These three keep its look (glass for controls, near-opaque frosted
