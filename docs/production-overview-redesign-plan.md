@@ -101,6 +101,28 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 7: Glass F, Hub (and Home leaves the menu)
+
+Feedback on 14 and 15: a top menu, not a sidebar; the three actions in the page head, not floating over
+content; health on the left and Orbit's batch panel on the right; Orbit's figures below them, then Under way.
+On a phone: actions first, then health folded to one line that opens to the full list. Home is to go, with its
+operator actions and figures moving here.
+
+| Piece | Taken from | Data |
+|---|---|---|
+| Top menu: Production, Compliance, Sales, then Settings, notifications, account | 14's toolbar, without Home | menus in `app/ui/page_registry.py` less Home |
+| Actions in the head: Add to inventory (menu), Trace and recall, Record production step | 15 | unchanged routes |
+| Health ring, five checks: expired stock, idle over 48 hours, expires in 7 days, low stock, trace links | 15, plus Home's idle-batch check | hub overview + dashboard summary `action_board.stalled_batches` |
+| Batch ring, chips filter Under way | 14 | hub overview |
+| Eight figures: open action items, operator actions, started, failed or cancelled; longest running, finished all time, workflows, stock lines | Home's "This week" + 14's four | dashboard summary `operations`, `operator_actions`, `action_board` |
+| Action items across all workspaces; recent activity (Today / This week); today's planned production | Home | dashboard summary `action_board`, `audit_log`, `planned_work` |
+
+Home's sales figures (revenue this month, customer tasks) are left to the Sales overview, and its compliance
+score to Compliance; the action items still list overdue sales tasks and the overdue excise entry, so nothing
+that needs doing disappears with Home. Building it means the Production overview also calls
+`/api/core/dashboard/summary` (an existing endpoint, unchanged), and the nav drops Home and makes Production
+the landing page; both are for the follow-up MR. Checked at 320–1440 in light and dark, three passes (60–62).
+
 ## Round 6: Glass with the ring
 
 The founder liked the ring in option 2's hero (one segmented circle, a figure in its middle).
