@@ -379,15 +379,18 @@ def test_xero_tenant_picker_activates_the_explicit_choice(browser, app_url, fres
         for choice in page.get_by_role("radio").all():
             expect(choice).not_to_be_checked()
         sync.assert_not_called()
+        assert_clean_page(page)
 
         page.get_by_text("Second test organisation", exact=True).click()
-        page.get_by_role("button", name="Connect Selected Organisation").click()
+        with page.expect_response(lambda r: r.request.method == "POST" and urlparse(r.url).path == path) as submitted:
+            page.get_by_role("button", name="Connect Selected Organisation").click()
+        assert submitted.value.status == 302
+        assert submitted.value.headers["location"] == "/crm/customers?xero_connected=1"
         expect(page).to_have_url(f"{app_url}/crm/customers?xero_connected=1")
         status = page.request.get("/api/crm/xero/status").json()
         assert status["connected"] is True
         assert status["tenant_id"] == "audit-second"
         sync.assert_called_once_with(UUID(user["org_id"]), triggered_by="oauth_connect")
-        assert_clean_page(page)
     finally:
         context.close()
 
