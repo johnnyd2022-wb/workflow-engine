@@ -101,6 +101,29 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 8: Glass G, Hub+ (16 with the founder's changes)
+
+- **The batch ring is gone,** so the health ring is the only ring. In its place, "In progress" shows the count, one sentence, and two key stats: longest running (124 days) and finished this week (0, 85 all time).
+- **Six figures:** "Longest running" (now a key stat) and "Failed or cancelled" are dropped.
+- **Phone tab bar** with Production, Compliance, Sales and Settings. It replaces the top switcher.
+- **Wider side margins:** 1248 px max width with 48 px gutters (about 144 px a side at 1440); 16 px gutters on a phone. Checked at 320–1440 with no sideways scroll.
+- **Greeting by the hour in New Zealand,** with the first name of the signed-in user. `Intl` with `Pacific/Auckland` handles NZST and NZDT.
+
+| Hour | Message |
+|---|---|
+| 00:00–06:59 | Wow Johnny, you really are dedicated to be working at this hour! |
+| 07:00–11:59 | Good morning Johnny, let's get to work |
+| 12:00–16:59, 3 or more operator actions today | Good afternoon Johnny, looks like a productive day |
+| 12:00–16:59, fewer | Good afternoon Johnny, let's keep things moving |
+| 17:00–23:59 | Good evening Johnny, working late I see… |
+
+Three placements to compare (`?greet=`):
+- **head:** the greeting is the page title, with "Production · date" below it. This is the default.
+- **eyebrow:** a small line above "Production".
+- **banner:** a glass strip above the two panels.
+
+For the real build, the first name comes from the session's user, and "operator actions today" comes from the dashboard summary's `audit_log.day.total`.
+
 ## Round 7: Glass F, Hub (and Home leaves the menu)
 
 Feedback on 14 and 15: a top menu, not a sidebar; the three actions in the page head, not floating over
