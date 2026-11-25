@@ -9,7 +9,7 @@ import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import UUID, uuid4
 
 import pytest
@@ -27,6 +27,7 @@ from app.features.crm.models.xero_contact import XeroContact
 from app.features.crm.services.xero_oauth_service import XeroOAuthService
 from app.features.crm.services.xero_sync_service import XeroSyncService
 from app.features.operational_cases.models.operational_case import OperationalCase
+from app.utils.config_loader import config
 from tests.e2e.conftest import assert_clean_page, attach_probe, login_through_ui
 from tests.e2e.page_load_audit import audit_current_page
 from tests.factories import ExecutionFactory, InventoryItemFactory, ProcessFactory, UserFactory
@@ -331,9 +332,9 @@ def test_valid_invitation_at_phone_width(browser, app_url, mobile_detail_records
 
 @pytest.mark.parametrize(("width", "height"), [(390, 844), (1280, 800), (1440, 900)])
 def test_xero_tenant_picker_activates_the_explicit_choice(browser, app_url, fresh_user, monkeypatch, width, height):
-    from app.app import app
-
     user = fresh_user(UserRole.ADMIN)
+    monkeypatch.setattr(type(config), "xero_client_id", "synthetic-client")
+    monkeypatch.setattr(type(config), "xero_redirect_uri", f"{app_url}/crm/xero/callback")
     monkeypatch.setattr(
         XeroOAuthService,
         "exchange_code",
@@ -360,14 +361,14 @@ def test_xero_tenant_picker_activates_the_explicit_choice(browser, app_url, fres
     attach_probe(page)
     try:
         login_through_ui(page, user["email"], user["password"])
-        cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
-        cookie = next(c for c in context.cookies() if c["name"] == cookie_name)
-        serializer = app.session_interface.get_signing_serializer(app)
-        session_data = serializer.loads(cookie["value"])
-        session_data["_xero_oauth_state"] = "browser-state"
-        context.add_cookies([{**cookie, "value": serializer.dumps(session_data)}])
+        # Leave the dashboard so its background requests cannot update the session
+        # cookie concurrently with the OAuth start request.
+        page.goto("/healthcheck")
+        start = page.request.get("/crm/xero/auth", max_redirects=0)
+        assert start.status == 302
+        state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
         path = "/crm/xero/select-tenant"
-        response = page.goto("/crm/xero/callback?state=browser-state&code=browser-code")
+        response = page.goto(f"/crm/xero/callback?state={state}&code=browser-code")
         assert response and response.ok, f"{path}: {response.status if response else 'no response'}"
         assert page.url.split("?", 1)[0].endswith(path), f"{path} redirected to {page.url}"
         geometry = _capture_and_measure(page, path)
