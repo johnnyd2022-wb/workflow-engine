@@ -101,6 +101,15 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 10: Glass K, Bar+
+
+- **Actions** are in the greeting bar on screens wider than 1100 px. Narrower than that, they drop under the tabs.
+- **Four figures** sit straight under the greeting bar, so they are on the first screen.
+- **Action items** stay beside Under way.
+- **Manage production** is buttons, with icons, in a glass bar.
+
+A sweep every 20 px from 720 to 1440 found a bug in 18–20: at 901–1100 px wide, the actions overlapped the tabs. It is fixed in 18–21: below 1100 px the actions take their own row.
+
 ## Round 9: Glass H–J, the greeting bar and where action items go
 
 Changes in all three (from 17):

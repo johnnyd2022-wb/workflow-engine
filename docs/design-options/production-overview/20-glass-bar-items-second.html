@@ -277,6 +277,10 @@ svg{flex:none}
   .lower{grid-template-columns:minmax(0,1fr)}
   .side{display:block}
 }
+@media (max-width:1100px){
+  .head{grid-template-columns:minmax(0,1fr)}
+  .head .acts{grid-column:1;grid-row:3;justify-self:start}
+}
 @media (max-width:1080px){
   .duo{grid-template-columns:minmax(0,1fr)}
   .topnav .org b{display:none}
