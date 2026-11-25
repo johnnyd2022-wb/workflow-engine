@@ -101,6 +101,19 @@ Limoncello is flagged in words and colour; expired stock is the only red; every 
 current page shows is still reachable; phone width has no sideways scroll; all five have a
 dark theme and honour `prefers-reduced-motion`.
 
+## Round 9: Glass H–J, the greeting bar and where action items go
+
+Changes in all three (from 17):
+- **Greeting** is a glass bar under the tabs. Its icon follows New Zealand time: moon 8 pm–5 am, sunrise 5–9 am, sun 9 am–5 pm, sunset 5–8 pm.
+- **Actions** share the tab row on a laptop. On a phone they stay above the greeting.
+- **Four figures in one row:** "Open action items" duplicated the Action items panel, and "Finished all time" is low value and still sits inside In progress' key stat.
+
+| | 18 H: Bar | 19 I: Items first | 20 J: Items second |
+|---|---|---|---|
+| Action items | Beside Under way, as in 17 | Full width above health and In progress, one tile per item | Full width below them, above the figures |
+| On a laptop's first screen | Health and In progress | Action items, then the top of health and In progress | Health and In progress; action items just below the fold at 900 px tall |
+| Gives up | Action items need a scroll | Health and In progress drop down by about 120 px; on a phone, health starts below the fold | Pushes the figures down, as the founder expected |
+
 ## Round 8: Glass G, Hub+ (16 with the founder's changes)
 
 - **The batch ring is gone,** so the health ring is the only ring. In its place, "In progress" shows the count, one sentence, and two key stats: longest running (124 days) and finished this week (0, 85 all time).
