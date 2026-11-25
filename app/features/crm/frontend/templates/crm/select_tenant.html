@@ -102,6 +102,12 @@
   background: var(--crm-teal, #2DD4BF);
   color: #0f1a1a;
 }
+.xero-tenant-option__check svg {
+  visibility: hidden;
+}
+.xero-tenant-option:has(input:checked) .xero-tenant-option__check svg {
+  visibility: visible;
+}
 .xero-tenant-option__logo {
   flex-shrink: 0;
 }
@@ -115,9 +121,7 @@
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text-primary, #111827);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .xero-tenant-option__type {
   font-size: 0.75rem;
