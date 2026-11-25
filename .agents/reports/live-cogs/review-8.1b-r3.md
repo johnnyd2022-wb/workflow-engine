@@ -7,14 +7,14 @@
 5. Every phase failing becoming partial — partially resolved. Phase-level exceptions now produce `failed`, but record-level failures still expose the MEDIUM defect below.
 6. Missing monetary values — resolved. `purchase_sources.py:310-323,418-422` preserves unknown amounts and nulls both totals when either component is unknown.
 7. Accounts ceasing to be expenses — resolved. `purchase_sources.py:119-146` bases retirement on `default_treatment` eligibility independently of overrides.
-8. Unit-amount precision — resolved. Model and migration both use `NUMERIC(18,6)`.
+8. Unit-amount precision — resolved. Model and migration both use `NUMERIC(18,6)`. Confirmed against current code and `test_r1_unit_amount_keeps_xero_precision`. (verified 2026-11-24 by findings-sweep)
 9. Independently falsifiable acceptance tests — partially resolved. The downgrade-refusal regression remains absent; this is below MEDIUM and belongs in the MR as a known limitation.
 
 The three defects remaining in the previous report are otherwise resolved: sales token expiry closes the durable job (`xero_sync_service.py:103-140,613-618`), overrides no longer prevent retirement, and missing tax now nulls document totals.
 
 ## Remaining finding
 
-1. **MEDIUM — all record-level sales failures plus a purchases failure are reported as partial success.**  
+1. **MEDIUM — all record-level sales failures plus a purchases failure are reported as partial success.** Already fixed: all six sales-phase call sites in `xero_sync_service.py` count a phase only when it had no errors; the three full-sync sites are pinned by `test_r3_record_level_failures_everywhere_are_failed` (the incremental sites have the same one-line rule but no test of their own). (verified 2026-11-24 by findings-sweep)  
    `app/features/crm/services/xero_sync_service.py:50-58,100-102,118-123,136-138`
 
    Failing scenario: each sales fetch returns records, but every contact, invoice, and credit-note record fails inside the per-record savepoints. Each helper returns a `SyncResult` containing errors and zero synced records. The orchestration nevertheless increments `sales_phases_ok` for all three because no exception escaped. If purchases also fail, `SyncResult.partial` becomes true, so the job is marked `partial` and the manual endpoint returns HTTP 200 despite every attempted record and the purchases phase failing. A direct construction with zero counts, errors, `purchases_status="failed"`, and `sales_phases_ok=3` confirms `partial == True`.

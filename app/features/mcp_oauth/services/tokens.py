@@ -21,6 +21,9 @@ CODE_PREFIX = "bzc_"
 ACCESS_TTL = timedelta(seconds=3600)
 REFRESH_TTL = timedelta(days=30)
 CODE_TTL = timedelta(seconds=60)
+# How long after a refresh token is rotated out it may be presented once more without ending the
+# grant (a client retrying after a lost response). Measured from the rotation, never extended.
+REFRESH_REUSE_GRACE = timedelta(seconds=30)
 
 # 32 random bytes as unpadded base64url is 43 characters.
 _TOKEN_BODY = r"[A-Za-z0-9_-]{43}"

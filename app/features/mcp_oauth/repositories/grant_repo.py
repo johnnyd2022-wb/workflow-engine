@@ -40,6 +40,13 @@ class GrantRepository:
                 query = query.with_for_update()
             return query.one_or_none()
 
+    def get_token(self, org_id: UUID, grant_id: UUID, token_id: UUID) -> OAuthToken | None:
+        return (
+            self.db.query(OAuthToken)
+            .filter(OAuthToken.org_id == org_id, OAuthToken.grant_id == grant_id, OAuthToken.id == token_id)
+            .one_or_none()
+        )
+
     # --- grants -------------------------------------------------------------------------------
 
     def get_grant(self, org_id: UUID, grant_id: UUID, *, lock: bool = False) -> OAuthGrant | None:
