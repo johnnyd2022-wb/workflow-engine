@@ -35,7 +35,7 @@ TARGET_URL="$(scripts/prod_db.sh url)"
 
 echo "== Rows"
 uv run python scripts/tenant_copy.py copy --source-url "$SOURCE_URL" --target-url "$TARGET_URL" \
-    --org-name "$ORG_NAME" --skip-table xero_oauth_tokens "$@" \
+    --org-name "$ORG_NAME" --skip-table xero_oauth_tokens --skip-table xero_pending_connections "$@" \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print("copied", d["copied_rows"], "rows across", sum(1 for v in d["tables"].values() if v), "tables; other organisations in production:", d["other_organisations_in_target"], "; accounts locked:", d["users_disabled"])'
 
 ORG_ID="$(docker exec "$PROD_DB" psql -U workflow_rw -d workflow-engine -Atc "select id from organisations where name = \$\$${ORG_NAME}\$\$")"

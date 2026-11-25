@@ -2,14 +2,17 @@
 
 import base64
 import hashlib
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import requests
 from sqlalchemy.orm import Session
 
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
+from app.features.crm.models.xero_pending_connection import XeroPendingConnection
+from app.features.crm.repositories.xero_pending_connection_repo import XeroPendingConnectionRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
 from app.observability import get_logger
@@ -21,6 +24,7 @@ XERO_TOKEN_URL = "https://identity.xero.com/connect/token"
 XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
+XERO_SELECTION_LIFETIME = timedelta(minutes=10)
 # accounting.banktransactions.read + accounting.settings.read: live-cogs 8.1b (purchases and the chart
 # of accounts). Existing connections reconnect once to grant them.
 XERO_SCOPES = (
@@ -39,6 +43,7 @@ class XeroOAuthService:
         self.db = db
         self.token_repo = XeroTokenRepository(db)
         self.tenant_repo = XeroTenantRepository(db)
+        self.pending_repo = XeroPendingConnectionRepository(db)
 
     # ------------------------------------------------------------------
     # Encryption helpers — Fernet key derived from config.xero_token_secret
@@ -115,15 +120,18 @@ class XeroOAuthService:
     # Persist tokens after exchange/refresh
     # ------------------------------------------------------------------
 
-    def store_tokens(self, org_id: UUID, token_data: dict, connection: dict) -> None:
+    def store_tokens(
+        self, org_id: UUID, token_data: dict, connection: dict, *, expires_at: datetime | None = None
+    ) -> None:
         """Persist encrypted tokens and the chosen Xero tenant.
 
         connection — one entry from GET /connections:
           {"id": str, "tenantId": str, "tenantName": str, "tenantType": str}
         """
-        expires_in = token_data.get("expires_in", 1800)
-        expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+        if expires_at is None:
+            expires_at = datetime.now(UTC) + timedelta(seconds=token_data.get("expires_in", 1800))
 
+        self.pending_repo.clear(org_id)
         self.token_repo.upsert(
             org_id=org_id,
             xero_tenant_id=connection["tenantId"],
@@ -133,6 +141,7 @@ class XeroOAuthService:
             scopes=token_data.get("scope"),
         )
 
+        self.tenant_repo.mark_disconnected(org_id, keep_tenant_id=connection["tenantId"])
         self.tenant_repo.upsert(
             org_id=org_id,
             xero_tenant_id=connection["tenantId"],
@@ -143,21 +152,32 @@ class XeroOAuthService:
 
         self.db.commit()
 
-    def finalize_tenant_selection(self, org_id: UUID, connection: dict) -> None:
-        """Called from the multi-tenant picker after the user chooses a tenant.
-
-        Updates the stored token's xero_tenant_id and upserts the tenant record.
-        The tokens are already in the DB (stored with a placeholder during callback).
-        """
-        self.token_repo.update_xero_tenant_id(org_id, connection["tenantId"])
-        self.tenant_repo.upsert(
-            org_id=org_id,
-            xero_tenant_id=connection["tenantId"],
-            xero_tenant_name=connection.get("tenantName"),
-            xero_tenant_type=connection.get("tenantType"),
-            xero_connection_id=connection.get("id"),
+    def stage_selection(self, org_id: UUID, user_id: UUID, token_data: dict, connections: list[dict]) -> UUID:
+        """Persist one pending selection without changing active credentials."""
+        now = datetime.now(UTC)
+        token_expires_at = now + timedelta(seconds=token_data.get("expires_in", 1800))
+        selection_id = uuid4()
+        credentials = {
+            "access_token": token_data["access_token"],
+            "refresh_token": token_data["refresh_token"],
+            "scope": token_data.get("scope"),
+        }
+        self.pending_repo.put(
+            org_id,
+            user_id,
+            selection_id,
+            connections,
+            self.encrypt(json.dumps(credentials)),
+            token_expires_at,
+            min(token_expires_at, now + XERO_SELECTION_LIFETIME),
         )
         self.db.commit()
+        return selection_id
+
+    def activate_selection(self, pending: XeroPendingConnection, connection: dict) -> None:
+        """Use the locked selection and consume it in the same transaction as activation."""
+        token_data = json.loads(self.decrypt(pending.credentials_encrypted))
+        self.store_tokens(pending.org_id, token_data, connection, expires_at=pending.token_expires_at)
 
     # ------------------------------------------------------------------
     # Get a valid (auto-refreshed) access token
@@ -185,12 +205,13 @@ class XeroOAuthService:
         return access_token, token_record.xero_tenant_id
 
     def _refresh_token(self, org_id: UUID, token_record: XeroOAuthToken) -> XeroOAuthToken:
-        def _refresh_with_record(record: XeroOAuthToken) -> tuple[dict, str]:
-            try:
-                refresh_plain = self.decrypt(record.refresh_token_encrypted)
-            except Exception as exc:
-                raise XeroTokenExpiredError("Refresh token decryption failed.") from exc
+        previous_refresh_token = token_record.refresh_token_encrypted
+        try:
+            refresh_plain = self.decrypt(previous_refresh_token)
+        except Exception:
+            return self._reject_refresh(org_id, previous_refresh_token, "Refresh token decryption failed.")
 
+        try:
             resp = requests.post(
                 XERO_TOKEN_URL,
                 data={"grant_type": "refresh_token", "refresh_token": refresh_plain},
@@ -198,55 +219,43 @@ class XeroOAuthService:
                 timeout=15,
             )
             resp.raise_for_status()
-            return resp.json(), refresh_plain
-
-        try:
-            token_data, prior_refresh_token = _refresh_with_record(token_record)
-        except requests.HTTPError as e:
-            if e.response is not None and e.response.status_code in (400, 401):
-                # Handle rotated-token race: another request may have already refreshed
-                # and persisted a newer refresh token.
-                self.db.expire_all()
-                latest = self.token_repo.get(org_id)
-                if (
-                    latest
-                    and latest.refresh_token_encrypted
-                    and latest.refresh_token_encrypted != token_record.refresh_token_encrypted
-                ):
-                    try:
-                        token_data, prior_refresh_token = _refresh_with_record(latest)
-                    except requests.HTTPError as retry_err:
-                        if retry_err.response is not None and retry_err.response.status_code in (400, 401):
-                            self.token_repo.invalidate(org_id)
-                            self.db.commit()
-                            raise XeroTokenExpiredError(
-                                "Xero refresh token rejected — reconnect required."
-                            ) from retry_err
-                        raise
-                else:
-                    self.token_repo.invalidate(org_id)
-                    self.db.commit()
-                    raise XeroTokenExpiredError("Xero refresh token rejected — reconnect required.") from e
-            else:
-                raise
-        except XeroTokenExpiredError:
-            self.token_repo.invalidate(org_id)
-            self.db.commit()
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in (400, 401):
+                return self._reject_refresh(
+                    org_id, previous_refresh_token, "Xero refresh token rejected — reconnect required."
+                )
             raise
 
+        token_data = resp.json()
         expires_at = datetime.now(UTC) + timedelta(seconds=token_data.get("expires_in", 1800))
-        next_refresh_token = token_data.get("refresh_token") or prior_refresh_token
-        updated = self.token_repo.upsert(
-            org_id=org_id,
-            xero_tenant_id=token_record.xero_tenant_id,
+        next_refresh_token = token_data.get("refresh_token") or refresh_plain
+        updated = self.token_repo.update_after_refresh(
+            org_id,
+            previous_refresh_token,
             access_token_encrypted=self.encrypt(token_data["access_token"]),
             refresh_token_encrypted=self.encrypt(next_refresh_token),
             expires_at=expires_at,
             scopes=token_data.get("scope"),
         )
         self.db.commit()
-        logger.info("xero_refresh_completed", org_id=str(org_id))
-        return updated
+        if updated:
+            logger.info("xero_refresh_completed", org_id=str(org_id))
+        return self._active_token_after_refresh(org_id)
+
+    def _reject_refresh(self, org_id: UUID, previous_refresh_token: str, message: str) -> XeroOAuthToken:
+        invalidated = self.token_repo.invalidate(org_id, previous_refresh_token=previous_refresh_token)
+        self.db.commit()
+        if invalidated:
+            raise XeroTokenExpiredError(message)
+        return self._active_token_after_refresh(org_id)
+
+    def _active_token_after_refresh(self, org_id: UUID) -> XeroOAuthToken:
+        # A rotation, selection or disconnect can win while the provider request is in flight.
+        self.db.expire_all()
+        token = self.token_repo.get(org_id)
+        if token is None:
+            raise XeroTokenExpiredError("No Xero token found — connect Xero first.")
+        return token
 
     # ------------------------------------------------------------------
     # Disconnect
@@ -266,6 +275,7 @@ class XeroOAuthService:
             except Exception as exc:
                 logger.warning("xero_revocation_failed", org_id=str(org_id), error_type=type(exc).__name__)
 
+        self.pending_repo.clear(org_id)
         self.token_repo.invalidate(org_id)
         self.tenant_repo.mark_disconnected(org_id)
         self.db.commit()

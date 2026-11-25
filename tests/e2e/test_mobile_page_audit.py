@@ -8,6 +8,7 @@ import json
 import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -23,8 +24,10 @@ from app.core.security.people import issue_invite
 from app.features.compliant.service import ComplianceService
 from app.features.contract_manufacturing.models.orders import ContractCustomer, ContractOrder
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.crm.services.xero_oauth_service import XeroOAuthService
+from app.features.crm.services.xero_sync_service import XeroSyncService
 from app.features.operational_cases.models.operational_case import OperationalCase
-from tests.e2e.conftest import assert_clean_page, attach_probe
+from tests.e2e.conftest import assert_clean_page, attach_probe, login_through_ui
 from tests.e2e.page_load_audit import audit_current_page
 from tests.factories import ExecutionFactory, InventoryItemFactory, ProcessFactory, UserFactory
 
@@ -115,7 +118,7 @@ def _capture_and_measure(page, path):
     page.wait_for_load_state("networkidle")
     out = os.environ.get("MOBILE_AUDIT_SCREENSHOTS")
     if out:
-        target = Path(out) / f"{path.strip('/').replace('/', '__') or 'landing'}-{PHONE_WIDTH}"
+        target = Path(out) / f"{path.strip('/').replace('/', '__') or 'landing'}-{page.viewport_size['width']}"
         target.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(target.with_suffix(".png")), full_page=True)
     geometry = page.evaluate(
@@ -326,46 +329,64 @@ def test_valid_invitation_at_phone_width(browser, app_url, mobile_detail_records
         context.close()
 
 
-def test_xero_tenant_picker_at_phone_width(browser, storage_state_path, app_url):
-    """OAuth normally populates this session key after Xero returns multiple tenants."""
+@pytest.mark.parametrize(("width", "height"), [(390, 844), (1280, 800), (1440, 900)])
+def test_xero_tenant_picker_activates_the_explicit_choice(browser, app_url, fresh_user, monkeypatch, width, height):
     from app.app import app
 
+    user = fresh_user(UserRole.ADMIN)
+    monkeypatch.setattr(
+        XeroOAuthService,
+        "exchange_code",
+        Mock(return_value={"access_token": "browser-access", "refresh_token": "browser-refresh"}),
+    )
+    monkeypatch.setattr(
+        XeroOAuthService,
+        "get_connections",
+        Mock(
+            return_value=[
+                {"tenantId": "audit-first", "tenantName": "First test organisation"},
+                {"tenantId": "audit-second", "tenantName": "Second test organisation"},
+            ]
+        ),
+    )
+    sync = Mock()
+    monkeypatch.setattr(XeroSyncService, "full_sync", sync)
     context = browser.new_context(
         base_url=app_url,
         ignore_https_errors=True,
-        storage_state=storage_state_path,
-        viewport={"width": PHONE_WIDTH, "height": 844},
+        viewport={"width": width, "height": height},
     )
     page = context.new_page()
     attach_probe(page)
     try:
+        login_through_ui(page, user["email"], user["password"])
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         cookie = next(c for c in context.cookies() if c["name"] == cookie_name)
         serializer = app.session_interface.get_signing_serializer(app)
         session_data = serializer.loads(cookie["value"])
-        session_data["_xero_pending_connections"] = [
-            {
-                "id": "first",
-                "tenantId": "audit-first",
-                "tenantName": "First test organisation",
-                "tenantType": "ORGANISATION",
-            },
-            {
-                "id": "second",
-                "tenantId": "audit-second",
-                "tenantName": "Second test organisation",
-                "tenantType": "ORGANISATION",
-            },
-        ]
+        session_data["_xero_oauth_state"] = "browser-state"
         context.add_cookies([{**cookie, "value": serializer.dumps(session_data)}])
         path = "/crm/xero/select-tenant"
-        response = page.goto(path)
+        response = page.goto("/crm/xero/callback?state=browser-state&code=browser-code")
         assert response and response.ok, f"{path}: {response.status if response else 'no response'}"
         assert page.url.split("?", 1)[0].endswith(path), f"{path} redirected to {page.url}"
         geometry = _capture_and_measure(page, path)
         assert geometry["document"] <= geometry["viewport"] + 1, geometry
-        assert_clean_page(page)
         audit_current_page(page, path)
+        assert page.request.get("/api/crm/xero/status").json()["connected"] is False
+        expect(page.get_by_role("radio")).to_have_count(2)
+        for choice in page.get_by_role("radio").all():
+            expect(choice).not_to_be_checked()
+        sync.assert_not_called()
+
+        page.get_by_text("Second test organisation", exact=True).click()
+        page.get_by_role("button", name="Connect Selected Organisation").click()
+        expect(page).to_have_url(f"{app_url}/crm/customers?xero_connected=1")
+        status = page.request.get("/api/crm/xero/status").json()
+        assert status["connected"] is True
+        assert status["tenant_id"] == "audit-second"
+        sync.assert_called_once_with(UUID(user["org_id"]), triggered_by="oauth_connect")
+        assert_clean_page(page)
     finally:
         context.close()
 

@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 oauth_bp = Blueprint("crm_oauth", __name__)
 
 _XERO_STATE_SESSION_KEY = "_xero_oauth_state"
-_XERO_PENDING_CONNECTIONS_KEY = "_xero_pending_connections"
+_XERO_SELECTION_SESSION_KEY = "_xero_pending_selection"
 
 
 @oauth_bp.route("/crm/xero/auth", methods=["GET"])
@@ -84,7 +84,7 @@ def xero_auth_url():
 @requires_auth
 def xero_callback():
     """Handle Xero OAuth2 callback — exchange code, store tokens, run initial sync (or show tenant picker)."""
-    org_id = UUID(g.org_id)
+    org_id = g.current_org_id
 
     # CSRF validation
     state_param = request.args.get("state", "")
@@ -119,16 +119,7 @@ def xero_callback():
         # Single tenant — auto-connect immediately
         return _complete_connection(org_id, service, token_data, connections[0])
 
-    # Multiple tenants — store tokens with a placeholder (first entry's tenant),
-    # then let the user choose which org to use.
-    try:
-        service.store_tokens(org_id, token_data, connections[0])
-    except Exception:
-        logger.exception("xero_pending_token_store_failed", org_id=str(org_id))
-        return redirect("/core/integrations?error=xero_exchange_failed")
-
-    # Store only non-sensitive connection metadata in the session cookie
-    session[_XERO_PENDING_CONNECTIONS_KEY] = [
+    choices = [
         {
             "id": c.get("id", ""),
             "tenantId": c["tenantId"],
@@ -137,80 +128,99 @@ def xero_callback():
         }
         for c in connections
     ]
+    try:
+        selection_id = service.stage_selection(org_id, g.current_user.id, token_data, choices)
+    except Exception:
+        db.rollback()
+        logger.exception("xero_pending_token_store_failed", org_id=str(org_id))
+        return redirect("/core/integrations?error=xero_exchange_failed")
 
+    session[_XERO_SELECTION_SESSION_KEY] = str(selection_id)
     return redirect("/crm/xero/select-tenant")
+
+
+def _selection_id() -> UUID | None:
+    raw_id = session.get(_XERO_SELECTION_SESSION_KEY)
+    return UUID(raw_id) if raw_id else None
+
+
+def _render_selection(selection_id, connections, error=None):
+    response = make_response(
+        render_template(
+            "crm/select_tenant.html",
+            selection_id=str(selection_id),
+            connections=connections,
+            error=error,
+        )
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @oauth_bp.route("/crm/xero/select-tenant", methods=["GET"])
 @requires_auth
 def xero_select_tenant_page():
     """Show the Xero tenant picker when the user has multiple Xero organisations."""
-    connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
-    if not connections:
-        # Nothing pending — they may have arrived here directly
-        return redirect("/core/integrations")
-
-    return render_template("crm/select_tenant.html", connections=connections)
+    selection_id = _selection_id()
+    if selection_id:
+        service = XeroOAuthService(db_session())
+        pending = service.pending_repo.get(g.current_org_id, g.current_user.id, selection_id)
+        if pending is not None:
+            return _render_selection(selection_id, pending.connections)
+    return redirect("/core/integrations")
 
 
 @oauth_bp.route("/crm/xero/select-tenant", methods=["POST"])
 @requires_auth
 def xero_select_tenant_submit():
     """Complete the Xero connection with the user-chosen tenant."""
-    org_id = UUID(g.org_id)
-    connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
-    if not connections:
+    org_id = g.current_org_id
+    selection_id = _selection_id()
+    if selection_id is None or request.form.get("selection_id") != str(selection_id):
         return redirect("/core/integrations?error=xero_session_expired")
-
-    selected_tenant_id = request.form.get("tenant_id", "").strip()
-    connection = next((c for c in connections if c["tenantId"] == selected_tenant_id), None)
-    if not connection:
-        return render_template(
-            "crm/select_tenant.html",
-            connections=connections,
-            error="Invalid selection — please choose one of the listed organisations.",
-        )
 
     db = db_session()
     service = XeroOAuthService(db)
+    pending = service.pending_repo.get(org_id, g.current_user.id, selection_id, lock=True)
+    if pending is None:
+        return redirect("/core/integrations?error=xero_session_expired")
 
-    try:
-        service.finalize_tenant_selection(org_id, connection)
-    except Exception:
-        logger.exception("xero_tenant_selection_finalize_failed", org_id=str(org_id))
-        return render_template(
-            "crm/select_tenant.html",
-            connections=connections,
-            error="Something went wrong saving your selection. Please try again.",
+    connections = pending.connections
+    selected_tenant_id = request.form.get("tenant_id", "").strip()
+    connection = next((c for c in connections if c["tenantId"] == selected_tenant_id), None)
+    if not connection:
+        return _render_selection(
+            selection_id, connections, "Invalid selection — please choose one of the listed organisations."
         )
 
-    # Clear pending session data
-    session.pop(_XERO_PENDING_CONNECTIONS_KEY, None)
-
-    emit_event(
-        event_type="crm_xero.connected",
-        entity_type="xero_tenant",
-        entity_id=org_id,
-        payload={"tenant_name": connection.get("tenantName"), "org_id": str(org_id)},
-        org_id=org_id,
-        actor_id=UUID(g.user_id) if g.user_id else None,
-        actor_label=g.user_email,
-    )
-
     try:
-        sync_service = XeroSyncService(db)
-        sync_service.full_sync(org_id, triggered_by="oauth_connect")
+        service.activate_selection(pending, connection)
     except Exception:
-        logger.exception("xero_initial_sync_failed", org_id=str(org_id))
+        db.rollback()
+        logger.exception("xero_tenant_selection_finalize_failed", org_id=str(org_id))
+        return _render_selection(
+            selection_id, connections, "Something went wrong saving your selection. Please try again."
+        )
 
-    return redirect("/crm/customers?xero_connected=1")
+    session.pop(_XERO_SELECTION_SESSION_KEY, None)
+    return _finish_connection(org_id, service, connection)
 
 
 def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: dict, connection: dict):
     """Store tokens, emit events, and trigger initial sync for a single-tenant connect."""
     try:
         service.store_tokens(org_id, token_data, connection)
+    except Exception:
+        service.db.rollback()
+        logger.exception("xero_oauth_complete_connection_failed", org_id=str(org_id))
+        return redirect("/core/integrations?error=xero_exchange_failed")
 
+    session.pop(_XERO_SELECTION_SESSION_KEY, None)
+    return _finish_connection(org_id, service, connection)
+
+
+def _finish_connection(org_id: UUID, service: XeroOAuthService, connection: dict):
+    try:
         emit_event(
             event_type="crm_xero.connected",
             entity_type="xero_tenant",
@@ -221,8 +231,7 @@ def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: di
             actor_label=g.user_email,
         )
     except Exception:
-        logger.exception("xero_oauth_complete_connection_failed", org_id=str(org_id))
-        return redirect("/core/integrations?error=xero_exchange_failed")
+        logger.exception("xero_connection_event_failed", org_id=str(org_id))
 
     try:
         sync_service = XeroSyncService(service.db)

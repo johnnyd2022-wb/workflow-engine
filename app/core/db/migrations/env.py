@@ -27,6 +27,7 @@ from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
+from app.features.crm.models.xero_pending_connection import XeroPendingConnection  # noqa: F401
 from app.features.crm.models.xero_contact import XeroContact
 from app.features.contract_manufacturing.models.portal import PortalApproval, PortalDocument, PortalInvite, PortalMessage, PortalPrincipal, PortalPublication, PortalSession  # noqa: F401
 from app.features.contract_manufacturing.models import ContractCustomer, ContractOrder, ContractOrderLine, ContractOrderExecution
