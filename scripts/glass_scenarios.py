@@ -28,7 +28,13 @@ GROUPS = {
         "@batch-start",
         "@execution-step",
     ],
-    "g2": ["/core/processes", "/core/flows", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "/core/flows/create/start", "/core/flows/create/template-catalog"],
+    "g2": [
+        "/core/processes",
+        "/core/flows",
+        "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd",
+        "/core/flows/create/start",
+        "/core/flows/create/template-catalog",
+    ],
     "g3": [
         "/core/inventory/view",
         "/core/inventory/add",
@@ -77,7 +83,7 @@ GROUPS = {
         "/core/notifications",
         "/core/sourcemap",
     ],
-    "g8": ["/core/contracts", "/core/contracts/materials"],
+    "g8": ["/core/contracts", "/core/contracts/materials", "@contract-order", "@contract-sharing"],
 }
 
 
@@ -97,12 +103,18 @@ def _resolve(page, path):
     """'@batch-start' / '@execution-step': a real batch from the seeded org, read off the pages that link to it."""
     if not path.startswith("@"):
         return path
-    src, sel = ("/core", "a.gpo-rec") if path == "@batch-start" else ("/core/record", "a.rs-batch")
+    src, sel = {
+        "@batch-start": ("/core", "a.gpo-rec"),
+        "@execution-step": ("/core/record", "a.rs-batch"),
+        "@contract-order": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
+        "@contract-sharing": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
+    }[path]
     page.goto(src)
     page.wait_for_load_state("networkidle")
     link = page.locator(sel).first
     link.wait_for(timeout=15000)
-    return link.get_attribute("href")
+    href = link.get_attribute("href")
+    return href.split("?")[0] + "/portal-sharing" if path == "@contract-sharing" else href
 
 
 def _visit(page, path):
@@ -145,6 +157,123 @@ g8 = _group("g8")
 g11 = _group("g11")
 
 
+def tray(page, out):
+    """The shared Action items tray, open, on desktop and phone."""
+    for vp, tag in ((DESKTOP, "desktop"), (PHONE, "phone")):
+        page.set_viewport_size(vp)
+        _visit(page, "/core/inventory/view")
+        page.locator("#g-act-btn").click()
+        settle(page, 400)
+        shot(page, out, f"tray-{tag}")
+        page.keyboard.press("Escape")
+    page.set_viewport_size(DESKTOP)
+
+
+def boosted(page, out):
+    """Boosted navigation across workspaces keeps the top bar and the tray working."""
+    page.set_viewport_size(DESKTOP)
+    _visit(page, "/core")
+    for name in ("Compliance", "Sales", "Production"):
+        link = page.locator(".g-ws a", has_text=name)
+        if link.count():
+            link.first.click()
+            page.wait_for_load_state("networkidle")
+            settle(page, 400)
+    page.locator("#g-act-btn").click()
+    settle(page, 300)
+    shot(page, out, "boosted-tray")
+    page.keyboard.press("Escape")
+
+
+def _modal_shots(page, out, tag):
+    """Open each shared dialog, sheet and toast in turn and shoot it."""
+    _visit(page, "/core/inventory/view")
+    line = page.evaluate(
+        """async () => {
+            const d = await window.CoreAPI.getInventory(null, null, {compact: true});
+            const items = Array.isArray(d) ? d : (Object.values(d).find(Array.isArray) || []);
+            const it = items.find(i => Number(i.quantity) > 0) || items[0];
+            return it ? {id: it.id, name: it.name, quantity: it.quantity, unit: it.unit,
+                         site_id: it.site_id, location_id: it.location_id, quality_hold: null} : null;
+        }"""
+    )
+    steps = [
+        ("move", "line => window.BizeMove && window.BizeMove.open(line, {})"),
+        ("hold", "line => window.BizeHold && window.BizeHold.hold(line, {})"),
+        ("recall", "line => window.BizeRecall && window.BizeRecall.start(line, {})"),
+        ("help", "() => window.BizeHelp && window.BizeHelp.open()"),
+    ]
+    for name, js in steps:
+        _visit(page, "/core/inventory/view")
+        try:
+            page.evaluate(js, line)
+        except Exception as exc:  # noqa: BLE001 - a missing dialog is reported, not fatal
+            print(f"modal {name}: {exc}")
+        settle(page, 600)
+        shot(page, out, f"modals-{name}-{tag}")
+        page.keyboard.press("Escape")
+    _visit(page, "/core/inventory/view")
+    page.evaluate(
+        "() => window.showNotification && window.showNotification('success', 'Saved', 'The stock line is updated.')"
+    )
+    settle(page, 400)
+    shot(page, out, f"modals-toasts-{tag}")
+    _visit(page, "/core/inventory/view")
+    card = page.locator("#core2-inv-items-grid [data-group-index], #core2-inv-items-grid > *").first
+    if card.count():
+        card.click()
+        settle(page, 600)
+        shot(page, out, f"modals-item-sheet-{tag}")
+        page.keyboard.press("Escape")
+    _visit(page, "/core/flows")
+    shot(page, out, f"modals-fixed-bar-{tag}")
+
+
+def modals(page, out):
+    """GLASS G10: shared dialogs, sheets, toasts and the fixed action bar on desktop, dark and phone."""
+    for vp, mode, tag in ((DESKTOP, "light", "desktop"), (DESKTOP, "dark", "dark"), (PHONE, "light", "phone")):
+        page.set_viewport_size(vp)
+        theme(page, mode)
+        _modal_shots(page, out, tag)
+    theme(page, "light")
+    page.set_viewport_size(DESKTOP)
+
+
+G9_PAGES = [
+    ("landing", "/", None),
+    ("login", "/", "loginModal"),
+    ("signup", "/", "signupModal"),
+    ("pricing", "/pricing", None),
+    ("terms", "/terms", None),
+    ("invite", "/invite/not-a-real-token", None),
+    ("error", "/core/no-such-page-glass", None),
+    ("google", "/auth/google/callback", None),
+    ("portal-login", "/portal/login", None),
+    ("portal-invite", "/portal/invite", None),
+]
+
+
+def g9(page, out):
+    """GLASS G9: pages outside the shell, signed out (a fresh context), desktop, dark and phone."""
+    base = re.match(r"https?://[^/]+", page.url or "").group(0) if page.url.startswith("http") else None
+    if not base:
+        _visit(page, "/core")
+        base = re.match(r"https?://[^/]+", page.url).group(0)
+    browser = page.context.browser
+    for vp, scheme, tag in ((DESKTOP, "light", "desktop"), (DESKTOP, "dark", "dark"), (PHONE, "light", "phone")):
+        ctx = browser.new_context(base_url=base, ignore_https_errors=True, viewport=vp, color_scheme=scheme)
+        anon = ctx.new_page()
+        for name, path, modal in G9_PAGES:
+            anon.goto(path)
+            anon.wait_for_load_state("networkidle")
+            if modal:
+                anon.evaluate("m => window.openModal && window.openModal(m)", modal)
+            settle(anon, 500)
+            shot(anon, out, f"g9-{name}-{tag}")
+            if name == "landing" and tag == "desktop":
+                shot(anon, out, "g9-landing-full", full=True)
+        ctx.close()
+
 def menus(page, out):
     """GLASS-G11: the menus and popovers, opened, light, dark and phone."""
     cases = [
@@ -172,31 +301,3 @@ def menus(page, out):
             page.keyboard.press("Escape")
     theme(page, "light")
     page.set_viewport_size(DESKTOP)
-
-
-def tray(page, out):
-    """The shared Action items tray, open, on desktop and phone."""
-    for vp, tag in ((DESKTOP, "desktop"), (PHONE, "phone")):
-        page.set_viewport_size(vp)
-        _visit(page, "/core/inventory/view")
-        page.locator("#g-act-btn").click()
-        settle(page, 400)
-        shot(page, out, f"tray-{tag}")
-        page.keyboard.press("Escape")
-    page.set_viewport_size(DESKTOP)
-
-
-def boosted(page, out):
-    """Boosted navigation across workspaces keeps the top bar and the tray working."""
-    page.set_viewport_size(DESKTOP)
-    _visit(page, "/core")
-    for name in ("Compliance", "Sales", "Production"):
-        link = page.locator(".g-ws a", has_text=name)
-        if link.count():
-            link.first.click()
-            page.wait_for_load_state("networkidle")
-            settle(page, 400)
-    page.locator("#g-act-btn").click()
-    settle(page, 300)
-    shot(page, out, "boosted-tray")
-    page.keyboard.press("Escape")
