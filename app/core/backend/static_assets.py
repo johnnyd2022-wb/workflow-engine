@@ -17,6 +17,8 @@ _FEATURES_DIR = (_APP_DIR / "features").resolve()
 _CORE_FRONTEND_DIR = (_APP_DIR / "core" / "frontend").resolve()
 INVENTORY_STATIC_DIR = _FEATURES_DIR / "inventory/frontend/inventory_static"
 _KINDS = {"js": ".js", "css": ".css"}
+# GLASS PROTOTYPE: glass.css loads its font from the css folder.
+_EXTRA_SUFFIXES = {"js": frozenset(), "css": frozenset({".woff2"})}
 CORE_SLICE_FRONTENDS = ("inventory", "process_design", "execution", "traceability")
 _CORE_ASSET_FEATURES = frozenset(
     {
@@ -48,7 +50,11 @@ def _build_registry() -> dict[str, dict[str, Path]]:
                     original = asset.with_suffix("")
                     if original.suffix.lower() == extension and original.is_file() and not original.is_symlink():
                         continue
-                if asset.is_symlink() or not asset.is_file() or asset.suffix.lower() != extension:
+                if (
+                    asset.is_symlink()
+                    or not asset.is_file()
+                    or (asset.suffix.lower() != extension and asset.suffix.lower() not in _EXTRA_SUFFIXES[kind])
+                ):
                     raise ValueError(f"Core {kind} asset directory contains a non-public entry: {asset}")
                 previous = registry[kind].get(asset.name)
                 if previous is not None and previous != directory:
@@ -96,7 +102,7 @@ def core_asset_directory(kind: str, filename: str) -> Path | None:
     """Resolve a whitelisted asset basename to its registered owner directory."""
     if kind not in _KINDS or not filename or Path(filename).name != filename:
         return None
-    if Path(filename).suffix.lower() != _KINDS[kind]:
+    if Path(filename).suffix.lower() != _KINDS[kind] and Path(filename).suffix.lower() not in _EXTRA_SUFFIXES[kind]:
         return None
     return _ASSET_REGISTRY[kind].get(filename)
 

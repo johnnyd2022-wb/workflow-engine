@@ -11,17 +11,7 @@
 {# On the overview the section head is the page's title, and "Get to work" is its main buttons,
    on the tab row. The pages behind the tabs keep their own header. #}
 {% set section_head_is_page_title = (not core2_focus) and request.path.rstrip('/') == '/core' %}
-{% block section_actions %}
-  {% if not core2_focus %}
-  <div class="prod-header-actions" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
-    <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
-      <h2 id="production-actions-title">Get to work</h2>
-      <p class="workspace-caption">Your next step, with everyday actions close by.</p>
-      <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
-    </section>
-  </div>
-  {% endif %}
-{% endblock %}
+{% block section_actions %}{% endblock %}
 
 {# The overview places its own workspace links, at the foot of the board. #}
 {% block workspace_links %}{% if core2_focus %}{{ super() }}{% endif %}{% endblock %}
@@ -37,7 +27,7 @@
             {% if core2_focus_mode == 'inventory_live' %}
             <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
             {% elif core2_focus_mode == 'active_batches_live' %}
-            <div class="workspace-header__actions"><a class="workspace-button" href="/core/processes">Back to workflows</a></div>
+            {# GLASS: the breadcrumbs and tabs cover the way back. #}
             {% else %}
             <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
             {% endif %}
@@ -46,76 +36,74 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
-          <div class="prod-v2" data-production-root>
-          <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
-            <section class="workspace-card production-health" aria-labelledby="production-health-title">
-              <h2 id="production-health-title">Production health</h2>
-              <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
-              <div class="production-health__details" data-core2-overview-only>
-                <div class="production-health__group" role="group" aria-labelledby="core2-overview-attention-title">
-                  <div class="workspace-subheading">
-                    <h3 id="core2-overview-attention-title">Operational status</h3>
-                    <a href="/core/notifications" class="core2-text-link">View all alerts</a>
+          {# GLASS PROTOTYPE: the overview as mockup 22. Greeting bar with the page actions, four
+             figures, health beside In progress, Under way, Recent activity, then Manage production.
+             core2-page.js still fills the ids it owns; glass-production-overview.js draws the rest. #}
+          {% set tasks_path = request.path == '/core/tasks' %}
+          <div class="prod-v2 gpo" data-production-root data-gpo-root data-gpo-first-name="{{ (g.current_user.first_name if g.current_user and g.current_user.first_name else '')|e }}">
+          <div class="production-overview__start" data-core2-overview-only{% if tasks_path %} hidden{% endif %}>
+            <div class="g-bar gpo-greet" data-gpo-greet>
+              <span class="gpo-greet__icon" aria-hidden="true" data-gpo-sky></span>
+              <p class="gpo-greet__text" data-gpo-greeting>Welcome back</p>
+              <div class="gpo-greet__acts production-actions" role="group" aria-label="Get to work">
+                <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
+              </div>
+            </div>
+
+            <div class="gpo-figs" role="group" aria-label="At a glance">
+              <a class="g-fig gpo-fig" href="#gpo-feed-title"><span>Operator actions</span><strong data-gpo-ops-week>–</strong><em>logged this week</em></a>
+              <a class="g-fig gpo-fig" href="/core/executions/live"><span>Batches started</span><strong data-gpo-started-week>–</strong><em>this week</em></a>
+              <a class="g-fig gpo-fig" href="/core/processes"><span>Product workflows</span><strong id="metric-total-processes">–</strong><em>ready to run</em></a>
+              <a class="g-fig gpo-fig" href="/core/inventory/view"><span>Stock lines</span><strong id="metric-inventory">–</strong><em>on hand</em></a>
+            </div>
+
+            <div class="gpo-duo">
+              <section class="g-panel gpo-health production-health" aria-labelledby="production-health-title" data-gpo-health>
+                <div class="g-card-h"><h2 id="production-health-title">Production health</h2><a href="/core/notifications">View all alerts</a></div>
+                <div class="gpo-hbody">
+                  <div class="gpo-halo" role="img" data-gpo-halo aria-label="Checking production health">
+                    <svg viewBox="0 0 200 200" aria-hidden="true" data-gpo-halo-svg></svg>
+                    <div class="gpo-halo__c" aria-hidden="true"><b data-gpo-halo-score>–</b><span>checks clear</span></div>
                   </div>
-                  <div id="core2-overview-attention" class="prod-checks" aria-live="polite">
-                    <p class="core2-active-batches-empty">Loading operational priorities...</p>
+                  <div class="gpo-hmain">
+                    <div id="core2-journey-bar" class="gpo-state" role="status" aria-live="polite"><p class="g-cap">Checking production health…</p></div>
+                    <div class="gpo-checks" role="group" aria-label="Operational status" data-gpo-checks aria-live="polite"></div>
                   </div>
                 </div>
-              </div>
-            </section>
-            <section class="workspace-card prod-glance" aria-labelledby="core2-overview-summary-title">
-              <h2 id="core2-overview-summary-title">At a glance</h2>
-              <div class="prod-figures" role="group" aria-label="Production metrics">
-                <a class="prod-figure" href="/core/executions/live">
-                  <span class="prod-figure__label">Active batches</span>
-                  <strong class="prod-figure__value" id="metric-active-executions">0</strong>
-                  <span class="prod-figure__meta">in progress now</span>
-                </a>
-                <a class="prod-figure" href="/core/executions/live">
-                  <span class="prod-figure__label">Longest running</span>
-                  <strong class="prod-figure__value" data-production-oldest>–</strong>
-                  <span class="prod-figure__meta" data-production-oldest-name>no batches under way</span>
-                </a>
-                <a class="prod-figure" href="/core/executions/live">
-                  <span class="prod-figure__label">Finished this week</span>
-                  <strong class="prod-figure__value" data-production-finished-week>0</strong>
-                  <span class="prod-figure__meta"><span id="metric-completed">0</span> all time</span>
-                </a>
-                <a class="prod-figure" href="/core/processes">
-                  <span class="prod-figure__label">Product workflows</span>
-                  <strong class="prod-figure__value" id="metric-total-processes">0</strong>
-                  <span class="prod-figure__meta">ready to run</span>
-                </a>
-                <a class="prod-figure" href="/core/inventory/view">
-                  <span class="prod-figure__label">Stock lines</span>
-                  <strong class="prod-figure__value" id="metric-inventory">0</strong>
-                  <span class="prod-figure__meta">on hand</span>
-                </a>
-                <a class="prod-figure" href="/core/inventory/live">
-                  <span class="prod-figure__label">Stock movements</span>
-                  <strong class="prod-figure__value" data-production-movements>0</strong>
-                  <span class="prod-figure__meta">in the last 24 hours</span>
-                </a>
-              </div>
-            </section>
+              </section>
+
+              <section class="g-panel gpo-today" aria-labelledby="gpo-today-title">
+                <div class="g-card-h"><h2 id="gpo-today-title">In progress</h2><a href="/core/executions/live">Production board</a></div>
+                <p class="gpo-big"><span id="metric-active-executions" data-gpo-active-count>–</span> <span data-gpo-active-word>batches</span><small>in progress</small></p>
+                <p class="gpo-lede" data-gpo-lede></p>
+                <div class="gpo-kst">
+                  <a href="/core/executions/live"><b data-production-oldest>–</b><span>longest running</span><small data-production-oldest-name>no batches under way</small></a>
+                  <a href="/core/executions/live"><b data-production-finished-week>0</b><span>finished this week</span><small><span id="metric-completed">0</span> all time</small></a>
+                </div>
+                <div class="gpo-key" role="group" aria-label="Show batches at a step" data-gpo-chips></div>
+              </section>
+            </div>
           </div>
 
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
-            <section class="workspace-card production-active" aria-labelledby="core2-overview-batches-title">
-              <div class="workspace-card__header">
-                <h2 id="core2-overview-batches-title">Active production</h2>
-                <a class="workspace-link" href="/core/executions/live">Production board</a>
-              </div>
-              <p class="workspace-caption" data-production-active-caption>Batches under way, longest running first.</p>
-              <div id="core2-overview-active-batches" class="prod-batches" aria-live="polite">
-                <p class="core2-active-batches-empty">Loading active batches...</p>
-              </div>
+            <section class="g-panel gpo-sec production-active" aria-labelledby="core2-overview-batches-title">
+              <div class="g-card-h"><h2 id="core2-overview-batches-title">Under way</h2><a href="/core/executions/live">Production board</a></div>
+              <p class="g-cap gpo-cap" data-gpo-rows-cap aria-live="polite">Loading batches…</p>
+              <div class="gpo-rows" data-gpo-rows></div>
+              <button class="gpo-showall" type="button" data-gpo-showall hidden>Show all batches</button>
+              <div class="gpo-plan" data-gpo-plan hidden></div>
             </section>
           </div>
-          {# After the batches in the source, as on screen. #}
-          <div class="production-overview__end" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
-            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
-            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
+
+          <div class="production-overview__end" data-core2-overview-only{% if tasks_path %} hidden{% endif %}>
+            <section class="g-panel gpo-sec gpo-feedw" aria-labelledby="gpo-feed-title">
+              <div class="g-card-h"><h2 id="gpo-feed-title">Recent activity</h2>
+                <div class="gpo-seg g-right" role="group" aria-label="Period"><button type="button" data-gpo-period="day" aria-pressed="false">Today</button><button type="button" data-gpo-period="week" aria-pressed="true">This week</button></div>
+              </div>
+              <ul class="gpo-feed" data-gpo-feed aria-live="polite"><li><span class="gpo-empty">Loading activity…</span></li></ul>
+              <div class="gpo-feedfoot"><span data-gpo-feed-total></span><a href="/core/sourcemap?tab=activity">All activity</a></div>
+            </section>
+            {% with workspace_links_card = false, workspace_links_footer = none %}{% include 'shared/workspace_links.html' %}{% endwith %}
           </div>
           </div>
 
@@ -482,6 +470,7 @@
 {% block scripts %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='core2-page.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='glass-production-overview.js') }}"></script>
   
   <!-- Create Process Modal - Guided flow (like flows2) -->
   <div class="modal-overlay create-process-guided" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px; overflow-y: auto;">

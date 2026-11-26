@@ -15,7 +15,15 @@ DESKTOP = {"width": 1440, "height": 900}
 
 GROUPS = {
     "g0": ["/core", "/core/dashboard"],
-    "g1": ["/core", "/core?tab=batches", "/core/executions/live", "/core/tasks", "/core/record", "/core/flows/batches/start"],
+    "g1": [
+        "/core",
+        "/core?tab=batches",
+        "/core/executions/live",
+        "/core/tasks",
+        "/core/record",
+        "@batch-start",
+        "@execution-step",
+    ],
     "g2": ["/core/processes", "/core/flows", "/core/flows/create/start", "/core/flows/create/template-catalog"],
     "g3": [
         "/core/inventory/view",
@@ -75,11 +83,26 @@ def _slug(path):
 
 def theme(page, mode):
     """Remember the theme the way the app does (localStorage), so it survives the next load."""
-    page.evaluate("m => { try { m === 'dark' ? localStorage.setItem('spa-theme','dark') : localStorage.removeItem('spa-theme'); } catch (e) {} }", mode)
+    page.evaluate(
+        "m => { try { m === 'dark' ? localStorage.setItem('spa-theme','dark') : localStorage.removeItem('spa-theme'); } catch (e) {} }",
+        mode,
+    )
+
+
+def _resolve(page, path):
+    """'@batch-start' / '@execution-step': a real batch from the seeded org, read off the pages that link to it."""
+    if not path.startswith("@"):
+        return path
+    src, sel = ("/core", "a.gpo-rec") if path == "@batch-start" else ("/core/record", "a.rs-batch")
+    page.goto(src)
+    page.wait_for_load_state("networkidle")
+    link = page.locator(sel).first
+    link.wait_for(timeout=15000)
+    return link.get_attribute("href")
 
 
 def _visit(page, path):
-    page.goto(path)
+    page.goto(_resolve(page, path))
     page.wait_for_load_state("networkidle")
     settle(page, 700)
 

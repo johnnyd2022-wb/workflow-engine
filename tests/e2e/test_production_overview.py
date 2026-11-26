@@ -77,7 +77,7 @@ def _serve(page, batches):
 def _open(page, style=None):
     page.goto("/core" + (f"?style={style}" if style else ""))
     expect(page.locator(".production-health__state")).to_be_visible()
-    return page.get_by_role("region", name="Active production", exact=True)
+    return page.get_by_role("region", name="Under way", exact=True)  # GLASS: mockup 22 names it Under way
 
 
 def test_each_batch_shows_its_step_progress_and_age_longest_running_first(production_page):
@@ -85,10 +85,10 @@ def test_each_batch_shows_its_step_progress_and_age_longest_running_first(produc
     _serve(page, BATCHES)
     active = _open(page)
 
-    expect(active).to_contain_text("4 batches under way, longest running first.")
+    expect(active).to_contain_text("4 batches, longest running first.")
     rows = active.locator("[data-execution-id]")
     expect(rows).to_have_count(4)
-    assert rows.locator(".prod-row__name").all_inner_texts() == [
+    assert rows.locator(".gpo-prod b").all_inner_texts() == [
         "Limoncello",
         "Pink Gin",
         "Navy Strength Gin",
@@ -96,21 +96,26 @@ def test_each_batch_shows_its_step_progress_and_age_longest_running_first(produc
     ]
     first = rows.nth(0)
     expect(first).to_contain_text("Blend and sweeten")
-    expect(first).to_contain_text("Step 2 of 3 · Started 8 days ago")
+    expect(first).to_contain_text("Step 2 of 3")
+    expect(first).to_contain_text("8 days running")
     expect(first.get_by_role("img", name="1 of 3 steps done")).to_be_visible()
-    assert first.locator(".prod-progress span.is-done").count() == 1
-    expect(rows.nth(3)).to_contain_text("Step 1 of 3 · Started 2 hours ago")
+    expect(rows.nth(3)).to_contain_text("Step 1 of 3")
+    expect(rows.nth(3)).to_contain_text("0 days running")
     # The two Navy Strength batches are told apart by their step, in the link's name too.
-    expect(active.get_by_role("link", name="Record next step for Navy Strength Gin, Distil")).to_be_visible()
+    expect(active.get_by_role("link", name=re.compile(r"^Record distil for Navy Strength Gin"))).to_be_visible()
     expect(
-        active.get_by_role("link", name="Record next step for Navy Strength Gin, Macerate botanicals")
+        active.get_by_role("link", name=re.compile(r"^Record macerate botanicals for Navy Strength Gin"))
     ).to_be_visible()
 
-    glance = page.get_by_role("region", name="At a glance", exact=True)
-    longest = glance.get_by_role("link", name=re.compile("Longest running"))
+    today = page.get_by_role("region", name="In progress", exact=True)
+    longest = today.get_by_role("link", name=re.compile("longest running"))
     expect(longest).to_contain_text("8 days")
     expect(longest).to_contain_text("Limoncello")
-    expect(glance.get_by_role("link", name=re.compile("Active batches"))).to_contain_text("4")
+    expect(today).to_contain_text("4 batches")
+    # Filtering by step shows only the batches at that step.
+    today.get_by_role("button", name=re.compile("^Distil")).click()
+    expect(rows.filter(visible=True)).to_have_count(1)
+    expect(active).to_contain_text("1 batch at distil")
     assert_clean_page(page)
 
 
@@ -119,13 +124,12 @@ def test_a_quiet_floor_says_so_and_a_clear_check_does_not_shout(production_page)
     _serve(page, [])
     active = _open(page)
 
-    expect(active).to_contain_text("No batches are active right now.")
-    expect(active.locator("[data-production-active-caption]")).to_be_hidden()
-    expect(page.get_by_role("region", name="At a glance", exact=True)).to_contain_text("no batches under way")
+    expect(active).to_contain_text("No batches are under way right now.")
+    expect(page.get_by_role("region", name="In progress", exact=True)).to_contain_text("no batches under way")
     checks = page.get_by_role("group", name="Operational status")
     expired = checks.get_by_role("link", name=re.compile("Expired stock"))
-    expect(expired).to_contain_text("Nothing to do.")
-    expect(expired).to_have_class(re.compile("prod-check--clear"))
+    expect(expired).to_contain_text("None expired")
+    expect(expired).to_have_class(re.compile("gpo-t-clear"))
     assert_clean_page(page)
 
 
@@ -136,7 +140,7 @@ def test_leaving_mid_load_is_not_reported_as_a_failure(production_page):
     # Hold the overview until the page has gone, then let the abort surface.
     page.route(OVERVIEW, lambda route: None)
     page.goto("/core")
-    page.locator("#sidebar").get_by_role("link", name="Settings", exact=True).click()
+    page.locator(".g-top").get_by_role("link", name="Settings", exact=True).click()  # GLASS: top bar, no sidebar
     page.wait_for_url("**/core/settings")
     page.wait_for_timeout(300)
     assert not [text for text in errors if "Failed to load core overview" in text], errors
@@ -147,7 +151,7 @@ def test_recording_production_is_the_main_action_and_is_drawn_as_one(production_
     _serve(page, BATCHES)
     _open(page)
 
-    work = page.get_by_role("region", name="Get to work", exact=True)
+    work = page.get_by_role("group", name="Get to work", exact=True)  # GLASS: in the greeting bar
     main = work.get_by_role("link", name="Record production step")
     expect(main).to_have_attribute("href", "/core/record")  # the step picker, not the workflow list
     solid = main.evaluate("el => getComputedStyle(el).backgroundColor")
@@ -181,12 +185,12 @@ def test_the_page_opens_with_its_title_then_the_tabs_then_the_board(production_p
     expect(title).to_be_visible()
     expect(page.locator("#page-content h1:visible")).to_have_count(1)
     expect(page.locator("#core2-hub-caption")).to_be_hidden()
-    expect(tabs.get_by_role("tab")).to_have_count(4)
+    expect(tabs.get_by_role("tab")).to_have_count(5)  # GLASS: Tasks is a tab
     health = page.get_by_role("region", name="Production health", exact=True)
     tops = [title.bounding_box()["y"], tabs.bounding_box()["y"], health.bounding_box()["y"]]
     assert tops == sorted(tops)
 
-    work = page.get_by_role("region", name="Get to work", exact=True)
+    work = page.get_by_role("group", name="Get to work", exact=True)  # GLASS: in the greeting bar
     main = work.get_by_role("link", name="Record production step")
     expect(main).to_be_in_viewport()
     boxes = [main.bounding_box(), work.get_by_role("link", name="Trace and recall").bounding_box()]
@@ -202,25 +206,20 @@ def test_the_page_opens_with_its_title_then_the_tabs_then_the_board(production_p
             )
             assert apart, (one, other)
 
-    line = row.bounding_box()
-    if width >= 1440:
-        # Room for both: the buttons share the tab row, the main one at its right edge.
-        assert line["y"] <= boxes[0]["y"] and boxes[0]["y"] + boxes[0]["height"] <= line["y"] + line["height"]
-        assert abs(line["x"] + line["width"] - (boxes[0]["x"] + boxes[0]["width"])) < 2
-    else:
-        # No room: the buttons take the row beneath, the main one first.
-        tabs_bottom = tabs.bounding_box()["y"] + tabs.bounding_box()["height"]
-        assert boxes[0]["y"] >= tabs_bottom and abs(boxes[0]["x"] - line["x"]) < 2
-        assert boxes[0]["y"] <= min(box["y"] for box in boxes[1:])
+    # GLASS: the buttons sit in the greeting bar under the tabs at every width, above the board.
+    tabs_bottom = tabs.bounding_box()["y"] + tabs.bounding_box()["height"]
+    assert all(box["y"] >= tabs_bottom for box in boxes)
+    assert all(box["y"] + box["height"] <= health.bounding_box()["y"] for box in boxes)
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "scrolls sideways"
     assert_clean_page(page)
 
 
-def test_the_current_tab_is_marked_by_colour_weight_and_a_bar_the_width_of_the_tab(production_page):
+def test_the_current_tab_is_marked_by_colour_weight_and_its_own_surface(production_page):
+    # GLASS: the tabs are a segmented switch; the current one is a solid pill, not an underline.
     page = production_page
     _serve(page, BATCHES)
     _open(page)
-    _title, tabs, row = _head(page)
+    _title, tabs, _row = _head(page)
     current = tabs.get_by_role("tab", name="Overview", exact=True)
     other = tabs.get_by_role("tab", name="Planner", exact=True)
 
@@ -228,20 +227,11 @@ def test_the_current_tab_is_marked_by_colour_weight_and_a_bar_the_width_of_the_t
         return tab.evaluate("(el, prop) => getComputedStyle(el)[prop]", prop)
 
     expect(current).to_have_attribute("aria-selected", "true")
-    assert style(current, "backgroundColor") == "rgba(0, 0, 0, 0)", "a tab, not a filled switch"
+    assert style(current, "backgroundColor") != style(other, "backgroundColor")
     assert style(current, "color") != style(other, "color")
-    assert int(style(current, "fontWeight")) > int(style(other, "fontWeight"))
-    assert style(current, "borderBottomColor") != style(other, "borderBottomColor")
-    assert style(current, "borderBottomWidth") == "3px"
-    # The bar is the tab's own bottom edge, sitting on the divider.
-    assert row.evaluate("el => getComputedStyle(el).borderBottomWidth") == "1px"
-    box, line = current.bounding_box(), row.bounding_box()
-    assert abs(box["y"] + box["height"] - (line["y"] + line["height"])) <= 1
-    # Tabs touch, so each bar runs to the middle of the gap before the next label.
     boxes = [tab.bounding_box() for tab in tabs.get_by_role("tab").all()]
     for left, right in zip(boxes, boxes[1:], strict=False):
-        assert abs(left["x"] + left["width"] - right["x"]) < 0.5
-    assert abs(boxes[0]["x"] - line["x"]) < 0.5, "the first tab starts at the page's left edge"
+        assert left["x"] + left["width"] <= right["x"] + 0.5
 
 
 def test_other_production_pages_show_the_section_then_the_tabs_then_their_own_title(production_page):
@@ -260,8 +250,8 @@ def test_other_production_pages_show_the_section_then_the_tabs_then_their_own_ti
     current = page.get_by_role("tab", name="Workflows", exact=True)
     expect(current).to_have_attribute("aria-selected", "true")
     here = page.get_by_role("tab", name="Overview", exact=True).bounding_box()
-    # The tabs do not move when the page changes.
-    assert abs(here["x"] - tabs_at["x"]) < 1 and abs(here["y"] - tabs_at["y"]) < 1
+    # The tabs keep their place across; GLASS: the overview's larger title moves them down a little.
+    assert abs(here["x"] - tabs_at["x"]) < 1
     assert name.bounding_box()["y"] < here["y"] < own.bounding_box()["y"]
     expect(page.locator(".section-head__actions")).to_have_count(0)
 
@@ -269,4 +259,5 @@ def test_other_production_pages_show_the_section_then_the_tabs_then_their_own_ti
     page.wait_for_url(re.compile(r"/core/?$"))
     expect(page.locator(".production-health__state")).to_be_visible()
     expect(page.locator("#page-content h1:visible")).to_have_text("Production")
-    expect(page.locator(".section-head__actions").get_by_role("link", name="Record production step")).to_be_visible()
+    work = page.get_by_role("group", name="Get to work", exact=True)  # GLASS: the greeting bar
+    expect(work.get_by_role("link", name="Record production step")).to_be_visible()

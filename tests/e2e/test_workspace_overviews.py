@@ -61,14 +61,13 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         )
         assert saved.ok, saved.text()
         for name, path, labels, secondary in [
-            ("production", "/core", ["Overview", "Planner", "Workflows", "Inventory"], "Contract orders"),
+            ("production", "/core", ["Overview", "Inventory", "Workflows", "Planner", "Tasks"], "Contract orders"),
             ("compliance", "/compliant/nz-alcohol", ["Overview", "NP3", "Customs", "Licensing"], "Tools"),
             ("sales", "/crm", ["Overview", "Customers", "Sales tasks", "Analytics"], "Batch matching"),
         ]:
             page.goto(path)
             nav = page.get_by_role("navigation", name=f"{name.title()} sections", exact=True)
-            expect(nav.get_by_role("tab")).to_have_count(4)
-            expect(nav.get_by_role("tab")).to_have_text(labels)
+            expect(nav.get_by_role("tab")).to_have_text(labels)  # GLASS: Production has five tabs
             expect(page.get_by_role("heading", name=name.title(), exact=True)).to_be_visible()
             actions = page.get_by_role("region", name=f"{name.title()} workspace actions", exact=True)
             expect(actions.get_by_role("link", name=secondary)).to_be_visible()
@@ -88,7 +87,7 @@ def test_ac1_ac4_ac5_four_primary_destinations_and_context_actions(browser, app_
         page.goto("/core?tab=inventory")
         expect(page.get_by_role("region", name="Inventory workspace", exact=True)).to_be_visible()
         expect(page.get_by_role("tab", name="Inventory", exact=True)).to_have_attribute("aria-selected", "true")
-        page.get_by_role("link", name="Back to overview").click()
+        page.get_by_role("tab", name="Overview", exact=True).click()  # GLASS: the tabs replace "Back to overview"
         expect(page.get_by_role("heading", name="Production", exact=True)).to_be_visible()
         expect(page.get_by_role("tablist", name="Production pages")).to_have_count(1)
     finally:
@@ -130,15 +129,8 @@ def test_ac2_ac3_health_card_and_inventory_menu(browser, app_url, workspace_user
         page.goto("/core")
         health = page.get_by_role("region", name="Production health", exact=True)
         expect(health.get_by_text(title, exact=True)).to_be_visible()
-        expected_colours = {
-            "healthy": "rgb(21, 149, 112)",
-            "degraded": "rgb(217, 134, 8)",
-            "critical": "rgb(220, 59, 59)",
-            "unavailable": "rgb(148, 163, 184)",
-        }
-        expect(health.get_by_test_id("production-health-bar").locator("span")).to_have_css(
-            "background-color", expected_colours[state]
-        )
+        # GLASS: the state is a word plus a coloured dot on the state line, not a coloured bar.
+        expect(health.locator("[data-health-state]")).to_have_attribute("data-health-state", state)
         _capture(page, f"health-{state}", width)
         if state != "unavailable":
             detail = health.get_by_role("button", name="View health details")
@@ -148,7 +140,7 @@ def test_ac2_ac3_health_card_and_inventory_menu(browser, app_url, workspace_user
             page.keyboard.press("Escape")
             expect(page.get_by_role("dialog")).not_to_be_visible()
             expect(detail).to_be_focused()
-        actions = page.get_by_role("region", name="Get to work", exact=True)
+        actions = page.get_by_role("group", name="Get to work", exact=True)
         actions.get_by_role("button", name="Add to inventory, choose how").click()
         for label in ["Manual entry", "CSV upload"]:
             expect(actions.get_by_role("menuitem", name=label, exact=True)).to_be_visible()
@@ -201,62 +193,48 @@ def test_production_overview_reads_health_first_and_offers_each_batch_its_next_s
     try:
         page.goto("/core")
         tabs = page.get_by_role("navigation", name="Production sections", exact=True).get_by_role("tab")
-        # The section tabs sit under the title, and only the current page is marked.
-        expect(tabs).to_have_count(4)
+        # GLASS (mockup 22): the section tabs sit under the title, and only the current page is marked.
+        expect(tabs).to_have_count(5)
         expect(tabs.first).to_have_attribute("aria-selected", "true")
-        weights = tabs.evaluate_all("tabs => tabs.map(tab => Number(getComputedStyle(tab).fontWeight))")
-        assert weights[0] > max(weights[1:]), "only the current page is emphasised"
         title = page.get_by_role("heading", name="Production", exact=True, level=1).bounding_box()
         assert title["y"] < tabs.first.bounding_box()["y"]
 
         health = page.get_by_role("region", name="Production health", exact=True)
         expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
-        glance = page.get_by_role("region", name="At a glance", exact=True)
-        expect(glance.get_by_role("link")).to_have_count(6)
+        figures = page.get_by_role("group", name="At a glance", exact=True)
+        expect(figures.get_by_role("link")).to_have_count(4)
+        today = page.get_by_role("region", name="In progress", exact=True)
+        active = page.get_by_role("region", name="Under way", exact=True)
+        feed = page.get_by_role("region", name="Recent activity", exact=True)
         manage = page.get_by_role("region", name="Production workspace actions", exact=True)
-        expect(manage.get_by_role("link")).to_have_count(5)
-        board = manage.get_by_role("link", name="View production board", exact=True)
-        expect(board).to_have_attribute("href", "/core/executions/live")
-        active = page.get_by_role("region", name="Active production", exact=True)
-        actions = page.get_by_role("region", name="Get to work", exact=True)
+        expect(manage.get_by_role("link")).to_have_count(3)
+        actions = page.get_by_role("group", name="Get to work", exact=True)
         boxes = {
             name: item.bounding_box()
-            for name, item in [("health", health), ("glance", glance), ("active", active), ("actions", actions)]
+            for name, item in [
+                ("actions", actions),
+                ("figures", figures),
+                ("health", health),
+                ("today", today),
+                ("active", active),
+                ("feed", feed),
+                ("manage", manage),
+            ]
         }
-        boxes["manage"] = manage.bounding_box()
-        # The actions sit in the page header, above everything else.
-        assert boxes["actions"]["y"] < boxes["health"]["y"]
+        # Greeting bar with the actions, the figures, health + In progress, Under way, activity, Manage.
+        order = ["actions", "figures", "health", "active", "feed", "manage"]
+        assert [boxes[n]["y"] for n in order] == sorted(boxes[n]["y"] for n in order)
         if width >= 1440:
-            # With room the page is a board, as Home is: health beside the figures, level with
-            # each other, then the batches and the links the full width beneath.
-            assert boxes["health"]["y"] == boxes["glance"]["y"]
-            assert round(boxes["health"]["height"]) == round(boxes["glance"]["height"])
-            assert boxes["active"]["y"] > boxes["health"]["y"] + boxes["health"]["height"]
-            assert boxes["manage"]["y"] > boxes["active"]["y"] + boxes["active"]["height"]
-            assert round(boxes["active"]["width"]) == round(boxes["manage"]["width"])
-            assert round(boxes["active"]["width"]) == round(
-                boxes["glance"]["x"] + boxes["glance"]["width"] - boxes["health"]["x"]
-            )
+            assert boxes["health"]["y"] == boxes["today"]["y"], "health beside In progress"
+            assert round(boxes["active"]["width"]) == round(boxes["feed"]["width"]) == round(boxes["manage"]["width"])
         else:
-            # Without it, one column in the page's source order, so what is seen is what is tabbed.
-            order = ["health", "glance", "active", "manage"]
-            assert [boxes[name]["y"] for name in order] == sorted(boxes[name]["y"] for name in order)
-            assert len({round(boxes[name]["width"]) for name in order}) == 1, "every block spans the content column"
-        links = [link.bounding_box() for link in manage.get_by_role("link").all()]
-        if width >= 1440:
-            assert len({link["y"] for link in links[:4]}) == 1, "the four links share one row on the board"
-        else:
-            assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
-        assert len({round(link["width"]) for link in links[:4]}) == 1
-        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 1.5
-        plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
-        expect(board).to_have_css("background-color", plain)
+            assert boxes["today"]["y"] > boxes["health"]["y"]
 
         # A batch says where it is and offers its next step without being opened first.
         batch = active.locator("[data-execution-id]").first
         expect(batch).to_contain_text("Gin distillation")
-        expect(batch.locator(".prod-progress")).to_be_visible()
-        record = batch.get_by_role("link", name=re.compile("^Record next step"))
+        expect(batch.get_by_role("img", name=re.compile("steps done|No steps yet"))).to_be_visible()
+        record = batch.get_by_role("link", name=re.compile("^Record "))
         expect(record).to_be_visible()
         assert "/core/flows/batches/start?id=" in record.get_attribute("href")
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
