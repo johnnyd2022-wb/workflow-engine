@@ -1,1 +1,32 @@
 /* GLASS PROTOTYPE: page rules for group g4 (see wb task GLASS-G4). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* Page header sits 18px above the first panel. */
+html body #page-content .oc-shell > .workspace-header,html body #page-content .production-board > .workspace-header,
+html body #page-content .planning-demand > .workspace-header,html body #page-content .production-board .workspace-header,
+html body #page-content .planning-demand .workspace-header{margin-bottom:18px}
+
+/* Planner + production board */
+html body #page-content .production-board,html body #page-content .planning-demand{padding:0;max-width:none}
+html body #page-content .board-day{border-radius:18px;padding:12px;border-color:var(--line);background:var(--glass-strong)}
+html body #page-content .board-day:has(.board-day__today){border-color:var(--accent);background:var(--solid)}
+html body #page-content .board-day__today{border-radius:999px}
+html body #page-content .planner-glance .workspace-tile,html body #page-content .planner-glance [class*="glance__item"]{border-radius:18px}
+
+/* Cases */
+html body #page-content .oc-card{border-radius:18px;border-color:var(--line);background:var(--solid)}
+html body #page-content .oc-card--overdue{border-color:var(--bad);box-shadow:inset 4px 0 0 var(--bad)}
+html body #page-content .oc-card__link{padding:16px 18px;border-radius:inherit}
+html body #page-content .oc-card__link:hover{background:var(--glass-strong)}
+html body #page-content .oc-card__title{font-weight:800;color:var(--ink)}
+html body #page-content .production-board[data-board-root]{padding:0 0 40px;max-width:none}
+@media (max-width:767px){html body #page-content .production-board[data-board-root]{padding:0 0 24px}}
+html body #page-content .production-board .board-field input{min-height:44px;height:44px;border-radius:var(--g-r-ctl)}
+html body #page-content .workspace-page > .workspace-header{margin-bottom:18px}
+html body #page-content .workspace-page .workspace-header .workspace-button--primary,html[data-spa-theme="dark"] body #page-content .workspace-page .workspace-header .workspace-button--primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* Quiet weekend columns: wide enough for "No batches" on one line. */
+@container board (min-width: 768px){html body #page-content [data-board-root] .board-days[data-view="week"][data-weekend="quiet"]{grid-template-columns:repeat(5,minmax(0,1fr)) repeat(2,minmax(96px,.5fr))}}
+/* The Manage production links are a glass bar, not a card. */
+html body #page-content .planning-demand .workspace-links.workspace-card{padding:8px 8px 8px 20px;border-radius:24px;background:var(--glass)}
+html body #page-content .planning-demand .workspace-links.workspace-card h2{font-size:14px}
+/* While the Add demand form is open its Save is the one filled action; the toggle steps back. */
+html body #page-content .workspace-page .workspace-header .workspace-button--primary[data-add-toggle][aria-expanded="true"],html[data-spa-theme="dark"] body #page-content .workspace-page .workspace-header .workspace-button--primary[data-add-toggle][aria-expanded="true"]{transition:none;background:var(--glass-strong);color:var(--ink);border-color:var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow)}
