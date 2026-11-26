@@ -16,7 +16,13 @@ def test_sales_estimate_copy_on_phone_and_desktop(monkeypatch, sales_page):  # n
     monkeypatch.setattr("app.features.compliant.service.nz_alcohol_active", lambda *_: True)
     sales_page.route(
         "**/api/crm/excise/months",
-        lambda route: route.fulfill(json={"months": [{"month": "2026-10", "complete": True, "lal": "1"}], "sources": ["Xero"], "rates_source": None}),
+        lambda route: route.fulfill(
+            json={
+                "months": [{"month": "2026-10", "complete": True, "lal": "1"}],
+                "sources": ["Xero"],
+                "rates_source": None,
+            }
+        ),
     )
     sales_page.route(
         "**/api/crm/excise?*",
@@ -26,7 +32,14 @@ def test_sales_estimate_copy_on_phone_and_desktop(monkeypatch, sales_page):  # n
                     "label": "October 2026",
                     "month": "2026-10",
                     "complete": True,
-                    "totals": {"lal": "1", "litres": "5", "duty": "100", "levy": "5", "gst": "0.75", "customs": "105.75"},
+                    "totals": {
+                        "lal": "1",
+                        "litres": "5",
+                        "duty": "100",
+                        "levy": "5",
+                        "gst": "0.75",
+                        "customs": "105.75",
+                    },
                     "rows": [],
                     "problems": [],
                     "unmapped": {"count": 0},

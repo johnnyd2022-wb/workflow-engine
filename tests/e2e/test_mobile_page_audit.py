@@ -35,7 +35,6 @@ PUBLIC_PAGES = ["/", "/landing-diagram", "/pricing", "/privacy", "/terms", "/por
 
 APP_PAGES = [
     "/core",
-    "/core/dashboard",
     "/core/getting-started",
     "/core/go-live",
     "/core/processes",
@@ -186,6 +185,9 @@ def test_app_page_at_phone_width(browser, storage_state_path, app_url, path):
         context.close()
 
 
+@pytest.mark.skip(
+    reason="GLASS PROTOTYPE: Home is gone; the top bar shows the org and Settings at every width (test_glass_shell)"
+)
 @pytest.mark.parametrize("width", [320, 390, 1440])
 def test_home_uses_org_name_and_phone_settings_lives_in_account_menu(
     browser, storage_state_path, app_url, e2e_user, width
@@ -418,11 +420,11 @@ def test_mobile_navigation_and_customer_task_sheet(browser, storage_state_path, 
     attach_probe(page)
     try:
         page.goto("/core")
-        page.locator("a.nav-link[href='/crm']").click()
+        page.locator("[data-glass-tabbar] a[href='/crm']").click()  # GLASS: phone tab bar
         expect(page).to_have_url(f"{app_url}/crm")
-        page.locator("a.nav-link[href='/compliant']").click()
+        page.locator("[data-glass-tabbar] a[href='/compliant']").click()  # GLASS: phone tab bar
         expect(page).to_have_url(f"{app_url}/compliant")
-        page.locator("a.nav-link[href='/core']").click()
+        page.locator("[data-glass-tabbar] a[href='/core']").click()  # GLASS: phone tab bar
         expect(page).to_have_url(f"{app_url}/core")
         page.goto(f"/crm/customers/{contact_id}")
         page.get_by_role("button", name="New task").click()

@@ -50,7 +50,7 @@
       if (first) first.focus({ preventScroll: true });
     }
   }
-  btn.addEventListener('click', (e) => { e.stopPropagation(); setOpen(btn.getAttribute('aria-expanded') !== 'true'); });
+  btn.addEventListener('click', (e) => { e.stopPropagation(); if (!loadedAt) load(true); setOpen(btn.getAttribute('aria-expanded') !== 'true'); });
   if (scrim) scrim.addEventListener('click', () => setOpen(false));
   document.addEventListener('click', (e) => {
     if (tray.classList.contains('open') && !e.target.closest('#g-act-tray') && !e.target.closest('#g-act-btn')) setOpen(false);

@@ -115,7 +115,7 @@
       <div class="customers-preview-backdrop" x-show="selected" @click="closePreview()" x-cloak></div>
       <aside class="customers-preview" x-show="selected" role="dialog" aria-modal="true" aria-labelledby="customer-preview-title" x-cloak @keydown.tab="trapPreviewFocus($event)">
         <template x-if="selected"><div>
-          <div class="customers-preview-head"><span>Contact preview</span><button type="button" class="customers-text-action" data-close-preview @click="closePreview()" aria-label="Close customer preview">Close</button></div>
+          <div class="customers-preview-head"><span>Contact preview</span><button type="button" class="customers-text-action" data-close-preview autofocus @click="closePreview()" aria-label="Close customer preview">Close</button></div>
           <h2 id="customer-preview-title" x-text="selected.name"></h2>
           <p class="customers-meta" x-text="selected.contact_status || 'Status not set'"></p>
           <dl><dt>Email</dt><dd><a x-show="selected.email_address" :href="'mailto:' + selected.email_address" x-text="selected.email_address"></a><span x-show="!selected.email_address">No email recorded</span></dd>

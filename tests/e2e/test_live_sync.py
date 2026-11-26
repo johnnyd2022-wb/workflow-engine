@@ -132,6 +132,7 @@ def test_core_hub_reflects_a_colleague_batch_without_reload(two_users_one_org):
     expect(page_a.locator("#metric-active-executions")).to_have_text("1", timeout=15_000)
 
 
+@pytest.mark.skip(reason="GLASS PROTOTYPE: Home (/core/dashboard) is removed")
 def test_dashboard_reflects_a_colleague_batch_without_reload(two_users_one_org):
     """Phase B: /core/dashboard's active-batches KPI ticks when a colleague starts a
     batch, no reload."""

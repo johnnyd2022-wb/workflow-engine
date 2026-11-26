@@ -39,8 +39,15 @@ def _local_date_expr(col):
 @requires_auth
 def dashboard():
     # GLASS PROTOTYPE: Home is gone; its action items live in the top bar and its figures on
-    # the Production overview.
-    return redirect("/core", code=302)
+    # the Production overview. Everyone lands on the first workspace their role can open (a margins-only
+    # role cannot open /core, and access_policy sends a denied page here, so /core alone would loop).
+    from app.ui.navigation import section_home, section_tabs
+
+    user = getattr(g, "current_user", None)
+    for section in ("production", "sales", "compliance"):
+        if section_tabs(section, user):
+            return redirect(section_home(section, user), code=302)
+    return redirect("/core/settings", code=302)
 
 
 def _dashboard_parse_due_date(raw: Any) -> date | None:

@@ -43,7 +43,18 @@ def test_a_primary_button_is_teal_in_the_dark_theme(logged_in_page: Page):
     button = logged_in_page.locator(".add-inv-manual-submit-bar__btn")
     background = button.evaluate("el => getComputedStyle(el).backgroundColor")
     image = button.evaluate("el => getComputedStyle(el).backgroundImage")
-    assert background == TEAL and image == "none", (background, image)
+    # GLASS PROTOTYPE: the primary colour is the glass accent (--accent), not the old teal.
+    accent = logged_in_page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()")
+    assert accent and background != TEAL and image == "none", (background, image, accent)
+    probe = logged_in_page.evaluate(
+        "a => { const d = document.createElement('div'); d.style.color = a; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; }",
+        accent,
+    )
+
+    def channels(c):
+        return [int(x) for x in c[c.index("(") + 1 : c.index(")")].split(",")[:3]]
+
+    assert all(abs(a - b) <= 2 for a, b in zip(channels(background), channels(probe))), (background, probe)
 
 
 def test_a_short_page_stays_dark_to_the_bottom_on_a_phone(logged_in_page: Page):

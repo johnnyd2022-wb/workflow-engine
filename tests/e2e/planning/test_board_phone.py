@@ -161,6 +161,8 @@ def test_drag_batch_to_day_and_refresh_after_a_concurrent_pin(board_clients, db,
         page.get_by_role("button", name="Show board").click()
         target = page.locator(f'[data-board-date="{target_day.isoformat()}"]')
         expect(target).to_be_attached()
+        # GLASS: the top bar's Action items request can land mid-render; let the month view settle.
+        page.wait_for_load_state("networkidle")
         handle = card.get_by_role("button", name="Drag to move", exact=True)
         expect(handle).to_be_visible()
         _drag_between_days(page, handle, target.locator("h3"))

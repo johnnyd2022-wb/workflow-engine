@@ -10,6 +10,9 @@ from app.core.db.models.user import UserRole
 from tests.e2e.conftest import csrf_headers, login_through_ui
 from tests.test_contract_orders import _recipe
 
+# GLASS PROTOTYPE (branch proto/glass-theme only): Home (/core/dashboard) is removed; it redirects to /core.
+pytest.skip("GLASS PROTOTYPE: Home (/core/dashboard) is removed; it redirects to /core", allow_module_level=True)
+
 pytestmark = pytest.mark.e2e
 
 

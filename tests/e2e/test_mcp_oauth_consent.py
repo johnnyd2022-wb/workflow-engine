@@ -119,7 +119,7 @@ def test_cancel_goes_back_to_the_assistant_with_access_denied(page: Page, assist
 def test_a_next_that_is_not_the_consent_page_is_ignored_after_sign_in(page: Page, assistant):
     page.goto("/?login=1&next=" + "https%3A%2F%2Fevil.example%2Fphish")
     _sign_in(page, assistant)
-    page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=15_000)
+    page.wait_for_url(re.compile(r"/core(/dashboard)?/?(\?.*)?$"), timeout=15_000)
     assert "evil.example" not in page.url
 
 

@@ -116,7 +116,9 @@ def test_top_bar_survives_boosted_navigation(logged_in_page):
     # The /core pages, then every workspace the top bar offers this user (not every e2e org has
     # Compliance or Sales).
     paths = [p for p in SAMPLE[1:] if p.startswith("/core")]
-    paths += [h for h in page.locator(".g-ws a").evaluate_all("els => els.map(a => a.getAttribute('href'))") if h != "/core"]
+    paths += [
+        h for h in page.locator(".g-ws a").evaluate_all("els => els.map(a => a.getAttribute('href'))") if h != "/core"
+    ]
     for path in paths:
         page.evaluate(
             """(href) => { const a = document.createElement('a'); a.href = href; a.id = '__glass_probe';

@@ -145,15 +145,15 @@ def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged
 
 @pytest.mark.parametrize(("tab", "loaded_calls"), [("inventory", _inventory_calls), ("workflows", _execution_calls)])
 def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loaded_calls):
-    """A swapped-in Core panel must not inherit the old panel's lazy-load cache."""
+    """(GLASS: starts from Settings; Home and the sidebar are gone.) A swapped-in Core panel must not inherit the old panel's lazy-load cache."""
     page = logged_in_page
     calls = _core_api_calls(page)
 
-    page.goto("/core/dashboard")
-    page.wait_for_selector("[data-dashboard-root]")
+    page.goto("/core/settings")
+    page.wait_for_selector("[data-settings-root]")
     _wait(page)
 
-    page.locator('a.nav-link[href="/core"]').click()
+    page.locator('.g-ws a[href="/core"]').click()
     page.wait_for_selector(f'[data-core2-tab-panel="{tab}"]', state="attached")
     _wait(page)
     _show(page, tab)
@@ -161,10 +161,10 @@ def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loade
     first_load_count = loaded_calls(calls)
     assert first_load_count == 1, calls
 
-    page.locator('a.nav-link[href="/core/dashboard"]').click()
-    page.wait_for_selector("[data-dashboard-root]")
+    page.locator('a.g-setbtn[href="/core/settings"]').click()
+    page.wait_for_selector("[data-settings-root]")
     _wait(page)
-    page.locator('a.nav-link[href="/core"]').click()
+    page.locator('.g-ws a[href="/core"]').click()
     page.wait_for_selector(f'[data-core2-tab-panel="{tab}"]', state="attached")
     _wait(page)
     _show(page, tab)
@@ -225,13 +225,13 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
     looks fine but nothing responds until a hard refresh -- and Overview would never (re)load.
     Bounce a few times and prove the panels still respond and the overview call fires."""
     page = logged_in_page
-    page.goto("/core/dashboard")
-    page.wait_for_selector("[data-dashboard-root]")
+    page.goto("/core/settings")
+    page.wait_for_selector("[data-settings-root]")
     _wait(page)
     calls = _core_api_calls(page)
 
     for i in range(3):
-        page.locator('a.nav-link[href="/core"]').click()
+        page.locator('.g-ws a[href="/core"]').click()
         page.wait_for_selector('[data-core2-tab-panel="inventory"]', state="attached")
         # The hub's scripts run when the swap settles, a moment after its markup appears.
         for _ in range(100):
@@ -244,8 +244,8 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
         _show(page, "inventory")
         _show(page, "overview")
 
-        page.locator('a.nav-link[href="/core/dashboard"]').click()
-        page.wait_for_selector("[data-dashboard-root]")
+        page.locator('a.g-setbtn[href="/core/settings"]').click()
+        page.wait_for_selector("[data-settings-root]")
         _wait(page)
 
 
@@ -253,7 +253,7 @@ def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in
     """flows2 first paint renders Structure only; Batches (execution list) and Inventory
     load the first time their tab is shown, and re-opening a tab is 0 fetches."""
     page = logged_in_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")
     _wait(page)
     hdrs = {"X-CSRFToken": _csrf(page), "Content-Type": "application/json", "Referer": page.url}
     proc = page.request.post(
@@ -330,13 +330,13 @@ def test_core_initial_load_caches_page_code_and_defers_editor(logged_in_page, pa
 @pytest.mark.parametrize("boosted", [False, True], ids=["direct", "boosted"])
 def test_core_execution_editor_loads_on_inventory_action(logged_in_page, boosted):
     page = logged_in_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")
     process_id = _create_process(page, "Lazy core editor")
     _add_step(page, process_id, 1, "Mix")
     execution_id = _start_execution(page, process_id)
 
     if boosted:
-        page.locator('a.nav-link[href="/core"]').click()
+        page.locator('.g-ws a[href="/core"]').click()
     else:
         page.goto("/core/inventory/live")
     page.wait_for_function("typeof window.executeNextStepFromInventory === 'function'")
@@ -370,7 +370,7 @@ def test_core_execution_editor_loads_on_inventory_action(logged_in_page, boosted
 )
 def test_page_stylesheet_loads_on_boosted_entry(logged_in_page, route, stylesheet):
     page = logged_in_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")
     link = page.locator(f'link[rel="stylesheet"][href*="/{stylesheet}"]')
     assert link.count() == 0
 
@@ -392,7 +392,7 @@ def test_page_stylesheet_loads_on_boosted_entry(logged_in_page, route, styleshee
 
 def test_boosted_sales_overview_waits_for_its_own_controller(logged_in_page):
     page = logged_in_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")
     assert page.locator('script[data-alpine-component="crmOverview"]').count() == 0
     assert page.evaluate("typeof window.crmOverview") == "undefined"
 
@@ -402,6 +402,6 @@ def test_boosted_sales_overview_waits_for_its_own_controller(logged_in_page):
 
     page.route("**/crm/static/js/overview.js*", delay_controller)
     with page.expect_response("**/api/crm/overview") as overview:
-        page.locator('#sidebar a.nav-link[data-nav-section="sales"]').click()
+        page.locator('.g-ws a[data-nav-section="sales"]').click()
     assert overview.value.ok
     assert page.locator(".sales-overview").count() == 1

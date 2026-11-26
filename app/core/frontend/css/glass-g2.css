@@ -53,3 +53,7 @@ html[data-spa-theme="dark"] body #page-content :is(.processes-list-page,.chooser
 html[data-spa-theme="dark"] body.flows2-page #page-content .max-content{--spa-yellow:var(--accent);--spa-yellow-mid:var(--accent);--spa-yellow-deep:var(--accent);--spa-on-yellow:var(--accent-ink)}
 html body.flows2-page #page-content .flows2-process-head__desc{margin-left:0;margin-right:0;max-width:72ch}
 @media (max-width:720px){html body #page-content .pt-catalog-header{flex-direction:column;align-items:flex-start;gap:8px}}
+/* Phone: the mode switch wraps rather than scrolling inside itself. */
+@media (max-width:720px){
+  html body #page-content .flows2-mode .flow-mode-segmented,html body #page-content .flows2-inventory-submode .flow-mode-segmented{width:auto;max-width:100%;flex-wrap:wrap;overflow:visible;border-radius:22px}
+}

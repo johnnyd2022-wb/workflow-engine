@@ -14,6 +14,9 @@ from playwright.sync_api import Page, expect
 
 from tests.e2e.conftest import assert_clean_page
 
+# GLASS PROTOTYPE (branch proto/glass-theme only): Home (/core/dashboard) is removed; it redirects to /core.
+pytest.skip("GLASS PROTOTYPE: Home (/core/dashboard) is removed; it redirects to /core", allow_module_level=True)
+
 pytestmark = pytest.mark.e2e
 
 

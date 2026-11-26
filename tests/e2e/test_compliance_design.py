@@ -362,6 +362,9 @@ def test_action_detail_text_does_not_look_like_a_link(compliance_page):
     expect(link).to_be_visible()
 
 
+@pytest.mark.skip(
+    reason="GLASS PROTOTYPE: the premise is the sidebar narrowing the content; the glass shell has no sidebar"
+)
 def test_framework_rows_stay_compact_at_a_laptop_width(compliance_page):
     """At 1280 with the sidebar open the board stacks, but each framework is still one row."""
     page = compliance_page

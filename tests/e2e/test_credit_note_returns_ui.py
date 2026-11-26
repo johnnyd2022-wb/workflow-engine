@@ -130,7 +130,10 @@ def test_sales_overview_records_credit_only_return_decision(sales_page, db, org)
     section.get_by_role("button", name="Credit only · no goods").click()
     expect(section).to_be_hidden()
     db.refresh(line)
-    assert line.no_return_note == "Customer went into liquidation; goods were not returned — Buyer entered liquidation before collection"
+    assert (
+        line.no_return_note
+        == "Customer went into liquidation; goods were not returned — Buyer entered liquidation before collection"
+    )
 
 
 def test_sales_overview_records_goods_that_came_back(sales_page, db, org):  # noqa: F811

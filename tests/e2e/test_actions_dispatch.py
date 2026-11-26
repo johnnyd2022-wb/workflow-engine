@@ -27,7 +27,7 @@ SETUP = """() => {
 
 def test_the_dispatcher_runs_allowed_actions_and_nothing_else(logged_in_page):
     page = logged_in_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")  # GLASS: Home is gone
     page.wait_for_load_state("networkidle")
     page.evaluate(SETUP)
 
@@ -47,12 +47,12 @@ def test_the_dispatcher_runs_allowed_actions_and_nothing_else(logged_in_page):
 
     page.click("#submit")
     page.wait_for_timeout(300)
-    assert page.url.endswith("/core/dashboard"), "data-submit-action='none' never submits natively"
+    assert page.url.endswith("/core/settings"), "data-submit-action='none' never submits natively"
 
 
 def test_an_inline_handler_is_blocked_by_the_enforced_policy(strict_csp_page):
     page = strict_csp_page
-    page.goto("/core/dashboard")
+    page.goto("/core/settings")  # GLASS: Home is gone
     page.wait_for_load_state("networkidle")
     ran = page.evaluate("""() => new Promise((resolve) => {
       window.__inline = false;

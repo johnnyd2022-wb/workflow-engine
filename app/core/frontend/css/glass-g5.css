@@ -28,6 +28,6 @@ html body #page-content :is(.suggestion,.evidence-choice){background:var(--glass
 html body #page-content :is(.suggestion,.evidence-choice):hover{background:var(--solid)}
 /* Customs views on a phone: one scrolling row, not a wrapped grid. */
 @media (max-width:720px){
-  html body #page-content .customs-views{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
-  html body #page-content .customs-views a{flex:none}
+  html body #page-content .customs-views{display:flex;flex-wrap:wrap;overflow:visible;max-width:100%;width:auto;border-radius:22px}
+  html body #page-content .customs-views a{flex:none;padding:7px 12px}
 }

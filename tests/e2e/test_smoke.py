@@ -22,10 +22,11 @@ def test_landing_page_renders_clean(page: Page, app_url: str):
 
 
 def test_login_lands_on_dashboard(logged_in_page: Page):
-    """/dashboard redirects to /core/dashboard (app.py:95) — assert where we land."""
+    """/dashboard redirects to /core/dashboard (app.py:95) — assert where we land.
+    GLASS PROTOTYPE: Home is gone, so it ends on the Production overview."""
     page = logged_in_page
     page.goto("/dashboard")
-    expect(page).to_have_url(re.compile(r"/core/dashboard"))
+    expect(page).to_have_url(re.compile(r"/core/?$"))
     assert_clean_page(page)
 
 

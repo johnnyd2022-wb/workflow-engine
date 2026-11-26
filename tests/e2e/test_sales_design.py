@@ -317,6 +317,9 @@ def test_saved_order_never_strands_the_figures_at_half_width(browser, app_url, w
         context.close()
 
 
+@pytest.mark.skip(
+    reason="GLASS PROTOTYPE: the premise is the sidebar narrowing the content; the glass shell has no sidebar"
+)
 def test_board_pairs_on_content_width_not_window_width(browser, app_url, workspace_user):
     """At 1280 with the sidebar open the content is too narrow to pair, whatever the window says."""
     context, page = _page(browser, app_url, workspace_user, 1280)

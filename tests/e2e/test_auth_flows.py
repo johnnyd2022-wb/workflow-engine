@@ -57,7 +57,7 @@ def test_signup_creates_org_and_signs_in(page: Page, app_url: str, purge_after):
     purge_after(email)
     page.locator("#signupForm button[type=submit]").click()
 
-    page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=15_000)
+    page.wait_for_url(re.compile(r"/core(/dashboard)?/?(\?.*)?$"), timeout=15_000)
     assert_clean_page(page)
 
 
@@ -153,7 +153,7 @@ def test_2fa_enroll_enable_then_login_requires_a_code(page: Page, app_url: str, 
     # The right code must.
     page.locator("#login-2fa-code").fill(pyotp.TOTP(secret).now())
     page.locator("#login-submit-btn").click()
-    page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=15_000)
+    page.wait_for_url(re.compile(r"/core(/dashboard)?/?(\?.*)?$"), timeout=15_000)
     assert_clean_page(page)
 
 

@@ -14,6 +14,9 @@ from app.core.db.models.user import UserRole
 from tests.e2e.conftest import assert_clean_page, attach_probe, login_through_ui
 from tests.factories import InventoryItemFactory
 
+# GLASS PROTOTYPE (branch proto/glass-theme only): Home (/core/dashboard) is removed; it redirects to /core.
+pytest.skip("GLASS PROTOTYPE: Home (/core/dashboard) is removed; it redirects to /core", allow_module_level=True)
+
 pytestmark = pytest.mark.e2e
 
 SUMMARY = "**/api/core/dashboard/summary*"

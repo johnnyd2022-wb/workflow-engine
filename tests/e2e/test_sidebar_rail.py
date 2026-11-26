@@ -11,6 +11,9 @@ from playwright.sync_api import expect
 
 from tests.e2e.conftest import assert_clean_page, attach_probe
 
+# GLASS PROTOTYPE (branch proto/glass-theme only): the sidebar is replaced by the glass top bar.
+pytest.skip("GLASS PROTOTYPE: the sidebar is replaced by the glass top bar", allow_module_level=True)
+
 pytestmark = pytest.mark.e2e
 
 OPEN, RAIL = 260, 80

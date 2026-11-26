@@ -47,7 +47,7 @@ def test_help_shows_this_pages_reference_and_a_ready_to_send_email(strict_csp_pa
 
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
-    expect(page.get_by_role("button", name="Account menu")).to_be_focused()
+    expect(page.get_by_role("button", name="Account menu", exact=True)).to_be_focused()
     assert_clean_page(page)
 
 

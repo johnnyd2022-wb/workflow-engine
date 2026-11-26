@@ -106,7 +106,8 @@
       dialog.addEventListener('close', function () {
         setTimeout(function () {
           var button = document.querySelector('.bee-profile__button');
-          if (button && (document.activeElement === document.body || !document.activeElement || document.activeElement.offsetParent === null)) {
+          var active = document.activeElement;
+          if (button && (active === document.body || !active || active.offsetParent === null || (active.closest && active.closest('.bee-menu')))) {
             button.focus();
           }
         }, 0);
