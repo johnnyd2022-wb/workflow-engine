@@ -12,6 +12,7 @@ import ast
 import contextlib
 import inspect
 import json
+import secrets
 import sys
 import textwrap
 from html.parser import HTMLParser
@@ -128,17 +129,47 @@ def template_inventory():
     return templates
 
 
+def staff_routes(blueprint):
+    from app.admin_site.app_factory import create_admin_app
+    from app.admin_site.auth import PUBLIC_ENDPOINTS
+    from app.admin_site.settings import AdminSettings
+
+    staff_app = create_admin_app(
+        AdminSettings(
+            environment="test",
+            allowed_emails=frozenset({"admin@example.test"}),
+            require_authoritative_email=True,
+            secret_key=secrets.token_urlsafe(32),
+            google_client_id="inventory-only",
+            google_client_secret="inventory-only",
+            google_redirect_uri="https://admin.example.test/auth/google/callback",
+            customer_app_url="https://example.test",
+        )
+    )
+
+    def policy(endpoint, _method):
+        return "public" if endpoint in PUBLIC_ENDPOINTS else "staff_session"
+
+    return route_inventory(staff_app, policy, deny=None, blueprint=blueprint)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--blueprint", help="Limit routes to one blueprint and its children")
+    parser.add_argument("--staff", action="store_true", help="Inventory the separate staff application")
     args = parser.parse_args()
 
     with contextlib.redirect_stdout(sys.stderr):
-        from app.app import app  # noqa: PLC0415
-        from app.core.security.access_policy import DENY, requirement_for  # noqa: PLC0415
+        if args.staff:
+            routes = staff_routes(args.blueprint)
+        else:
+            from app.app import app
+            from app.core.security.access_policy import DENY, requirement_for
+
+            routes = route_inventory(app, requirement_for, DENY, args.blueprint)
 
     inventory = {
-        "routes": route_inventory(app, requirement_for, DENY, args.blueprint),
+        "routes": routes,
         "templates": template_inventory(),
     }
     json.dump(inventory, sys.stdout, indent=2)

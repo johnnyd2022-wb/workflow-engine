@@ -2,7 +2,6 @@
 
 import hashlib
 import hmac
-import re
 import secrets
 import time
 from datetime import UTC, datetime
@@ -11,7 +10,7 @@ from uuid import UUID
 from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, session
 from flask_limiter.util import get_remote_address
 
-from app.api.routes.auth_payloads import INVITE_TOKEN_PATTERN, InviteToken, Password
+from app.api.routes.auth_payloads import InviteToken, Password
 from app.api.routes.auth_routes import limiter, rotate_session
 from app.core.db import db_session
 from app.core.db.models.user import User
@@ -21,7 +20,7 @@ from app.core.security.people import PeopleError, validate_new_password
 from app.core.security.permissions import requires_auth
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required
 from app.core.utils.log_action import log_action
-from app.features.google_sign_in.oidc import exchange_verified_identity, google_client
+from app.features.google_sign_in.oidc import callback_state, exchange_verified_identity, google_client
 from app.features.google_sign_in.service import PROVIDER, GoogleSignInError, assert_account_available, resolve_identity
 from app.features.mcp_oauth.services import pending_authorization
 from app.observability import get_logger
@@ -147,11 +146,10 @@ def link():
 @limiter.limit("20 per minute")
 def callback():
     flow = session.pop("google_flow", None)
-    state = request.args.get("state", "")
+    state = callback_state()
     if (
         not isinstance(flow, dict)
-        or len(request.args.getlist("state")) != 1
-        or not re.fullmatch(INVITE_TOKEN_PATTERN, state)
+        or state is None
         or not hmac.compare_digest(state, flow.get("state", ""))
         or time.time() - flow.get("created_at", 0) > FLOW_SECONDS
         or flow.get("current_user_id") != session.get("user_id")

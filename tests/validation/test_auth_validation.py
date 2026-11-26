@@ -114,3 +114,22 @@ def test_go_live_date_requires_a_json_object(go_live_client):
     response = go_live_client.put("/api/core/go-live", json=["2026-10-01"])
     assert response.status_code == 400
     assert "_body" in response.json["errors"]
+
+
+def test_staff_callback_rejects_repeated_state(monkeypatch):
+    from time import time
+
+    from app.admin_site import auth
+    from tests.test_admin_site import _app, _browser
+
+    client = _browser(_app())
+    state = "a" * 43
+    with client.session_transaction() as session:
+        session["google_flow"] = {"state": state, "nonce": "example", "created_at": time()}
+
+    def provider_called(_nonce):
+        pytest.fail("Repeated state must be rejected before contacting the provider")
+
+    monkeypatch.setattr(auth, "exchange_verified_identity", provider_called)
+    response = client.get("/auth/google/callback", query_string=[("state", state), ("state", state), ("code", "mock")])
+    assert response.status_code == 400
