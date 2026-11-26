@@ -3140,7 +3140,7 @@ def cmd_shoot(args) -> int:
             page.locator("#login-email").fill(state["email"])
             page.locator("#login-password").fill(state["password"])
             page.locator("#login-submit-btn").click()
-            page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=20_000)
+            page.wait_for_url(re.compile(r"/core(/dashboard)?/?(\?.*)?$"), timeout=20_000)
             for name, scenario in scenarios:
                 page.set_viewport_size(DESKTOP)
                 try:

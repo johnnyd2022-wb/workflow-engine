@@ -1,0 +1,7 @@
+{# GLASS PROTOTYPE: the phone's bottom tab bar (Production, Compliance, Sales, Settings). #}
+<nav class="g-tabbar glass" aria-label="Workspaces" data-glass-tabbar>
+  {% if can('production.view', 'inventory.view', 'sales.view') %}<a href="{{ section_home('production') }}" data-nav-section="production"{% if active_section == 'production' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-prod"/></svg>Production</a>{% endif %}
+  {% if compliant_subscribed and can('compliance.view') %}<a href="{{ section_home('compliance') }}" data-nav-section="compliance"{% if active_section == 'compliance' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-comp"/></svg>Compliance</a>{% endif %}
+  {% if crm_enabled and can('sales.view') %}<a href="{{ section_home('sales') }}" data-nav-section="sales"{% if active_section == 'sales' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-sales"/></svg>Sales</a>{% endif %}
+  <a href="/core/settings" data-nav-section="settings"{% if active_section == 'settings' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-set"/></svg>Settings</a>
+</nav>

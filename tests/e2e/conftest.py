@@ -467,7 +467,7 @@ def login_through_ui(page, email: str, password: str) -> None:
     expect(password_input).to_have_value(password)
 
     page.locator("#login-submit-btn").click()
-    page.wait_for_url(re.compile(r"/(core/)?dashboard"), timeout=15_000)
+    page.wait_for_url(re.compile(r"/core(/dashboard)?/?(\?.*)?$"), timeout=15_000)
 
 
 @pytest.fixture(scope="session")

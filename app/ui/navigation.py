@@ -251,8 +251,6 @@ def _workspace_links(section: str | None, key: str | None, user, conditions: dic
         # Module-gated links aren't in the page at all for orgs without the module.
         and not (tab.when in ("nz_alcohol", "costing") and _hidden(tab, conditions))
     ]
-    if section == "production" and primary == "overview" and has_permission(user, "production.view"):
-        links.append({"key": "tasks", "label": "Production tasks", "href": "/core/tasks", "hidden": False})
     return links
 
 
@@ -280,7 +278,7 @@ def nav_context() -> dict:
         return {}
     user = getattr(g, "current_user", None)
     section, tab_key = resolve(request.path)
-    if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows"}:
+    if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows", "tasks"}:
         tab_key = request.args["tab"]
     tabs = section_tabs(section, user) if user is not None else []
     conditions = (

@@ -1,0 +1,12 @@
+{# GLASS PROTOTYPE: Action items, the same component on every page. glass-shell.js fills it from
+   the dashboard summary's action board (GET /api/core/dashboard/summary), the list Home used to show. #}
+<div class="g-actwrap" data-action-tray>
+  <button type="button" class="g-icon" id="g-act-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="g-act-tray" aria-label="Action items" title="Action items">
+    <svg aria-hidden="true"><use href="#gi-todo"/></svg><span class="g-count" id="g-act-count" aria-hidden="true" hidden>0</span>
+  </button>
+  <div class="g-tray" id="g-act-tray" role="dialog" aria-labelledby="g-act-title">
+    <div class="g-tray-h"><h2 id="g-act-title">Action items</h2><a href="/core/notifications">Review all</a></div>
+    <p class="g-cap" id="g-act-cap">Loading…</p>
+    <ul class="g-items" id="g-act-list"></ul>
+  </div>
+</div>

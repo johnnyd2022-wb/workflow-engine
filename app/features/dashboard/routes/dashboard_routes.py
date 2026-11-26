@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from flask import g, jsonify, render_template, request
+from flask import g, jsonify, redirect, request
 from sqlalchemy import func, select
 
 from app.core.db import db_session
@@ -38,7 +38,9 @@ def _local_date_expr(col):
 
 @requires_auth
 def dashboard():
-    return render_template("dashboard/dashboard.html", active_page="dashboard", org_name=g.org_name)
+    # GLASS PROTOTYPE: Home is gone; its action items live in the top bar and its figures on
+    # the Production overview.
+    return redirect("/core", code=302)
 
 
 def _dashboard_parse_due_date(raw: Any) -> date | None:

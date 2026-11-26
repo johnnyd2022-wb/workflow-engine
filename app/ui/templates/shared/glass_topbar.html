@@ -1,0 +1,33 @@
+{# GLASS PROTOTYPE: the top bar on every signed-in page. Workspaces in the middle (Home is gone),
+   then theme, settings, Action items (the shared tray), notifications and the account menu.
+   Outside #page-content, so a boosted navigation keeps it; glass-shell.js moves aria-current. #}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="gi-prod" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 20V9l5 3V9l5 3V6l8 4v10z"/></symbol>
+  <symbol id="gi-comp" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="gi-sales" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+  <symbol id="gi-set" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M10.3 3h3.4l.5 2.4 1.9 1.1 2.3-.8 1.7 3-1.8 1.6v2.2l1.8 1.6-1.7 3-2.3-.8-1.9 1.1-.5 2.6h-3.4l-.5-2.6-1.9-1.1-2.3.8-1.7-3 1.8-1.6v-2.2L3.9 8.7l1.7-3 2.3.8 1.9-1.1z"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="gi-bell" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path fill="none" stroke="currentColor" stroke-width="2" d="M10 21a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="gi-todo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M9 4.5H7A2.5 2.5 0 0 0 4.5 7v12A2.5 2.5 0 0 0 7 21.5h10a2.5 2.5 0 0 0 2.5-2.5V7A2.5 2.5 0 0 0 17 4.5h-2"/><rect x="9" y="2.5" width="6" height="4" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8.5 13.5l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="gi-right" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="gi-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="gi-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+</svg>
+{% set can_prod = can('production.view', 'inventory.view', 'sales.view') %}
+{% set can_comp = compliant_subscribed and can('compliance.view') %}
+{% set can_sales = crm_enabled and can('sales.view') %}
+<header class="g-top glass" role="banner" data-glass-topbar>
+  <a class="g-org" href="{{ section_home('production') if can_prod else '/core/settings' }}" aria-label="biz-e home">
+    <span class="g-logo" aria-hidden="true" x-text="orgInitials">B</span>
+    <b x-text="orgLabel">biz-e</b>
+  </a>
+  <nav class="g-ws" aria-label="Workspaces">
+    {% if can_prod %}<a href="{{ section_home('production') }}" data-nav-section="production"{% if active_section == 'production' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-prod"/></svg><span>Production</span></a>{% endif %}
+    {% if can_comp %}<a href="{{ section_home('compliance') }}" data-nav-section="compliance"{% if active_section == 'compliance' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-comp"/></svg><span>Compliance</span></a>{% endif %}
+    {% if can_sales %}<a href="{{ section_home('sales') }}" data-nav-section="sales"{% if active_section == 'sales' %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#gi-sales"/></svg><span>Sales</span></a>{% endif %}
+  </nav>
+  <button type="button" class="g-icon g-theme" data-glass-theme aria-label="Switch light or dark" title="Light or dark"><svg class="g-sun" aria-hidden="true"><use href="#gi-sun"/></svg><svg class="g-moon" aria-hidden="true"><use href="#gi-moon"/></svg></button>
+  <a class="g-icon g-setbtn" href="/core/settings" data-nav-section="settings" aria-label="Settings" title="Settings"><svg aria-hidden="true"><use href="#gi-set"/></svg></a>
+  {% include 'shared/action_tray.html' %}
+  <a href="/core/notifications" class="g-icon" id="topbar-notifications-link" aria-label="Notifications" title="Notifications"><svg aria-hidden="true"><use href="#gi-bell"/></svg><span class="g-dot" id="topbar-notifications-count" data-visible="false">0</span></a>
+  <button type="button" class="g-av bee-profile__button" aria-label="Account menu" aria-haspopup="menu" :aria-expanded="open" @click.stop="openMenu()" x-text="userInitial">?</button>
+</header>

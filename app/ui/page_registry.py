@@ -30,7 +30,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core", "production", "overview", "Production overview", None, None),
     Page("/core/cases", "production", "overview", "Cases", None, None),
     Page("/core/cases/new", "production", "overview", "New case", "/core/cases", None),
-    Page("/core/tasks", "production", "overview", "Production tasks", None, None),
+    Page("/core/tasks", "production", "tasks", "Production tasks", None, None),
     Page("/core/planner", "production", "planner", "Production demand", None, None),
     Page("/core/planner/board", "production", "planner", "Production board", "/core/planner", None),
     Page("/core/executions/live", "production", "batches", "Batches", None, None),
@@ -216,6 +216,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("inventory", "Inventory", "/core/inventory/view", ("inventory.view",)),
         Tab("contracts", "Contract orders", "/core/contracts", ("sales.view", "production.view")),
         Tab("suppliers", "Suppliers", "/core/suppliers", ("inventory.view",)),
+        # GLASS PROTOTYPE: Production tasks is a tab, not a link at the foot of the overview.
+        Tab("tasks", "Tasks", "/core/tasks", ("production.view",)),
         # Live cost (8.1d): purchases from Xero to record into stock; costing orgs only.
         Tab("purchases", "Purchases", "/core/costing/purchases", ("costs.view",), when="costing"),
         # Live cost (8.1e-2): cost readiness per product.
@@ -271,11 +273,13 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
 # entries, URLs and permissions; a permitted secondary can stand in for a primary
 # that a restricted role cannot open.
 WORKSPACE_TAB_GROUPS = {
+    # GLASS PROTOTYPE: Overview, Inventory, Workflows, Planner, Tasks.
     "production": (
         ("overview",),
-        ("planner", "contracts"),
-        ("workflows", "batches"),
         ("inventory", "suppliers", "purchases", "costs"),
+        ("workflows", "batches"),
+        ("planner", "contracts"),
+        ("tasks",),
     ),
     "compliance": (
         ("overview", "tools", "configuration"),

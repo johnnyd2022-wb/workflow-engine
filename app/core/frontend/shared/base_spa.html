@@ -58,6 +58,8 @@
   {# Production overview: global, like the rest, so an in-app visit to /core arrives styled. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='production-overview.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batches.css') }}">
+  {# GLASS PROTOTYPE: last, so it restyles everything above. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='glass.css') }}">
 
   {# Page-level head customisation #}
   {% block head_extras %}{% endblock %}
@@ -78,174 +80,12 @@
   <script src="/ui/shared/site-picker.js"></script>
   <script src="/ui/shared/move-stock.js"></script>
   <div class="app-layout">
-    {% include 'shared/sidebar-v2.html' %}
+    {# GLASS PROTOTYPE: no sidebar; the backdrop the glass refracts. #}
+    <div class="g-aurora" aria-hidden="true"><div><i></i><i></i><i></i><i></i></div></div>
 
     <div class="main-content">
       <div class="bee-topbar-wrap" x-data="bizeMascot()">
-        <header
-          class="main-header"
-          role="banner"
-          :class="open ? 'bee-menu-open' : ''"
-        >
-        <div class="main-header-inner">
-          <div style="display:flex; align-items:center; gap: 10px; min-width: 0;">
-            {% block topbar %}
-            <a
-              href="/core"
-              class="spa-banner-back"
-              id="spa-banner-back"
-              aria-label="Go back"
-              hx-boost="false"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M11 19l-7-7 7-7"/>
-                <path d="M4 12h16"/>
-              </svg>
-            </a>
-            {% endblock %}
-          </div>
-
-          <div class="topbar-account">
-            <a
-              href="/core/notifications"
-              class="topbar-notifications"
-              id="topbar-notifications-link"
-              aria-label="Notifications"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              <span
-                class="topbar-notifications__badge"
-                id="topbar-notifications-count"
-                data-visible="false"
-              >0</span>
-            </a>
-            <div class="bee-profile" x-cloak :class="quirk ? 'bee-quirk' : ''">
-              <button
-                type="button"
-                class="bee-profile__button"
-                aria-label="Account menu"
-                aria-haspopup="menu"
-                :aria-expanded="open"
-                @click.stop="openMenu()"
-              >
-                <span class="bee-avatar" aria-hidden="true">
-                  <svg
-                    class="bee-svg"
-                    viewBox="0 0 100 100"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <!-- Steampunk bronze palette -->
-                      <linearGradient id="beeG" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="#C6863A"/>
-                        <stop offset="45%" stop-color="#B87333"/>
-                        <stop offset="100%" stop-color="#6B3F10"/>
-                      </linearGradient>
-                    </defs>
-
-                    <g class="bee-wing bee-wing--left" opacity="0.95">
-                      <path
-                        d="M26 38 C16 30 18 16 31 19 C44 22 45 38 34 42 C31 43 29 41 26 38 Z"
-                        fill="none"
-                        stroke="#E5E7EB"
-                        stroke-width="4"
-                        stroke-linecap="round"
-                      />
-                      <path
-                        d="M27 36 C19 29 21 19 31 20"
-                        fill="none"
-                        stroke="#9CA3AF"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        opacity="0.9"
-                      />
-                    </g>
-
-                    <g class="bee-wing bee-wing--right" opacity="0.95">
-                      <path
-                        d="M74 38 C84 30 82 16 69 19 C56 22 55 38 66 42 C69 43 71 41 74 38 Z"
-                        fill="none"
-                        stroke="#E5E7EB"
-                        stroke-width="4"
-                        stroke-linecap="round"
-                      />
-                      <path
-                        d="M73 36 C81 29 79 19 69 20"
-                        fill="none"
-                        stroke="#9CA3AF"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        opacity="0.9"
-                      />
-                    </g>
-
-                    <g class="bee-body">
-                      <!-- Body -->
-                      <ellipse
-                        cx="50"
-                        cy="58"
-                        rx="18"
-                        ry="24"
-                        fill="url(#beeG)"
-                        stroke="#E5E7EB"
-                        stroke-opacity="0.45"
-                        stroke-width="1"
-                      />
-
-                      <!-- Mechanical stripes -->
-                      <rect x="40" y="44" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-                      <rect x="40" y="54" width="20" height="6" rx="3" fill="#3A240B" opacity="0.9" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-                      <rect x="40" y="64" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-
-                      <!-- Head -->
-                      <circle
-                        cx="50"
-                        cy="35"
-                        r="11"
-                        fill="#1F2937"
-                        opacity="0.92"
-                        stroke="#E5E7EB"
-                        stroke-opacity="0.35"
-                        stroke-width="1"
-                      />
-
-                      <!-- Green cyber eyes -->
-                      <circle cx="46.3" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
-                      <circle cx="53.7" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
-                      <circle cx="46.3" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
-                      <circle cx="53.7" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
-                      <circle cx="45.7" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
-                      <circle cx="53.1" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
-
-                      <!-- Tail/connector -->
-                      <path d="M68 58 L82 54 L68 62 Z" fill="#1F2937" opacity="0.95"/>
-
-                      <!-- Rivets -->
-                      <circle cx="35" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
-                      <circle cx="65" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
-                      <circle cx="50" cy="78" r="2" fill="#E5E7EB" opacity="0.22"/>
-
-                      <!-- Mechanical antenna -->
-                      <path d="M44 26 L38 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round" />
-                      <path d="M56 26 L62 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round" />
-                      <circle cx="38" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
-                      <circle cx="62" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
-
-                      <!-- Small gear ring -->
-                      <circle cx="50" cy="35" r="13" fill="none" stroke="#E5E7EB" stroke-width="3" opacity="0.35"/>
-                    </g>
-                  </svg>
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </header>
+        {% include 'shared/glass_topbar.html' %}
 
         <div
           class="bee-menu"
@@ -285,6 +125,10 @@
               <button type="button" class="bee-menu__help" role="menuitem" @click="openHelp()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
                 <span>Help and contact</span>
+              </button>
+              <button type="button" class="bee-menu__help" role="menuitem" id="sidebar-logout-btn" data-action="handleAccountInfoLogout" data-action-fallback-href="/">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>
+                <span>Log out</span>
               </button>
             </div>
           </div>
@@ -328,6 +172,8 @@
       </main>
     </div>
   </div>
+  {% include 'shared/glass_tabbar.html' %}
+  <div class="g-scrim" id="g-scrim"></div>
 
   <div id="loading-indicator" class="htmx-indicator">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -366,6 +212,7 @@
   <script src="/ui/shared/account-info.js"></script>
   <script src="/ui/shared/page-init.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/glass-shell.js"></script>
   <script src="/ui/shared/section-tabs.js"></script>
   <script src="/ui/shared/dialog-focus.js" defer></script>
   <script src="/ui/shared/help.js" defer></script>
@@ -883,6 +730,9 @@
           fullName: '',
           email: '',
           orgName: '',
+          orgInitials: 'B',
+          orgLabel: 'biz-e',
+          userInitial: '?',
 
           prevBodyOverflow: '',
           prevHtmlOverflow: '',
@@ -907,6 +757,9 @@
               this.fullName = ((first + ' ' + last).trim() || first || u.email || 'User');
               this.email = (u.email || '').toString();
               this.orgName = (org.name || '').toString();
+              this.orgLabel = this.orgName || 'biz-e';
+              this.orgInitials = this.orgLabel.split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase() || 'B';
+              this.userInitial = (first || u.email || '?').charAt(0).toUpperCase();
             } catch (e) {
               // Non-fatal; keep placeholders.
             }
