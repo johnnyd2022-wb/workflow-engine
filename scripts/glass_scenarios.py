@@ -16,7 +16,7 @@ DESKTOP = {"width": 1440, "height": 900}
 GROUPS = {
     "g0": ["/core", "/core/dashboard"],
     "g1": ["/core", "/core?tab=batches", "/core/executions/live", "/core/tasks", "/core/record", "/core/flows/batches/start"],
-    "g2": ["/core/processes", "/core/flows", "/core/flows/create/start", "/core/flows/create/template-catalog"],
+    "g2": ["/core/processes", "/core/flows", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "/core/flows/create/start", "/core/flows/create/template-catalog"],
     "g3": [
         "/core/inventory/view",
         "/core/inventory/add",
