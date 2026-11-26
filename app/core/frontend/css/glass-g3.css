@@ -1,1 +1,47 @@
 /* GLASS PROTOTYPE: page rules for group g3 (see wb task GLASS-G3). Layout only; colours and surfaces come from glass.css tokens. */
+
+
+/* Breadcrumbs sit on the shell edge like the section head (section-tabs.css pads them 24px). */
+html body #page-content .breadcrumbs{padding:0}
+
+/* Header: title, then the page's actions in one glass bar; 18px to the first container. */
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header{
+  display:flex;flex-direction:column;align-items:stretch;gap:0;margin:18px 0 18px}
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header p{margin:6px 0 0;color:var(--muted);font-weight:500}
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header > .workspace-header__actions:not([hidden]){
+  display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin:16px 0 0;padding:8px;border-radius:24px;
+  background:var(--glass);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),inset 0 -1px 0 var(--edge),var(--shadow)}
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header > .workspace-header__actions:not(:has(> :not([hidden]))){display:none}
+/* workspace-overviews.css turns primary buttons into a teal outline in dark mode; keep the glass primary. */
+html[data-spa-theme="dark"] body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) .workspace-button--primary{
+  background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* Stocktake's own frame: the shell already centres and pads the page. */
+html body #page-content .st-shell[data-stocktake-root]{max-width:none;padding:0 0 40px}
+
+/* Stat tiles read as glass figures. */
+html body #page-content .inv-view-page .inv-tile{background:var(--glass-strong);border:1px solid var(--rim-dim);border-radius:20px;box-shadow:inset 0 1px 0 var(--rim);color:var(--ink)}
+html body #page-content .inv-view-page .inv-tile strong{font-weight:800;color:var(--ink)}
+html body #page-content .inv-view-page .inv-tile.is-active{background:var(--solid);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+html body #page-content .inv-view-page .inv-tile--attention strong{color:var(--warn)}
+html body #page-content .inv-view-page .inv-tile--overdue strong{color:var(--bad)}
+html body #page-content .inv-view-page .inv-glance{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+/* Add manually / CSV / barcode (primary_card pages): spacing and a floating glass submit bar. */
+html body #page-content .primary-task > .workspace-header{margin-bottom:18px}
+html body #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar{
+  left:50%;right:auto;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));bottom:calc(16px + var(--g-tabbar) + env(safe-area-inset-bottom,0px));
+  border-radius:var(--g-r-pill);background:var(--glass);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow)}
+html[data-spa-theme="dark"] body #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar{background:var(--glass);border-color:var(--rim-dim)}
+html body #page-content .add-inv-manual-submit-bar__inner{display:flex;justify-content:center;padding:8px}
+html body #page-content.page-content:has(.add-inventory-manual-root) .add-inventory-manual-root{padding-bottom:calc(110px + var(--g-tabbar))}
+
+/* workspace-overviews.css re-sets the legacy tokens to its teal dark palette on .workspace-overview and
+   .workspace-links; point them back at the glass tokens for this group's pages. */
+html[data-spa-theme="dark"] body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell,.primary-task),
+html[data-spa-theme="dark"] body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell,.primary-task) .workspace-links{
+  --ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted);
+  --ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);
+  --bg-card:var(--panel);--bg-primary:var(--panel);--border-default:var(--line);--text-primary:var(--ink)}

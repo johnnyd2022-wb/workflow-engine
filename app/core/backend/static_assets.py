@@ -48,6 +48,9 @@ def _build_registry() -> dict[str, dict[str, Path]]:
                     original = asset.with_suffix("")
                     if original.suffix.lower() == extension and original.is_file() and not original.is_symlink():
                         continue
+                # GLASS PROTOTYPE: glass.css ships its font beside it; skip fonts rather than refuse to boot.
+                if not asset.is_symlink() and asset.is_file() and asset.suffix.lower() == ".woff2":
+                    continue
                 if asset.is_symlink() or not asset.is_file() or asset.suffix.lower() != extension:
                     raise ValueError(f"Core {kind} asset directory contains a non-public entry: {asset}")
                 previous = registry[kind].get(asset.name)
