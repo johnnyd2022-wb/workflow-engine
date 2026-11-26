@@ -24,7 +24,7 @@
     <label style="display:block;font-weight:600;margin:14px 0 5px;" for="record-operator-note">Correction note</label>
     <textarea id="record-operator-note" class="spa-inp" data-record-prompt="operator_note" rows="3" style="width:100%;">{{ prompts.get('operator_note') or '' }}</textarea>
     <label style="display:block;font-weight:600;margin:14px 0 5px;" for="record-reason">Reason for this edit (required)</label>
-    <input id="record-reason" class="spa-inp" maxlength="500" style="width:100%;" required placeholder="What changed and why?">
+    <input id="record-reason" class="spa-inp" minlength="3" maxlength="500" style="width:100%;" required placeholder="What changed and why?">
     <div id="record-error" role="alert" hidden style="color:var(--error);margin-top:10px;"></div>
     <button type="button" class="btn btn-primary" id="record-save" style="margin-top:14px;">Save correction</button>
   </section>

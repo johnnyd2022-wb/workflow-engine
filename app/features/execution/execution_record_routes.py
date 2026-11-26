@@ -139,7 +139,7 @@ def register_routes(bp):
         if not isinstance(data.get("reason"), str):
             return jsonify({"error": "An edit reason is required"}), 400
         reason = data["reason"].strip()
-        if len(reason) < 3 or len(reason) > 500:
+        if not 3 <= len(reason) <= 500 or "\x00" in reason:
             return jsonify({"error": "An edit reason of 3–500 characters is required"}), 400
         changes = data.get("prompts", {})
         if not isinstance(changes, dict) or any(not isinstance(k, str) or k in _AUDIT_KEYS for k in changes):

@@ -17,6 +17,20 @@ _MAGIC = {
 }
 
 
+_EXTENSIONS = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf", ".png": "image/png"}
+
+
+def _detect_mime(head: bytes) -> str | None:
+    return next((mime for magic, mime in _MAGIC.items() if head.startswith(magic)), None)
+
+
+def _file_type_allowed(filename: str, mime: str | None) -> bool:
+    suffix = Path(filename).suffix.lower()
+    allowed = {_normalize_content_type(value) for value in get_allowed_mime_types()}
+    # Existing generic .dat uploads still require a recognized file signature.
+    return mime in allowed and (suffix == ".dat" or _EXTENSIONS.get(suffix) == mime)
+
+
 def detect_mime_from_path(file_path: Path) -> str | None:
     """
     Detect MIME from file magic bytes. Returns canonical MIME or None if unknown.
@@ -26,10 +40,7 @@ def detect_mime_from_path(file_path: Path) -> str | None:
             head = f.read(12)
     except OSError:
         return None
-    for magic, mime in _MAGIC.items():
-        if head.startswith(magic):
-            return mime
-    return None
+    return _detect_mime(head)
 
 
 def get_allowed_mime_types():
@@ -84,9 +95,9 @@ def validate_file():
     if not f or not f.filename or f.filename.strip() == "":
         logger.warning("Evidence validate_file: no file or empty filename")
         return False, "No file selected", None, None, None
-    data = f.read()
-    size = len(data)
     max_bytes = get_max_file_size_bytes()
+    data = f.read(max_bytes + 1)
+    size = len(data)
     if size > max_bytes:
         logger.warning("Evidence validate_file: file too large size=%s max=%s", size, max_bytes)
         return False, f"File too large (max {max_bytes // (1024 * 1024)}MB)", None, None, None
@@ -94,11 +105,16 @@ def validate_file():
         logger.warning("Evidence validate_file: file is empty")
         return False, "File is empty", None, None, None
     allowed = get_allowed_mime_types()
-    content_type = _normalize_content_type(f.content_type or request.content_type or "")
-    allowed_normalized = [_normalize_content_type(m) for m in allowed]
-    if content_type not in allowed_normalized:
+    content_type = _detect_mime(data[:12])
+    if not _file_type_allowed(f.filename.strip(), content_type):
         logger.warning("Evidence validate_file: type not allowed content_type=%r allowed=%s", content_type, allowed)
-        return False, f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}", None, None, None
+        return (
+            False,
+            f"File type not allowed or the contents do not match the extension. Allowed: {', '.join(allowed)}",
+            None,
+            None,
+            None,
+        )
     logger.info("Evidence validate_file: ok filename=%s size=%s content_type=%s", f.filename, size, content_type)
     return True, "", data, content_type, (f.filename or "").strip()
 
@@ -113,13 +129,18 @@ def validate_file_streaming():
     import os as os_mod
     import tempfile
 
-    if "file" not in request.files:
-        logger.warning("Evidence validate_file_streaming: no 'file' in request.files")
+    uploads = request.files.getlist("file")
+    if not uploads:
         return False, "No file in request", None, None, None, 0
-    f = request.files["file"]
+    if len(uploads) != 1 or set(request.files) != {"file"}:
+        return False, "Choose exactly one file.", None, None, None, 0
+    f = uploads[0]
     if not f or not f.filename or f.filename.strip() == "":
         return False, "No file selected", None, None, None, 0
 
+    filename = f.filename.strip()
+    if len(filename) > 255 or any(ord(character) < 32 for character in filename):
+        return False, "Enter a valid filename of up to 255 characters.", None, None, None, 0
     max_bytes = get_max_file_size_bytes()
     fd, temp_path = tempfile.mkstemp(prefix="evidence_", suffix=".tmp")
     try:
@@ -141,12 +162,8 @@ def validate_file_streaming():
             return False, "File is empty", None, None, None, 0
 
         content_type = detect_mime_from_path(Path(temp_path))
-        if not content_type:
-            content_type = _normalize_content_type(f.content_type or request.content_type or "")
-        content_type = _normalize_content_type(content_type or "")
         allowed = get_allowed_mime_types()
-        allowed_normalized = [_normalize_content_type(m) for m in allowed]
-        if content_type not in allowed_normalized:
+        if not _file_type_allowed(filename, content_type):
             logger.warning("Evidence validate_file_streaming: type not allowed content_type=%r", content_type)
             try:
                 os_mod.unlink(temp_path)
@@ -154,7 +171,7 @@ def validate_file_streaming():
                 pass
             return (
                 False,
-                f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}",
+                f"File type not allowed or the contents do not match the extension. Allowed: {', '.join(allowed)}",
                 None,
                 None,
                 None,

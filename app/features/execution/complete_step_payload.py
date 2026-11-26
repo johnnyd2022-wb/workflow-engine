@@ -8,9 +8,10 @@ Trace/audit keys in execution_data are still stripped in backend after validatio
 from __future__ import annotations
 
 from datetime import datetime
+from math import isfinite
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.utils.internal_counters import inc_counter
 
@@ -51,7 +52,14 @@ class CompleteStepRequestBody(BaseModel):
     actual_outputs: list[Any] = Field(default_factory=list)
     execution_data: dict[str, Any] = Field(default_factory=dict)
     occurred_at: datetime | None = None
-    allow_consumption_override: bool = False
+    allow_consumption_override: bool = Field(default=False, strict=True)
+
+    @field_validator("occurred_at", mode="before")
+    @classmethod
+    def check_timestamp_type(cls, value):
+        if value is not None and not isinstance(value, str | datetime):
+            raise ValueError("Enter a date and time.")
+        return value
 
 
 def validate_json_blob(
@@ -73,12 +81,14 @@ def validate_json_blob(
     if isinstance(obj, dict):
         if len(obj) > MAX_DICT_KEYS_PER_LEVEL:
             raise ValueError(f"{path}: too many keys (max {MAX_DICT_KEYS_PER_LEVEL})")
-        for k, v in obj.items():
+        for index, (k, v) in enumerate(obj.items()):
             if not isinstance(k, str):
                 raise ValueError(f"{path}: object keys must be strings")
             if len(k) > MAX_KEY_LENGTH:
                 raise ValueError(f"{path}: key too long (max {MAX_KEY_LENGTH} chars)")
-            validate_json_blob(v, depth=depth + 1, path=f"{path}.{k[:48]}", budget=budget)
+            if "\x00" in k:
+                raise ValueError(f"{path}: keys cannot contain null characters")
+            validate_json_blob(v, depth=depth + 1, path=f"{path}[{index}]", budget=budget)
     elif isinstance(obj, list):
         if len(obj) > MAX_LIST_LENGTH:
             raise ValueError(f"{path}: list too long (max {MAX_LIST_LENGTH})")
@@ -87,9 +97,14 @@ def validate_json_blob(
     elif isinstance(obj, str):
         if len(obj) > MAX_STRING_LENGTH:
             raise ValueError(f"{path}: string too long (max {MAX_STRING_LENGTH} chars)")
+        if "\x00" in obj:
+            raise ValueError(f"{path}: text cannot contain null characters")
     elif isinstance(obj, bool):
         pass
-    elif isinstance(obj, int | float):
+    elif isinstance(obj, float):
+        if not isfinite(obj):
+            raise ValueError(f"{path}: numbers must be finite")
+    elif isinstance(obj, int):
         pass
     elif obj is None:
         pass

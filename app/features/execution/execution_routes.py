@@ -50,12 +50,18 @@ from app.features.execution.execution_data import EXECUTION_DATA_TRACE_KEYS, spl
 from app.features.execution.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.features.process_design.process_design_routes import assert_flow_process_access, flow_process_id_from_request
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
 
 _ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
 _RECORD_PICKER = "/core/record"  # keep in sync with RECORD_PICKER in batch-start-scripts.html
+
+
+class CreateExecutionInput(JsonInput):
+    process_id: UUID
+    site_id: UUID | None = None
 
 
 def _safe_flow_return_to(value, process_id) -> str:
@@ -211,7 +217,10 @@ def register_routes(bp):
         # Keep this route as a compatibility alias.
         from urllib.parse import urlencode
 
-        args = dict(request.args)
+        forwarded = {"id", "process_id", "execution_id", "step_id", "draft", "return_to"}
+        if any(len(request.args.getlist(field)) > 1 for field in forwarded):
+            abort(400)
+        args = {name: value for name, value in request.args.items() if name in forwarded}
         process_id = args.get("process_id")
 
         # Map to the batches/start contract:
@@ -241,9 +250,18 @@ def register_routes(bp):
             abort(400)
         assert_flow_process_access(process_id)
 
-        execution_id = request.args.get("execution_id")
-        step_id = request.args.get("step_id")
+        if any(
+            len(request.args.getlist(field)) > 1 for field in ("id", "execution_id", "step_id", "draft", "return_to")
+        ):
+            abort(400)
+        try:
+            execution_id = UUID(request.args["execution_id"]) if request.args.get("execution_id") else None
+            step_id = UUID(request.args["step_id"]) if request.args.get("step_id") else None
+        except ValueError:
+            abort(400)
         draft = request.args.get("draft")
+        if draft not in (None, "", "0", "1", "false", "true", "False", "True"):
+            abort(400)
         is_draft = str(draft or "").strip() in {"1", "true", "True"}
         if not execution_id and not is_draft:
             abort(400)
@@ -269,21 +287,15 @@ def register_routes(bp):
     def create_execution():
         """Create a new execution for a process"""
         org_id = UUID(g.org_id)
-        data = request.get_json()
-
-        process_id_str = data.get("process_id")
-        if not process_id_str:
-            return jsonify({"error": "process_id is required"}), 400
-
         try:
-            process_id = UUID(process_id_str)
-        except ValueError:
-            return jsonify({"error": "Invalid process ID"}), 400
+            data = read_json(CreateExecutionInput)
+        except InvalidInputError as exc:
+            return exc.response()
 
         repo = ExecutionRepository(db_session)
         try:
             execution = repo.create_execution(
-                org_id=org_id, process_id=process_id, site_id=getattr(g, "validated_site_id", None)
+                org_id=org_id, process_id=data.process_id, site_id=getattr(g, "validated_site_id", None)
             )
             return (
                 jsonify(
@@ -310,8 +322,14 @@ def register_routes(bp):
     def list_executions():
         """List executions, optionally filtered by process"""
         org_id = UUID(g.org_id)
+        for field in ("process_id", "status", "count"):
+            if len(request.args.getlist(field)) > 1:
+                return InvalidInputError({field: "Use one value for this parameter."}).response()
         process_id_str = request.args.get("process_id")
         status_str = request.args.get("status")
+        count = request.args.get("count")
+        if count not in (None, "", "0", "1", "true", "false"):
+            return InvalidInputError({"count": "Use true or false."}).response()
 
         process_id = None
         if process_id_str:
@@ -325,13 +343,13 @@ def register_routes(bp):
             try:
                 status = ExecutionStatus(status_str)
             except ValueError:
-                return jsonify({"error": f"Invalid status: {status_str}"}), 400
+                return InvalidInputError({"status": "Choose an allowed execution status."}).response()
 
         repo = ExecutionRepository(db_session)
 
         # count=1 -> just the total (for a paginated caller's "N batches" header). No object
         # graph, no growth with history.
-        if request.args.get("count") in ("1", "true"):
+        if count in ("1", "true"):
             return jsonify({"count": repo.count_executions(org_id=org_id, process_id=process_id, status=status)}), 200
 
         try:
@@ -607,24 +625,30 @@ def register_routes(bp):
         if not raw_bytes.strip():
             raw_body = {}
         else:
+            if not request.is_json:
+                return InvalidInputError({"_body": "Send an application/json request."}).response()
             try:
                 raw_body = json.loads(raw_bytes.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-                return jsonify({"error": "Invalid JSON"}), 400
+            except (ValueError, RecursionError):
+                return InvalidInputError({"_body": "Send a valid JSON object."}).response()
             if not isinstance(raw_body, dict):
-                return jsonify({"error": "Invalid request body", "details": ["JSON root must be an object"]}), 400
+                return InvalidInputError({"_body": "Send a JSON object."}).response()
 
         try:
             parsed_body = CompleteStepRequestBody.model_validate(raw_body)
-        except ValidationError as e:
-            return jsonify({"error": "Invalid request body", "details": e.errors()}), 400
+        except ValidationError as exc:
+            errors = {}
+            for error in exc.errors(include_input=False, include_context=False, include_url=False):
+                location = error["loc"]
+                field = location[0] if location and location[0] in CompleteStepRequestBody.model_fields else "_body"
+                errors.setdefault(field, "Enter a valid value." if field != "_body" else "Unknown field.")
+            return jsonify(error="Invalid request body", errors=errors), 400
 
-        try:
-            validate_json_blob(parsed_body.actual_inputs, path="$.actual_inputs")
-            validate_json_blob(parsed_body.actual_outputs, path="$.actual_outputs")
-            validate_json_blob(parsed_body.execution_data, path="$.execution_data")
-        except ValueError as e:
-            return jsonify({"error": "Invalid request body", "details": [str(e)]}), 400
+        for field in ("actual_inputs", "actual_outputs", "execution_data"):
+            try:
+                validate_json_blob(getattr(parsed_body, field), path=f"$.{field}")
+            except ValueError as error:
+                return jsonify(error="Invalid request body", errors={field: str(error)}), 400
 
         actual_inputs = parsed_body.actual_inputs
         actual_outputs = parsed_body.actual_outputs
