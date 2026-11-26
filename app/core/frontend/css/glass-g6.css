@@ -1,1 +1,25 @@
 /* GLASS PROTOTYPE: page rules for group g6 (see wb task GLASS-G6). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* CRM's own accent was teal (--crm-teal); every Sales page now uses the glass accent. */
+:root,html[data-spa-theme="dark"]{--crm-teal:var(--accent);--crm-teal-dim:var(--accent-soft);--crm-teal-mid:var(--accent-soft)}
+html body #page-content .crm-root a:not([class]){color:var(--accent)}
+
+/* Excise and matching sit on .max-content without workspace-overview, so they kept its side padding. */
+html body #page-content .max-content.crm-root{padding-left:0;padding-right:0;max-width:none}
+html body #page-content .crm-root .crm-hero{padding:0;margin:18px 0 18px;background:transparent;border:0;box-shadow:none}
+
+/* 18px between a header with actions and the first container (overview and analytics). */
+html body #page-content .crm-root > .workspace-header,html body #page-content .sales-analytics > .workspace-header{margin-bottom:18px}
+
+/* workspace-overviews.css re-sets the legacy tokens to its teal dark palette; keep the glass ones on Sales pages. */
+html[data-spa-theme="dark"] body #page-content .crm-root,
+html[data-spa-theme="dark"] body #page-content .crm-root .workspace-links{
+  --ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted);
+  --ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);
+  --bg-card:var(--panel);--bg-primary:var(--panel);--border-default:var(--line);--text-primary:var(--ink)}
+html[data-spa-theme="dark"] body #page-content .crm-root .workspace-button--primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* Table heads sit on the panel, not on a slab. */
+html body #page-content .crm-root .crm-table th{background:transparent}
+/* Sales overview: the section head's actions sit right above the first panel; give it room. */
+html body #page-content .sales-overview{padding-top:18px}

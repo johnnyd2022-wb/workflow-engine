@@ -1,1 +1,55 @@
 /* GLASS PROTOTYPE: page rules for group g2 (see wb task GLASS-G2). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* The bottom action rail (workflow editor, create wizard, batch start): a floating glass bar inside the
+   shell column, above the phone tab bar, instead of a full-width strip offset by the old sidebar. */
+html body.flows2-page #page-content .spa-fixed-action-bar{
+  position:fixed;left:50%;right:auto;transform:translateX(-50%);
+  width:min(calc(var(--g-shell) - 2 * var(--g-gutter)),calc(100vw - 32px));
+  bottom:calc(14px + var(--g-tabbar) + env(safe-area-inset-bottom,0px));z-index:50;margin:0;
+  border-radius:var(--g-r-pill);border:1px solid var(--rim-dim);background:var(--glass);
+  backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  box-shadow:inset 0 1px 0 var(--rim),inset 0 -1px 0 var(--edge),var(--shadow)}
+/* Elsewhere (create wizard) the rail keeps its place and only takes the glass surface. */
+html body #page-content .spa-fixed-action-bar{border-top:0;background:var(--glass);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%)}
+html[data-spa-theme="dark"] body #page-content .spa-fixed-action-bar{background:var(--glass);border-color:var(--rim-dim)}
+html body.flows2-page #page-content .spa-fixed-action-bar .spa-fixed-action-bar__inner{padding:8px;max-width:none}
+html body.flows2-page #page-content .max-content{padding-bottom:calc(100px + var(--g-tabbar))}
+@media (max-width:720px){
+  html body.flows2-page #page-content .spa-fixed-action-bar{border-radius:24px}
+}
+
+/* Workflow editor (flows2): sits on the shell edge like every other page. */
+html body.flows2-page #page-content .max-content{padding-left:0;padding-right:0;max-width:none}
+html body.flows2-page #page-content .flows2-process-head{text-align:left;padding:0;margin:18px 0 18px;background:transparent;border:0;box-shadow:none}
+
+/* Mode switches (Process structure / Batches / Inventory): the glass segmented pill. */
+html body #page-content .flows2-mode .flow-mode-segmented,html body #page-content .flows2-inventory-submode .flow-mode-segmented{
+  display:inline-flex;gap:2px;padding:4px;border-radius:var(--g-r-pill);background:var(--glass);border:1px solid var(--rim-dim);
+  backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);max-width:100%;overflow-x:auto;scrollbar-width:none}
+html body #page-content .flows2-mode .flow-mode-segment,html body #page-content .flows2-inventory-submode .flow-mode-segment{
+  flex:none;min-height:38px;padding:0 18px;border:0 !important;border-radius:var(--g-r-pill) !important;background:transparent;color:var(--muted);font-weight:700;font-size:13.5px}
+html body #page-content .flows2-mode .flow-mode-segment--active,html body #page-content .flows2-inventory-submode .flow-mode-segment--active,
+html body #page-content .flows2-mode .flow-mode-segment--active:hover{background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1),inset 0 1px 0 var(--rim)}
+
+/* Header to first container: 18px (workflows list, create start, template catalog). */
+html body #page-content :is(.processes-list-page,.chooser-shell) > .workspace-header{margin-bottom:18px}
+html body #page-content .pt-catalog-shell{max-width:none;padding:18px 0 32px}
+html body #page-content .pt-catalog-header h1{font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+
+/* Editor head reads left like every other page; the mode switch is only as wide as its options. */
+html body.flows2-page #page-content .flows2-process-head *{text-align:left}
+html body.flows2-page #page-content .flows2-process-head__stats{justify-content:stretch}
+html body #page-content .flows2-mode .flow-mode-segmented{display:flex;width:fit-content}
+
+/* workspace-overviews.css re-sets the legacy tokens to its teal dark palette; keep the glass ones here. */
+html[data-spa-theme="dark"] body #page-content :is(.processes-list-page,.chooser-shell,.pt-catalog-shell),
+html[data-spa-theme="dark"] body.flows2-page #page-content .max-content{
+  --ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted);
+  --ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);
+  --bg-card:var(--panel);--bg-primary:var(--panel);--border-default:var(--line);--text-primary:var(--ink)}
+html[data-spa-theme="dark"] body #page-content .processes-list-page .workspace-button--primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* spa-theme.css's dark mustard accent (--spa-yellow) still colours icons here; use the glass accent. */
+html[data-spa-theme="dark"] body #page-content :is(.processes-list-page,.chooser-shell,.pt-catalog-shell),
+html[data-spa-theme="dark"] body.flows2-page #page-content .max-content{--spa-yellow:var(--accent);--spa-yellow-mid:var(--accent);--spa-yellow-deep:var(--accent);--spa-on-yellow:var(--accent-ink)}
+html body.flows2-page #page-content .flows2-process-head__desc{margin-left:0;margin-right:0;max-width:72ch}
+@media (max-width:720px){html body #page-content .pt-catalog-header{flex-direction:column;align-items:flex-start;gap:8px}}

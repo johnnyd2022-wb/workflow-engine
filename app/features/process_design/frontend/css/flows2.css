@@ -560,8 +560,8 @@
       transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
     }
     .flows2-step:hover {
-      border-color: #51a69c;
-      background: #f0fbf9;
+      border-color: var(--accent);
+      background: var(--solid);
       box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
     }
     .flows2-step:focus-within {
@@ -820,8 +820,8 @@
       color: var(--text-tertiary, #94a3b8);
     }
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .flows2-stat--active .flows2-stat__icon {
-      background: rgba(246, 208, 76, 0.15);
-      color: var(--spa-yellow, #f6d04c);
+      background: var(--accent-soft);
+      color: var(--accent);
     }
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .flows2-stat--done .flows2-stat__icon {
       background: rgba(34, 197, 94, 0.14);
@@ -831,7 +831,7 @@
       color: var(--text-primary, #ffffff);
     }
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .flows2-stat--active .flows2-stat__value {
-      color: var(--spa-yellow, #f6d04c);
+      color: var(--accent);
     }
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .flows2-stat--done .flows2-stat__value {
       color: var(--success, #4ade80);
@@ -898,9 +898,9 @@
       border-top-color: rgba(255, 255, 255, 0.12);
     }
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .flows2-step[data-expanded="true"] .flows2-step__toggle {
-      background: rgba(246, 208, 76, 0.15);
+      background: var(--accent-soft);
       border-color: rgba(246, 208, 76, 0.35);
-      color: var(--spa-yellow, #f6d04c);
+      color: var(--accent);
     }
 
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .searchable-dropdown-list .dropdown-item:hover {

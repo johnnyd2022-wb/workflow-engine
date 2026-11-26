@@ -113,7 +113,7 @@ html[data-spa-theme="dark"] #page-content .compliance-board .compliance-state[da
 #page-content .compliance-header-actions .workspace-button--primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
 #page-content .compliance-header-actions .workspace-button--primary:hover { background: var(--ui-accent-strong); border-color: var(--ui-accent-strong); }
 html[data-spa-theme="dark"] #page-content.page-content .compliance-header-actions .workspace-button--primary,
-html[data-spa-theme="dark"] #page-content.page-content .compliance-header-actions .workspace-button--primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
+html[data-spa-theme="dark"] #page-content.page-content .compliance-header-actions .workspace-button--primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--accent-ink); }
 @container sechead (max-width: 1099px) {
   #page-content .compliance-header-actions .workspace-button--primary { order: -1; }
 }

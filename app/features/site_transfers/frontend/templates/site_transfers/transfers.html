@@ -10,7 +10,6 @@
   <header class="workspace-header">
     <div><h1>Stock transfers</h1><p>Stock moving between your sites: what is on its way, and what has arrived.</p></div>
     <div class="workspace-header__actions">
-      <a class="workspace-button" href="/core/inventory/view">Inventory</a>
       {% if can('inventory.adjust') %}<button type="button" class="workspace-button workspace-button--primary" data-transfers-move hidden>Move stock</button>{% endif %}
     </div>
   </header>

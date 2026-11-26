@@ -24,7 +24,7 @@ GROUPS = {
         "@batch-start",
         "@execution-step",
     ],
-    "g2": ["/core/processes", "/core/flows", "/core/flows/create/start", "/core/flows/create/template-catalog"],
+    "g2": ["/core/processes", "/core/flows", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "/core/flows/create/start", "/core/flows/create/template-catalog"],
     "g3": [
         "/core/inventory/view",
         "/core/inventory/add",
