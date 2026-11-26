@@ -1,1 +1,21 @@
 /* GLASS PROTOTYPE: page rules for group g8 (see wb task GLASS-G8). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* Contract orders: the page takes the full content column; the shell already pads it. */
+html body #page-content .contract-workspace,html body #page-content .contract-workspace[data-contracts-root]{max-width:none;padding:0 0 40px;margin:0}
+html body #page-content .contract-workspace > .workspace-header{margin-bottom:18px}
+html body #page-content .contract-workspace [class*="status"],html body #page-content .contract-workspace [class*="badge"],html body #page-content .contract-workspace [class*="pill"]{border-radius:999px}
+html body #page-content .contract-card{padding:22px 24px}
+@media (max-width:720px){html body #page-content .contract-card{padding:18px 16px}}
+html body #page-content .contract-workspace > .workspace-header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+html body #page-content .contract-ready{margin:0 0 14px;color:var(--muted)}
+html body #page-content .contract-card ul{list-style:none;padding:0;margin:6px 0 14px}
+html body #page-content .contract-card ul li{padding:8px 0;border-bottom:1px solid var(--line)}
+html body #page-content .contract-card h3{font-size:14px;font-weight:800;margin:14px 0 0;color:var(--ink)}
+html body #page-content .contract-card h2 + p{color:var(--muted);margin-top:2px}
+html body #page-content .contract-card fieldset{border:1px solid var(--line);border-radius:18px;padding:14px 16px}
+html body #page-content .contract-card a:not(.btn):not(.workspace-button){color:var(--accent);font-weight:700;text-decoration:none}
+html body #page-content .contract-card label:has(> input[type="checkbox"]){flex:1 1 100%;display:flex;flex-direction:row;align-items:flex-start;gap:10px;font-weight:600}
+html body #page-content .contract-card label > input[type="checkbox"]{margin-top:3px;flex:0 0 auto;width:18px;height:18px;min-width:0}
+html body #page-content .contract-card form > p{flex:1 1 100%;margin:4px 0;color:var(--muted)}
+html body #page-content .contract-card * + h2{margin-top:18px}
+html body #page-content .contract-card input[type="file"]{border:1px solid var(--field-line);border-radius:var(--g-r-ctl);padding:8px;background:var(--field);color:var(--ink);max-width:100%}

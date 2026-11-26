@@ -24,7 +24,13 @@ GROUPS = {
         "@batch-start",
         "@execution-step",
     ],
-    "g2": ["/core/processes", "/core/flows", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "/core/flows/create/start", "/core/flows/create/template-catalog"],
+    "g2": [
+        "/core/processes",
+        "/core/flows",
+        "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd",
+        "/core/flows/create/start",
+        "/core/flows/create/template-catalog",
+    ],
     "g3": [
         "/core/inventory/view",
         "/core/inventory/add",
@@ -73,7 +79,7 @@ GROUPS = {
         "/core/notifications",
         "/core/sourcemap",
     ],
-    "g8": ["/core/contracts", "/core/contracts/materials"],
+    "g8": ["/core/contracts", "/core/contracts/materials", "@contract-order", "@contract-sharing"],
 }
 
 
@@ -93,12 +99,18 @@ def _resolve(page, path):
     """'@batch-start' / '@execution-step': a real batch from the seeded org, read off the pages that link to it."""
     if not path.startswith("@"):
         return path
-    src, sel = ("/core", "a.gpo-rec") if path == "@batch-start" else ("/core/record", "a.rs-batch")
+    src, sel = {
+        "@batch-start": ("/core", "a.gpo-rec"),
+        "@execution-step": ("/core/record", "a.rs-batch"),
+        "@contract-order": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
+        "@contract-sharing": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
+    }[path]
     page.goto(src)
     page.wait_for_load_state("networkidle")
     link = page.locator(sel).first
     link.wait_for(timeout=15000)
-    return link.get_attribute("href")
+    href = link.get_attribute("href")
+    return href.split("?")[0] + "/portal-sharing" if path == "@contract-sharing" else href
 
 
 def _visit(page, path):
