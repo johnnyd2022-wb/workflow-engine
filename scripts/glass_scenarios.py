@@ -14,6 +14,7 @@ from ui_shots import PHONE, settle, shot
 DESKTOP = {"width": 1440, "height": 900}
 
 GROUPS = {
+    "g11": ["/core/inventory/live", "/core/costing/purchases", "/core/costing/costs", "/core/costing/rules", "/core/costing/margins", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings"],
     "g0": ["/core", "/core/dashboard"],
     "g1": [
         "/core",
@@ -150,6 +151,7 @@ g5 = _group("g5")
 g6 = _group("g6")
 g7 = _group("g7")
 g8 = _group("g8")
+g11 = _group("g11")
 
 
 def tray(page, out):
