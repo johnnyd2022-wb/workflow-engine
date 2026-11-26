@@ -294,3 +294,8 @@ new two, then one full pass on all five. Playwright screenshots at 1440 × 900 l
 full page, each read in full; the shooter fails on console
 errors and on sideways scroll at every width. Defects fixed between passes are listed in
 the MR.
+
+## Round 11: Glass L, Tray (option 22)
+
+From 21: Action items leave the page for the top bar. The button is a pill with a checklist icon, the words "Action items" and a red count (21), so it reads as work to do rather than as a notification; the bell keeps its dot. It opens a tray anchored under it on a laptop and a bottom sheet on a phone (the sheet is moved to `<body>`, because the glass bar's backdrop-filter would trap a fixed child). Below 1080 px the words drop and the icon and count stay. Recent activity now runs full width under Under way.
+
