@@ -43,3 +43,6 @@ html body [role="dialog"][aria-modal="true"]:not(dialog):not(#g-act-tray) select
 html body [role="dialog"][aria-modal="true"]:not(dialog):not(#g-act-tray) textarea{background:var(--field)!important;color:var(--ink)}
 @keyframes g-sheet-up{from{opacity:.4;margin-bottom:-24px}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){html body [role="dialog"][aria-modal="true"]:not(dialog){animation:none}}
+
+/* Selected chips sit on the accent: use its own ink so dark mode (light-blue accent) stays readable. */
+html body #page-content [class*="chip"].is-active,html body #page-content [class*="chip"][aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
