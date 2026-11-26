@@ -907,6 +907,24 @@ deploy_test:
   tags:
     - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
 
+# GLASS PROTOTYPE (branch proto/glass-theme only, never merged): every pipeline for this branch
+# rebuilds it and restarts workflow-engine-test-glass on :8003, served as test-glass.biz-e.app.
+# It borrows the running test container's settings and never migrates (scripts/deploy_test_glass.sh).
+deploy_test_glass:
+  stage: deploy
+  script:
+    - ./scripts/deploy_test_glass.sh
+  environment:
+    name: test-glass
+    url: https://test-glass.biz-e.app
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "proto/glass-theme"
+    - if: $CI_COMMIT_BRANCH == "proto/glass-theme"
+  needs: []
+  interruptible: true
+  tags:
+    - deploy-target
+
 # Ground-truth verification of the DEPLOYED container (not a fresh in-process
 # app) -- see tests/e2e/conftest.py's E2E_BASE_URL fixture path and its commit
 # message for why that distinction needed a real code fix first.
