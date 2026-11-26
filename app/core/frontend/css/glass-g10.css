@@ -1,1 +1,30 @@
 /* GLASS PROTOTYPE: page rules for group g10 (see wb task GLASS-G10). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* Dialogs rise from the bottom as sheets at every width (founder rule), solid surface, no focus ring on the sheet itself. */
+html body dialog[open]:modal{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(640px,100vw);max-width:100vw;max-height:88vh;overflow:auto;
+  border-radius:26px 26px 0 0;border-bottom:0;padding:22px 24px calc(22px + env(safe-area-inset-bottom));background:var(--solid);color:var(--text);
+  box-shadow:var(--shadow-pop);animation:g10-rise .24s cubic-bezier(.2,.8,.2,1);box-sizing:border-box}
+html body dialog[open]:modal::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:-8px auto 14px}
+html body dialog:focus,html body dialog:focus-visible{outline:none}
+html body dialog::backdrop{background:var(--scrim);backdrop-filter:blur(2px)}
+@keyframes g10-rise{from{transform:translateY(100%)}}
+@media (prefers-reduced-motion:reduce){html body dialog[open]:modal{animation:none}}
+html body dialog h2,html body dialog h3{color:var(--ink);font-weight:800;letter-spacing:-.01em}
+html body dialog p,html body dialog small{color:var(--text)}
+html body dialog a{color:var(--accent);font-weight:700}
+html body dialog input:not([type="checkbox"]):not([type="radio"]),html body dialog select,html body dialog textarea{background:var(--field);color:var(--ink);border:1px solid var(--field-line);border-radius:var(--g-r-ctl)}
+html body dialog button:not(.btn):not(.g-btn):not([class*="close"]){border-radius:var(--g-r-pill)}
+html body dialog [class*="close"]{border-radius:50%}
+
+/* Toast: a solid rounded card, top right; at the bottom above the tab bar on a phone. */
+html body .spa-notification-toast .card{border-radius:20px !important;padding:16px 18px !important}
+html body .spa-notification-toast #notification-title{color:var(--ink) !important;font-weight:800 !important}
+html body .spa-notification-toast #notification-message{color:var(--text) !important}
+@media (max-width:720px){html body .spa-notification-toast{top:auto !important;bottom:calc(96px + env(safe-area-inset-bottom)) !important;left:12px !important;right:12px !important;min-width:0 !important;max-width:none !important}}
+/* Page dialogs (move, hold, recall, people, integrations …) carry #page-content rules; meet them there. */
+html body #page-content dialog[open]:modal{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(640px,100vw);max-width:100vw;max-height:88vh;overflow:auto;
+  border-radius:26px 26px 0 0;border:1px solid var(--rim-dim);border-bottom:0;padding:0 0 env(safe-area-inset-bottom);background:var(--solid);color:var(--text);
+  box-shadow:var(--shadow-pop);animation:g10-rise .24s cubic-bezier(.2,.8,.2,1);box-sizing:border-box}
+html body #page-content dialog[open]:modal::before{margin:10px auto 0}
+html body #page-content dialog::backdrop{background:var(--scrim)}
+html body #page-content dialog textarea{background:var(--field);border-radius:var(--g-r-ctl)}

@@ -14,7 +14,17 @@ from ui_shots import PHONE, settle, shot
 DESKTOP = {"width": 1440, "height": 900}
 
 GROUPS = {
-    "g11": ["/core/inventory/live", "/core/costing/purchases", "/core/costing/costs", "/core/costing/rules", "/core/costing/margins", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings"],
+    "g11": [
+        "/core/inventory/live",
+        "/core/costing/purchases",
+        "/core/costing/costs",
+        "/core/costing/rules",
+        "/core/costing/margins",
+        "/compliant/nz-alcohol/np3-audit",
+        "/compliant/nz-alcohol/wine",
+        "/compliant/nz-alcohol/evidence",
+        "/crm/tastings",
+    ],
     "g0": ["/core", "/core/dashboard"],
     "g1": [
         "/core",
@@ -180,3 +190,57 @@ def boosted(page, out):
     settle(page, 300)
     shot(page, out, "boosted-tray")
     page.keyboard.press("Escape")
+
+
+def _modal_shots(page, out, tag):
+    """Open each shared dialog, sheet and toast in turn and shoot it."""
+    _visit(page, "/core/inventory/view")
+    line = page.evaluate(
+        """async () => {
+            const d = await window.CoreAPI.getInventory(null, null, {compact: true});
+            const items = Array.isArray(d) ? d : (Object.values(d).find(Array.isArray) || []);
+            const it = items.find(i => Number(i.quantity) > 0) || items[0];
+            return it ? {id: it.id, name: it.name, quantity: it.quantity, unit: it.unit,
+                         site_id: it.site_id, location_id: it.location_id, quality_hold: null} : null;
+        }"""
+    )
+    steps = [
+        ("move", "line => window.BizeMove && window.BizeMove.open(line, {})"),
+        ("hold", "line => window.BizeHold && window.BizeHold.hold(line, {})"),
+        ("recall", "line => window.BizeRecall && window.BizeRecall.start(line, {})"),
+        ("help", "() => window.BizeHelp && window.BizeHelp.open()"),
+    ]
+    for name, js in steps:
+        _visit(page, "/core/inventory/view")
+        try:
+            page.evaluate(js, line)
+        except Exception as exc:  # noqa: BLE001 - a missing dialog is reported, not fatal
+            print(f"modal {name}: {exc}")
+        settle(page, 600)
+        shot(page, out, f"modals-{name}-{tag}")
+        page.keyboard.press("Escape")
+    _visit(page, "/core/inventory/view")
+    page.evaluate(
+        "() => window.showNotification && window.showNotification('success', 'Saved', 'The stock line is updated.')"
+    )
+    settle(page, 400)
+    shot(page, out, f"modals-toasts-{tag}")
+    _visit(page, "/core/inventory/view")
+    card = page.locator("#core2-inv-items-grid [data-group-index], #core2-inv-items-grid > *").first
+    if card.count():
+        card.click()
+        settle(page, 600)
+        shot(page, out, f"modals-item-sheet-{tag}")
+        page.keyboard.press("Escape")
+    _visit(page, "/core/flows")
+    shot(page, out, f"modals-fixed-bar-{tag}")
+
+
+def modals(page, out):
+    """GLASS G10: shared dialogs, sheets, toasts and the fixed action bar on desktop, dark and phone."""
+    for vp, mode, tag in ((DESKTOP, "light", "desktop"), (DESKTOP, "dark", "dark"), (PHONE, "light", "phone")):
+        page.set_viewport_size(vp)
+        theme(page, mode)
+        _modal_shots(page, out, tag)
+    theme(page, "light")
+    page.set_viewport_size(DESKTOP)
