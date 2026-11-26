@@ -530,13 +530,15 @@ class TestEntityActivityFeed:
         names = {e["payload"]["name"] for e in body["events"]}
         assert names == {"in_range"}, f"expected only the in-range event, got {names}"
 
-    def test_ac13_malformed_date_is_silently_ignored_not_400(self, org, app_client):
+    def test_ac13_malformed_from_date_is_rejected(self, org, app_client):
         resp = app_client.get("/api/core/entities/activity?from_date=not-a-date")
-        assert resp.status_code == 200, resp.data
+        assert resp.status_code == 400, resp.data
+        assert "from_date" in resp.get_json()["errors"]
 
-    def test_ac13_malformed_to_date_is_silently_ignored_not_400(self, org, app_client):
+    def test_ac13_malformed_to_date_is_rejected(self, org, app_client):
         resp = app_client.get("/api/core/entities/activity?to_date=not-a-date")
-        assert resp.status_code == 200, resp.data
+        assert resp.status_code == 400, resp.data
+        assert "to_date" in resp.get_json()["errors"]
 
     def test_ac_gap_non_numeric_limit_returns_400_not_500(self, app_client, org):
         resp = app_client.get("/api/core/entities/activity?limit=abc")
@@ -852,9 +854,9 @@ class TestMergeInventoryLegacyAuditMatching:
 
         resp = app_client.get(f"/api/core/entities/inventory_item/{item.id}/story")
         body = resp.get_json()
-        assert (
-            len(body["events"]) == 1
-        ), "a matched legacy entry augments the existing event, it does not add a second row"
+        assert len(body["events"]) == 1, (
+            "a matched legacy entry augments the existing event, it does not add a second row"
+        )
         assert body["events"][0]["event_type"] != "inventory_item.legacy_entry"
         assert "Jane Operator" in body["events"][0]["actor"]
 

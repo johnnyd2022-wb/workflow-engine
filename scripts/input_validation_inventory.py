@@ -77,7 +77,28 @@ def source_inputs(view):
         and node.value.id == "request"
         and node.attr in REQUEST_INPUTS
     ]
-    return {"source": source, "line": start, "reads": sorted(reads, key=lambda read: read["line"])}
+    schemas = {}
+    for call in ast.walk(tree):
+        if (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id in {"read_json", "read_form"}
+            and call.args
+            and isinstance(call.args[0], ast.Name)
+        ):
+            name = call.args[0].id
+            model = handler.__globals__.get(name)
+            if model is not None and hasattr(model, "model_fields"):
+                schemas[name] = {
+                    "source": "json" if call.func.id == "read_json" else "form",
+                    "fields": {field: {"required": info.is_required()} for field, info in model.model_fields.items()},
+                }
+    return {
+        "source": source,
+        "line": start,
+        "reads": sorted(reads, key=lambda read: read["line"]),
+        "schemas": schemas,
+    }
 
 
 def route_inventory(app, requirement_for, deny, blueprint):

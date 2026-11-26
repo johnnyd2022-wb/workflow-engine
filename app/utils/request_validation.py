@@ -122,3 +122,27 @@ def _field_path(schema: type[JsonInput], location: tuple) -> str:
             break
         path.append(str(part))
     return ".".join(path) or "_body"
+
+
+def query_text(name: str, *, default: str = "", max_length: int = 255) -> str:
+    """Read one bounded query string value."""
+    values = request.args.getlist(name)
+    if not values:
+        return default
+    if len(values) != 1:
+        raise InvalidInputError({name: "Use one value for this parameter."})
+    value = values[0]
+    if len(value) > max_length or any(category(character) in {"Cc", "Cs"} for character in value):
+        raise InvalidInputError({name: f"Enter text of up to {max_length} characters."})
+    return value.strip()
+
+
+def query_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
+    """Read a bounded non-negative integer from a URL query string."""
+    raw = query_text(name, default=str(default), max_length=24)
+    if not raw.isascii() or not raw.isdecimal():
+        raise InvalidInputError({name: f"{name} must be an integer."})
+    value = int(raw)
+    if not minimum <= value <= maximum:
+        raise InvalidInputError({name: f"{name} must be between {minimum} and {maximum}."})
+    return value

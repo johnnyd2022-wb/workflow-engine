@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from flask import g, jsonify, request
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_int, query_text
 
 logger = get_logger(__name__)
 
@@ -587,10 +588,10 @@ def entity_story(entity_type: str, entity_id: str):
 
     org_id = UUID(g.org_id)
     try:
-        limit = min(int(request.args.get("limit", 200)), 500)
-        offset = int(request.args.get("offset", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "limit and offset must be integers"}), 400
+        limit = query_int("limit", default=200, minimum=1, maximum=500)
+        offset = query_int("offset", default=0, minimum=0, maximum=2**31 - 1)
+    except InvalidInputError as exc:
+        return exc.response()
 
     db = db_session()
     events = (
@@ -796,6 +797,19 @@ def entity_summary_detail(entity_type: str, entity_id: str):
     ), 200
 
 
+def _activity_date(name: str) -> date | None:
+    raw = query_text(name, max_length=10)
+    if not raw:
+        return None
+    try:
+        parsed = date.fromisoformat(raw)
+        if parsed.isoformat() == raw:
+            return parsed
+    except ValueError:
+        pass
+    raise InvalidInputError({name: "Enter a date in YYYY-MM-DD format."})
+
+
 @requires_auth
 def entity_activity_feed():
     """All entity events for the org, newest-first, with optional date/type filtering.
@@ -806,13 +820,18 @@ def entity_activity_feed():
 
     org_id = UUID(g.org_id)
     try:
-        limit = min(int(request.args.get("limit", 150)), 500)
-        offset = int(request.args.get("offset", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "limit and offset must be integers"}), 400
-    from_date = request.args.get("from_date", "")
-    to_date = request.args.get("to_date", "")
-    entity_types_param = request.args.get("entity_types", "")
+        limit = query_int("limit", default=150, minimum=1, maximum=500)
+        offset = query_int("offset", default=0, minimum=0, maximum=2**31 - 1)
+    except InvalidInputError as exc:
+        return exc.response()
+    try:
+        from_date = _activity_date("from_date")
+        to_date = _activity_date("to_date")
+        entity_types_param = query_text("entity_types", max_length=512)
+        if from_date and to_date and from_date > to_date:
+            raise InvalidInputError({"to_date": "End date must be on or after the start date."})
+    except InvalidInputError as exc:
+        return exc.response()
 
     db = db_session()
     q = db.query(EntityEvent).filter(EntityEvent.org_id == org_id)
@@ -823,18 +842,9 @@ def entity_activity_feed():
             q = q.filter(EntityEvent.entity_type.in_(allowed))
 
     if from_date:
-        try:
-            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            q = q.filter(EntityEvent.created_at >= fd)
-        except ValueError:
-            pass
-
+        q = q.filter(EntityEvent.created_at >= datetime.combine(from_date, time.min, tzinfo=UTC))
     if to_date:
-        try:
-            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=UTC)
-            q = q.filter(EntityEvent.created_at <= td)
-        except ValueError:
-            pass
+        q = q.filter(EntityEvent.created_at <= datetime.combine(to_date, time.max, tzinfo=UTC))
 
     total = q.count()
     events = q.order_by(EntityEvent.created_at.desc()).offset(offset).limit(limit).all()
