@@ -299,3 +299,4 @@ the MR.
 
 From 21: Action items leave the page for the top bar. The button is a pill with a checklist icon, the words "Action items" and a red count (21), so it reads as work to do rather than as a notification; the bell keeps its dot. It opens a tray anchored under it on a laptop and a bottom sheet on a phone (the sheet is moved to `<body>`, because the glass bar's backdrop-filter would trap a fixed child). Below 1080 px the words drop and the icon and count stay. Recent activity now runs full width under Under way.
 
+Revised: the button is icon-only (a clipboard with a tick, the usual "tasks" symbol) with the count as a badge, like the bell. Tabs are Overview, Inventory, Workflows, Planner, Tasks; Production tasks moved off the Manage production bar into the Tasks tab.
