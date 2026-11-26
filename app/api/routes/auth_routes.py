@@ -37,7 +37,13 @@ from app.core.db.repositories.user_repo import EmailConflictError, UserRepositor
 from app.core.security.access_policy import access_expired, role_label_for
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
-from app.core.security.people import PeopleError, hash_invite_token, permission_list, validate_new_password
+from app.core.security.people import (
+    PeopleError,
+    hash_invite_token,
+    permission_list,
+    validate_email,
+    validate_new_password,
+)
 from app.core.security.permissions import requires_auth
 from app.core.security.tenant_scope import unscoped
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
@@ -50,40 +56,6 @@ from app.utils.request_validation import InvalidInputError, read_json
 logger = get_logger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
-
-
-def validate_email(email: str) -> tuple[bool, str | None]:
-    """
-    Validate email address format.
-
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    if not email:
-        return False, "Email address is required"
-
-    email = email.strip()
-
-    if not email:
-        return False, "Email address cannot be empty"
-
-    if "@" not in email or any(character.isspace() for character in email):
-        return False, "Invalid email address format"
-
-    # Basic validation: must have @ and at least one character before and after
-    parts = email.split("@")
-    if len(parts) != 2:
-        return False, "Invalid email address format"
-
-    if not parts[0] or not parts[1]:
-        return False, "Invalid email address format"
-
-    # Check for basic domain format (at least one dot)
-    labels = parts[1].split(".")
-    if len(labels) < 2 or any(not label for label in labels):
-        return False, "Invalid email address format"
-
-    return True, None
 
 
 # Relaxed limits: CI jobs (GitLab sets CI / GITLAB_CI) and any process running with

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Blueprint, g, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, g, redirect, render_template, request, send_file, url_for
 
 from app.admin_site import operations as ops
 from app.admin_site.auth import settings
@@ -15,6 +15,7 @@ from app.core.db.models.organisation import OrganisationStatus
 admin_bp = Blueprint("admin", __name__)
 
 _STATUS = {"active": OrganisationStatus.ACTIVE, "suspended": OrganisationStatus.SUSPENDED}
+_MAX_PAGE = (2**31 - 1) // ops.PAGE_SIZE
 
 
 @admin_bp.app_context_processor
@@ -31,6 +32,17 @@ def _invite_link(token: str | None) -> str | None:
     return f"{settings().customer_app_url}/invite/{token}" if token else None
 
 
+def _page_number() -> int | None:
+    values = request.args.getlist("page")
+    if not values:
+        return 1
+    raw = values[0]
+    if len(values) != 1 or len(raw) > len(str(_MAX_PAGE)) or not raw.isascii() or not raw.isdecimal():
+        return None
+    page = int(raw)
+    return page if 1 <= page <= _MAX_PAGE else None
+
+
 @admin_bp.route("/")
 def home():
     return redirect(url_for("admin.organisations"))
@@ -42,10 +54,11 @@ def home():
 def _organisations_page(*, error=None, form=None, status_code=200):
     search = request.args.get("q", "").strip()[:255]
     status = request.args.get("status", "all")
-    try:
-        page = max(1, int(request.args.get("page", "1")))
-    except ValueError:
+    page = _page_number()
+    if page is None:
         page = 1
+        error = error or "Enter a valid page number."
+        status_code = 400
     orgs, total = ops.list_organisations(
         db_session(), search=search, status=_STATUS.get(status), offset=(page - 1) * ops.PAGE_SIZE
     )
@@ -184,10 +197,9 @@ def rename_organisation(org_id):
 def audit(org_id):
     db = db_session()
     org = ops.get_organisation(db, org_id)
-    try:
-        page = max(1, int(request.args.get("page", "1")))
-    except ValueError:
-        page = 1
+    page = _page_number()
+    if page is None:
+        abort(400, description="Enter a valid page number.")
     person = ops.get_user(db, org.id, request.args["user"]) if request.args.get("user") else None
     entries, total = ops.list_audit(
         db, org.id, user_id=person.id if person else None, offset=(page - 1) * ops.PAGE_SIZE

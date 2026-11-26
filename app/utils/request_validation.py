@@ -5,6 +5,7 @@ uses strict Pydantic types. Dates, UUIDs, decimal strings and enum values use th
 standard JSON representations. Schemas reject extra fields by default.
 """
 
+from types import NoneType, UnionType
 from typing import Annotated, get_args, get_origin
 from unicodedata import category
 
@@ -107,6 +108,12 @@ def _field_path(schema: type[JsonInput], location: tuple) -> str:
     annotation = schema
     path = []
     for part in location:
+        if get_origin(annotation) is UnionType:
+            variants = tuple(choice for choice in get_args(annotation) if choice is not NoneType)
+            if len(variants) == 1:
+                annotation = variants[0]
+        if get_origin(annotation) is Annotated:
+            annotation = get_args(annotation)[0]
         if isinstance(part, int) and get_origin(annotation) is list:
             annotation = get_args(annotation)[0]
         elif isinstance(annotation, type) and issubclass(annotation, JsonInput) and part in annotation.model_fields:

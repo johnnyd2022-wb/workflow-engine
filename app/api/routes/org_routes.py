@@ -5,9 +5,15 @@ from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request
 
+from app.api.routes.org_payloads import (
+    CreateRoleInput,
+    CreateUserInput,
+    UpdateOrganisationInput,
+    UpdateRoleInput,
+    UpdateUserInput,
+)
 from app.core.db import db_session
 from app.core.db.models.org_role import OrgRole
-from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.site import Site
 from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.organisation_repo import OrganisationRepository
@@ -25,6 +31,7 @@ from app.core.security.people import (
     role_value,
     serialize_person,
     validate_custom_role,
+    validate_email,
     validate_new_password,
 )
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
@@ -37,6 +44,7 @@ from app.core.security.staff_site_roles import (
 from app.core.utils.emit_event import emit_event
 from app.core.utils.log_action import log_action
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, read_json
 
 logger = get_logger(__name__)
 
@@ -80,10 +88,12 @@ def get_current_org():
 @requires_org_scope
 def update_org():
     """Update current organisation (admin only)"""
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
+    try:
+        data = read_json(UpdateOrganisationInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    if data.name is None and data.status is None:
+        return InvalidInputError({"_body": "Include a name or status to update."}).response()
 
     if not g.current_org:
         return jsonify({"error": "Organisation not found"}), 404
@@ -92,15 +102,9 @@ def update_org():
     try:
         org_repo = OrganisationRepository(db)
 
-        name = data.get("name")
-        status_str = data.get("status")
-
-        status = None
-        if status_str:
-            try:
-                status = OrganisationStatus(status_str)
-            except ValueError:
-                return jsonify({"error": f"Invalid status: {status_str}"}), 400
+        name = data.name
+        status = data.status
+        status_str = status.value if status is not None else None
 
         # Capture before-state for diff
         before_name = g.current_org.name
@@ -172,11 +176,6 @@ def _invite_url(token: str) -> str:
     return request.host_url.rstrip("/") + "/invite/" + token
 
 
-def _json_body():
-    data = request.get_json(silent=True)
-    return data if isinstance(data, dict) else None
-
-
 @org_bp.route("/users", methods=["POST"])
 @requires_auth
 @requires_role(UserRole.ADMIN)
@@ -188,20 +187,21 @@ def create_user():
     to pass on; the person sets their own password. With a password (the scripted path the
     Whistlebird replay and tests use) the account is active straight away.
     """
-    data = _json_body()
-    if data is None:
-        return jsonify({"error": "JSON body required"}), 400
-
-    email = (data.get("email") or "").strip().lower()
-    password = data.get("password")
-    if not email:
-        return jsonify({"error": "email is required"}), 400
+    try:
+        data = read_json(CreateUserInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    email = data.email.lower()
+    password = data.password
+    is_valid, message = validate_email(email)
+    if not is_valid:
+        return InvalidInputError({"email": message}).response()
 
     db = db_session()
     try:
         lock_role_administration(db, g.current_org_id)
-        role, custom = parse_role_choice(data.get("role", "member"), _custom_roles(db))
-        expires = parse_access_expiry(data.get("access_expires_at"), role)
+        role, custom = parse_role_choice(data.role, _custom_roles(db))
+        expires = parse_access_expiry(data.access_expires_at, role)
         if password:
             validate_new_password(password)
 
@@ -215,8 +215,8 @@ def create_user():
                 password_hash=AuthService.hash_password(secret),
                 role=role,
                 is_active=bool(password),
-                first_name=(data.get("first_name") or "").strip() or None,
-                last_name=(data.get("last_name") or "").strip() or None,
+                first_name=data.first_name or None,
+                last_name=data.last_name or None,
             )
         except EmailConflictError as e:
             db.rollback()
@@ -266,9 +266,10 @@ def _load_target(db, user_uuid: UUID):
 @requires_org_scope
 def update_user(user_id: str):
     """Change someone's role, access end date, or active state (admin only)."""
-    data = _json_body()
-    if data is None:
-        return jsonify({"error": "JSON body required"}), 400
+    try:
+        data = read_json(UpdateUserInput).model_dump(mode="json", exclude_unset=True)
+    except InvalidInputError as exc:
+        return exc.response()
 
     user_uuid = _parse_user_id(user_id)
     if user_uuid is None:
@@ -284,9 +285,7 @@ def update_user(user_id: str):
         role, custom = parse_role_choice(data["role"], _custom_roles(db)) if "role" in data else (None, None)
         if "role" in data and target.id == g.current_user.id and str(data["role"]).strip() != role_value(target):
             raise PeopleError("You can't change your own role. Ask another admin.")
-        is_active = data.get("is_active") if "is_active" in data else None
-        if is_active is not None and not isinstance(is_active, bool):
-            return jsonify({"error": "is_active must be true or false"}), 400
+        is_active = data.get("is_active")
         if is_active is True and invite_is_pending(target):
             return jsonify({"error": "This person hasn't accepted their invite yet."}), 400
 
@@ -466,9 +465,10 @@ def list_roles():
 @requires_org_scope
 def create_role():
     """Clone a built-in role and tick its permissions (admin only)."""
-    data = _json_body()
-    if data is None:
-        return jsonify({"error": "JSON body required"}), 400
+    try:
+        data = read_json(CreateRoleInput).model_dump(mode="json", exclude_unset=True)
+    except InvalidInputError as exc:
+        return exc.response()
     db = db_session()
     try:
         lock_role_administration(db, g.current_org_id)
@@ -507,9 +507,10 @@ def _load_role(db, role_id: str):
 @requires_org_scope
 def update_role(role_id: str):
     """Rename a custom role or change its permissions; everyone holding it changes at once."""
-    data = _json_body()
-    if data is None:
-        return jsonify({"error": "JSON body required"}), 400
+    try:
+        data = read_json(UpdateRoleInput).model_dump(mode="json", exclude_unset=True)
+    except InvalidInputError as exc:
+        return exc.response()
     db = db_session()
     lock_role_administration(db, g.current_org_id)
     role = _load_role(db, role_id)

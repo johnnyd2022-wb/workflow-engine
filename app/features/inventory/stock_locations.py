@@ -9,9 +9,12 @@ the licensed area is an excise removal on the move date.
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify
+from pydantic import Field, StringConstraints
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -19,8 +22,22 @@ from app.core.db.models.stock_location import StockLocation
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
+from app.utils.request_validation import CleanName, InvalidInputError, JsonInput, read_json
 
 stock_locations_bp = Blueprint("stock_locations", __name__)
+
+
+class CreateLocationInput(JsonInput):
+    name: Annotated[CleanName, StringConstraints(max_length=120)]
+    inside_licensed_area: bool = False
+    site_id: UUID | None = None
+
+
+class MoveStockInput(JsonInput):
+    quantity: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=4)]
+    to_location_id: UUID | Literal[""] | None = None
+    occurred_on: date | Literal[""] | None = None
+    note: Annotated[str, StringConstraints(max_length=500, pattern=r"^[^\x00]*$")] | None = None
 
 
 def _org_id() -> UUID:
@@ -57,14 +74,15 @@ def list_locations():
 @stock_locations_bp.route("/api/core/stock-locations", methods=["POST"])
 @requires_auth
 def create_location():
-    data = request.get_json(silent=True) or {}
-    name = str(data.get("name") or "").strip()
-    if not name or len(name) > 120:
-        return jsonify({"error": "name is required (up to 120 characters)"}), 400
+    try:
+        data = read_json(CreateLocationInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    name = data.name
     loc = StockLocation(
         org_id=_org_id(),
         name=name,
-        inside_licensed_area=bool(data.get("inside_licensed_area")),
+        inside_licensed_area=data.inside_licensed_area,
         site_id=getattr(g, "validated_site_id", None),
     )
     db_session.add(loc)
@@ -82,21 +100,22 @@ def create_location():
 @stock_locations_bp.route("/api/core/inventory/<item_id>/move", methods=["POST"])
 @requires_auth
 def move_stock(item_id: str):
-    data = request.get_json(silent=True) or {}
     try:
         item_uuid = UUID(item_id)
-        to_location = UUID(str(data["to_location_id"])) if data.get("to_location_id") else None
-        occurred = date.fromisoformat(str(data.get("occurred_on") or date.today().isoformat()))
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid item, location or date"}), 400
+    except ValueError:
+        return InvalidInputError({"item_id": "Enter a valid item ID."}).response()
+    try:
+        data = read_json(MoveStockInput)
+    except InvalidInputError as exc:
+        return exc.response()
     try:
         new_item, transfer = InventoryRepository(db_session).move_lot(
             _org_id(),
             item_uuid,
-            data.get("quantity"),
-            to_location,
-            occurred,
-            data.get("note"),
+            data.quantity,
+            data.to_location_id or None,
+            data.occurred_on or date.today(),
+            data.note,
             user_id=g.current_user.id,
             commit=False,
         )

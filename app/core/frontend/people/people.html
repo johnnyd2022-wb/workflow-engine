@@ -58,10 +58,10 @@
   <dialog class="pp-dialog" data-people-dialog aria-labelledby="people-dialog-title">
     <form data-people-form method="dialog" hx-boost="false" novalidate>
       <h2 id="people-dialog-title">Invite someone</h2>
-      <label class="pp-field">Email<input type="email" name="email" id="people-email" required autocomplete="off"></label>
+      <label class="pp-field">Email<input type="email" name="email" id="people-email" maxlength="255" required autocomplete="off"></label>
       <div class="pp-row2">
-        <label class="pp-field">First name<input name="first_name" id="people-first-name" autocomplete="off"></label>
-        <label class="pp-field">Last name<input name="last_name" id="people-last-name" autocomplete="off"></label>
+        <label class="pp-field">First name<input name="first_name" id="people-first-name" maxlength="255" autocomplete="off"></label>
+        <label class="pp-field">Last name<input name="last_name" id="people-last-name" maxlength="255" autocomplete="off"></label>
       </div>
       <label class="pp-field">Role
         <select name="role" id="people-role" data-people-role-select></select>
