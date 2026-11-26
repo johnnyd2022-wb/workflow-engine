@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any
 from uuid import UUID
 
@@ -14,14 +14,22 @@ from app.core.db import SessionLocal, db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep
-from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.process_repo import STALE_WRITE, STEP_TIMING_FIELDS, ProcessRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_duration
 from app.core.security.permissions import requires_auth, requires_role
+from app.features.process_design.process_payloads import (
+    POSITION_LIMIT,
+    CreateProcessInput,
+    CreateStepInput,
+    ReorderStepsInput,
+    UpdateProcessInput,
+    UpdateStepInput,
+)
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, read_json
 
 logger = get_logger(__name__)
 
@@ -105,42 +113,7 @@ def _get_process_or_404(process_id: UUID):
     return proc
 
 
-def _is_valid_step_position(pos) -> bool:
-    """Pure grid-validity check, shared by `_coerce_step_position` (which aborts) and
-    `reorder_steps` (which needs a plain bool since it can't call `abort()` from inside
-    a `with sess.begin():` block without triggering a partial commit — see reorder_steps).
-    """
-    from decimal import Decimal
-
-    # Defensive bounds: reject NaN/Inf and negative/zero positions.
-    if not pos.is_finite() or pos <= 0:
-        return False
-    # Guard against pathological magnitudes (prevents log spam / abuse).
-    if pos.copy_abs() > Decimal("1e30"):
-        return False
-    # Hard invariant: always store positions on the 1000-grid.
-    if (pos % Decimal("1000")) != 0:
-        return False
-    return True
-
-
-def _coerce_step_position(value):
-    if value is None:
-        return None
-    from decimal import Decimal
-
-    try:
-        pos = Decimal(str(value))
-    except Exception:
-        abort(400)
-    if not _is_valid_step_position(pos):
-        abort(400)
-    return pos
-
-
 def _next_step_position(process_id: UUID) -> Decimal:
-    from decimal import Decimal
-
     max_pos = (
         db_session.query(Step.position)
         .filter(Step.process_id == process_id)
@@ -151,11 +124,15 @@ def _next_step_position(process_id: UUID) -> Decimal:
     if max_pos is None:
         return Decimal("1000")
     grid = Decimal("1000")
-    mp = Decimal(str(max_pos))
-    rem = mp % grid
-    if rem != 0:
-        mp = mp + (grid - rem)
-    return mp + grid
+    with localcontext() as context:
+        context.prec = 50
+        position = Decimal(str(max_pos))
+        if remainder := position % grid:
+            position += grid - remainder
+        position += grid
+    if position >= POSITION_LIMIT:
+        raise InvalidInputError({"position": "Reorder steps before adding another at the end."})
+    return position
 
 
 def _flow_state_key(process_id: UUID | None) -> str:
@@ -254,24 +231,6 @@ def _iso(dt):
     return dt.isoformat() if dt else None
 
 
-_STEP_TIMING_LIMIT = 525_600  # a year in minutes; the planner's limit for a step
-
-
-def _step_timing(data) -> tuple[dict, str | None]:
-    """The step-timing keys present in ``data``: whole minutes up to a year, or null to clear."""
-    timing = {}
-    for field in STEP_TIMING_FIELDS:
-        if field not in data:
-            continue
-        value = data[field]
-        if value is not None and (
-            isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _STEP_TIMING_LIMIT
-        ):
-            return {}, "Step timings are whole minutes, from 0 up to a year"
-        timing[field] = value
-    return timing, None
-
-
 def _serialize_step(step) -> dict:
     return {
         "id": str(step.id),
@@ -296,11 +255,13 @@ def _validate_process_settings(raw: Any) -> tuple[dict, str | None]:
         return {}, "settings must be an object"
     unknown = sorted(set(raw) - _PROCESS_SETTINGS_KEYS)
     if unknown:
-        return {}, f"settings: unknown key(s) {', '.join(unknown)}"
+        return {}, "settings has unknown keys."
     if "fifo_auto_select" in raw and not isinstance(raw["fifo_auto_select"], bool):
         return {}, "settings.fifo_auto_select must be true or false"
-    if "library_stock_name" in raw and not (0 < len(str(raw["library_stock_name"] or "").strip()) <= 60):
-        return {}, "settings.library_stock_name must be 1-60 characters"
+    if "library_stock_name" in raw:
+        name = raw["library_stock_name"]
+        if not isinstance(name, str) or not 0 < len(name.strip()) <= 60 or any(ord(char) < 32 for char in name):
+            return {}, "settings.library_stock_name must be text of 1 to 60 characters"
     return raw, None
 
 
@@ -371,6 +332,16 @@ def _validate_step_outputs_expiry_after_ready(outputs: list) -> list[str]:
             continue
         errors.extend(assert_expiry_after_ready_duration(out_name, rv, ru, ev, eu))
     return errors
+
+
+def _process_field_error(error: InvalidInputError):
+    field = next(iter(error.errors))
+    message = error.errors[field]
+    if field in STEP_TIMING_FIELDS:
+        message = "Step timings are whole minutes, from 0 up to a year."
+    elif field != "_body":
+        message = f"Check {field}. {message}"
+    return jsonify(error=message, errors=error.errors), 400
 
 
 def register_routes(bp):
@@ -570,7 +541,10 @@ def register_routes(bp):
     def list_processes():
         """List all processes for the current organisation"""
         org_id = UUID(g.org_id)
-        include_steps = request.args.get("include_steps", "false").lower() == "true"
+        step_flags = request.args.getlist("include_steps")
+        if len(step_flags) > 1 or (step_flags and step_flags[0].lower() not in {"true", "false"}):
+            return InvalidInputError({"include_steps": "Use true or false."}).response()
+        include_steps = bool(step_flags and step_flags[0].lower() == "true")
         repo = ProcessRepository(db_session)
         processes = repo.list_processes(org_id)
 
@@ -649,34 +623,22 @@ def register_routes(bp):
     def create_process():
         """Create a new process"""
         org_id = UUID(g.org_id)
-        data = request.get_json()
-
-        name = data.get("name")
-        if not name:
-            return jsonify({"error": "Process name is required"}), 400
-
-        description = data.get("description")
-        category_str = data.get("category")
-        category = None
-        if category_str:
-            try:
-                category = ProcessCategory(category_str)
-            except ValueError:
-                return jsonify({"error": f"Invalid category: {category_str}"}), 400
-
-        is_draft = data.get("is_draft", False)
-        settings, settings_error = _validate_process_settings(data.get("settings"))
+        try:
+            data = read_json(CreateProcessInput)
+        except InvalidInputError as exc:
+            return _process_field_error(exc)
+        settings, settings_error = _validate_process_settings(data.settings)
         if settings_error:
-            return jsonify({"error": settings_error}), 400
+            return InvalidInputError({"settings": settings_error}).response()
 
         repo = ProcessRepository(db_session)
         try:
             process = repo.create_process(
                 org_id=org_id,
-                name=name,
-                description=description,
-                category=category,
-                is_draft=is_draft,
+                name=data.name,
+                description=data.description,
+                category=data.category or None,
+                is_draft=data.is_draft,
                 settings=settings,
             )
             return jsonify(_serialize_process(process)), 201
@@ -697,31 +659,23 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process ID"}), 400
 
-        data = request.get_json()
-        name = data.get("name")
-        description = data.get("description")
-        category_str = data.get("category")
-        is_draft = data.get("is_draft")  # Extract is_draft from request
-        settings, settings_error = _validate_process_settings(data.get("settings"))
+        try:
+            data = read_json(UpdateProcessInput)
+        except InvalidInputError as exc:
+            return _process_field_error(exc)
+        settings, settings_error = _validate_process_settings(data.settings)
         if settings_error:
-            return jsonify({"error": settings_error}), 400
-
-        category = None
-        if category_str:
-            try:
-                category = ProcessCategory(category_str)
-            except ValueError:
-                return jsonify({"error": f"Invalid category: {category_str}"}), 400
+            return InvalidInputError({"settings": settings_error}).response()
 
         repo = ProcessRepository(db_session)
         try:
             process = repo.update_process(
                 process_id=process_uuid,
                 org_id=org_id,
-                name=name,
-                description=description,
-                category=category,
-                is_draft=is_draft,  # Pass is_draft to repository
+                name=data.name,
+                description=data.description,
+                category=data.category or None,
+                is_draft=data.is_draft,
                 settings=settings or None,
                 if_match=_if_match_token(),
             )
@@ -823,44 +777,33 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process ID"}), 400
 
-        data = request.get_json()
-        step_number = data.get("step_number")
-        name = data.get("name")
-
-        if step_number is None or name is None:
-            return jsonify({"error": "step_number and name are required"}), 400
         try:
-            step_number_int = int(step_number)
-        except Exception:
-            return jsonify({"error": "Invalid step_number"}), 400
-
-        # Option B ordering: accept explicit position, else append.
-        position = _coerce_step_position(data.get("position"))
-        if position is None:
-            position = _next_step_position(process_uuid)
-
-        outputs = data.get("outputs", [])
+            payload = read_json(CreateStepInput)
+        except InvalidInputError as exc:
+            return _process_field_error(exc)
+        data = payload.model_dump(exclude_unset=True)
+        outputs = data.get("outputs") or []
         expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
         if expiry_ready_errors:
-            return jsonify({"error": expiry_ready_errors[0]}), 400
-        timing, timing_error = _step_timing(data)
-        if timing_error:
-            return jsonify({"error": timing_error}), 400
+            return InvalidInputError({"outputs": expiry_ready_errors[0]}).response()
+        timing = {field: data[field] for field in STEP_TIMING_FIELDS if field in data}
 
         repo = ProcessRepository(db_session)
         try:
             step = repo.add_step(
                 process_id=process_uuid,
                 org_id=org_id,
-                step_number=step_number_int,
-                position=position,
-                name=name,
+                step_number=payload.step_number,
+                position=payload.position or _next_step_position(process_uuid),
+                name=payload.name,
                 description=data.get("description"),
-                inputs=data.get("inputs", []),
-                outputs=data.get("outputs", []),
-                execution_prompts=data.get("execution_prompts", []),
+                inputs=data.get("inputs") or [],
+                outputs=outputs,
+                execution_prompts=data.get("execution_prompts") or [],
                 timing=timing,
             )
+        except InvalidInputError as exc:
+            return exc.response()
         except IntegrityError:
             db_session.rollback()
             return jsonify({"error": "Could not create step"}), 409
@@ -897,18 +840,15 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process or step ID"}), 400
 
-        data = request.get_json()
-        if data and "position" in data:
-            _coerce_step_position(data.get("position"))
-
-        outputs = data.get("outputs")
-        if outputs is not None:
-            expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
-            if expiry_ready_errors:
-                return jsonify({"error": expiry_ready_errors[0]}), 400
-        timing, timing_error = _step_timing(data or {})
-        if timing_error:
-            return jsonify({"error": timing_error}), 400
+        try:
+            payload = read_json(UpdateStepInput)
+        except InvalidInputError as exc:
+            return _process_field_error(exc)
+        data = payload.model_dump(exclude_unset=True)
+        expiry_ready_errors = _validate_step_outputs_expiry_after_ready(data.get("outputs"))
+        if expiry_ready_errors:
+            return InvalidInputError({"outputs": expiry_ready_errors[0]}).response()
+        timing = {field: data[field] for field in STEP_TIMING_FIELDS if field in data}
 
         repo = ProcessRepository(db_session)
 
@@ -918,7 +858,7 @@ def register_routes(bp):
                 process_id=process_uuid,
                 org_id=org_id,
                 step_number=data.get("step_number"),
-                position=_coerce_step_position(data.get("position")) if "position" in data else None,
+                position=payload.position,
                 name=data.get("name"),
                 description=data.get("description"),
                 inputs=data.get("inputs"),
@@ -964,34 +904,11 @@ def register_routes(bp):
         except ValueError:
             return jsonify({"error": "Invalid process ID"}), 400
 
-        data = request.get_json() or {}
-
-        # Explicit orders with positions (preferred).
-        orders = data.get("orders") or data.get("steps")
-
-        from decimal import Decimal
-
-        if not isinstance(orders, list) or not orders:
-            return jsonify({"error": "orders is required"}), 400
-
-        updates: list[tuple[UUID, Decimal]] = []
-        for row in orders:
-            if not isinstance(row, dict):
-                return jsonify({"error": "Invalid orders payload"}), 400
-            sid = row.get("id") or row.get("step_id")
-            pos = row.get("position")
-            if not sid or pos is None:
-                return jsonify({"error": "Each order must include id and position"}), 400
-            try:
-                step_uuid = UUID(str(sid))
-                position = Decimal(str(pos))
-            except Exception:
-                return jsonify({"error": "Invalid id or position"}), 400
-            if not _is_valid_step_position(position):
-                return jsonify(
-                    {"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}
-                ), 400
-            updates.append((step_uuid, position))
+        try:
+            data = read_json(ReorderStepsInput)
+        except InvalidInputError as exc:
+            return _process_field_error(exc)
+        updates = [(order.id, order.position) for order in data.orders]
 
         # Optimistic concurrency: a reorder bumps each moved step's updated_at, so the newest
         # step updated_at across the process is the structural-version token -- it advances on
