@@ -276,8 +276,11 @@ def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, ap
         else:
             assert len({round(box["width"]) for box in boxes}) == 1, "narrow screens stack every block"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
-        assert len(links) >= 2 and links[0]["y"] == links[1]["y"]
-        assert len({round(link["width"]) for link in links}) == 1
+        assert len(links) >= 2
+        if width >= 1024:  # GLASS: on a phone the pills wrap onto a second line
+            assert links[0]["y"] == links[1]["y"]
+        # GLASS: the Manage bar holds pills sized to their words, not equal-width tiles.
+        assert all(link["height"] == links[0]["height"] for link in links)
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "compliance-layout", width)
     finally:
@@ -324,6 +327,7 @@ def test_sales_overview_keeps_figures_in_card_and_actions_in_header(browser, app
 # tests/e2e/dashboard/test_dashboard_today.py.
 @pytest.mark.parametrize("width", [390, 1024])
 def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browser, app_url, workspace_user, width):
+    pytest.skip("GLASS PROTOTYPE: Home (/core/dashboard) is removed and redirects to /core (test_glass_shell)")
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/dashboard")
