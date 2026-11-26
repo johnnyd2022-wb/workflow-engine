@@ -1,0 +1,120 @@
+/* GLASS PROTOTYPE: pages outside the shell (landing, sign in, sign up, 2FA, invite, session
+   expired, Google sign-in, legal, error pages, contract customer portal). Loaded after glass.css
+   and after each page's own <style>, so these rules win. These pages have no theme toggle, so
+   dark follows the device. Colours come from glass.css tokens. */
+
+@media (prefers-color-scheme: dark){
+  html:not([data-spa-theme="light"]){
+    --a1:#1D3A7A; --a2:#33307A; --a3:#0E4B50; --a4:#3F1F7A; --base:#070B16;
+    --ink:#F2F5FF; --text:#CDD5E7; --muted:#97A2BB;
+    --glass:rgba(30,38,60,.42); --glass-strong:rgba(34,43,68,.72); --panel:rgba(17,23,40,.86); --solid:#111827;
+    --rim:rgba(255,255,255,.2); --rim-dim:rgba(255,255,255,.08); --edge:rgba(255,255,255,.07); --line:rgba(255,255,255,.08);
+    --field:rgba(9,13,26,.7); --field-line:rgba(255,255,255,.14);
+    --accent:#6EA8FF; --accent-ink:#06122B; --accent-soft:rgba(110,168,255,.14); --ring:rgba(110,168,255,.55);
+    --ok:#34D399; --warn:#FBBF24; --bad:#F87171; --bad-soft:rgba(248,113,113,.15);
+    --shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -14px rgba(0,0,0,.7); --shadow-pop:0 22px 60px rgba(0,0,0,.6); --scrim:rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+
+/* The aurora, drawn without extra markup. */
+html{background:var(--base)}
+html body{background:transparent !important;color:var(--text) !important;font-family:var(--g-font) !important;min-height:100vh}
+html body::before{content:"";position:fixed;inset:-10%;z-index:-1;pointer-events:none;filter:blur(72px) saturate(120%);opacity:.85;
+  background:radial-gradient(40vw 40vw at 18% 14%,var(--a1),transparent 70%),radial-gradient(36vw 36vw at 86% 18%,var(--a2),transparent 70%),
+             radial-gradient(40vw 40vw at 50% 96%,var(--a3),transparent 70%),radial-gradient(28vw 28vw at 74% 80%,var(--a4),transparent 70%)}
+html body h1,html body h2,html body h3{color:var(--ink) !important;letter-spacing:-.02em}
+html body h1{font-weight:800}
+html body a{color:var(--accent)}
+html body :focus-visible{outline:3px solid var(--ring);outline-offset:2px}
+
+/* ---- Landing and legal (styles_2.css): map its variables onto the glass tokens ---- */
+html:root{
+  --color-midnight:var(--base); --color-midnight-gradient:var(--base); --color-graphite:var(--panel);
+  --color-primary:var(--accent); --color-primary-hover:var(--accent); --color-secondary:var(--accent);
+  --color-text-primary:var(--ink); --color-text-secondary:var(--text); --color-border:var(--line);
+  --background:transparent; --foreground:var(--ink); --card:var(--panel); --card-foreground:var(--ink);
+  --primary:var(--accent); --primary-foreground:var(--accent-ink); --secondary:var(--accent); --secondary-foreground:var(--accent-ink);
+  --muted-foreground:var(--muted); --accent-foreground:var(--accent-ink);
+  --border:var(--line); --input:var(--field); --glass-overlay:var(--glass); --glass-border:var(--rim-dim);
+  --shadow-glass:var(--shadow); --shadow-glass-hover:var(--shadow-pop); --radius:24px;
+}
+html body .navbar{position:sticky;top:12px;z-index:50;margin:12px auto 0;max-width:var(--g-shell);width:calc(100% - 32px);border-radius:var(--g-r-pill);
+  background:var(--glass) !important;backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  border:1px solid var(--rim-dim) !important;box-shadow:inset 0 1px 0 var(--rim),var(--shadow)}
+html body .navbar-logo span[style*="color"]{color:var(--ink) !important}
+html body .navbar-logo span[style*="border-radius:50%"]{background:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-soft) !important}
+html body .gradient-text{background:none !important;-webkit-text-fill-color:var(--accent) !important;color:var(--accent) !important}
+html body [style*="color:#F9FAFB"],html body [style*="color: #F9FAFB"],html body [style*="color:#fff"],html body [style*="color: white"]{color:var(--ink) !important}
+html body .btn{border-radius:var(--g-r-pill) !important;font-weight:700;min-height:44px;font-family:var(--g-font)}
+html body .btn-hero,html body .btn-default{background:var(--accent) !important;color:var(--accent-ink) !important;border-color:transparent !important;box-shadow:0 10px 24px -10px var(--accent) !important}
+html body .btn-glass{background:var(--glass-strong) !important;color:var(--ink) !important;border:1px solid var(--rim-dim) !important;box-shadow:inset 0 1px 0 var(--rim),var(--shadow) !important}
+html body .btn-ghost{background:transparent !important;color:var(--text) !important;border-color:transparent !important;box-shadow:none !important}
+html body .glass-card,html body .metric-card,html body .glass,html body .card{background:var(--panel) !important;border:1px solid var(--rim-dim) !important;border-radius:var(--g-r-panel) !important;
+  box-shadow:inset 0 1px 0 var(--rim),var(--shadow) !important;color:var(--text)}
+html body section[style*="background"],html body div[style*="background: var(--color-midnight"],html body div[style*="background:#0"],html body footer{background:transparent !important}
+html body .form-input,html body input:not([type="checkbox"]):not([type="radio"]),html body select,html body textarea{background:var(--field) !important;color:var(--ink) !important;
+  border:1px solid var(--field-line) !important;border-radius:var(--g-r-ctl) !important;min-height:44px;font-family:var(--g-font)}
+html body input:focus,html body select:focus,html body textarea:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-soft) !important;outline:none}
+html body label{color:var(--ink)}
+html body .text-muted,html body .text-sm.text-muted{color:var(--muted) !important}
+
+/* Sign in / sign up / session expired: solid bottom sheets over a scrim. */
+html body .modal-overlay{background:var(--scrim) !important;backdrop-filter:blur(2px) !important;-webkit-backdrop-filter:blur(2px) !important;align-items:flex-end !important;padding:0 !important}
+html body .modal-overlay .modal-content{background:var(--solid) !important;color:var(--text) !important;border:1px solid var(--rim-dim) !important;border-bottom:0 !important;
+  border-radius:26px 26px 0 0 !important;box-shadow:var(--shadow-pop) !important;width:min(560px,100vw) !important;max-width:100vw !important;margin:0 auto !important;
+  max-height:92vh;overflow:auto;animation:g9-rise .24s cubic-bezier(.2,.8,.2,1)}
+html body .modal-overlay .modal-content::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:-8px auto 14px}
+@keyframes g9-rise{from{transform:translateY(100%)}}
+html body .modal-overlay .text-error,html body #login-error,html body #signup-error{background:var(--bad-soft) !important;color:var(--bad) !important;border:0 !important;border-radius:14px !important}
+
+/* ---- Standalone cards: invite, error, Google sign-in ---- */
+html body > main{background:var(--panel) !important;border:1px solid var(--rim-dim) !important;border-radius:var(--g-r-panel) !important;
+  box-shadow:inset 0 1px 0 var(--rim),var(--shadow) !important;backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);color:var(--text)}
+html body > main p,html body .help p,html body .hint{color:var(--muted)}
+html body .brand::before,html body .brand span{background:var(--accent) !important}
+html body .brand{color:var(--ink) !important}
+html body button,html body .button,html body .home{border-radius:var(--g-r-pill) !important;min-height:44px;font-weight:700;font-family:var(--g-font)}
+html body > main button:not([disabled]),html body > main .button,html body .home{background:var(--accent) !important;color:var(--accent-ink) !important;border:0 !important;text-decoration:none}
+html body .error,html body [data-error]{color:var(--bad) !important}
+html body .warnings{background:var(--warn-soft,rgba(217,119,6,.13)) !important;border-radius:14px !important;border:0 !important}
+html body .ref code,html body code{color:var(--ink)}
+
+/* ---- Contract customer portal ---- */
+html:root:has(.portal-shell){color:var(--text);background:var(--base);color-scheme:light dark}
+html body .portal-shell{max-width:820px;padding:24px 16px 48px}
+html body .portal-brand{font-weight:800;color:var(--ink);display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:var(--g-r-pill);
+  background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px)}
+html body .portal-shell section,html body .portal-shell article{background:var(--panel) !important;border:1px solid var(--rim-dim) !important;border-radius:var(--g-r-panel) !important;
+  box-shadow:inset 0 1px 0 var(--rim),var(--shadow);padding:22px 24px;color:var(--text)}
+html body .portal-shell button{background:var(--accent) !important;color:var(--accent-ink) !important;border:0 !important;padding:0 18px}
+html body .portal-shell a{color:var(--accent);font-weight:700}
+
+@media (max-width:720px){
+  html body .navbar{top:8px;width:calc(100% - 24px)}
+  html body > main{border-radius:22px !important;margin-left:16px !important;margin-right:16px !important}
+  html body .portal-shell section,html body .portal-shell article{padding:18px 16px;border-radius:22px !important}
+}
+@media (prefers-reduced-motion:reduce){html body .modal-overlay .modal-content{animation:none}}
+
+/* Legal pages (pricing, terms, privacy) */
+html:root{--legal-text:var(--text);--legal-muted:var(--muted);--legal-border:var(--line);--legal-accent:var(--accent)}
+html body .legal-nav{border:0;position:sticky;top:12px;z-index:10;margin:12px auto 0;max-width:52rem;width:calc(100% - 32px);border-radius:var(--g-r-pill);
+  background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%)}
+html body .legal-logo,html body .legal-links a:hover,html body .legal-links a[aria-current="page"]{color:var(--ink) !important;font-family:var(--g-font) !important;font-weight:800}
+html body .legal-logo i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+html body .legal-main{margin-top:18px;background:var(--panel);border:1px solid var(--rim-dim);border-radius:var(--g-r-panel);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);padding:28px 28px 40px}
+html body .legal-main h1,html body .legal-main h2{color:var(--ink) !important}
+html body .legal-main p,html body .legal-main li{color:var(--text)}
+html body .legal-draft{background:var(--warn-soft,rgba(217,119,6,.13));border:0;color:var(--warn);border-radius:16px}
+html body .legal-draft strong{color:var(--warn)}
+html body .pricing-plan{border-radius:22px !important;border-color:var(--line) !important;background:var(--solid) !important}
+html body .pricing-price{color:var(--ink) !important}
+html body .pricing-cta{border-radius:var(--g-r-pill) !important;background:var(--accent) !important;color:var(--accent-ink) !important;min-height:44px;display:inline-flex;align-items:center;padding:0 20px !important;font-weight:700;text-decoration:none}
+html body .legal-footer{border:0}
+@media (max-width:720px){html body .legal-main{margin:14px 12px 0;padding:22px 18px 32px;border-radius:22px}}
+
+/* Error page's home link is a button */
+html body .home{display:inline-flex !important;align-items:center;justify-content:center;padding:0 20px !important}
+html body [style*="background-clip"],html body [style*="-webkit-text-fill-color"]{background:none !important;-webkit-text-fill-color:var(--accent) !important;color:var(--accent) !important}
+html body > section,html body main > section,html body .container > section{background:transparent !important}

@@ -244,3 +244,39 @@ def modals(page, out):
         _modal_shots(page, out, tag)
     theme(page, "light")
     page.set_viewport_size(DESKTOP)
+
+
+G9_PAGES = [
+    ("landing", "/", None),
+    ("login", "/", "loginModal"),
+    ("signup", "/", "signupModal"),
+    ("pricing", "/pricing", None),
+    ("terms", "/terms", None),
+    ("invite", "/invite/not-a-real-token", None),
+    ("error", "/core/no-such-page-glass", None),
+    ("google", "/auth/google/callback", None),
+    ("portal-login", "/portal/login", None),
+    ("portal-invite", "/portal/invite", None),
+]
+
+
+def g9(page, out):
+    """GLASS G9: pages outside the shell, signed out (a fresh context), desktop, dark and phone."""
+    base = re.match(r"https?://[^/]+", page.url or "").group(0) if page.url.startswith("http") else None
+    if not base:
+        _visit(page, "/core")
+        base = re.match(r"https?://[^/]+", page.url).group(0)
+    browser = page.context.browser
+    for vp, scheme, tag in ((DESKTOP, "light", "desktop"), (DESKTOP, "dark", "dark"), (PHONE, "light", "phone")):
+        ctx = browser.new_context(base_url=base, ignore_https_errors=True, viewport=vp, color_scheme=scheme)
+        anon = ctx.new_page()
+        for name, path, modal in G9_PAGES:
+            anon.goto(path)
+            anon.wait_for_load_state("networkidle")
+            if modal:
+                anon.evaluate("m => window.openModal && window.openModal(m)", modal)
+            settle(anon, 500)
+            shot(anon, out, f"g9-{name}-{tag}")
+            if name == "landing" and tag == "desktop":
+                shot(anon, out, "g9-landing-full", full=True)
+        ctx.close()

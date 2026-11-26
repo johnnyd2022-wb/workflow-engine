@@ -6,6 +6,9 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}Customer portal{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('contract_portal.static', filename='portal.css') }}">
+  <!-- GLASS PROTOTYPE: the glass look outside the app shell (see glass-g9.css). -->
+  <link rel="stylesheet" href="/static/css/glass.css">
+  <link rel="stylesheet" href="/static/css/glass-g9.css">
 </head>
 <body>
 <main class="portal-shell">
