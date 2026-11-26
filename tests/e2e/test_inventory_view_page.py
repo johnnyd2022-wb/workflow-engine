@@ -74,7 +74,7 @@ def test_stock_loads_again_after_leaving_and_returning_by_boosted_links(stocked_
     for _ in range(2):
         page.get_by_role("link", name="Live inventory", exact=True).click()
         expect(page.locator(".workspace-header h1")).to_have_text("Live inventory")
-        page.get_by_role("link", name="Back to inventory", exact=True).click()
+        page.locator(".breadcrumbs").get_by_role("link", name="Inventory", exact=True).click()
         expect(page.locator(".workspace-header h1")).to_have_text("Inventory")
         expect(_rows(page)).to_have_count(4)
         expect(page.locator("#inv-view-count")).to_have_text("4 lines on hand")

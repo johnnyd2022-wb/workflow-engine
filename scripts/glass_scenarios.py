@@ -14,7 +14,10 @@ from ui_shots import PHONE, settle, shot
 DESKTOP = {"width": 1440, "height": 900}
 
 GROUPS = {
-    "g11": ["/core/inventory/live", "/core/costing/purchases", "/core/costing/costs", "/core/costing/rules", "/core/costing/margins", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings"],
+    "g11": ["/core/inventory/live", "/core/costing/purchases", "/core/costing/costs", "/core/costing/rules", "/core/costing/margins", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings",
+            "/crm/customers/2f72f218-ec65-4873-b083-6e6b0b16922d", "/core/cases/a5a1b54e-be9b-4386-82e8-9588e62ae66a",
+            "/core/no-such-page",
+            "/core/contracts/cb5be5fa-69e3-4f7e-b94d-e43a2e296632"],
     "g0": ["/core", "/core/dashboard"],
     "g1": [
         "/core",
@@ -140,6 +143,35 @@ g6 = _group("g6")
 g7 = _group("g7")
 g8 = _group("g8")
 g11 = _group("g11")
+
+
+def menus(page, out):
+    """GLASS-G11: the menus and popovers, opened, light, dark and phone."""
+    cases = [
+        ("avatar", "/core/inventory/view", ".g-av"),
+        ("inv-drawer", "/core/inventory/view", "#inv-view-tbody tr"),
+        ("inv-more", "/core/inventory/view", "[data-inv-more-toggle]"),
+        ("notif-kebab", "/core/notifications", "#page-content button[aria-haspopup], #page-content .nt-more"),
+        ("flows-manage", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "#flows2-manage-btn, .flows2-manage-btn, [aria-controls*=manage]"),
+        ("supplier-add", "/core/suppliers", "#page-content .workspace-button--primary"),
+        ("crm-new-task", "/crm/tasks", "#page-content .workspace-button--primary, #page-content .crm-btn--primary"),
+    ]
+    for vp, mode, tag in ((DESKTOP, "light", "desktop"), (DESKTOP, "dark", "dark"), (PHONE, "light", "phone")):
+        page.set_viewport_size(vp)
+        theme(page, mode)
+        for name, path, sel in cases:
+            _visit(page, path)
+            loc = page.locator(sel)
+            if loc.count() and loc.first.is_visible():
+                try:
+                    loc.first.click(timeout=3000)
+                except Exception:
+                    pass
+                settle(page, 500)
+            shot(page, out, f"menu-{name}-{tag}")
+            page.keyboard.press("Escape")
+    theme(page, "light")
+    page.set_viewport_size(DESKTOP)
 
 
 def tray(page, out):
