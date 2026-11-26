@@ -40,9 +40,11 @@ import csv
 import io
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Annotated, Literal
 from uuid import UUID
 
 from flask import Blueprint, Response, g, jsonify, render_template, request
+from pydantic import Field, StringConstraints
 from sqlalchemy import func
 
 from app.core.db import db_session
@@ -60,6 +62,8 @@ from app.core.utils.inventory_quantity import coerce_stored_quantity
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import is_count_unit, normalize_unit, whole_count_error
 from app.features.compliant.platform import stock_measures
+from app.features.inventory.inventory_payloads import OptionalId, PositiveQuantity, Quantity
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 stocktake_bp = Blueprint("stocktake", __name__, template_folder="frontend/templates")
 
@@ -72,6 +76,33 @@ DEFAULT_BULK_TOLERANCE_PERCENT = Decimal("0.5")
 FREQUENCY_MONTHS = {"monthly": 1, "quarterly": 3, "six_monthly": 6, "annual": 12}
 _COUNTED_TYPES = (InventoryType.FINAL_PRODUCT.value, InventoryType.WORK_IN_PROGRESS.value)
 _MAIN = "Licensed area (main)"
+
+
+class StartStocktakeInput(JsonInput):
+    counted_on: date | Literal[""] | None = None
+    kind: Literal["scheduled", "customs_visit", ""] = "scheduled"
+    location_id: OptionalId = None
+
+
+class CountStockInput(JsonInput):
+    counted: Quantity
+
+
+class StocktakeReason(JsonInput):
+    reason: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    quantity: PositiveQuantity
+    occurred_on: date | Literal[""] | None = None
+    location_id: OptionalId = None
+    note: Annotated[str, StringConstraints(max_length=500, pattern=r"^[^\x00]*$")] | None = None
+
+
+class ResolveStockInput(JsonInput):
+    reasons: Annotated[list[StocktakeReason], Field(min_length=1, max_length=100)]
+
+
+class StocktakeSettingsInput(JsonInput):
+    frequency: Literal["monthly", "quarterly", "six_monthly", "annual"] = "annual"
+    bulk_tolerance_percent: Annotated[Decimal, Field(ge=0, le=5, decimal_places=4)] = DEFAULT_BULK_TOLERANCE_PERCENT
 
 
 def _d(value) -> Decimal:
@@ -834,14 +865,16 @@ def list_stocktakes():
 @stocktake_bp.route("/api/core/stocktakes", methods=["POST"])
 @requires_auth
 def create_stocktake():
-    data = request.get_json(silent=True) or {}
     try:
-        counted_on = date.fromisoformat(str(data.get("counted_on") or date.today().isoformat()))
-        if counted_on > date.today():
-            raise ValueError("A stocktake can't be dated in the future")
-        location = UUID(str(data["location_id"])) if data.get("location_id") else None
+        data = read_json(StartStocktakeInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    counted_on = data.counted_on or date.today()
+    if counted_on > date.today():
+        return InvalidInputError({"counted_on": "A stocktake can't be dated in the future"}).response()
+    try:
         st = start_stocktake(
-            db_session, _org(), counted_on, data.get("kind") or "scheduled", location, g.current_user.id
+            db_session, _org(), counted_on, data.kind or "scheduled", data.location_id or None, g.current_user.id
         )
         db_session.commit()
     except ValueError as e:
@@ -879,7 +912,11 @@ def count_stocktake_line(stocktake_id: str, line_id: str):
     if st.status == "done" and line.status != "investigating":
         return jsonify({"error": "This stocktake is finished"}), 409
     try:
-        record_count(db_session, line, (request.get_json(silent=True) or {}).get("counted"), _settings())
+        counted = read_json(CountStockInput).counted
+    except InvalidInputError as exc:
+        return exc.response()
+    try:
+        record_count(db_session, line, counted, _settings())
         db_session.commit()
     except ValueError as e:
         db_session.rollback()
@@ -895,11 +932,15 @@ def resolve_stocktake_line(stocktake_id: str, line_id: str):
     if line is None:
         return jsonify({"error": "Line not found"}), 404
     try:
+        data = read_json(ResolveStockInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    try:
         records = resolve_line(
             db_session,
             _org(),
             line,
-            (request.get_json(silent=True) or {}).get("reasons") or [],
+            data.model_dump(mode="json")["reasons"],
             g.current_user.id,
             date.today(),
         )
@@ -940,16 +981,12 @@ def update_stocktake_settings():
     """How often to count (Customs' minimum is annual) and the bulk measurement tolerance."""
     from app.features.compliant.service import ComplianceService
 
-    data = request.get_json(silent=True) or {}
-    frequency = data.get("frequency", "annual")
-    if frequency not in FREQUENCY_MONTHS:
-        return jsonify({"error": "frequency must be monthly, quarterly, six_monthly or annual"}), 400
     try:
-        tolerance = Decimal(str(data.get("bulk_tolerance_percent", DEFAULT_BULK_TOLERANCE_PERCENT)))
-    except InvalidOperation:
-        return jsonify({"error": "bulk_tolerance_percent must be a number"}), 400
-    if not tolerance.is_finite() or tolerance < 0 or tolerance > 5:
-        return jsonify({"error": "bulk_tolerance_percent must be between 0 and 5"}), 400
+        data = read_json(StocktakeSettingsInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    frequency = data.frequency
+    tolerance = data.bulk_tolerance_percent
     service = ComplianceService(db_session)
     profile = service.get_profile(_org())
     if profile is None:

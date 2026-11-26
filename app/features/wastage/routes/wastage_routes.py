@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import g, jsonify, render_template, request
+from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -34,6 +35,7 @@ from app.core.utils.packs import can_convert_for_lot, convert_for_lot, settle_ta
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.observability import get_logger
 from app.utils.config_loader import config
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
@@ -195,6 +197,11 @@ def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) 
     session.execute(text("SELECT pg_advisory_xact_lock(:k1, :k2)"), {"k1": k1, "k2": k2})
 
 
+class WastageInput(JsonInput):
+    entries: JsonValue = None
+    idempotency_key: JsonValue = None
+
+
 @requires_auth
 def record_wastage():
     """
@@ -229,8 +236,11 @@ def record_wastage():
     (WASTAGE, signed quantity) for replay and reconciliation; InventoryWastage remains the wastage slice.
     """
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    entries = data.get("entries")
+    try:
+        data = read_json(WastageInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    entries = data.entries
     if not entries or not isinstance(entries, list):
         return (
             jsonify(
@@ -259,10 +269,15 @@ def record_wastage():
             400,
         )
 
-    idem_key_raw = data.get("idempotency_key")
+    idem_key_raw = data.idempotency_key
     idem_key: str | None = None
     if idem_key_raw is not None:
-        if not isinstance(idem_key_raw, str) or not idem_key_raw.strip() or len(idem_key_raw) > 128:
+        if (
+            not isinstance(idem_key_raw, str)
+            or not idem_key_raw.strip()
+            or len(idem_key_raw) > 128
+            or "\x00" in idem_key_raw
+        ):
             return (
                 jsonify(
                     {
@@ -290,6 +305,9 @@ def record_wastage():
         if not item_id_str:
             parse_errors.append(f"Entry {idx + 1}: inventory_item_id required")
             continue
+        if not isinstance(item_id_str, str):
+            parse_errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
+            continue
         try:
             item_id = UUID(item_id_str)
         except (ValueError, TypeError):
@@ -310,7 +328,11 @@ def record_wastage():
         if u_err:
             parse_errors.append(f"Entry {idx + 1}: {u_err}")
             continue
-        reason = (entry.get("reason") or "").replace("\x00", "").strip()
+        raw_reason = entry.get("reason")
+        if raw_reason is not None and (not isinstance(raw_reason, str) or "\x00" in raw_reason):
+            parse_errors.append(f"Entry {idx + 1}: reason must be text without null characters")
+            continue
+        reason = (raw_reason or "").strip()
         if not reason:
             parse_errors.append(f"Entry {idx + 1}: reason is required")
             continue

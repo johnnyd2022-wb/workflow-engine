@@ -33,12 +33,18 @@ from app.core.utils.inventory_quantity import (
 from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.features.compliance_checks.routes import corechecks
 from app.features.execution.execution_data import split_execution_data
+from app.features.inventory.inventory_payloads import (
+    AdjustQuantityInput,
+    ConsumeFifoInput,
+    CreateInventoryInput,
+    UpdateInventoryInput,
+)
 from app.features.reconciliation.service import find_producing_step
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, read_json
 
 logger = get_logger(__name__)
 
-_VALID_INVENTORY_TYPES = frozenset(t.value for t in InventoryType)
 LIST_INVENTORY_MAX_PREVIOUS_STEPS = 80
 LIST_INVENTORY_MAX_AUDIT_HISTORY = 120
 LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
@@ -730,30 +736,18 @@ def register_routes(bp):
     def create_inventory_item():
         """Create a new inventory item (typically raw material). Supports barcode; enforces product identity when barcode exists."""
         org_id = UUID(g.org_id)
-        data = request.get_json()
-
-        name = (data.get("name") or "").strip() or None
-        quantity = data.get("quantity")
-        unit = (data.get("unit") or "").strip() or None
-        inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
-
-        # inventory_type is a plain String(50) with no DB constraint, and several views match
-        # it exactly (`/out-of-stock`, `?type=`). An off-enum value therefore does not error —
-        # the item just silently stops appearing in the recall-tracing view. Validate here.
-        if inventory_type not in _VALID_INVENTORY_TYPES:
-            return jsonify(
-                {"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}
-            ), 400
-        barcode = (data.get("barcode") or "").strip() or None
-
-        if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
-            return jsonify({"error": "quantity is required"}), 400
         try:
-            qty_val = float(quantity)
-            if qty_val <= 0:
-                return jsonify({"error": "quantity must be greater than 0"}), 400
-        except (TypeError, ValueError):
-            return jsonify({"error": "quantity must be a valid number"}), 400
+            payload = read_json(CreateInventoryInput)
+        except InvalidInputError as exc:
+            if "inventory_type" in exc.errors:
+                return jsonify(error="Choose a valid inventory_type.", errors=exc.errors), 400
+            return exc.response()
+        data = payload.model_dump(mode="json", exclude_unset=True)
+        name = payload.name or None
+        quantity = payload.quantity
+        unit = payload.unit or None
+        inventory_type = payload.inventory_type.value
+        barcode = payload.barcode or None
 
         repo = InventoryRepository(db_session)
         try:
@@ -944,11 +938,7 @@ def register_routes(bp):
                 extra_data["notes"] = notes
                 # Invariant: untracked items must always have remaining_balance_to_reconcile for reduce_only logic.
                 extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
-                try:
-                    qty_val = float(quantity) if quantity is not None else 0
-                    extra_data["remaining_balance_to_reconcile"] = str(qty_val) if qty_val > 0 else "0"
-                except (TypeError, ValueError):
-                    extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
+                extra_data["remaining_balance_to_reconcile"] = format(quantity, "f")
 
             # Live cost (8.1e-1): an optional "total paid" prices the new lot in the same
             # transaction, for people who manage costs in an org with costing switched on.
@@ -1043,15 +1033,19 @@ def register_routes(bp):
     def update_inventory_item(item_id):
         """Update an existing inventory item"""
         org_id = UUID(g.org_id)
-        data = request.get_json()
-
-        name = data.get("name")
-        quantity = data.get("quantity")
-        unit = data.get("unit")
-        inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
-
-        if not all([name, quantity, unit]):
-            return jsonify({"error": "name, quantity, and unit are required"}), 400
+        try:
+            item_uuid = UUID(item_id)
+        except ValueError:
+            return InvalidInputError({"item_id": "Enter a valid item ID."}).response()
+        try:
+            payload = read_json(UpdateInventoryInput)
+        except InvalidInputError as exc:
+            return exc.response()
+        data = payload.model_dump(mode="json", exclude_unset=True)
+        name = payload.name
+        quantity = payload.quantity
+        unit = payload.unit
+        inventory_type = payload.inventory_type.value
 
         repo = InventoryRepository(db_session)
         try:
@@ -1065,7 +1059,7 @@ def register_routes(bp):
                 expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
 
             # Get existing item
-            item = repo.get_inventory_item_by_id(UUID(item_id), org_id)
+            item = repo.get_inventory_item_by_id(item_uuid, org_id)
             if not item:
                 return jsonify({"error": "Inventory item not found"}), 404
 
@@ -1178,18 +1172,18 @@ def register_routes(bp):
         Emits inventory_item.quantity_adjusted so the change is fully traceable.
         """
         org_id = UUID(g.org_id)
-        data = request.get_json() or {}
-        raw = data.get("new_quantity")
-        if raw is None or str(raw).strip() == "":
-            return jsonify({"error": "new_quantity is required"}), 400
         try:
-            float(str(raw).strip())
-        except (TypeError, ValueError):
-            return jsonify({"error": "new_quantity must be a valid number"}), 400
+            item_uuid = UUID(item_id)
+        except ValueError:
+            return InvalidInputError({"item_id": "Enter a valid item ID."}).response()
+        try:
+            quantity = read_json(AdjustQuantityInput).new_quantity
+        except InvalidInputError as exc:
+            return exc.response()
 
         repo = InventoryRepository(db_session)
         try:
-            item = repo.set_inventory_item_quantity(UUID(item_id), org_id, str(raw).strip())
+            item = repo.set_inventory_item_quantity(item_uuid, org_id, str(quantity))
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         if not item:
@@ -1207,19 +1201,20 @@ def register_routes(bp):
     def consume_final_product_fifo():
         """Consume finished stock FIFO from the default or explicit shipping site."""
         org_id = UUID(g.org_id)
-        data = request.get_json() or {}
-        name = (data.get("name") or "").strip()
-        quantity = data.get("quantity")
-        reference = data.get("reference")
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-        if quantity is None or str(quantity).strip() == "":
-            return jsonify({"error": "quantity is required"}), 400
+        try:
+            data = read_json(ConsumeFifoInput)
+        except InvalidInputError as exc:
+            return exc.response()
+        name = data.name
 
         repo = InventoryRepository(db_session)
         try:
             consumed = repo.consume_final_product_fifo(
-                org_id, name, str(quantity).strip(), reference=reference, site_id=getattr(g, "validated_site_id", None)
+                org_id,
+                name,
+                str(data.quantity),
+                reference=data.reference,
+                site_id=getattr(g, "validated_site_id", None),
             )
         except ValueError as e:
             return jsonify({"error": str(e)}), 400

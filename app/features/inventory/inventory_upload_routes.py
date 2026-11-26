@@ -11,9 +11,11 @@ import io
 import re
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Annotated
 from uuid import UUID
 
 from flask import Response, g, jsonify, request
+from pydantic import Field, StringConstraints
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.idempotency import idempotent_write
@@ -25,6 +27,7 @@ from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
 from app.observability import get_logger, start_span
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
@@ -32,6 +35,25 @@ logger = get_logger(__name__)
 CSV_MAX_BYTES = 2 * 1024 * 1024
 # Max rows per CSV (validation and commit)
 CSV_MAX_ROWS = 500
+
+
+class InventoryCsvRow(JsonInput):
+    row_index: Annotated[int, Field(ge=2, le=CSV_MAX_ROWS + 1)] | None = None
+    name: Annotated[str, StringConstraints(max_length=255)] | None = None
+    quantity: Annotated[str, StringConstraints(max_length=128)] | Decimal | None = None
+    unit: Annotated[str, StringConstraints(max_length=50)] | None = None
+    supplier: Annotated[str, StringConstraints(max_length=255)] | None = None
+    purchase_date: Annotated[str, StringConstraints(max_length=40)] | None = None
+    batch_number: Annotated[str, StringConstraints(max_length=255)] | None = None
+    expiry_date: Annotated[str, StringConstraints(max_length=40)] | None = None
+    site: Annotated[str, StringConstraints(max_length=120)] | None = None
+    total_paid: Annotated[str, StringConstraints(max_length=128)] | Decimal | None = None
+    pack: Annotated[str, StringConstraints(max_length=60)] | None = None
+
+
+class CommitInventoryCsv(JsonInput):
+    rows: Annotated[list[InventoryCsvRow], Field(max_length=CSV_MAX_ROWS)]
+    site_id: UUID | None = None
 
 
 def _allowed_units_list():
@@ -170,7 +192,12 @@ def _parse_upload(org_id):
     Returns a (response, status) tuple on a file-level error, else a dict with rows,
     validation, truncated, fieldnames and raw_rows (the file's own cells, for the error report).
     """
-    file = request.files.get("file")
+    files = request.files.getlist("file")
+    if len(files) > 1 or set(request.files) - {"file"}:
+        return InvalidInputError({"file": "Choose one CSV file."}).response()
+    file = files[0] if files else None
+    if file is not None and not (file.filename or "").lower().endswith(".csv"):
+        return InvalidInputError({"file": "Choose a file with the .csv extension."}).response()
     # Read the raw body as BYTES, not text. `get_data(as_text=True)` decodes with
     # errors="replace", so invalid UTF-8 arrived as U+FFFD instead of being
     # rejected — the multipart branch below returns 400 for exactly that input.
@@ -178,7 +205,7 @@ def _parse_upload(org_id):
     # refusing the upload.
     raw = request.get_data() if not file else None
     if file:
-        content = file.read()
+        content = file.read(CSV_MAX_BYTES + 1)
         if len(content) > CSV_MAX_BYTES:
             return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
         try:
@@ -199,7 +226,15 @@ def _parse_upload(org_id):
     else:
         return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
 
-    reader = csv.DictReader(io.StringIO(text))
+    if "\x00" in text:
+        return InvalidInputError({"file": "The CSV must contain text."}).response()
+    try:
+        return _parse_csv_rows(org_id, csv.DictReader(io.StringIO(text)))
+    except csv.Error:
+        return InvalidInputError({"file": "The CSV contains an invalid or oversized cell."}).response()
+
+
+def _parse_csv_rows(org_id, reader):
     # Normalize headers: strip and case-insensitive match
     required = {"item name": "name", "quantity": "qty", "unit": "unit"}
     optional = {
@@ -473,15 +508,11 @@ def register_routes(bp):
         Duplicate (org + item name + batch number) rows are skipped with an error entry; other rows still commit.
         """
         org_id = UUID(g.org_id)
-        data = request.get_json()
+        try:
+            rows = read_json(CommitInventoryCsv).model_dump(mode="json")["rows"]
+        except InvalidInputError as exc:
+            return exc.response()
         with start_span("inventory.csv_commit", attributes={"org_id": str(org_id), "max_rows": CSV_MAX_ROWS}):
-            if not data or not isinstance(data.get("rows"), list):
-                return jsonify({"error": "Expected JSON body with 'rows' array."}), 400
-
-            rows = data["rows"]
-            if len(rows) > CSV_MAX_ROWS:
-                return jsonify({"error": f"Maximum {CSV_MAX_ROWS} rows per upload."}), 400
-
             repo = InventoryRepository(db_session)
             errors = []
             # Phase 1: validate all rows with shared logic; do not create yet

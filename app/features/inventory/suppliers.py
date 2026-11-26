@@ -7,10 +7,11 @@ an edit, exactly what changed. Suppliers already named on inventory items can be
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from flask import g, jsonify, render_template, request
+from flask import g, jsonify, render_template
+from pydantic import Field, StringConstraints
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,11 +24,22 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.time import utc_now
 from app.observability import get_logger
+from app.utils.request_validation import CleanText, InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
 FIELDS = ("name", "contact_name", "phone", "email", "address", "notes")
 _MAX_LENGTH = {"name": 255, "contact_name": 255, "phone": 50, "email": 255, "address": 2000, "notes": 4000}
+
+
+class SupplierInput(JsonInput):
+    name: Annotated[CleanText, StringConstraints(max_length=255)] | None = None
+    contact_name: Annotated[CleanText, StringConstraints(max_length=255)] | None = None
+    phone: Annotated[CleanText, StringConstraints(max_length=50)] | None = None
+    email: Annotated[CleanText, StringConstraints(max_length=255)] | None = None
+    address: Annotated[str, StringConstraints(max_length=2000, pattern=r"^[^\x00]*$")] | None = None
+    notes: Annotated[str, StringConstraints(max_length=4000, pattern=r"^[^\x00]*$")] | None = None
+    lead_time_days: Annotated[int, Field(ge=0, le=365)] | Annotated[str, StringConstraints(max_length=5)] | None = None
 
 
 class SupplierError(ValueError):
@@ -239,8 +251,11 @@ def register_routes(bp) -> None:
     @requires_auth
     def create_core_supplier():
         try:
-            supplier = create_supplier(db_session(), org_id(), actor_id(), request.get_json(silent=True) or {})
+            data = read_json(SupplierInput).model_dump(exclude_unset=True)
+            supplier = create_supplier(db_session(), org_id(), actor_id(), data)
             return jsonify({"supplier": supplier}), 201
+        except InvalidInputError as exc:
+            return exc.response()
         except SupplierError as exc:
             db_session().rollback()
             return jsonify({"error": str(exc)}), 400
@@ -249,9 +264,10 @@ def register_routes(bp) -> None:
     @requires_auth
     def update_core_supplier(supplier_id: str):
         try:
-            supplier = update_supplier(
-                db_session(), org_id(), actor_id(), UUID(supplier_id), request.get_json(silent=True) or {}
-            )
+            data = read_json(SupplierInput).model_dump(exclude_unset=True)
+            supplier = update_supplier(db_session(), org_id(), actor_id(), UUID(supplier_id), data)
+        except InvalidInputError as exc:
+            return exc.response()
         except SupplierError as exc:
             db_session().rollback()
             return jsonify({"error": str(exc)}), 400
