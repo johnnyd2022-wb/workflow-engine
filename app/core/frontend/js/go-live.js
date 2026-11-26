@@ -58,9 +58,9 @@
       var row = el('div', { className: 'gl-lot', 'data-gl-lot': product.name });
       row.append(
         field('Batch ID', el('input', { type: 'text', 'data-k': 'batch_id', placeholder: 'e.g. VAT44', maxlength: '255' })),
-        field('Quantity (' + product.unit + ')', el('input', { type: 'number', 'data-k': 'quantity', min: '0', step: counted ? '1' : 'any', inputmode: counted ? 'numeric' : 'decimal' })),
+        field('Quantity (' + product.unit + ')', el('input', { type: 'number', 'data-k': 'quantity', min: counted ? '1' : '0.0001', max: '99999999999999.9999', step: counted ? '1' : '0.0001', inputmode: counted ? 'numeric' : 'decimal' })),
         field('Bottled on', el('input', { type: 'date', 'data-k': 'bottled_on' })),
-        field('ABV %', el('input', { type: 'number', 'data-k': 'abv_percent', min: '0', max: '100', step: '0.1' })),
+        field('ABV %', el('input', { type: 'number', 'data-k': 'abv_percent', min: '0', max: '100', step: '0.0001' })),
         el('button', { type: 'button', className: 'gl-remove', 'aria-label': 'Remove this batch', text: '×' })
       );
       row.querySelector('.gl-remove').addEventListener('click', function () { row.remove(); });
@@ -84,7 +84,7 @@
         var box = el('div', { className: 'gl-product', 'data-gl-product': product.name, 'data-unit': product.unit }, [name, lots, add]);
         if (product.counted) {
           box.append(el('div', { className: 'gl-row' }, [
-            field('Library stock (mL, part-filled)', el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', 'data-gl-library': product.name, placeholder: '0' }))
+            field('Library stock (mL, part-filled)', el('input', { type: 'number', min: '1', max: '99999999999999', step: '1', inputmode: 'numeric', 'data-gl-library': product.name, placeholder: '0' }))
           ]));
         }
         wrap.append(box);
@@ -96,11 +96,11 @@
       var unit = el('select', { 'data-k': 'unit' });
       ['l', 'ml', 'kg', 'g', 'units'].forEach(function (u) { unit.append(el('option', { value: u, text: u === 'l' ? 'L' : (u === 'ml' ? 'mL' : u) })); });
       row.append(
-        field('What', el('input', { type: 'text', 'data-k': 'name', list: 'gl-intermediate-names', placeholder: 'e.g. Aged gin' })),
-        field('Quantity', el('input', { type: 'number', 'data-k': 'quantity', min: '0', step: 'any' })),
+        field('What', el('input', { type: 'text', 'data-k': 'name', list: 'gl-intermediate-names', maxlength: '255', placeholder: 'e.g. Aged gin' })),
+        field('Quantity', el('input', { type: 'number', 'data-k': 'quantity', min: '0.0001', max: '99999999999999.9999', step: '0.0001' })),
         field('Unit', unit),
-        field('ABV %', el('input', { type: 'number', 'data-k': 'abv_percent', min: '0', max: '100', step: '0.1' })),
-        field('Batch ID', el('input', { type: 'text', 'data-k': 'batch_id', placeholder: 'e.g. Barrel 3' })),
+        field('ABV %', el('input', { type: 'number', 'data-k': 'abv_percent', min: '0', max: '100', step: '0.0001' })),
+        field('Batch ID', el('input', { type: 'text', 'data-k': 'batch_id', placeholder: 'e.g. Barrel 3', maxlength: '255' })),
         el('button', { type: 'button', className: 'gl-remove', 'aria-label': 'Remove', text: '×' })
       );
       row.querySelector('.gl-remove').addEventListener('click', function () { row.remove(); });
@@ -142,6 +142,25 @@
       root.querySelector('[data-gl-step="count"]').classList.toggle('gl-step--done', !!(status.opening_items || []).length);
     }
 
+    function checkStockInputs() {
+      for (var input of root.querySelectorAll('[data-gl-step="count"] input')) {
+        if (!input.checkValidity()) {
+          input.reportValidity();
+          return input.validationMessage;
+        }
+      }
+      for (var row of root.querySelectorAll('[data-gl-lot], [data-gl-wip]')) {
+        var entered = Array.from(row.querySelectorAll('input')).some(function (input) { return input.value.trim(); });
+        if (!entered) continue;
+        var name = row.querySelector('[data-k="name"]');
+        if (name && !name.value.trim()) return 'Enter a name for the work in progress.';
+        if (!row.querySelector('[data-k="quantity"]').value.trim()) {
+          return name ? 'Enter a quantity for the work in progress.' : 'Enter a quantity for the batch.';
+        }
+      }
+      return '';
+    }
+
     function collectRows() {
       var rows = [];
       root.querySelectorAll('[data-gl-product]').forEach(function (box) {
@@ -170,6 +189,7 @@
     $('[data-gl-add-wip]').addEventListener('click', function () { $('[data-gl-wip-rows]').append(wipRow()); });
 
     $('[data-gl-save-date]').addEventListener('click', async function () {
+      if (!$('[data-gl-date]').reportValidity()) return;
       try {
         render(await api('PUT', '/api/core/go-live', { go_live_date: $('[data-gl-date]').value }));
         say('Go-live date saved. Tracing starts on ' + state.status.go_live_date + '.', true);
@@ -180,6 +200,8 @@
     $('[data-gl-save-count]').addEventListener('click', async function () {
       var error = $('[data-gl-count-error]');
       error.hidden = true;
+      var invalid = checkStockInputs();
+      if (invalid) { error.textContent = invalid; error.hidden = false; return; }
       var rows = collectRows();
       if (!rows.length) { error.textContent = 'Enter at least one quantity.'; error.hidden = false; return; }
       try {

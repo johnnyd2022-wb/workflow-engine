@@ -67,6 +67,7 @@ def test_valid_input(sample_client, payload):
         ("name", "   "),
         ("name", "n" * 16),
         ("name", "batch\u0085a"),
+        ("name", "batch\n"),
         ("count", "12"),
         ("count", True),
         ("count", 101),
@@ -87,7 +88,8 @@ def test_valid_input(sample_client, payload):
 def test_field_errors(sample_client, payload, field, value):
     response = sample_client.post("/", json={**payload, field: value})
     assert response.status_code == 400
-    assert set(response.json["errors"]) == {field}
+    expected = "ids.0" if field == "ids" and value else field
+    assert set(response.json["errors"]) == {expected}
 
 
 def test_missing_field(sample_client, payload):

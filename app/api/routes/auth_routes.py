@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -15,6 +16,18 @@ from app.api.middleware.session_security import (
     DEFAULT_SESSION_TIMEOUT_MINUTES,
     MAX_SESSION_TIMEOUT_MINUTES,
     MIN_SESSION_TIMEOUT_MINUTES,
+)
+from app.api.routes.auth_payloads import (
+    INVITE_TOKEN_PATTERN,
+    AcceptInviteInput,
+    ChangePasswordInput,
+    EnableTwoFactorInput,
+    LoginInput,
+    PasswordPolicyInput,
+    SessionTimeoutInput,
+    SignupInput,
+    UserSettingsInput,
+    VerifyTwoFactorInput,
 )
 from app.core.db import db_session
 from app.core.db.models.trusted_device import TrustedDevice
@@ -32,6 +45,7 @@ from app.core.utils.log_action import log_action
 from app.features.mcp_oauth.services import pending_authorization
 from app.observability import get_logger, start_span, traced
 from app.ui.legal import TERMS_VERSION
+from app.utils.request_validation import InvalidInputError, read_json
 
 logger = get_logger(__name__)
 
@@ -53,7 +67,7 @@ def validate_email(email: str) -> tuple[bool, str | None]:
     if not email:
         return False, "Email address cannot be empty"
 
-    if "@" not in email:
+    if "@" not in email or any(character.isspace() for character in email):
         return False, "Invalid email address format"
 
     # Basic validation: must have @ and at least one character before and after
@@ -65,7 +79,8 @@ def validate_email(email: str) -> tuple[bool, str | None]:
         return False, "Invalid email address format"
 
     # Check for basic domain format (at least one dot)
-    if "." not in parts[1]:
+    labels = parts[1].split(".")
+    if len(labels) < 2 or any(not label for label in labels):
         return False, "Invalid email address format"
 
     return True, None
@@ -211,19 +226,16 @@ def rotate_session():
 @traced("auth.signup")
 def signup():
     """Create a new organisation with an admin user. Rate limited to prevent abuse."""
-    data = request.get_json()
+    try:
+        data = read_json(SignupInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    org_name = data.get("org_name")
-    email = data.get("email")
-    password = data.get("password")
-    password_confirm = data.get("password_confirm")
-    phone_number = data.get("phone_number")
-
-    if not org_name or not email or not password or not password_confirm:
-        return jsonify({"error": "org_name, email, password, and password_confirm are required"}), 400
+    org_name = data.org_name
+    email = data.email
+    password = data.password
+    password_confirm = data.password_confirm
+    phone_number = data.phone_number
 
     # Normalize email to lowercase at write time (before validation and DB operations)
     email = email.lower().strip()
@@ -231,14 +243,14 @@ def signup():
     # Validate email format
     is_valid, error_msg = validate_email(email)
     if not is_valid:
-        return jsonify({"error": error_msg}), 400
+        return InvalidInputError({"email": error_msg}).response()
 
     if password != password_confirm:
-        return jsonify({"error": "Passwords do not match"}), 400
+        return InvalidInputError({"password_confirm": "Passwords do not match"}).response()
     try:
         validate_new_password(password)
     except PeopleError as err:
-        return jsonify({"error": str(err)}), 400
+        return InvalidInputError({"password": str(err)}).response()
 
     # Normalize phone number if provided (reusable function for consistency)
     from app.core.utils.phone_normalization import normalize_phone_number
@@ -246,7 +258,7 @@ def signup():
     try:
         phone_number = normalize_phone_number(phone_number)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return InvalidInputError({"phone_number": str(e)}).response()
 
     db = db_session()
     try:
@@ -321,29 +333,13 @@ def login():
     Rate limited: 5 attempts per 1 minute (allows 5 attempts to trigger account lockout)
     Account lockout: 5 failed attempts → 1 minute lockout
     """
-    data = request.get_json()
+    try:
+        data = read_json(LoginInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    email = data.get("email")
-    password = data.get("password")
-
-    # SECURITY: `org_id` is deliberately NOT read from the request body. `users.email` is
-    # globally unique (User.email is unique=True, not unique-per-org), so an org_id could
-    # only ever narrow the lookup to the same user or to nothing — it can never select a
-    # different account. Its only real effect was as an oracle: pairing a known email with
-    # a guessed org_id let an attacker probe org membership. Timing parity now hides that
-    # (see AuthService.authenticate), but the parameter itself had no legitimate caller —
-    # the login form sends email/password/device_fingerprint only — so it is gone rather
-    # than merely mitigated. Internal callers that genuinely need a scoped lookup still
-    # have `get_user_by_email(email, org_id=...)`.
-
-    if not email or not password:
-        return jsonify({"error": "email and password are required"}), 400
-
-    # Normalize email to lowercase at write time (before any DB operations)
-    email = email.lower().strip()
+    email = data.email.lower()
+    password = data.password
 
     # CRITICAL: Clear ALL authentication-related session data before starting new login
     # This ensures no stale partial authentication state persists
@@ -512,7 +508,7 @@ def login():
             # Verify BOTH token (from cookie) AND fingerprint match
             trusted_device_repo = TrustedDeviceRepository(db)
             device_token = request.cookies.get("trusted_device_token")
-            device_fingerprint_data = data.get("device_fingerprint", {})
+            device_fingerprint_data = data.device_fingerprint.model_dump(by_alias=True, exclude_unset=True)
 
             # Debug logging
             logger.debug(
@@ -683,31 +679,30 @@ def login():
 @traced("auth.accept_invite")
 def accept_invite():
     """Set a password from an admin's invite link and activate the account (plan 0.4)."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON body required"}), 400
-    token = (data.get("token") or "").strip()
-    if not token:
-        return jsonify({"error": "token is required"}), 400
+    try:
+        data = read_json(AcceptInviteInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
+    token = data.token
     db = db_session()
     try:
         user = _pending_invite_user(db, token)
         if user is None:
             return jsonify({"error": "This invite link isn't valid or has expired. Ask your admin for a new one."}), 400
         try:
-            validate_new_password(data.get("password") or "", data.get("password_confirm"))
+            validate_new_password(data.password, data.password_confirm)
         except PeopleError as e:
-            return jsonify({"error": str(e)}), 400
+            return InvalidInputError({"password": str(e)}).response()
 
-        user.password_hash = AuthService.hash_password(data["password"])
+        user.password_hash = AuthService.hash_password(data.password)
         user.is_active = True
         user.invite_token_hash = None
         user.invite_expires_at = None
         for field in ("first_name", "last_name"):
-            value = (data.get(field) or "").strip()
+            value = getattr(data, field)
             if value:
-                setattr(user, field, value[:255])
+                setattr(user, field, value)
         db.commit()
         log_action("accept_invite", "user", user.id, None, user.org_id, user.id)
         return jsonify({"message": "Your account is ready. Sign in to continue.", "email": user.email}), 200
@@ -721,6 +716,8 @@ def _pending_invite_user(db, token: str):
     """The not-yet-active user this token invites, or None if unknown or expired."""
     from app.core.db.models.user import User
 
+    if not re.fullmatch(INVITE_TOKEN_PATTERN, token):
+        return None
     with unscoped():
         user = db.query(User).filter(User.invite_token_hash == hash_invite_token(token)).one_or_none()
     if user is None or user.is_active or not user.invite_expires_at:
@@ -740,8 +737,9 @@ def accept_invite_page(token: str):
 
     db = db_session()
     user = _pending_invite_user(db, token)
-    context = {"token": token, "valid": user is not None}
+    context = {"valid": user is not None}
     if user is not None:
+        context["token"] = token
         with unscoped():
             org = OrganisationRepository(db).get_org_by_id(user.org_id)
         context.update(
@@ -874,26 +872,16 @@ def verify_two_factor():
     Session lifecycle: session clear/invalidation (e.g. logout, expiry) forces full re-login
     and 2FA again when enabled; no "skip 2FA" state is persisted in the session.
     """
-    data = request.get_json()
+    try:
+        data = read_json(VerifyTwoFactorInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    token = data.get("token")
-    remember_device = data.get("remember_device", False)  # Optional: remember this device for 30 days
-    device_fingerprint_data = data.get("device_fingerprint", {})  # Browser characteristics for fingerprinting
-
-    if not token:
-        return jsonify({"error": "token is required"}), 400
-
-    # CRITICAL: Validate token format server-side
-    # Accept either 6-digit TOTP code or 8-character backup code
-    token = token.strip()
-    is_totp_code = len(token) == 6 and token.isdigit()
-    is_backup_code = len(token) == 8 and token.isalnum()
-
-    if not (is_totp_code or is_backup_code):
-        return jsonify({"error": "Invalid code format. Enter a 6-digit TOTP code or 8-character backup code."}), 400
+    token = data.token
+    remember_device = data.remember_device
+    device_fingerprint_data = data.device_fingerprint.model_dump(by_alias=True, exclude_unset=True)
+    is_totp_code = len(token) == 6
+    is_backup_code = len(token) == 8
 
     # Check for pending 2FA session - if it doesn't exist, user must login again
     pending = session.get("pending_2fa_user_id")
@@ -1194,23 +1182,17 @@ def enable_2fa():
     2. The device clock is synchronized
     3. The user can successfully generate codes
     """
-    data = request.get_json()
+    try:
+        data = read_json(EnableTwoFactorInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    token1 = data.get("token1")
-    token2 = data.get("token2")
-
-    if not token1:
-        return jsonify({"error": "First token is required"}), 400
-
-    if not token2:
-        return jsonify({"error": "Second token is required"}), 400
+    token1 = data.token1
+    token2 = data.token2
 
     # Ensure tokens are different
     if token1 == token2:
-        return jsonify({"error": "Second token must be different from the first"}), 400
+        return InvalidInputError({"token2": "Second token must be different from the first"}).response()
 
     user = g.current_user
 
@@ -1450,25 +1432,10 @@ def manage_session_timeout():
 
         elif request.method == "PUT":
             # Update timeout
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "JSON body required"}), 400
-
-            timeout_minutes = data.get("session_timeout_minutes")
-            if timeout_minutes is None:
-                return jsonify({"error": "session_timeout_minutes is required"}), 400
-
-            # Validate bounds using constants from session_security
-            if (
-                not isinstance(timeout_minutes, int)
-                or timeout_minutes < MIN_SESSION_TIMEOUT_MINUTES
-                or timeout_minutes > MAX_SESSION_TIMEOUT_MINUTES
-            ):
-                return jsonify(
-                    {
-                        "error": f"session_timeout_minutes must be between {MIN_SESSION_TIMEOUT_MINUTES} and {MAX_SESSION_TIMEOUT_MINUTES} minutes"
-                    }
-                ), 400
+            try:
+                timeout_minutes = read_json(SessionTimeoutInput).session_timeout_minutes
+            except InvalidInputError as exc:
+                return exc.response()
 
             # Update user's session timeout
             updated_user = user_repo.update_session_timeout(user.id, timeout_minutes)
@@ -1493,12 +1460,10 @@ def check_password_policy():
     This endpoint provides password policy warnings to help users create stronger passwords.
     It does NOT block users from proceeding - it only provides warnings.
     """
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    password = data.get("password", "")
+    try:
+        password = read_json(PasswordPolicyInput).password
+    except InvalidInputError as exc:
+        return exc.response()
 
     if not password:
         return jsonify({"warnings": [], "is_valid": True}), 200
@@ -1534,30 +1499,27 @@ def check_password_policy():
 @requires_auth
 def change_password():
     """Change user password. Requires authentication and current password verification."""
-    data = request.get_json()
+    try:
+        data = read_json(ChangePasswordInput)
+    except InvalidInputError as exc:
+        return exc.response()
 
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    current_password = data.get("current_password")
-    new_password = data.get("new_password")
-    new_password_confirm = data.get("new_password_confirm")
-
-    if not current_password or not new_password or not new_password_confirm:
-        return jsonify({"error": "current_password, new_password, and new_password_confirm are required"}), 400
+    current_password = data.current_password
+    new_password = data.new_password
+    new_password_confirm = data.new_password_confirm
 
     # Validate passwords match
     if new_password != new_password_confirm:
-        return jsonify({"error": "New passwords do not match"}), 400
+        return InvalidInputError({"new_password_confirm": "New passwords do not match"}).response()
 
     try:
         validate_new_password(new_password)
     except PeopleError as err:
-        return jsonify({"error": str(err)}), 400
+        return InvalidInputError({"new_password": str(err)}).response()
 
     # Ensure new password is different from current
     if current_password == new_password:
-        return jsonify({"error": "New password must be different from current password"}), 400
+        return InvalidInputError({"new_password": "New password must be different from current password"}).response()
 
     user = g.current_user
     if not user:
@@ -1659,35 +1621,22 @@ def manage_user_settings():
 
         elif request.method == "PUT":
             # Update settings
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "JSON body required"}), 400
+            try:
+                data = read_json(UserSettingsInput)
+                if not data.model_fields_set:
+                    raise InvalidInputError({"_body": "Include a profile field to update."})
+            except InvalidInputError as exc:
+                return exc.response()
 
-            email = data.get("email")
-            first_name = data.get("first_name")
-            last_name = data.get("last_name")
-            phone_number = data.get("phone_number")
+            email = data.email
+            first_name = data.first_name
+            last_name = data.last_name
+            phone_number = data.phone_number
 
-            # Validate email if provided
             if email is not None:
                 is_valid, error_msg = validate_email(email)
                 if not is_valid:
-                    return jsonify({"error": error_msg}), 400
-
-            # Validate profile names if provided
-            if first_name is not None:
-                if not isinstance(first_name, str):
-                    return jsonify({"error": "first_name must be a string"}), 400
-                first_name = first_name.strip()
-                if len(first_name) > 255:
-                    return jsonify({"error": "first_name must be 255 characters or fewer"}), 400
-
-            if last_name is not None:
-                if not isinstance(last_name, str):
-                    return jsonify({"error": "last_name must be a string"}), 400
-                last_name = last_name.strip()
-                if len(last_name) > 255:
-                    return jsonify({"error": "last_name must be 255 characters or fewer"}), 400
+                    return InvalidInputError({"email": error_msg}).response()
 
             # Normalize phone number if provided (reusable function for consistency)
             from app.core.utils.phone_normalization import normalize_phone_number
@@ -1697,7 +1646,7 @@ def manage_user_settings():
                     # Empty string means clear the phone number
                     phone_number = normalize_phone_number(phone_number) if phone_number else None
                 except ValueError as e:
-                    return jsonify({"error": str(e)}), 400
+                    return InvalidInputError({"phone_number": str(e)}).response()
 
             # Update user
             try:

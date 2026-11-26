@@ -10,7 +10,7 @@
       <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
       <form action="/auth/google/unlink" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" autocomplete="current-password" required></label>
+        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" maxlength="72" autocomplete="current-password" required></label>
         <button class="workspace-button" type="submit">Unlink Google</button>
       </form>
       {% else %}
@@ -18,8 +18,8 @@
       <form action="/auth/google/password" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p>Sign in with Google again if your sign-in was more than 10 minutes ago.</p>
-        <label class="form-label">New password<input class="form-input" name="password" type="password" autocomplete="new-password" required minlength="8"></label>
-        <label class="form-label">Confirm password<input class="form-input" name="password_confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+        <label class="form-label">New password<input class="form-input" name="password" type="password" maxlength="72" autocomplete="new-password" required minlength="8"></label>
+        <label class="form-label">Confirm password<input class="form-input" name="password_confirm" type="password" maxlength="72" autocomplete="new-password" required minlength="8"></label>
         <button class="workspace-button workspace-button--primary" type="submit">Add password</button>
       </form>
       {% endif %}
@@ -28,7 +28,7 @@
       <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
       <form action="/auth/google/link" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" autocomplete="current-password" required></label>
+        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" maxlength="72" autocomplete="current-password" required></label>
         <button class="workspace-button" type="submit">Link Google</button>
       </form>
     {% endif %}
