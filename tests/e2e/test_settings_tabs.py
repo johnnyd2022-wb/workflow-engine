@@ -30,8 +30,9 @@ def user(_member, db):  # noqa: F811
     return _member
 
 
-def _active_sidebar(page):
-    return page.locator("#sidebar a.nav-link.active .nav-link-text")
+def _active_workspace(page):
+    # GLASS: no sidebar; the top bar marks the current workspace, and a settings page marks none.
+    return page.locator(".g-top .g-ws a[aria-current='page']")
 
 
 @pytest.mark.parametrize("path", ["/core/people", "/core/sites", "/core/tasks/configuration", "/core/integrations"])
@@ -39,14 +40,14 @@ def test_a_settings_page_lights_settings_in_the_sidebar(sales_page, path):  # no
     # The sidebar script picked the longest URL prefix, and /core/people starts with Production's /core.
     sales_page.goto(HOST + path)
     sales_page.wait_for_load_state("networkidle")
-    expect(_active_sidebar(sales_page)).to_have_text(["Settings"])
+    expect(_active_workspace(sales_page)).to_have_count(0)
 
 
 def test_the_sidebar_follows_a_boosted_move_into_settings(sales_page):  # noqa: F811
     sales_page.goto(HOST + "/core/settings")
     sales_page.get_by_role("tab", name="People").click()
     expect(sales_page).to_have_url(HOST + "/core/people")
-    expect(_active_sidebar(sales_page)).to_have_text(["Settings"])
+    expect(_active_workspace(sales_page)).to_have_count(0)
 
 
 def test_settings_pages_share_one_tab_row(sales_page):  # noqa: F811

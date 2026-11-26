@@ -16,9 +16,9 @@ workspace_user = _workspace_user
 
 
 def _expect_home(page):
-    expect(page.locator("[data-dashboard-root] #dashboard-page-title")).to_have_text(
-        re.compile(r"^E2E Fresh Org [0-9a-f]{8}$")
-    )
+    # GLASS: Home is gone; leaving Settings goes to the Production overview.
+    expect(page).to_have_url(re.compile(r"/core/?$"))
+    expect(page.get_by_role("heading", name="Production", exact=True, level=1)).to_be_visible()
 
 
 def _category(page, name):
@@ -176,7 +176,7 @@ def test_switching_category_keeps_a_draft_and_boosted_return_reloads(browser, ap
         _category(page, "account")
         expect(page.get_by_label("First name", exact=True)).to_have_value("Unsaved draft")
         page.evaluate("window.__settingsNavigationSentinel = true")
-        page.get_by_role("link", name="Home", exact=True).first.click()
+        page.locator(".g-top .g-ws").get_by_role("link", name="Production").click()
         _expect_home(page)
         page.get_by_role("link", name="Settings", exact=True).first.click()
         expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
@@ -208,7 +208,7 @@ def test_repeated_boosted_visits_have_one_activity_ping(browser, app_url, worksp
                 page.evaluate("window.__settingsOffset += 30000; document.dispatchEvent(new Event('input'))")
             page.remove_listener("request", record)
             assert len(pings) == 1
-            page.get_by_role("link", name="Home", exact=True).first.click()
+            page.locator(".g-top .g-ws").get_by_role("link", name="Production").click()
             _expect_home(page)
     finally:
         context.close()
@@ -232,7 +232,7 @@ def test_departure_cancels_pending_profile_load(browser, app_url, workspace_user
         page.goto("/core/settings")
         expect(page.locator("#settings-load-status")).to_have_text("Loading your account…")
         page.wait_for_function("window.__settingsPendingSignal !== undefined")
-        page.get_by_role("link", name="Home", exact=True).first.click()
+        page.locator(".g-top .g-ws").get_by_role("link", name="Production").click()
         _expect_home(page)
         assert page.evaluate("window.__settingsPendingSignal.aborted")
     finally:

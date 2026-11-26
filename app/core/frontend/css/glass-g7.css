@@ -1,1 +1,28 @@
 /* GLASS PROTOTYPE: page rules for group g7 (see wb task GLASS-G7). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* Shared panel look for this group's own cards. */
+html body #page-content .pp-card,html body #page-content .ig-item,html body #page-content .gl-step{
+  background:var(--panel);border:1px solid var(--rim-dim);border-radius:var(--g-r-panel);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);
+  backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);padding:22px 24px}
+html body #page-content .pp-message,html body #page-content .ig-message,html body #page-content .gs-message,html body #page-content .gl-message{border-radius:16px}
+html body #page-content .ig-logo{border-radius:14px}
+html body #page-content .pp-dialog,html body .pp-dialog,html body #page-content .ig-dialog,html body .ig-dialog{border-radius:26px;background:var(--solid);color:var(--text)}
+
+/* Getting started and Go live take the content column like every other page. */
+html body #page-content .gs-shell[data-getting-started-root]{max-width:none;padding:0 0 48px;margin:0}
+html body #page-content .gl-shell{max-width:none;padding:0 0 56px;margin:0}
+html body #page-content .gl-step--done .gl-num{background:var(--ok-soft);color:var(--ok)}
+
+/* Trace and recall */
+html body #page-content .sm-browse-card{border-radius:18px;border-color:var(--line);background:var(--solid)}
+html body #page-content .sm-browse-card:hover{border-color:var(--accent)}
+html body #page-content .sm-page .sm-browse-seg{border-radius:var(--g-r-pill);padding:4px;background:var(--glass);border:1px solid var(--rim-dim)}
+html body #page-content .sm-page .sm-browse-seg__btn{border-radius:var(--g-r-pill);height:36px;font-weight:700}
+html body #page-content .sm-recall-meta,html body #page-content .sm-recall-summary{border-radius:16px;border-color:var(--line)}
+@media (max-width:720px){
+  html body #page-content .pp-card,html body #page-content .ig-item,html body #page-content .gl-step{padding:18px 16px;border-radius:22px}
+}
+html body #page-content .gl-shell{padding-top:18px}
+html body #page-content .gl-head h1{font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+html body #page-content .gl-head p{color:var(--muted);font-weight:500}
+html body #page-content .sm-page .sm-browse-seg{background:var(--glass-strong);box-shadow:inset 0 1px 0 var(--rim),var(--shadow)}
