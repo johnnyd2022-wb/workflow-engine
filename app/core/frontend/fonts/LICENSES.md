@@ -13,3 +13,7 @@ To refresh: request
 `https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Momo+Trust+Display&display=swap`
 with a current Chrome user agent, download the latin and latin-ext `woff2` URLs, and keep the
 file names above.
+
+## Manrope (Glass prototype)
+
+manrope-latin.woff2: Manrope variable (400–800), latin subset, from Google Fonts. SIL OFL 1.1.

@@ -9,7 +9,7 @@
    Page sheets keep layout; colour, surface, radius and type come from here.
    ===================================================================== */
 
-@font-face{font-family:"Manrope";font-style:normal;font-weight:400 800;font-display:swap;src:url("manrope-latin.woff2") format("woff2")}
+@font-face{font-family:"Manrope";font-style:normal;font-weight:400 800;font-display:swap;src:url("/static/fonts/manrope-latin.woff2") format("woff2")}
 
 :root{
   --a1:#9CCBFF; --a2:#FFD2B5; --a3:#BDEFE0; --a4:#DCCEFF; --base:#EEF2F8;
