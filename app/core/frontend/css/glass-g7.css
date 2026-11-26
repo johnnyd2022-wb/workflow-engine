@@ -1,1 +1,22 @@
 /* GLASS PROTOTYPE: page rules for group g7 (see wb task GLASS-G7). Layout only; colours and surfaces come from glass.css tokens. */
+
+/* Page cards in this group used 10-16px radii and a hard border; they are glass panels. */
+html body #page-content :is(.st-card,.st-site-card,.pp-page .pp-list,.ig-item){
+  border-radius:var(--g-r-panel);border:1px solid var(--rim-dim);background:var(--panel);box-shadow:inset 0 1px 0 var(--rim),var(--shadow)}
+
+/* Every page here spans the shell column; 18px from header to first container. */
+html body #page-content :is(.gl-shell,.gs-shell[data-getting-started-root]){max-width:none;padding-left:0;padding-right:0}
+html body #page-content :is(.nt-page,.st-page,.ig-page,.pp-page,.sm-page,.gl-shell,.settings-overview,.ai-page) > .workspace-header{margin-bottom:18px}
+
+/* workspace-overviews.css re-sets the legacy tokens to its teal dark palette; keep the glass ones here. */
+html[data-spa-theme="dark"] body #page-content :is(.nt-page,.st-page,.ig-page,.pp-page,.gl-shell,.gs-shell,.settings-overview,.sm-page,.ai-page){
+  --ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted);
+  --ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);
+  --bg-card:var(--panel);--bg-primary:var(--panel);--border-default:var(--line);--text-primary:var(--ink);
+  --spa-yellow:var(--accent);--spa-yellow-mid:var(--accent);--spa-yellow-deep:var(--accent);--spa-on-yellow:var(--accent-ink)}
+html[data-spa-theme="dark"] body #page-content :is(.nt-page,.st-page,.ig-page,.pp-page,.gl-shell,.gs-shell,.settings-overview,.sm-page,.ai-page) .workspace-button--primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* People: the section wrapper is only a heading over the list panel. */
+html body #page-content .pp-card{background:transparent;border:0;box-shadow:none;padding:0}
+/* Settings sub-navigation: the current item uses the glass accent, not teal. */
+html[data-spa-theme="dark"] body #page-content .settings-nav a[aria-current]{background:var(--accent-soft);color:var(--accent)}
