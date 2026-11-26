@@ -45,3 +45,43 @@ html[data-spa-theme="dark"] body #page-content :is(.inv-view-page,.inv-add-page,
   --ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted);
   --ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);
   --bg-card:var(--panel);--bg-primary:var(--panel);--border-default:var(--line);--text-primary:var(--ink)}
+
+/* ===== GLASS-G11: menus, popovers and drawers (no group file of their own, so they live here).
+   A menu sits over content, so it is a solid surface, not the near-opaque panel. ===== */
+html body #page-content [role="menu"],html body #page-content [role="listbox"],
+html body #page-content .flows2-manage-menu,html body #page-content .inv-view-page .inv-drawer,
+html body #page-content .searchable-dropdown-list,html body #page-content .autocomplete-list,html body #page-content .dropdown-menu{
+  background:var(--solid) !important;color:var(--text);border:1px solid var(--rim-dim);box-shadow:var(--shadow-pop);backdrop-filter:none;-webkit-backdrop-filter:none}
+html body #page-content [role="menu"],html body #page-content .flows2-manage-menu,html body #page-content .dropdown-menu{border-radius:18px;padding:6px}
+html body #page-content [role="menu"] [role="menuitem"],html body #page-content .flows2-manage-item{
+  min-height:40px;border-radius:12px;padding:0 12px;color:var(--ink);font-weight:600;background:transparent;border:0;text-align:left}
+html body #page-content [role="menu"] [role="menuitem"]:hover,html body #page-content .flows2-manage-item:hover{background:var(--glass-strong)}
+html body #page-content .inv-view-page .inv-drawer{border-radius:26px 0 0 26px;border-right:0}
+html body #page-content .inv-view-page .inv-drawer__head{border-bottom-color:var(--line)}
+html body #page-content .inv-view-page .inv-drawer__close{border-radius:50%;width:44px;height:44px}
+@media (max-width:720px){
+  /* On a phone the item drawer rises from the bottom as a sheet. */
+  html body #page-content .inv-view-page .inv-drawer{top:auto;left:0;right:0;width:auto;max-height:88vh;border-radius:26px 26px 0 0;animation:g-rise .22s cubic-bezier(.2,.8,.2,1)}
+}
+/* The account menu: .bee-topbar-wrap wraps the whole page, so top:100% put the menu below the page.
+   Pin it under the avatar instead. */
+html body .bee-topbar-wrap > .bee-menu{position:fixed;top:84px;right:max(16px,calc((100vw - var(--g-shell)) / 2 + var(--g-gutter)));left:auto;bottom:auto;max-height:calc(100vh - 100px);overflow:auto}
+@media (max-width:720px){
+  html body .bee-topbar-wrap > .bee-menu{top:auto;bottom:0;left:0;right:0;width:auto;max-width:none;border-radius:26px 26px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom));animation:g-rise .22s cubic-bezier(.2,.8,.2,1)}
+}
+/* Destructive menu items stay red. */
+html body #page-content [role="menu"] [role="menuitem"]:is(.danger,[data-danger],.flows2-manage-item--danger,#flows2-manage-delete){color:var(--bad)}
+/* Account menu contents: left-aligned, readable email, its actions as glass pills. */
+html body .bee-menu .bee-menu__inner,html body .bee-menu .bee-menu__content{text-align:left;align-items:stretch}
+html body .bee-menu .bee-menu__title{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:6px}
+html body .bee-menu .bee-menu__name{font-size:16px;font-weight:800}
+html body .bee-menu .bee-menu__email{font-family:var(--g-font);font-size:13.5px;word-break:break-all}
+html body .bee-menu :is(.bee-menu__settings,.bee-menu__help){display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:44px;margin:8px 0 0;padding:0 16px;
+  border-radius:999px;border:1px solid var(--rim-dim);background:var(--glass-strong);color:var(--ink);font-weight:700;box-shadow:none;text-decoration:none}
+html body .bee-menu :is(.bee-menu__settings,.bee-menu__help):hover{background:var(--accent-soft)}
+html body .bee-menu .bee-menu__close{width:40px;height:40px;border-radius:50%;border:0;background:var(--glass-strong);color:var(--ink);display:grid;place-items:center}
+html body .bee-menu .bee-menu__close svg{width:18px;height:18px}
+html body .bee-menu :is(.bee-menu__settings,.bee-menu__help) svg{width:18px;height:18px;flex:none}
+/* spa-theme.css's dark mustard (--spa-yellow) is the old accent; everywhere in the page it is the glass accent now. */
+html[data-spa-theme="dark"] body #page-content.page-content{--spa-yellow:var(--accent);--spa-yellow-mid:var(--accent);--spa-yellow-deep:var(--accent);--spa-on-yellow:var(--accent-ink)}
+html body #page-content :is(.workspace-button--primary,.btn-primary,.g-btn--primary) svg{color:currentColor;stroke:currentColor}

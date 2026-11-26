@@ -7,26 +7,34 @@
   <title>{{ title }} · biz-e</title>
   {# Standalone on purpose: a 500 must render even when the app shell is what broke. #}
   <style>
-    :root { --bg: #f8fafc; --card: #ffffff; --text: #172033; --muted: #64748b; --border: #e2e8f0; --accent: #0d9488; }
+    /* GLASS PROTOTYPE: the glass tokens, pared down and inline so a 500 still renders without the shell. */
+    :root { --base: #EEF2F8; --panel: rgba(255,255,255,.86); --ink: #0D1424; --muted: #5D6A82; --line: rgba(13,20,36,.08);
+            --rim: rgba(255,255,255,.9); --rim-dim: rgba(255,255,255,.45); --accent: #2563EB; --accent-ink: #fff;
+            --a1: #9CCBFF; --a2: #FFD2B5; --a3: #BDEFE0; --shadow: 0 1px 1px rgba(13,20,36,.04),0 12px 32px -14px rgba(13,40,90,.24); }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #0b1220; --card: #111a2b; --text: #e5e7eb; --muted: #9ca3af; --border: #1f2a3d; --accent: #2dd4bf; }
+      :root { --base: #070B16; --panel: rgba(17,23,40,.86); --ink: #F2F5FF; --muted: #97A2BB; --line: rgba(255,255,255,.08);
+              --rim: rgba(255,255,255,.2); --rim-dim: rgba(255,255,255,.08); --accent: #6EA8FF; --accent-ink: #06122B;
+              --a1: #1D3A7A; --a2: #33307A; --a3: #0E4B50; --shadow: 0 1px 1px rgba(0,0,0,.3),0 16px 40px -14px rgba(0,0,0,.7); }
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
-           background: var(--bg); color: var(--text);
-           font: 16px/1.5 Inter, Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    main { width: 100%; max-width: 30rem; background: var(--card); border: 1px solid var(--border);
-           border-radius: 14px; padding: 32px 28px; }
-    .brand { font-weight: 700; letter-spacing: -0.01em; margin: 0 0 24px; }
+    html { background: var(--base); }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; color: var(--ink);
+           font: 15px/1.5 Manrope, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
+           background: radial-gradient(40vw 40vw at 15% 10%, var(--a1), transparent 70%), radial-gradient(36vw 36vw at 90% 15%, var(--a2), transparent 70%),
+                       radial-gradient(40vw 40vw at 50% 100%, var(--a3), transparent 70%), var(--base); }
+    main { width: 100%; max-width: 30rem; background: var(--panel); border: 1px solid var(--rim-dim); border-radius: 24px; padding: 28px 26px;
+           box-shadow: inset 0 1px 0 var(--rim), var(--shadow); backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); }
+    .brand { font-weight: 800; letter-spacing: -0.01em; margin: 0 0 22px; color: var(--ink); }
     .brand span { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-right: 8px; }
-    h1 { font-size: 1.375rem; line-height: 1.3; margin: 0 0 8px; }
+    h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; margin: 0 0 8px; }
     p { margin: 0 0 16px; color: var(--muted); }
-    .help { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 0.9375rem; }
+    .help { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 0.9375rem; }
     .help p { margin-bottom: 8px; }
-    .ref { font: 600 0.9375rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); letter-spacing: 0.04em; }
-    a { color: var(--accent); font-weight: 600; }
+    .ref { font: 600 0.9375rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); letter-spacing: 0.04em; }
+    a { color: var(--accent); font-weight: 700; }
     a[href^="mailto:"] { white-space: nowrap; }
-    .home { display: inline-block; margin-top: 4px; }
+    .home { display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: 999px; background: var(--accent);
+            color: var(--accent-ink); text-decoration: none; box-shadow: 0 10px 24px -10px var(--accent); }
   </style>
   <!-- GLASS PROTOTYPE: the glass look outside the app shell (see glass-g9.css). -->
   <link rel="stylesheet" href="/static/css/glass.css">

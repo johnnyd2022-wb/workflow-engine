@@ -25,7 +25,6 @@
               <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch under way, the step it is at, and how long it has waited.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
             </div>
             {% if core2_focus_mode == 'inventory_live' %}
-            {# GLASS: breadcrumbs and tabs cover the way back. #}
             {% elif core2_focus_mode == 'active_batches_live' %}
             {# GLASS: the breadcrumbs and tabs cover the way back. #}
             {% else %}
