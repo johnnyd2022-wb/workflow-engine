@@ -15,7 +15,7 @@
 #page-content .customs-views a { padding: 7px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--ui-text-muted, #64748b); text-decoration: none; white-space: nowrap; }
 #page-content .customs-views a:hover { color: var(--ui-text, #172033); }
 #page-content .customs-views a[aria-current="page"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
-html[data-spa-theme="dark"] #page-content .customs-views a[aria-current="page"] { background: rgba(45, 212, 191, .14); color: #5eead4; }
+html[data-spa-theme="dark"] #page-content .customs-views a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 
 /* Layout: the entry, and where things stand */
 #page-content .customs-layout { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
@@ -48,11 +48,11 @@ html[data-spa-theme="dark"] #page-content .customs-fact--good .customs-fact__val
 #page-content .customs-page .excise-period--more { border-style: dashed; background: transparent; }
 #page-content .customs-page .excise-period--more strong { color: var(--ui-accent-strong, #0f766e); }
 #page-content .customs-page .excise-period--active { border-color: var(--ui-accent, #0d9488); background: var(--ui-accent-soft, #ccfbf1); outline: 0; }
-html[data-spa-theme="dark"] #page-content .customs-page .excise-period--active { background: rgba(45, 212, 191, .14); }
+html[data-spa-theme="dark"] #page-content .customs-page .excise-period--active { background: var(--accent-soft); }
 html[data-spa-theme="dark"] #page-content .customs-page .excise-period--overdue span, html[data-spa-theme="dark"] #page-content .customs-page .excise-period .excise-period__waiting { color: #f97066; }
 html[data-spa-theme="dark"] #page-content .customs-page .excise-period--due span { color: #fdb022; }
 html[data-spa-theme="dark"] #page-content .customs-page .excise-period--lodged span { color: #47cd89; }
-html[data-spa-theme="dark"] #page-content .customs-page .excise-period--more strong { color: #5eead4; }
+html[data-spa-theme="dark"] #page-content .customs-page .excise-period--more strong { color: var(--accent); }
 
 /* The selected period */
 #page-content .customs-page .excise-draft { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
