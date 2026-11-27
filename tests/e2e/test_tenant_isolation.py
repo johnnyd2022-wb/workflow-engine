@@ -313,9 +313,7 @@ def test_org_b_dispose_confirm_page_does_not_leak_org_a_item(two_tenants):
     marker = f"Isolation Dispose {uuid.uuid4().hex[:8]}"
     item_id = _create_inventory_item(two_tenants["a"], marker, quantity_override=5)
 
-    response = two_tenants["b"].request.get(
-        f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1"
-    )
+    response = two_tenants["b"].goto(f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1")
     assert response.status == 200, f"confirm page failed for org B: {response.status}"
     body = response.text()
     assert marker not in body, "org A's item name leaked into org B's dispose-confirm page"
@@ -327,8 +325,6 @@ def test_org_b_dispose_confirm_page_does_not_leak_org_a_item(two_tenants):
 
     # Sanity: org A itself resolves the same item and sees the real name — proves the probe
     # would catch a leak rather than the route being broken outright.
-    owner = two_tenants["a"].request.get(
-        f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1"
-    )
+    owner = two_tenants["a"].goto(f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1")
     assert owner.status == 200, owner.status
     assert marker in owner.text(), "owner cannot see its own item on the confirm page — probe is inert"

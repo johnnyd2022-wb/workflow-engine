@@ -7,7 +7,7 @@
 
 
 {% block content %}
-<div class="crm-root" style="max-width:560px; margin:0 auto; padding-top:24px;">
+<div class="crm-root" style="max-width:592px; margin:0 auto; padding:24px 16px 0;">
 
   <div class="crm-page-header" style="margin-bottom:24px;">
     <div>
@@ -24,6 +24,7 @@
 
   <form method="POST" action="/crm/xero/select-tenant" hx-boost="false">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="selection_id" value="{{ selection_id }}">
 
     <div class="crm-card" style="padding:0; overflow:hidden;">
       {% for conn in connections %}
@@ -33,7 +34,7 @@
           id="tenant_{{ loop.index }}"
           name="tenant_id"
           value="{{ conn.tenantId }}"
-          {% if loop.first %}checked{% endif %}
+          required
           style="position:absolute; opacity:0; width:0; height:0;"
         >
         <div class="xero-tenant-option__check" aria-hidden="true">
@@ -56,7 +57,7 @@
       {% endfor %}
     </div>
 
-    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+    <div style="margin-top:20px; display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
       <a href="/crm/configuration" class="btn btn-secondary">Cancel</a>
       <button type="submit" class="btn btn-primary">Connect Selected Organisation</button>
     </div>
@@ -80,6 +81,10 @@
 .xero-tenant-option:has(input:checked) {
   background: rgba(45, 212, 191, 0.08);
 }
+.xero-tenant-option input:focus-visible + .xero-tenant-option__check {
+  outline: 2px solid var(--crm-teal, #2DD4BF);
+  outline-offset: 2px;
+}
 .xero-tenant-option__check {
   width: 20px;
   height: 20px;
@@ -97,6 +102,12 @@
   background: var(--crm-teal, #2DD4BF);
   color: #0f1a1a;
 }
+.xero-tenant-option__check svg {
+  visibility: hidden;
+}
+.xero-tenant-option:has(input:checked) .xero-tenant-option__check svg {
+  visibility: visible;
+}
 .xero-tenant-option__logo {
   flex-shrink: 0;
 }
@@ -110,9 +121,7 @@
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text-primary, #111827);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .xero-tenant-option__type {
   font-size: 0.75rem;

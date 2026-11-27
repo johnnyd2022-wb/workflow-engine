@@ -8,6 +8,8 @@ actually consumed -- no blend sheet typed anywhere.
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, timedelta
 
 import pytest
@@ -16,7 +18,7 @@ from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.process_repo import ProcessRepository
-from app.features.compliant.modules.nz_alcohol.wine import label, roles, rules
+from app.features.compliant.modules.nz_alcohol.wine import label, roles, rules, trace
 from app.features.compliant.modules.nz_alcohol.wine.service import validate_plan
 from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
 from tests.dag_traversal_helpers import clear_org_synthetic_data
@@ -459,6 +461,27 @@ def test_trace_and_mass_balance_for_a_wine_officer(db, wine_org):
     csv_text = client.get(f"/api/compliant/wine/lots/{lot.id}/trace?format=csv").get_data(as_text=True)
     assert csv_text.splitlines()[0].startswith("Lot,Stage") and "Block 1" in csv_text
     assert client.get("/api/compliant/wine/lots/not-a-uuid/trace").status_code == 404
+
+
+def test_trace_csv_quotes_text_with_leading_control_characters():
+    step = {
+        "lot": "\tCellar lot",
+        "stage": "Grape intake",
+        "completed_at": None,
+        "recorded_by": None,
+        "used": 0,
+        "made": 20,
+        "made_unit": "L",
+        "loss_pct": None,
+        "source": {"grower": "\rBlock 1"},
+        "inputs": [],
+        "flag": None,
+    }
+    row = next(csv.DictReader(io.StringIO(trace.as_csv({"steps": [step]}))))
+    assert row["Lot"] == "'\tCellar lot"
+    assert row["Grower"] == "'\rBlock 1"
+    assert row["Stage"] == "Grape intake"
+    assert row["Made"] == "20"
 
 
 def test_optional_frameworks_follow_their_switches(db, wine_org):

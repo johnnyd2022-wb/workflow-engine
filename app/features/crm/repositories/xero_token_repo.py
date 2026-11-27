@@ -58,12 +58,39 @@ class XeroTokenRepository:
             .first()
         )
 
-    def update_xero_tenant_id(self, org_id: UUID, xero_tenant_id: str) -> None:
-        self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
-            {"xero_tenant_id": xero_tenant_id, "updated_at": utc_now()}
+    def update_after_refresh(
+        self,
+        org_id: UUID,
+        previous_refresh_token: str,
+        *,
+        access_token_encrypted: str,
+        refresh_token_encrypted: str,
+        expires_at: datetime,
+        scopes: str | None,
+    ) -> bool:
+        now = utc_now()
+        return bool(
+            self.db.query(XeroOAuthToken)
+            .filter(
+                XeroOAuthToken.org_id == org_id,
+                XeroOAuthToken.is_valid.is_(True),
+                XeroOAuthToken.refresh_token_encrypted == previous_refresh_token,
+            )
+            .update(
+                {
+                    "access_token_encrypted": access_token_encrypted,
+                    "refresh_token_encrypted": refresh_token_encrypted,
+                    "expires_at": expires_at,
+                    "scopes": scopes,
+                    "last_refreshed_at": now,
+                    "updated_at": now,
+                },
+                synchronize_session=False,
+            )
         )
 
-    def invalidate(self, org_id: UUID) -> None:
-        self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
-            {"is_valid": False, "updated_at": utc_now()}
-        )
+    def invalidate(self, org_id: UUID, *, previous_refresh_token: str | None = None) -> bool:
+        query = self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id, XeroOAuthToken.is_valid.is_(True))
+        if previous_refresh_token is not None:
+            query = query.filter(XeroOAuthToken.refresh_token_encrypted == previous_refresh_token)
+        return bool(query.update({"is_valid": False, "updated_at": utc_now()}, synchronize_session=False))

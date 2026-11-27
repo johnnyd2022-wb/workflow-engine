@@ -41,6 +41,7 @@ EXCLUDED_TABLES: dict[str, str] = {
     "trusted_devices": "remembered-device sign-in tokens (security internals)",
     "two_factor_backup_codes": "two-factor backup codes (secrets)",
     "xero_oauth_tokens": "Xero access tokens (secrets)",
+    "xero_pending_connections": "Xero credentials awaiting account selection (secrets)",
     "user_identities": "Google sign-in links (security internals)",
     "system_findings_cache": "a cache of computed notifications, rebuilt from the other records",
     "admin_org_notes": "Biz-E staff's internal account notes",

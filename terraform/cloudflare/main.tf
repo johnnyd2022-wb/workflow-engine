@@ -20,6 +20,7 @@ module "tunnel" {
     "test.biz-e.app"       = "https://host.docker.internal:8001" # test
     "admin-test.biz-e.app" = "https://host.docker.internal:8020" # test admin site (scripts/run_admin.sh)
     "dev.biz-e.app"        = "https://172.26.121.16:8005"        # local development
+    "test-glass.biz-e.app" = "https://host.docker.internal:8003" # Glass prototype, branch proto/glass-theme (scripts/deploy_test_glass.sh there; applied by !772 follow-up)
 
     # The public MCP server (bize_mcp, scripts/run_mcp.sh): plain HTTP, published on loopback only.
     # Founders-only behind Access like every biz-e.app host, except the paths in public_paths.
