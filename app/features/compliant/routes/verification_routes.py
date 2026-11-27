@@ -3,13 +3,19 @@
 from datetime import date
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.features.compliant.modules.nz_alcohol import food_registrations, verification
+from app.features.compliant.routes.validation_payloads import (
+    VerificationCompletionInput,
+    VerificationInput,
+    VerificationRegistrationInput,
+)
 from app.features.compliant.service import ComplianceService
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 verification_bp = Blueprint("compliant_verification", __name__)
 
@@ -22,12 +28,8 @@ def _profile():
     return ComplianceService(db_session).get_profile(_org_id())
 
 
-def _context(lock=False):
-    data = request.get_json(silent=True) if request.method != "GET" else None
-    if data is not None and not isinstance(data, dict):
-        raise ValueError("Verification data must be an object")
-    registration_id = (data or {}).get("registration_id") if isinstance(data, dict) else None
-    registration_id = registration_id or request.args.get("registration_id")
+def _context(registration_id=None, *, lock=False):
+    registration_id = registration_id or query_text("registration_id", max_length=36)
     if not registration_id:
         return _profile(), None, None
     row = food_registrations.get_registration(db_session, _org_id(), registration_id, lock=lock)
@@ -48,6 +50,8 @@ def _status(profile, registration_id, registration=None):
 def get_verification_status():
     try:
         profile, registration_id, registration = _context()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError:
         return jsonify({"error": "Food registration not found"}), 404
     return jsonify(_status(profile, registration_id, registration)), 200
@@ -59,23 +63,41 @@ def suggest_verification_step():
     """The step the regulations give for an outcome, with the next due date it implies."""
     try:
         profile, _, _ = _context()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError:
         return jsonify({"error": "Food registration not found"}), 404
     cfg = verification.settings_for(profile)
     programme = cfg["programme"]
     if programme is None:
         return jsonify({"error": "Select a national programme in Configuration first"}), 409
-    outcome = request.args.get("outcome")
+    try:
+        outcome = query_text("outcome", max_length=12)
+        attitude = query_text("attitude", max_length=14) or None
+        initial = query_text("initial", max_length=5)
+        previous_step = query_text("previous_step", max_length=1)
+        raw_date = query_text("verified_on", max_length=10)
+    except InvalidInputError as exc:
+        return exc.response()
     if outcome not in verification.OUTCOMES:
         return jsonify({"error": "outcome must be acceptable or unacceptable"}), 400
-    attitude = request.args.get("attitude") or None
-    initial = request.args.get("initial") == "true"
+    if attitude is not None and attitude not in verification.ATTITUDES:
+        return InvalidInputError({"attitude": "Choose an allowed attitude."}).response()
+    if initial not in ("", "true", "false"):
+        return InvalidInputError({"initial": "Use true or false."}).response()
+    if previous_step and previous_step not in "12345678":
+        return InvalidInputError({"previous_step": "Choose a step from 1 to 8."}).response()
     try:
-        previous = int(request.args["previous_step"]) if request.args.get("previous_step") else None
-        verified_on = date.fromisoformat(request.args["verified_on"]) if request.args.get("verified_on") else None
+        previous = int(previous_step) if previous_step else None
+        verified_on = date.fromisoformat(raw_date) if raw_date else None
+        if verified_on and verified_on > date.today():
+            return InvalidInputError({"verified_on": "Enter a date on or before today."}).response()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError:
         return jsonify({"error": "previous_step must be a number and verified_on a date"}), 400
-    step = verification.suggest_step(programme, outcome, initial, attitude, previous)
+    is_initial = initial == "true"
+    step = verification.suggest_step(programme, outcome, is_initial, attitude, previous)
     months = verification.STEP_MONTHS[step]
     return jsonify(
         {
@@ -83,7 +105,7 @@ def suggest_verification_step():
             "frequency": verification.step_label(step),
             "allowed": [
                 {"step": s, "frequency": verification.step_label(s)}
-                for s in verification.allowed_steps(programme, outcome, initial)
+                for s in verification.allowed_steps(programme, outcome, is_initial)
             ],
             "next_due": verification.add_months(verified_on, months).isoformat() if verified_on and months else None,
         }
@@ -94,12 +116,13 @@ def suggest_verification_step():
 @requires_auth
 def record_verification():
     try:
-        profile, registration_id, registration = _context(lock=True)
+        data = read_json(VerificationInput)
+        profile, registration_id, registration = _context(data.registration_id, lock=True)
         record = verification.record(
             db_session,
             _org_id(),
             profile,
-            request.get_json(silent=True) or {},
+            data.model_dump(mode="json", exclude={"registration_id"}),
             g.current_user.id,
             date.today(),
             registration_id,
@@ -107,6 +130,8 @@ def record_verification():
         if registration_id is None:
             _clear_booked_visit(record.verified_on)
         db_session.commit()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as e:
         db_session.rollback()
         return jsonify({"error": str(e)}), 400
@@ -142,12 +167,13 @@ def complete_verification_action(action_id: str):
     except ValueError:
         return jsonify({"error": "Corrective action not found"}), 404
     try:
-        profile, registration_id, registration = _context()
+        data = read_json(VerificationCompletionInput)
+        profile, registration_id, registration = _context(data.registration_id)
         action = verification.complete_action(
             db_session,
             _org_id(),
             aid,
-            (request.get_json(silent=True) or {}).get("note"),
+            data.note,
             g.current_user.id,
             date.today(),
             registration_id,
@@ -155,6 +181,8 @@ def complete_verification_action(action_id: str):
         if action is None:
             return jsonify({"error": "Corrective action not found"}), 404
         db_session.commit()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as e:
         db_session.rollback()
         return jsonify({"error": str(e)}), 409
@@ -167,7 +195,10 @@ def complete_verification_action(action_id: str):
 def update_verification_registration():
     """When the business registered its national programme, which sets the initial verification date."""
     try:
-        _, selected, _ = _context()
+        data = read_json(VerificationRegistrationInput)
+        _, selected, _ = _context(data.registration_id)
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError:
         return jsonify({"error": "Food registration not found"}), 404
     if selected is not None:
@@ -175,14 +206,8 @@ def update_verification_registration():
     profile = _profile()
     if profile is None:
         return jsonify({"error": "Configure Compliant first"}), 409
-    data = request.get_json(silent=True) or {}
-    registered_as = data.get("registered_as")
-    if registered_as not in ("new", "existing"):
-        return jsonify({"error": "registered_as must be new or existing"}), 400
-    try:
-        registered_on = date.fromisoformat(str(data.get("registered_on") or ""))
-    except ValueError:
-        return jsonify({"error": "registered_on must be a date (YYYY-MM-DD)"}), 400
+    registered_on = data.registered_on
+    registered_as = data.registered_as
     if registered_on > date.today():
         return jsonify({"error": "registered_on can't be in the future"}), 400
     settings = {

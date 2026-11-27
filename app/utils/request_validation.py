@@ -5,12 +5,13 @@ uses strict Pydantic types. Dates, UUIDs, decimal strings and enum values use th
 standard JSON representations. Schemas reject extra fields by default.
 """
 
+from math import isfinite
 from types import NoneType, UnionType
 from typing import Annotated, get_args, get_origin
 from unicodedata import category
 
 from flask import jsonify, request
-from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, JsonValue, StringConstraints, ValidationError
 
 
 def _check_name(value):
@@ -21,6 +22,25 @@ def _check_name(value):
 
 CleanText = Annotated[str, StringConstraints(strip_whitespace=True), BeforeValidator(_check_name)]
 CleanName = Annotated[CleanText, StringConstraints(min_length=1)]
+
+
+def validate_json_storage(value):
+    """Reject values PostgreSQL JSONB cannot represent, including in nested metadata."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            validate_json_storage(key)
+            validate_json_storage(item)
+    elif isinstance(value, list):
+        for item in value:
+            validate_json_storage(item)
+    elif isinstance(value, str) and ("\x00" in value or any(category(char) == "Cs" for char in value)):
+        raise ValueError("Use valid text without null characters.")
+    elif isinstance(value, float) and not isfinite(value):
+        raise ValueError("Enter a finite number.")
+    return value
+
+
+StoredJson = Annotated[JsonValue, BeforeValidator(validate_json_storage)]
 
 
 class JsonInput(BaseModel):

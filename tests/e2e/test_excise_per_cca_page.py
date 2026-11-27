@@ -156,3 +156,13 @@ def test_a_reminder_link_opens_that_cca(sales_page, two_ccas):  # noqa: F811
     sales_page.goto(f"{BASE}/compliant/nz-alcohol/customs?period={_last_month().isoformat()}&cca={two.id}")
     expect(sales_page.locator(".excise-cca[aria-pressed='true']")).to_contain_text("CCA-2")
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_customs_rate_enforces_decimal_storage_limit(sales_page, two_ccas):  # noqa: F811
+    sales_page.goto(f"{BASE}/compliant/nz-alcohol/customs/settings")
+    rate = sales_page.locator("#excise-rate-value")
+    rate.evaluate("(field) => field.closest('details').open = true")
+    rate.fill("100000000")
+    assert rate.evaluate("(field) => field.validity.rangeOverflow")
+    rate.fill("99999999.9999")
+    assert rate.evaluate("(field) => field.checkValidity()")

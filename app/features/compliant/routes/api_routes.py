@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from uuid import UUID
 
-from flask import Blueprint, Response, g, jsonify, render_template, request, send_file
+from flask import Blueprint, Response, g, jsonify, render_template, send_file
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.idempotency import idempotent_write
@@ -31,9 +31,24 @@ from app.features.compliant.modules.nz_alcohol.workflow_rules import (
 )
 from app.features.compliant.np3_evidence_pdf import build_np3_evidence_register_pdf
 from app.features.compliant.platform.workflow_rules import workflow_context
+from app.features.compliant.routes.validation_payloads import (
+    ABVRulesInput,
+    AlcoholProductInput,
+    AttestationInput,
+    ComplianceProfileInput,
+    ComplianceRecordInput,
+    ExciseLodgementInput,
+    ExciseProductInput,
+    ExciseRateInput,
+    ExciseSettingsInput,
+    NPLogInput,
+    ReportInput,
+    ReviewIntervalInput,
+)
 from app.features.compliant.service import ComplianceService, serialise_record
 from app.features.execution.evidence.evidence_service import get_evidence_for_download
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_int, query_text, read_json
 
 logger = get_logger(__name__)
 
@@ -50,12 +65,7 @@ _SUBFEATURE_SETTINGS = (
     "np_registered_on",
     "np_registered_as",
 )
-_RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
-_RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-_FOOD_CONTROL_PROGRAMMES = {"np1", "np2", "np3", "none"}
-_LIQUOR_LICENCE_TYPES = {"on", "off", "club", "special"}
-_NP3_REVIEW_INTERVALS = {1, 3, 6, 12}
 
 
 def _csv_safe(value):
@@ -110,9 +120,12 @@ def _decimal(value, field: str) -> str | None:
     if value in (None, ""):
         return None
     try:
-        return str(Decimal(str(value)))
+        number = Decimal(str(value))
+        if number.is_finite():
+            return str(number)
     except InvalidOperation:
-        raise ValueError(f"{field} must be numeric") from None
+        pass
+    raise ValueError(f"{field} must be a finite number") from None
 
 
 @api_bp.route("/api/compliant/overview", methods=["GET"])
@@ -125,14 +138,14 @@ def overview():
 @requires_auth
 def core_sources():
     """Search selectable Core proof without exposing another tenant's records."""
-    kind = request.args.get("kind", "")
-    query = request.args.get("q", "").strip()
     try:
-        offset = int(request.args.get("offset", "0"))
-    except ValueError:
-        return jsonify({"error": "Invalid offset"}), 400
-    if kind not in {"file", "execution-step", "execution", "movement"} or len(query) > 100 or not 0 <= offset <= 10000:
-        return jsonify({"error": "Invalid search parameters"}), 400
+        kind = query_text("kind", max_length=14)
+        query = query_text("q", max_length=100)
+        offset = query_int("offset", default=0, minimum=0, maximum=10000)
+    except InvalidInputError as exc:
+        return exc.response()
+    if kind not in {"file", "execution-step", "execution", "movement"}:
+        return InvalidInputError({"kind": "Choose an allowed source type."}).response()
     return jsonify(_service().search_core_sources(_org_id(), kind, query, offset)), 200
 
 
@@ -140,11 +153,15 @@ def core_sources():
 @requires_auth
 def np3_audit():
     try:
+        export_format = query_text("format", default="json", max_length=4)
+        if export_format not in {"", "json", "csv", "pdf"}:
+            raise InvalidInputError({"format": "Choose json, csv or pdf."})
         audit = _service().np3_audit(_org_id())
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 409
-    export_format = request.args.get("format")
-    if export_format not in {"csv", "pdf"}:
+    if export_format in {"", "json"}:
         return jsonify(audit), 200
 
     if export_format == "pdf":
@@ -238,15 +255,16 @@ def np3_audit_check(control_id: str):
 def update_np3_check_settings(control_id: str):
     if control_id not in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ())):
         return jsonify({"error": "Unknown NP3 check"}), 404
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or data.get("review_interval_months") not in _NP3_REVIEW_INTERVALS:
-        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
+    try:
+        data = read_json(ReviewIntervalInput)
+    except InvalidInputError as exc:
+        return exc.response()
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
         return jsonify({"error": "Configure Compliance before changing NP3 check settings"}), 409
     settings = dict(profile.settings or {})
     intervals = dict(settings.get("np3_check_review_intervals") or {})
-    intervals[control_id] = data["review_interval_months"]
+    intervals[control_id] = data.review_interval_months
     settings["np3_check_review_intervals"] = intervals
     profile = _service().upsert_profile(_org_id(), {"settings": settings})
     log_action("update", "compliance_profile", profile.id, {"np3_check_review_interval": control_id})
@@ -258,35 +276,23 @@ def update_np3_check_settings(control_id: str):
 @idempotent_write("np3_attestation")  # GL-U03: a retried save adds the evidence once
 def attest_np3_check():
     """Append a focused NP3 self-review without exposing the generic record register."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON object required"}), 400
-    control_id = str(data.get("control_id") or "")
+    try:
+        data = read_json(AttestationInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    control_id = data.control_id
     framework = framework_by_slug(f"{_np_programme()}-food-control") or {}
     controls = dict(framework.get("controls", ()))
     if control_id not in controls:
         return jsonify({"error": "Unknown NP3 check"}), 400
-    how_we_meet = str(data.get("how_we_meet") or "").strip()
-    if not how_we_meet or len(how_we_meet) > 4000:
-        return jsonify({"error": "How we meet this requirement is required and must be at most 4000 characters"}), 400
-    if data.get("confirmed") is not True:
+    how_we_meet = data.how_we_meet.strip()
+    if not how_we_meet:
+        return InvalidInputError({"how_we_meet": "Describe how you meet this requirement."}).response()
+    if not data.confirmed:
         return jsonify({"error": "Confirm that you reviewed this check before signing it off"}), 400
-    try:
-        review_interval_months = int(data.get("review_interval_months", 6))
-    except (TypeError, ValueError):
-        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
-    if review_interval_months not in _NP3_REVIEW_INTERVALS:
-        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
-    evidence_reference = str(data.get("evidence_reference") or "").strip() or None
-    if evidence_reference and len(evidence_reference) > 1024:
-        return jsonify({"error": "evidence_reference must be at most 1024 characters"}), 400
-    source_refs = data.get("source_refs") or []
-    if (
-        not isinstance(source_refs, list)
-        or len(source_refs) > 30
-        or not all(isinstance(item, str) for item in source_refs)
-    ):
-        return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
+    review_interval_months = data.review_interval_months
+    evidence_reference = data.evidence_reference or None
+    source_refs = data.source_refs
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
         return jsonify({"error": "Configure Compliance before signing off checks"}), 409
@@ -296,13 +302,9 @@ def attest_np3_check():
     if invalid_source_refs:
         logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
         return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
-    evidence_fields = data.get("evidence_fields") or {}
+    evidence_fields = data.evidence_fields
     allowed_evidence_fields = {field["key"] for field in evidence_playbook(control_id)["fields"]}
-    if (
-        not isinstance(evidence_fields, dict)
-        or not set(evidence_fields).issubset(allowed_evidence_fields)
-        or not all(isinstance(value, str) and len(value) <= 1024 for value in evidence_fields.values())
-    ):
+    if not set(evidence_fields).issubset(allowed_evidence_fields):
         return jsonify({"error": "Evidence fields do not match this NP3 check"}), 400
     today = date.today()
     record = _service().add_record(
@@ -340,10 +342,10 @@ def add_np3_check_log(control_id: str):
     controls = dict(framework.get("controls", ()))
     if control_id not in controls or template is None:
         return jsonify({"error": "This NP3 check does not have a built-in log"}), 404
-    data = request.get_json(silent=True)
-    fields = data.get("fields") if isinstance(data, dict) else None
-    if not isinstance(fields, dict):
-        return jsonify({"error": "fields must be an object"}), 400
+    try:
+        fields = read_json(NPLogInput).fields
+    except InvalidInputError as exc:
+        return exc.response()
     template_fields = {field["key"]: field for field in template["fields"]}
     if not set(fields).issubset(template_fields):
         return jsonify({"error": "Log fields do not match this NP3 check"}), 400
@@ -352,8 +354,6 @@ def add_np3_check_log(control_id: str):
         raw_value = fields.get(key, "")
         if raw_value is None:
             raw_value = ""
-        if not isinstance(raw_value, str) or len(raw_value.strip()) > 4000:
-            return jsonify({"error": f"{definition['label']} must be text of at most 4000 characters"}), 400
         value = raw_value.strip()
         if definition.get("required") and not value:
             return jsonify({"error": f"{definition['label']} is required"}), 400
@@ -394,6 +394,8 @@ def add_np3_check_log(control_id: str):
     if status == "open" and not (normalised.get("corrective_action") or normalised.get("cause_and_action")):
         return jsonify({"error": "Describe the corrective action when follow-up is required"}), 400
     event_date = _date(normalised.get("event_date"), "event_date") or date.today()
+    if status == "open" and event_date.year == date.max.year and event_date.month == 12:
+        return InvalidInputError({"fields.event_date": "Choose a date that allows a follow-up next month."}).response()
     record = _service().add_record(
         _org_id(),
         g.current_user.id,
@@ -488,7 +490,10 @@ def capture_context():
     ``?step_id=`` (the step definition being executed) adds any rules that apply only to
     that step; without it, only rules that apply to every step are returned.
     """
-    raw_step_id = (request.args.get("step_id") or "").strip()
+    try:
+        raw_step_id = query_text("step_id", max_length=36)
+    except InvalidInputError as exc:
+        return exc.response()
     step_id = None
     if raw_step_id:
         try:
@@ -534,8 +539,10 @@ def get_abv_rules():
 @requires_role(UserRole.ADMIN)
 def update_abv_rules():
     """Replace only the ABV product rules; every other profile setting is left untouched."""
-    data = request.get_json(silent=True)
-    rules = data.get("rules") if isinstance(data, dict) else None
+    try:
+        rules = read_json(ABVRulesInput).rules
+    except InvalidInputError as exc:
+        return exc.response()
     error = validate_abv_rules(rules)
     if error:
         return jsonify({"error": error}), 400
@@ -552,37 +559,17 @@ def update_abv_rules():
 @requires_auth
 @requires_role(UserRole.ADMIN)
 def update_profile():
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON object required"}), 400
-    if "enabled" in data and not isinstance(data["enabled"], bool):
-        return jsonify({"error": "enabled must be boolean"}), 400
-    if "settings" in data and not isinstance(data["settings"], dict):
-        return jsonify({"error": "settings must be an object"}), 400
+    try:
+        data = read_json(ComplianceProfileInput).model_dump(mode="json", exclude_unset=True)
+    except InvalidInputError as exc:
+        return exc.response()
     settings = data.get("settings")
     if settings is not None:
-        programme = settings.get("food_control_programme")
-        if programme is not None and programme not in _FOOD_CONTROL_PROGRAMMES:
-            return jsonify({"error": "food_control_programme must be np1, np2, np3, or none"}), 400
-        review_interval = settings.get("np3_review_interval_months")
-        if review_interval is not None and review_interval not in _NP3_REVIEW_INTERVALS:
-            return jsonify({"error": "np3_review_interval_months must be 1, 3, 6, or 12"}), 400
         check_intervals = settings.get("np3_check_review_intervals")
-        if check_intervals is not None and (
-            not isinstance(check_intervals, dict)
-            or not all(
-                key in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ()))
-                and value in _NP3_REVIEW_INTERVALS
-                for key, value in check_intervals.items()
-            )
-        ):
-            return jsonify({"error": "np3_check_review_intervals must contain valid NP3 checks and intervals"}), 400
-        licence_types = settings.get("liquor_licence_types")
-        if licence_types is not None and (
-            not isinstance(licence_types, list)
-            or not all(isinstance(item, str) and item in _LIQUOR_LICENCE_TYPES for item in licence_types)
-        ):
-            return jsonify({"error": "liquor_licence_types must contain only on, off, club, or special"}), 400
+        if check_intervals is not None:
+            controls = dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ()))
+            if not set(check_intervals).issubset(controls):
+                return jsonify({"error": "np3_check_review_intervals must contain valid NP3 checks and intervals"}), 400
         workflow_settings_error = validate_workflow_settings(settings)
         if workflow_settings_error:
             return jsonify({"error": workflow_settings_error}), 400
@@ -626,47 +613,28 @@ def list_alcohol_products():
 @requires_auth
 @requires_role(UserRole.ADMIN)
 def create_alcohol_product():
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON object required"}), 400
-    product_type = str(data.get("product_type") or "")
-    if product_type not in {"beer", "spirits", "wine", "cider", "mead", "rtd", "other"}:
-        return jsonify({"error": "Invalid alcohol product type"}), 400
-    inventory_name = str(data.get("inventory_name") or "").strip()
-    if not inventory_name or len(inventory_name) > 255:
-        return jsonify({"error": "inventory_name is required and must be at most 255 characters"}), 400
-    customs_product_code = str(data.get("customs_product_code") or "").strip() or None
-    if customs_product_code and len(customs_product_code) > 100:
-        return jsonify({"error": "customs_product_code must be at most 100 characters"}), 400
     try:
-        abv_percent = Decimal(_decimal(data.get("abv_percent"), "abv_percent") or "0")
-        if not abv_percent.is_finite() or not Decimal("0") < abv_percent <= Decimal("100"):
-            return jsonify({"error": "abv_percent must be greater than 0 and at most 100"}), 400
-    except (ValueError, InvalidOperation):
-        return jsonify({"error": "abv_percent must be a number"}), 400
-    try:
-        product = _service().add_product_profile(
-            _org_id(),
-            {
-                "inventory_name": inventory_name,
-                "product_type": product_type,
-                "abv_percent": str(abv_percent),
-                "customs_product_code": customs_product_code,
-            },
-        )
+        data = read_json(AlcoholProductInput).model_dump()
+        data["customs_product_code"] = data["customs_product_code"] or None
+        product = _service().add_product_profile(_org_id(), data)
+    except InvalidInputError as exc:
+        return exc.response()
     except IntegrityError as exc:
         db_session().rollback()
         if "uq_compliance_alcohol_product_org_name" in str(exc):
             return jsonify({"error": "A profile already exists for this inventory name"}), 409
         raise
-    log_action("create", "compliance_alcohol_product_profile", product.id, {"product_type": product_type})
+    log_action("create", "compliance_alcohol_product_profile", product.id, {"product_type": data["product_type"]})
     return jsonify({"product": {"id": str(product.id), "inventory_name": product.inventory_name}}), 201
 
 
 @api_bp.route("/api/compliant/records", methods=["GET"])
 @requires_auth
 def list_records():
-    framework_slug = (request.args.get("framework") or "").strip() or None
+    try:
+        framework_slug = query_text("framework", max_length=80) or None
+    except InvalidInputError as exc:
+        return exc.response()
     if framework_slug and framework_by_slug(framework_slug) is None:
         return jsonify({"error": "Unknown framework"}), 400
     records = _service().records(_org_id(), framework_slug)
@@ -679,60 +647,28 @@ def list_records():
 @requires_auth
 @idempotent_write("compliance_record")  # GL-U03: a retried save adds the evidence once
 def create_record():
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON object required"}), 400
-    framework_slug = str(data.get("framework_slug") or "")
+    try:
+        data = read_json(ComplianceRecordInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    framework_slug = data.framework_slug
     framework = framework_by_slug(framework_slug)
     if framework is None:
         return jsonify({"error": "Unknown framework"}), 400
     control_ids = {control_id for control_id, _ in framework["controls"]}
-    control_id = str(data.get("control_id") or "")
+    control_id = data.control_id
     if control_id not in control_ids:
         return jsonify({"error": "Unknown control for framework"}), 400
-    if data.get("record_type") not in _RECORD_TYPES or data.get("status", "complete") not in _RECORD_STATUSES:
-        return jsonify({"error": "Invalid record_type or status"}), 400
-    title = str(data.get("title") or "").strip()
-    if not title or len(title) > 255:
-        return jsonify({"error": "title is required and must be at most 255 characters"}), 400
-    source_refs = data.get("source_refs") or []
-    if (
-        not isinstance(source_refs, list)
-        or len(source_refs) > 30
-        or not all(isinstance(item, str) for item in source_refs)
-    ):
-        return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
-    details = data.get("details") or {}
-    if not isinstance(details, dict):
-        return jsonify({"error": "details must be an object"}), 400
-    if data.get("declared_litres_of_alcohol") not in (None, ""):
-        details["declared_litres_of_alcohol"] = data["declared_litres_of_alcohol"]
+    record_data = data.model_dump(exclude={"declared_litres_of_alcohol"})
+    details = record_data["details"]
+    if data.declared_litres_of_alcohol is not None:
+        details["declared_litres_of_alcohol"] = str(data.declared_litres_of_alcohol)
     if "declared_litres_of_alcohol" in details:
         try:
             _decimal(details["declared_litres_of_alcohol"], "declared_litres_of_alcohol")
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-    evidence_reference = str(data.get("evidence_reference") or "").strip() or None
-    if evidence_reference and len(evidence_reference) > 1024:
-        return jsonify({"error": "evidence_reference must be at most 1024 characters"}), 400
-    try:
-        record_data = {
-            "framework_slug": framework_slug,
-            "control_id": control_id,
-            "record_type": data["record_type"],
-            "status": data.get("status", "complete"),
-            "title": title,
-            "period_start": _date(data.get("period_start"), "period_start"),
-            "period_end": _date(data.get("period_end"), "period_end"),
-            "due_date": _date(data.get("due_date"), "due_date"),
-            "measured_value": _decimal(data.get("measured_value"), "measured_value"),
-            "limit_value": _decimal(data.get("limit_value"), "limit_value"),
-            "evidence_reference": evidence_reference,
-            "source_refs": source_refs,
-            "details": details,
-        }
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    record_data["evidence_reference"] = data.evidence_reference or None
     if (
         record_data["period_start"]
         and record_data["period_end"]
@@ -782,15 +718,19 @@ def create_record():
 @api_bp.route("/api/compliant/reports/<framework_slug>", methods=["POST"])
 @requires_auth
 def create_report(framework_slug: str):
-    data = request.get_json(silent=True) or {}
     try:
+        data = read_json(ReportInput)
+        if data.period_start and data.period_end and data.period_start > data.period_end:
+            raise InvalidInputError({"period_end": "Choose a date on or after the period start."})
         report = _service().build_audit_pack(
             _org_id(),
             framework_slug,
             g.current_user.id,
-            _date(data.get("period_start"), "period_start"),
-            _date(data.get("period_end"), "period_end"),
+            data.period_start,
+            data.period_end,
         )
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     log_action("create", "compliance_report", UUID(report["report_id"]), {"framework": framework_slug})
@@ -824,7 +764,12 @@ def get_report(report_id: str):
             report_id=str(report_uuid),
         )
         return jsonify({"error": "Report not found"}), 404
-    output = (request.args.get("format") or "json").lower()
+    try:
+        output = query_text("format", default="json", max_length=4).lower() or "json"
+        if output not in {"json", "html", "csv"}:
+            raise InvalidInputError({"format": "Choose json, html or csv."})
+    except InvalidInputError as exc:
+        return exc.response()
     if output == "html":
         return render_template("compliant/audit_pack.html", report=report)
     if output == "csv":
@@ -889,11 +834,16 @@ def get_excise_period():
     """One period's entry; with several sites, one CCA licence's (``cca``, else the first)."""
     excise, cfg = _excise_cfg()
     try:
-        day = _parse_iso(request.args["period"], "period") if request.args.get("period") else None
-        licence_id = _cca_param(request.args.get("cca"))
+        raw_day = query_text("period", max_length=10)
+        day = _parse_iso(raw_day, "period") if raw_day else None
+        licence_id = _cca_param(query_text("cca", max_length=36))
         if day is None:
             day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
         current = excise.draft(db_session, _org_id(), day, cfg["frequency"], licence_id=licence_id)
+    except InvalidInputError as exc:
+        return exc.response()
+    except OverflowError:
+        return InvalidInputError({"period": "Choose a date within a valid excise period."}).response()
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"settings": cfg, "draft": current}), 200
@@ -916,7 +866,9 @@ def list_excise_periods():
 
     excise, cfg = _excise_cfg()
     try:
-        licence_id = _cca_param(request.args.get("cca"))
+        licence_id = _cca_param(query_text("cca", max_length=36))
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     if licence_id is None and excise.per_cca(db_session, _org_id()):
@@ -966,15 +918,12 @@ def get_excise_position():
 @requires_auth
 def update_excise_settings():
     excise, _cfg = _excise_cfg()
-    data = request.get_json(silent=True) or {}
-    frequency = data.get("frequency", "monthly")
-    if frequency not in excise.FREQUENCIES:
-        return jsonify({"error": "frequency must be monthly, six_monthly or twelve_monthly"}), 400
-    tracking = data.get("tracking_from")
     try:
-        tracking = _parse_iso(tracking, "tracking_from").isoformat() if tracking else None
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        data = read_json(ExciseSettingsInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    frequency = data.frequency
+    tracking = data.tracking_from.isoformat() if data.tracking_from else None
     profile = _service().get_profile(_org_id())
     if profile is None:
         return jsonify({"error": "Configure Compliant before setting up excise"}), 409
@@ -990,22 +939,24 @@ def update_excise_settings():
 @requires_auth
 def lodge_excise_period():
     excise, cfg = _excise_cfg()
-    data = request.get_json(silent=True) or {}
     try:
-        start = _parse_iso(data.get("period_start"), "period_start")
-        lodged_on = _parse_iso(data.get("lodged_on") or date.today().isoformat(), "lodged_on")
-        licence_id = _cca_param(data.get("cca"))
+        data = read_json(ExciseLodgementInput)
+        start = data.period_start
+        lodged_on = data.lodged_on or date.today()
+        licence_id = data.cca
         record = excise.lodge(
             db_session,
             _org_id(),
             start,
             cfg["frequency"],
             lodged_on,
-            data.get("entry_reference"),
+            data.entry_reference,
             g.current_user.id,
             licence_id=licence_id,
         )
         db_session.commit()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as e:
         db_session.rollback()
         return jsonify({"error": str(e)}), 400
@@ -1058,24 +1009,17 @@ def list_excise_rates():
 def add_excise_rate():
     from app.features.compliant.models.excise import ExciseRate
 
-    data = request.get_json(silent=True) or {}
-    tariff = str(data.get("tariff_item") or "").strip()
-    if not tariff or len(tariff) > 100:
-        return jsonify({"error": "tariff_item is required (up to 100 characters)"}), 400
     try:
-        rate = Decimal(str(data.get("rate_per_lal")))
-        effective = _parse_iso(data.get("effective_from"), "effective_from")
-    except (InvalidOperation, ValueError) as e:
-        return jsonify({"error": str(e) if isinstance(e, ValueError) else "rate_per_lal must be a number"}), 400
-    if not rate.is_finite() or rate < 0:
-        return jsonify({"error": "rate_per_lal must be 0 or more"}), 400
+        data = read_json(ExciseRateInput)
+    except InvalidInputError as exc:
+        return exc.response()
     db_session.add(
         ExciseRate(
             org_id=_org_id(),
-            tariff_item=tariff,
-            rate_per_lal=rate,
-            effective_from=effective,
-            description=(str(data.get("description") or "").strip()[:255] or None),
+            tariff_item=data.tariff_item,
+            rate_per_lal=data.rate_per_lal,
+            effective_from=data.effective_from,
+            description=data.description or None,
         )
     )
     try:
@@ -1133,36 +1077,26 @@ def list_excise_products():
 def save_excise_product():
     from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 
-    data = request.get_json(silent=True) or {}
-    name = str(data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name is required"}), 400
     try:
-        volume = Decimal(str(data["pack_volume_ml"])) if data.get("pack_volume_ml") not in (None, "") else None
-        abv = Decimal(str(data["abv_fallback"])) if data.get("abv_fallback") not in (None, "") else None
-    except InvalidOperation:
-        return jsonify({"error": "Pack volume and ABV must be numbers"}), 400
-    if volume is not None and not (0 < volume <= 100000):
-        return jsonify({"error": "Pack volume must be more than 0 mL"}), 400
-    if abv is not None and not (0 <= abv <= 100):
-        return jsonify({"error": "ABV must be between 0 and 100"}), 400
-    tariff = str(data.get("tariff_item") or "").strip()[:100] or None
-    category = str(data.get("excise_category") or "").strip() or None
+        data = read_json(ExciseProductInput)
+    except InvalidInputError as exc:
+        return exc.response()
+    category = data.excise_category or None
     if category is not None and excise_tariff.category(category) is None:
         return jsonify({"error": "Unknown product type"}), 400
     profile = (
         db_session.query(AlcoholProductProfile)
-        .filter(AlcoholProductProfile.org_id == _org_id(), AlcoholProductProfile.inventory_name == name)
+        .filter(AlcoholProductProfile.org_id == _org_id(), AlcoholProductProfile.inventory_name == data.name)
         .one_or_none()
     )
     if profile is None:
         profile = AlcoholProductProfile(
-            org_id=_org_id(), inventory_name=name, product_type=str(data.get("product_type") or "spirits")[:40]
+            org_id=_org_id(), inventory_name=data.name, product_type=data.product_type or "spirits"
         )
         db_session.add(profile)
-    profile.pack_volume_ml = volume
-    profile.abv_percent = abv
-    profile.customs_product_code = tariff
+    profile.pack_volume_ml = data.pack_volume_ml
+    profile.abv_percent = data.abv_fallback
+    profile.customs_product_code = data.tariff_item or None
     profile.excise_category = category
     profile.is_active = True
     db_session.commit()

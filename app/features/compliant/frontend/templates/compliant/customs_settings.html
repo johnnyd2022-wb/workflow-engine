@@ -33,7 +33,7 @@
         <div data-excise-rates></div>
         <form class="excise-inline-form" data-excise-rate-form hx-boost="false">
           <input name="tariff_item" id="excise-rate-tariff" placeholder="Tariff item" required maxlength="100" aria-label="Tariff item">
-          <input name="rate_per_lal" id="excise-rate-value" type="number" min="0" step="0.0001" placeholder="$ per LAL" required aria-label="Rate per litre of alcohol">
+          <input name="rate_per_lal" id="excise-rate-value" type="number" min="0" max="99999999.9999" step="0.0001" placeholder="$ per LAL" required aria-label="Rate per litre of alcohol">
           <input name="effective_from" id="excise-rate-from" type="date" required aria-label="Effective from">
           <button type="submit" class="workspace-button">Add rate</button>
         </form>
