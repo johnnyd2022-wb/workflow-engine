@@ -12,6 +12,7 @@ from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.observability import get_logger
 from app.utils.config_loader import config
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,12 @@ def register_routes(bp):
                 org_id=str(g.current_org_id),
             )
             return jsonify({"success": False, "error": "FORBIDDEN", "message": "Not authorized"}), 403
+
+        if request.is_json or request.get_data():
+            try:
+                read_json(JsonInput)
+            except InvalidInputError as exc:
+                return jsonify(success=False, error=str(exc), errors=exc.errors), 400
 
         from app.features.demo_data.services.resetdb import reset_demo_db
 

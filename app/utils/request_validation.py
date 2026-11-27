@@ -11,7 +11,7 @@ from typing import Annotated, get_args, get_origin
 from unicodedata import category
 
 from flask import jsonify, request
-from pydantic import BaseModel, BeforeValidator, ConfigDict, JsonValue, StringConstraints, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, JsonValue, StringConstraints, ValidationError
 
 
 def _check_name(value):
@@ -49,6 +49,13 @@ class JsonInput(BaseModel):
     model_config = ConfigDict(
         strict=True, extra="forbid", allow_inf_nan=False, validate_default=True, loc_by_alias=False
     )
+
+
+class _ServiceInput(JsonInput):
+    """Validate JSON storage types when the called service already owns the schema."""
+
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, StoredJson] = Field(init=False)
 
 
 _MESSAGES = {
@@ -96,6 +103,10 @@ def read_json[Payload: JsonInput](schema: type[Payload]) -> Payload:
         return schema.model_validate_json(request.get_data())
     except ValidationError as exc:
         raise _format_errors(schema, exc) from None
+
+
+def read_service_json() -> dict:
+    return read_json(_ServiceInput).model_extra or {}
 
 
 def read_form[Payload: JsonInput](schema: type[Payload]) -> Payload:

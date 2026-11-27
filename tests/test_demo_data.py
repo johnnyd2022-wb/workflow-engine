@@ -238,3 +238,17 @@ def test_clear_demo_db_is_noop_when_demo_user_missing(monkeypatch, db):
     monkeypatch.setattr(UserRepository, "get_user_by_email", lambda self, email: None)
 
     assert clear_demo_db(db) is None
+
+
+def test_demo_reset_rejects_unknown_body_before_reset(monkeypatch, flask_app, demo_org_member):
+    called = []
+
+    def reset(_session):
+        called.append(True)
+        return {"success": True}
+
+    monkeypatch.setattr("app.features.demo_data.services.resetdb.reset_demo_db", reset)
+    client = _logged_in_client(flask_app, demo_org_member)
+    response = client.post("/api/core/reset-demo-db", json={"unrecognized": True})
+    assert response.status_code == 400
+    assert called == []

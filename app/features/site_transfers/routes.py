@@ -15,6 +15,7 @@ from app.core.db.site_entitlement import sites_on
 from app.core.security.access_policy import has_permission
 from app.core.security.permissions import requires_auth
 from app.features.site_transfers import service
+from app.utils.request_validation import InvalidInputError, read_service_json
 
 site_transfers_bp = Blueprint(
     "site_transfers",
@@ -61,6 +62,8 @@ def _authority():
 @site_transfers_bp.errorhandler(ValueError)
 def invalid(error):
     db_session.rollback()
+    if isinstance(error, InvalidInputError):
+        return error.response()
     return jsonify({"error": str(error)}), 400
 
 
@@ -153,7 +156,7 @@ def dispatch():
         _org(),
         g.current_user.id,
         request.headers.get("Idempotency-Key"),
-        request.get_json(silent=True),
+        read_service_json(),
         _policy,
         _prepare,
     )
@@ -215,7 +218,7 @@ def receive(transfer_id):
         g.current_user.id,
         transfer_id,
         request.headers.get("Idempotency-Key"),
-        request.get_json(silent=True),
+        read_service_json(),
         _policy,
     )
     db_session.commit()

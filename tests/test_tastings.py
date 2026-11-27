@@ -606,3 +606,10 @@ def test_coalesced_prior_removals_reject_ambiguity_without_server_error_or_debit
     db.rollback()
     assert moved.quantity == Decimal(balance)
     assert db.query(TastingStockLot).filter_by(org_id=org.id).count() == 0
+
+
+def test_tasting_options_require_text(db, world):
+    org, rep, item, *_ = world
+    data = {**payload(rep, item), "venue_type": []}
+    with pytest.raises(service.TastingError, match="venue"):
+        service.save_event(db, org.id, rep.id, data)
