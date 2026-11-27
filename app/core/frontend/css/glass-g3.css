@@ -150,3 +150,17 @@ html body #page-content .sup-shell .sup-figure__label{font-size:12.5px;font-weig
   html body #page-content #dispose-inventory-page .dispose-tabs{border-radius:24px}
   html body #page-content #dispose-inventory-page .dispose-tab{border-radius:20px}
 }
+
+/* POLISH (orchestrator): header actions sit beside the title like every other page, not in a wide,
+   mostly empty glass bar of their own. */
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header{
+  flex-direction:row;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header > .workspace-header__actions:not([hidden]){
+  margin:0;padding:0;background:none;border:0;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+@media (max-width:720px){
+  html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header{flex-direction:column;align-items:stretch}
+  html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header > .workspace-header__actions:not([hidden]){justify-content:stretch}
+  html body #page-content :is(.inv-view-page,.inv-add-page,#dispose-inventory-page,.st-shell,.transfers-shell,.sup-shell) > .workspace-header > .workspace-header__actions > *{flex:1 1 0}
+}
+/* Toolbar selects match the buttons beside them. */
+html body #page-content .inv-view-page select{font-size:14px!important;font-weight:600}

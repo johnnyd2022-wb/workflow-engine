@@ -335,3 +335,13 @@ html body #page-content.page-content :is(input:not([type="checkbox"]):not([type=
 @media (min-width:721px){
   html body #page-content.page-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]),select,textarea){font-size:14.5px !important}
 }
+
+/* POLISH: on a phone the five tabs keep their natural width and the row scrolls (with a fade at the
+   edge) rather than squeezing each label against the next pill. */
+@media (max-width:720px){
+  html body #page-content .section-tabs{overflow-x:auto;scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent);mask-image:linear-gradient(90deg,#000 88%,transparent)}
+  html body #page-content .section-tabs .flow-mode-segmented{display:inline-flex;width:auto}
+  html body #page-content .section-tabs .flow-mode-segment,
+  html body #page-content .section-tabs .flow-mode-segment:first-child{flex:none;padding-left:14px;padding-right:14px;font-size:13.5px;scroll-snap-align:start}
+  html body #page-content .section-tabs .flow-mode-segment:last-child{margin-right:24px}
+}
