@@ -261,7 +261,7 @@
         </label>
         <label class="ss-field" x-show="mappingDraft.match_type === 'contains'">
           <span>Phrase</span>
-          <input id="ss-mapping-phrase" list="xero-line-item-options" x-model="mappingDraft.xero_description_pattern" placeholder="e.g. Wildflower" autocomplete="off">
+          <input id="ss-mapping-phrase" maxlength="500" list="xero-line-item-options" x-model="mappingDraft.xero_description_pattern" placeholder="e.g. Wildflower" autocomplete="off">
           <datalist id="xero-line-item-options">
             <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
               <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
@@ -278,7 +278,7 @@
           </label>
           <label class="ss-field">
             <span>Note (optional)</span>
-            <input id="ss-mapping-notes" x-model="mappingDraft.notes" placeholder="For your team" autocomplete="off">
+            <input id="ss-mapping-notes" maxlength="20000" x-model="mappingDraft.notes" placeholder="For your team" autocomplete="off">
           </label>
         </div>
         <div class="ss-queue" x-show="pendingMappings.length > 0" x-cloak>

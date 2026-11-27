@@ -1,8 +1,10 @@
 """OAuth2 routes — connect, callback, tenant picker, status, disconnect, manual sync."""
 
+from typing import Annotated
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request, session
+from flask import Blueprint, g, jsonify, make_response, redirect, render_template, session
+from pydantic import StringConstraints
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
@@ -12,6 +14,7 @@ from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroT
 from app.features.crm.services.xero_sync_service import XeroSyncService
 from app.observability import get_logger
 from app.utils.config_loader import config
+from app.utils.request_validation import CleanName, InvalidInputError, JsonInput, query_text, read_form
 
 logger = get_logger(__name__)
 
@@ -19,6 +22,10 @@ oauth_bp = Blueprint("crm_oauth", __name__)
 
 _XERO_STATE_SESSION_KEY = "_xero_oauth_state"
 _XERO_PENDING_CONNECTIONS_KEY = "_xero_pending_connections"
+
+
+class XeroTenantInput(JsonInput):
+    tenant_id: Annotated[CleanName, StringConstraints(max_length=128)]
 
 
 @oauth_bp.route("/crm/xero/auth", methods=["GET"])
@@ -87,18 +94,25 @@ def xero_callback():
     org_id = UUID(g.org_id)
 
     # CSRF validation
-    state_param = request.args.get("state", "")
     expected_state = session.pop(_XERO_STATE_SESSION_KEY, None)
+    try:
+        state_param = query_text("state", max_length=128)
+    except InvalidInputError:
+        return redirect("/core/integrations?error=xero_state_mismatch")
     if not expected_state or state_param != expected_state:
         logger.warning("xero_oauth_state_mismatch", org_id=str(org_id))
         return redirect("/core/integrations?error=xero_state_mismatch")
 
-    error = request.args.get("error")
+    try:
+        error = query_text("error", max_length=64)
+        code = query_text("code", max_length=2048)
+    except InvalidInputError:
+        return redirect("/core/integrations?error=xero_callback_error")
     if error:
-        logger.warning("xero_oauth_callback_error", org_id=str(org_id), error=error)
-        return redirect(f"/core/integrations?error=xero_{error}")
+        reason = "xero_access_denied" if error == "access_denied" else "xero_callback_error"
+        logger.warning("xero_oauth_callback_error", org_id=str(org_id), reason=reason)
+        return redirect(f"/core/integrations?error={reason}")
 
-    code = request.args.get("code")
     if not code:
         return redirect("/core/integrations?error=xero_no_code")
 
@@ -162,14 +176,17 @@ def xero_select_tenant_submit():
     if not connections:
         return redirect("/core/integrations?error=xero_session_expired")
 
-    selected_tenant_id = request.form.get("tenant_id", "").strip()
+    try:
+        selected_tenant_id = read_form(XeroTenantInput).tenant_id
+    except InvalidInputError:
+        selected_tenant_id = None
     connection = next((c for c in connections if c["tenantId"] == selected_tenant_id), None)
     if not connection:
         return render_template(
             "crm/select_tenant.html",
             connections=connections,
-            error="Invalid selection — please choose one of the listed organisations.",
-        )
+            error="Choose one of the listed organisations.",
+        ), 400
 
     db = db_session()
     service = XeroOAuthService(db)
@@ -254,7 +271,12 @@ def xero_sync():
     """
     org_id = UUID(g.org_id)
     db = db_session()
-    mode = (request.args.get("mode") or "full").strip().lower()
+    try:
+        mode = query_text("mode", default="full", max_length=16).lower()
+        if mode not in {"full", "incremental"}:
+            raise InvalidInputError({"mode": "Choose full or incremental sync."})
+    except InvalidInputError as exc:
+        return exc.response()
 
     try:
         sync_service = XeroSyncService(db)

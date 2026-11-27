@@ -1,7 +1,7 @@
 """CRMService — high-level CRM queries, notes, tasks, and product mapping."""
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
@@ -390,9 +390,14 @@ class CRMService:
         if revenue_baseline_target_mtd in ("", None):
             revenue_baseline_target_mtd = None
         else:
-            revenue_baseline_target_mtd = round(float(revenue_baseline_target_mtd), 2)
-            if revenue_baseline_target_mtd < 0:
-                raise ValueError("revenue_baseline_target_mtd must be >= 0")
+            try:
+                revenue_baseline_target_mtd = Decimal(str(revenue_baseline_target_mtd))
+            except InvalidOperation:
+                raise ValueError("Revenue target must be a number.") from None
+            if not revenue_baseline_target_mtd.is_finite() or not 0 <= revenue_baseline_target_mtd < Decimal("1e10"):
+                raise ValueError("Revenue target is outside the allowed range.")
+            if revenue_baseline_target_mtd != revenue_baseline_target_mtd.quantize(Decimal("0.01")):
+                raise ValueError("Revenue target can have at most two decimal places.")
         obfuscate_sales_figures = bool(data.get("obfuscate_sales_figures", before["obfuscate_sales_figures"]))
         row = self.traceability_repo.upsert(
             org_id=org_id,

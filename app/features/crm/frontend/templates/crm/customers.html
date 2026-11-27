@@ -41,7 +41,7 @@
     </div>
     <div x-show="importer.format==='tsv'" style="margin-top:12px;">
       <label class="crm-form-label" for="crm-import-paste">Paste rows copied from Excel or Google Sheets, including the header</label>
-      <textarea id="crm-import-paste" class="crm-form-input" rows="7" x-model="importer.text" @input="resetImportPreview()" placeholder="name&#9;email_address&#9;note"></textarea>
+      <textarea id="crm-import-paste" maxlength="1000000" class="crm-form-input" rows="7" x-model="importer.text" @input="resetImportPreview()" placeholder="name&#9;email_address&#9;note"></textarea>
     </div>
     <p class="crm-error-banner" role="alert" x-show="importer.error" x-text="importer.error" x-cloak></p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
