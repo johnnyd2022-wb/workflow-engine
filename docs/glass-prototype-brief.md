@@ -56,3 +56,20 @@ Open it, read its CSS, and screenshot it if you need to.
 8. Claim the next task. Stop when `wb claim` returns nothing.
 
 Never push, never touch main, never run `ui_shots.py purge`, never stop another agent's processes.
+
+## Polish pass (founder feedback, 2026-11-27)
+The founder looked at the MR screenshots and saw poor alignment, text running outside containers, and things not
+centred. The first pass judged pages from thumbnails; that is not allowed now. **Read every PNG at full size**
+(desktop, dark, phone) and fix every instance of:
+- text or controls overflowing, clipped or touching a container's edge; ellipsis where the words should wrap
+- uneven padding: a container's content must have the same inset on all sides (22–24px desktop, 16–18px phone)
+- misalignment: things that sit in a row share a centre line; columns share a left edge; headings and their
+  "View all" links sit on one centred row; numbers in a row of figures share a baseline
+- icon + label pairs not vertically centred; badges not centred in their pill
+- mixed type: anything not in Manrope, or body text not 14.5px / meta 12.5–13px; headings use the shared sizes
+- panels side by side with a big empty area in one of them (fill it sensibly or let heights differ cleanly)
+- buttons in one bar with different heights; inputs and selects not 40–44px tall in a toolbar
+- dark mode: text below 4.5:1 contrast, light-on-light chips, leftover teal or mustard
+- phone: anything cut off at 390 or 320, tabs or chips running off the edge, the tab bar covering the last action
+Fix shared causes in shared places (tell the orchestrator via `wb log` if it is glass.css); fix page causes in
+your group file. You are done only when a full pass at full size finds nothing.
