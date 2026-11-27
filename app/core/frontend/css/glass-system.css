@@ -303,3 +303,20 @@ html[data-spa-theme="dark"] .g-aurora div{opacity:.75}
 html[data-spa-theme="dark"] body #page-content .section-tabs .flow-mode-segment--active,
 html[data-spa-theme="dark"] body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"],.customs-views,.np3-views,.settings-nav,.pp-views):not(.section-tabs *):not(.section-tabs) > :is(a,button):is([aria-selected="true"],[aria-pressed="true"],[aria-current="page"],[aria-current="true"],.is-active,.active,[class*="--active"]){
   background:rgba(255,255,255,.14)!important;color:#fff!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)!important}
+
+/* Phone: sub-switches never scroll sideways inside themselves; they wrap onto a second row. */
+@media (max-width:720px){
+  html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"],.customs-views,.np3-views,.settings-nav,.pp-views,.sm-browse-seg,.oc-filter-tabs,.np3-sections):not(.section-tabs *):not(.section-tabs){
+    flex-wrap:wrap!important;overflow:visible!important;border-radius:20px!important;width:auto!important;max-width:100%}
+}
+/* Settings: the card spans the column, its form keeps a readable measure so short fields stay short. */
+html body #page-content .settings-overview :is(.settings-section-list,.settings-card form,.settings-group-content form){max-width:640px}
+@media (max-width:720px){
+  html body #page-content .settings-nav{display:grid!important;grid-template-columns:1fr 1fr;width:100%!important;gap:2px}
+  html body #page-content .settings-nav > a{width:100%}
+}
+/* Phone: a workspace's buttons on the tab row share one row in equal columns. */
+@media (max-width:720px){
+  html body #page-content :is(.section-head__actions,.sales-header-actions){display:grid!important;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}
+  html body #page-content :is(.section-head__actions,.sales-header-actions) > *{min-width:0;padding-left:8px!important;padding-right:8px!important;font-size:13px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
