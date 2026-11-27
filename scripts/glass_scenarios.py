@@ -14,10 +14,10 @@ from ui_shots import PHONE, settle, shot
 DESKTOP = {"width": 1440, "height": 900}
 
 GROUPS = {
-    "g11": ["/core/inventory/live", "/core/costing/purchases", "/core/costing/costs", "/core/costing/rules", "/core/costing/margins", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings",
-            "/crm/customers/2f72f218-ec65-4873-b083-6e6b0b16922d", "/core/cases/a5a1b54e-be9b-4386-82e8-9588e62ae66a",
+    "g11": ["/core/inventory/live", "/compliant/nz-alcohol/np3-audit", "/compliant/nz-alcohol/wine", "/compliant/nz-alcohol/evidence", "/crm/tastings",
+            "@customer", "@case",
             "/core/no-such-page",
-            "/core/contracts/cb5be5fa-69e3-4f7e-b94d-e43a2e296632"],
+            "@contract-order"],
     "g0": ["/core", "/core/dashboard"],
     "g1": [
         "/core",
@@ -108,6 +108,8 @@ def _resolve(page, path):
         "@workflow": ("/core", "a.gpo-rec"),
         "@execution-step": ("/core/record", "a.rs-batch"),
         "@contract-order": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
+        "@customer": ("/crm/customers", "a[href^='/crm/customers/']:not([href$='/new'])"),
+        "@case": ("/core/cases", "a[href^='/core/cases/']:not([href$='/new'])"),
         "@contract-sharing": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
     }[path]
     page.goto(src)

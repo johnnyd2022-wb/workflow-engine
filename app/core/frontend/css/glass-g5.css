@@ -31,3 +31,57 @@ html body #page-content :is(.suggestion,.evidence-choice):hover{background:var(-
   html body #page-content .customs-views{display:flex;flex-wrap:wrap;overflow:visible;max-width:100%;width:auto;border-radius:22px}
   html body #page-content .customs-views a{flex:none;padding:7px 12px}
 }
+
+/* ---- POLISH pass (glass-b) ---- */
+/* Compliance home: the number mark is a fixed square, so every card's text starts at the same inset. */
+html body #page-content .module-card__mark{flex:0 0 40px;width:40px;height:40px;border-radius:12px;font-size:14px}
+html body #page-content .module-card{align-items:flex-start}
+html body #page-content .module-card h2{font-size:18px;font-weight:700}
+
+/* Overview obligations: a fixed action column so every row's coverage bar starts at the same x;
+   status badge and action are pills like everywhere else. */
+@media (min-width:900px){
+  html body #page-content .compliance-board .compliance-framework{grid-template-columns:minmax(0,1fr) minmax(0,.85fr) 148px}
+}
+html body #page-content .compliance-board .compliance-framework-link{justify-content:center;border-radius:var(--g-r-pill);font-weight:700}
+html body #page-content .compliance-board .compliance-state{border-radius:var(--g-r-pill);padding:3px 10px;font-weight:700}
+
+/* Rows inside a panel line up with the panel's heading: no extra 4–6px side inset. */
+html body #page-content :is(.customs-rec-check,.customs-rec-row,.np3-check,.lic-row,.lic-empty,.prem-empty,.tr-reg,.tr-detail,.tr-place-edit){padding-left:0;padding-right:0}
+/* An empty-state line spans the whole list instead of one grid cell. */
+html body #page-content :is(.lic-licences,.prem-list) > .lic-empty,html body #page-content .lic-empty{grid-column:1/-1;max-width:none}
+
+/* Customs: the same 18px under the header and under the view switcher on every Customs page. */
+html body #page-content .customs-page > .customs-header{margin-bottom:18px}
+html body #page-content .customs-page > .customs-views{margin:0 0 18px}
+html body #page-content :is(.customs-records-page,.customs-transfers-page){gap:18px}
+html body #page-content :is(.customs-records-page,.customs-transfers-page) > :is(.customs-header,.customs-views){margin-bottom:0}
+/* A note under the panels has the panels' inset. */
+html body #page-content .customs-note{padding:18px 24px;border-radius:20px;font-size:13px}
+
+/* NP3: the selected filter chip's count stays readable on the accent fill. */
+html body #page-content .np3-chip.is-active strong{color:inherit;opacity:.85}
+/* Verification panel: the panel inset matches the other panels, and its Save is a glass pill, not the old teal. */
+html body #page-content .np3-page .verification-panel,html body #page-content .np3-summary-page .verification-panel{padding:24px}
+html body #page-content .verification-panel button[type="submit"]{min-height:40px;padding:0 18px;border-radius:var(--g-r-pill);background:var(--accent);color:var(--accent-ink);font-weight:700}
+html body #page-content .verification-panel button[type="submit"]:hover{background:var(--accent);filter:brightness(1.05)}
+
+/* Compliance settings: sections are panels with the shared inset and heading weight. */
+html body #page-content .cs-section{padding:24px;border-radius:24px;border:1px solid var(--rim-dim);background:var(--panel)}
+html body #page-content .cs-intro h2{font-size:17px;font-weight:700}
+
+@media (max-width:720px){
+  /* Customs views: two even rows that fill the width, not a ragged wrap. */
+  html body #page-content .customs-views a{flex:1 1 auto;text-align:center}
+  /* Customs settings: the product fields stack so nothing is cut off. */
+  html body #page-content .customs-product__fields{grid-template-columns:minmax(0,1fr)}
+  html body #page-content .cs-section{padding:18px 16px;border-radius:22px}
+  html body #page-content .np3-page .verification-panel,html body #page-content .np3-summary-page .verification-panel{padding:18px 16px}
+}
+/* Overview: 18px between the tab row and the first panels. */
+html body #page-content .compliance-board{margin-top:18px}
+/* Wine: the four header buttons stay on one row beside the title (they wrapped with the primary alone below). */
+@media (min-width:900px){
+  html body #page-content .wine-header-actions{flex-wrap:nowrap;flex:0 0 auto;max-width:none}
+  html body #page-content .wine-header-actions + *,html body #page-content .workspace-header:has(.wine-header-actions) > div:first-child{min-width:0}
+}

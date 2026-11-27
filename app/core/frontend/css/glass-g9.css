@@ -118,3 +118,10 @@ html body .legal-footer{border:0}
 html body .home{display:inline-flex !important;align-items:center;justify-content:center;padding:0 20px !important}
 html body [style*="background-clip"],html body [style*="-webkit-text-fill-color"]{background:none !important;-webkit-text-fill-color:var(--accent) !important;color:var(--accent) !important}
 html body > section,html body main > section,html body .container > section{background:transparent !important}
+
+/* POLISH (glass-b): the customer portal is a panel like the other signed-out cards: away from the top edge
+   and with the shared 24px inset. */
+html body > main.portal-shell{margin:48px auto !important;padding:28px 28px 32px}
+@media (max-width:720px){html body > main.portal-shell{margin:16px !important;padding:20px 18px 24px}}
+/* The note under the portal's sign-up form sits clear of its button. */
+html body .portal-shell form{margin-bottom:18px}

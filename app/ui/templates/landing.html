@@ -46,12 +46,13 @@
       .social-proof-row {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
-        gap: 0;
+        gap: 0 12px;
+        align-items: start;
       }
       .social-proof-divider { display: none; }
-      .social-proof-row > div { padding: 0 0.25rem; }
+      .social-proof-row > div { padding: 0; }
       .social-proof-row .text-3xl { font-size: 1.1rem; }
-      .social-proof-row .text-sm { font-size: 0.65rem; line-height: 1.3; }
+      .social-proof-row .text-sm { font-size: 0.78rem; line-height: 1.35; }
       .cta-card-inner { padding: 1.5rem !important; }
       .navbar-pricing { display: none; } /* the footer links Pricing on a phone */
     }
@@ -321,8 +322,8 @@
           Create Account
         </button>
         <p id="signup-terms" style="margin: 0; font-size: 0.8125rem; color: var(--text-muted, #94a3b8); text-align: center;">
-          By creating an account you agree to the <a href="/terms" target="_blank" rel="noopener" style="color: #2DD4BF;">terms of service</a>
-          and <a href="/privacy" target="_blank" rel="noopener" style="color: #2DD4BF;">privacy policy</a>.
+          By creating an account you agree to the <a href="/terms" target="_blank" rel="noopener" style="color: var(--accent, #2563EB);">terms of service</a>
+          and <a href="/privacy" target="_blank" rel="noopener" style="color: var(--accent, #2563EB);">privacy policy</a>.
         </p>
       </form>
     </div>

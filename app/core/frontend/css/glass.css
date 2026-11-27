@@ -292,6 +292,7 @@ html body #loading-indicator{background:var(--solid);color:var(--ink);border-rad
 @media (max-width:400px){
   .g-org b{display:none}
   html body #page-content .section-tabs .flow-mode-segment{padding:0 9px;font-size:12.5px}
+  html body #page-content .section-head:has(.flow-mode-segmented > :nth-child(5)){margin-bottom:12px}
 }
 
 /* POLISH: section tabs. Every pill has the same inset (section-tabs.css trims the first one to 2px),
@@ -345,3 +346,7 @@ html body #page-content.page-content :is(input:not([type="checkbox"]):not([type=
   html body #page-content .section-tabs .flow-mode-segment:first-child{flex:none;padding-left:14px;padding-right:14px;font-size:13.5px;scroll-snap-align:start}
   html body #page-content .section-tabs .flow-mode-segment:last-child{margin-right:24px}
 }
+/* POLISH: the page's main buttons on the tab row share the tabs' centre line (section-tabs.css adds a
+   10px bottom pad meant for its old underline). */
+html body #page-content .section-head__actions{padding:0;align-items:center}
+@media (max-width:720px){html body #page-content .section-head__actions{padding-top:4px}}
