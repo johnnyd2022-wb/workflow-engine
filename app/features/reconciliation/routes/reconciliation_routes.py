@@ -100,6 +100,11 @@ def register_routes(bp):
         try:
             data = read_json(ReconcileAdditionInput)
         except InvalidInputError as exc:
+            field = next(iter(exc.errors))
+            if field in exc.missing_fields:
+                return jsonify(error=f"{field} is required", errors=exc.errors), 400
+            if field == "untracked_item_id":
+                return jsonify(error="Invalid untracked_item_id", errors=exc.errors), 400
             return exc.response()
         fields = data.model_dump(mode="json")
 
@@ -139,6 +144,14 @@ def register_routes(bp):
         try:
             data = read_json(ReconcileExecutionInput)
         except InvalidInputError as exc:
+            field = next(iter(exc.errors))
+            if field in exc.missing_fields:
+                label = field
+                if field.startswith("output_"):
+                    label = f"{field} (or {field.removeprefix('output_')})"
+                return jsonify(error=f"{label} is required", errors=exc.errors), 400
+            if field in {"untracked_item_id", "process_id", "step_id"}:
+                return jsonify(error="Invalid untracked_item_id, process_id, or step_id", errors=exc.errors), 400
             return exc.response()
         fields = data.model_dump(mode="json")
 

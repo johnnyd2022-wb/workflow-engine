@@ -741,6 +741,8 @@ def register_routes(bp):
         except InvalidInputError as exc:
             if "inventory_type" in exc.errors:
                 return jsonify(error="Choose a valid inventory_type.", errors=exc.errors), 400
+            if "quantity" in exc.missing_fields and len(exc.errors) == 1:
+                return jsonify(error="quantity is required"), 400
             return exc.response()
         data = payload.model_dump(mode="json", exclude_unset=True)
         name = payload.name or None

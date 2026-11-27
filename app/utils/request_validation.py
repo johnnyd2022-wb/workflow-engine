@@ -87,7 +87,9 @@ _MESSAGES = {
 class InvalidInputError(ValueError):
     """Field errors safe to display in JSON responses or HTML forms."""
 
-    def __init__(self, errors: dict[str, str], *, identify_field: bool = False):
+    def __init__(
+        self, errors: dict[str, str], *, identify_field: bool = False, missing_fields: frozenset[str] = frozenset()
+    ):
         message = "Check the request fields."
         if len(errors) == 1:
             field, message = next(iter(errors.items()))
@@ -95,6 +97,7 @@ class InvalidInputError(ValueError):
                 message = f"{field} needs attention. {message}"
         super().__init__(message)
         self.errors = errors
+        self.missing_fields = missing_fields
 
     def response(self):
         return jsonify(error=str(self), errors=self.errors), 400
@@ -132,11 +135,14 @@ def read_form[Payload: JsonInput](schema: type[Payload]) -> Payload:
 
 def _format_errors(schema: type[JsonInput], exc: ValidationError) -> InvalidInputError:
     errors: dict[str, str] = {}
+    missing_fields = set()
     for error in exc.errors(include_url=False, include_context=False, include_input=False):
         kind = error["type"]
         field = _field_path(schema, error["loc"])
         errors.setdefault(field, _MESSAGES.get(kind, "Enter a valid value."))
-    return InvalidInputError(errors, identify_field=True)
+        if kind == "missing":
+            missing_fields.add(field)
+    return InvalidInputError(errors, identify_field=True, missing_fields=frozenset(missing_fields))
 
 
 def _field_path(schema: type[JsonInput], location: tuple) -> str:
