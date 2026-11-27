@@ -78,6 +78,7 @@ RESET_TABLES = (
     "xero_invoices",
     "xero_contacts",
     "xero_oauth_tokens",
+    "xero_pending_connections",
     "xero_sync_jobs",
     "xero_tenants",
     "product_mappings",

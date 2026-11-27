@@ -7,12 +7,52 @@ real browser session's cookies -- not a bypass.
 """
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 import pytest
 
 from tests.e2e.conftest import csrf_headers
 
 pytestmark = pytest.mark.e2e
+
+
+def test_batch_bootstrap_and_execution_bundle_stay_in_the_signed_in_org(two_tenants_with_chains):
+    for owner, other in (("a", "b"), ("b", "a")):
+        tenant = two_tenants_with_chains[owner]
+        page, dag = tenant["page"], tenant["dag"]
+        other_dag = two_tenants_with_chains[other]["dag"]
+        query = urlencode({"id": dag["process_id"], "execution_id": dag["execution_id"]})
+        bundle_url = f"/api/core/executions/{dag['execution_id']}/with-process"
+
+        with page.expect_response(lambda response: bundle_url in response.url) as bundle_response:
+            document = page.goto(f"/core/flows/batches/start?{query}")
+
+        assert document.status == 200
+        assert page.evaluate("window.ExecutionStepPageContext.executionId") == str(dag["execution_id"])
+
+        bundle = bundle_response.value
+        assert bundle.status == 200
+        assert bundle.json()["execution"]["id"] == str(dag["execution_id"])
+        assert bundle.json()["process"]["id"] == str(dag["process_id"])
+
+        for content in (document.text(), page.content(), bundle.text()):
+            for resource in ("org_id", "process_id", "execution_id", "r1_id", "w1_id", "f1_id"):
+                assert str(other_dag[resource]) not in content
+
+
+def test_batch_page_and_execution_api_reject_a_different_tenants_records(two_tenants_with_chains):
+    page = two_tenants_with_chains["b"]["page"]
+    other = two_tenants_with_chains["a"]["dag"]
+    query = urlencode({"id": other["process_id"], "execution_id": other["execution_id"]})
+
+    document = page.goto(f"/core/flows/batches/start?{query}")
+    assert document.status == 404
+    assert page.evaluate("typeof window.ExecutionStepPageContext") == "undefined"
+
+    for suffix in ("", "/with-process"):
+        response = page.request.get(f"/api/core/executions/{other['execution_id']}{suffix}")
+        assert response.status == 404
+        assert response.json() == {"error": "Execution not found"}
 
 
 def test_ac2_forward_trace_cross_tenant_existence_not_distinguishable(two_tenants_with_chains):

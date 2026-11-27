@@ -62,10 +62,12 @@ class XeroTenantRepository:
             .first()
         )
 
-    def mark_disconnected(self, org_id: UUID) -> None:
-        self.db.query(XeroTenant).filter(XeroTenant.org_id == org_id).update(
-            {"is_connected": False, "disconnected_at": utc_now(), "updated_at": utc_now()}
-        )
+    def mark_disconnected(self, org_id: UUID, *, keep_tenant_id: str | None = None) -> None:
+        query = self.db.query(XeroTenant).filter(XeroTenant.org_id == org_id, XeroTenant.is_connected.is_(True))
+        if keep_tenant_id is not None:
+            query = query.filter(XeroTenant.xero_tenant_id != keep_tenant_id)
+        now = utc_now()
+        query.update({"is_connected": False, "disconnected_at": now, "updated_at": now})
 
     def update_last_sync(self, org_id: UUID, synced_at: datetime) -> None:
         self.db.query(XeroTenant).filter(
