@@ -58,14 +58,14 @@ html body #page-content .workspace-card__header,html body #page-content .g-card-
   display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px}
 
 /* Sub-switches inside a page: the tabs' look, a size smaller, never full of air. */
-html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs){
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"],.customs-views,.np3-views,.settings-nav,.pp-views):not(.section-tabs *):not(.section-tabs){
   display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:999px;width:auto;max-width:100%;
   background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs) > :is(a,button){
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"],.customs-views,.np3-views,.settings-nav,.pp-views):not(.section-tabs *):not(.section-tabs) > :is(a,button){
   min-height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;border:0;border-radius:999px;
   background:transparent;color:var(--muted);font:700 13px/1 var(--g-font);white-space:nowrap;box-shadow:none;text-decoration:none;margin:0}
-html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs) > :is(a,button):is([aria-selected="true"],[aria-pressed="true"],[aria-current="page"],[aria-current="true"],.is-active,.active,[class*="--active"]){
-  background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1)}
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"],.customs-views,.np3-views,.settings-nav,.pp-views):not(.section-tabs *):not(.section-tabs) > :is(a,button):is([aria-selected="true"],[aria-pressed="true"],[aria-current="page"],[aria-current="true"],.is-active,.active,[class*="--active"]){
+  background:var(--solid)!important;color:var(--ink)!important;box-shadow:0 1px 2px rgba(13,20,36,.1)}
 
 /* Selects: one shape with a quiet chevron, the height of the buttons beside them. */
 html body #page-content.page-content select:not([multiple]):not([size]){
@@ -222,3 +222,61 @@ html body #page-content .core-tasks__toggle{display:inline-flex;align-items:cent
 @media (max-width:720px){html body #page-content .core-tasks__filters > *{flex:1 1 100%!important}
   html body #page-content .core-tasks__filters .workspace-form__actions{margin-left:0!important}
   html body #page-content .core-tasks__filters .workspace-form__actions > *{flex:1 1 0}}
+
+/* Compliance home: four modules sit as a 2 x 2 grid, never three and a straggler. */
+html body #page-content .module-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--g-gap)}
+@media (min-width:1200px){html body #page-content .module-grid:has(> :nth-child(4):last-child){grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:720px){html body #page-content .module-grid{grid-template-columns:1fr}}
+html body #page-content .module-card{display:flex;flex-direction:column;height:100%}
+html body #page-content .module-card__link{margin-top:auto}
+
+/* Buttons read in ink, whatever colour a page gave its links; only the primary button is blue. */
+html body #page-content :is(.workspace-button,.crm-btn,.btn):not(:is(.workspace-button--primary,.crm-btn--primary,.btn-primary,.btn--primary,.g-btn--primary,[class*="danger"])){color:var(--ink)}
+
+/* Headings that pages left at regular weight. */
+html body #page-content :is(.workspace-card,.g-panel) :is(h2,h3):not([class*="eyebrow"]){font-weight:800}
+
+/* One heading weight everywhere: section headings bold, sub headings semi-bold. */
+html body #page-content h2:not([class*="eyebrow"]):not(.sr-only){font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+html body #page-content h3:not([class*="eyebrow"]):not(.sr-only){font-weight:700;color:var(--ink)}
+
+/* Tools: calculator cards in a row share a height, the Calculate button sits on the bottom edge. */
+html body #page-content .ct-grid{align-items:stretch!important;gap:var(--g-gap)}
+html body #page-content .ct-card{display:flex;flex-direction:column;height:100%;padding:var(--g-pad)}
+html body #page-content .ct-card form,html body #page-content .ct-card > :last-child{margin-top:auto}
+html body #page-content .ct-card form{display:flex;flex-direction:column;flex:1}
+html body #page-content .ct-card .ct-submit{align-self:flex-end;margin-top:auto}
+html body #page-content .ct-card__head h2,html body #page-content .ct-card h2{font-size:17px}
+html body #page-content :is(.customs-views,.np3-views){width:fit-content!important;max-width:100%;display:inline-flex!important;flex-wrap:nowrap!important;margin:0 0 var(--g-gap)!important}
+@media (max-width:720px){html body #page-content :is(.customs-views,.np3-views){width:100%!important;overflow-x:auto}}
+
+/* Sales tasks: the search, filters and board actions sit in one glass toolbar; text actions in a header
+   or toolbar are real buttons, not loose blue words. */
+html body #page-content .tasks-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 var(--g-gap);padding:10px;border-radius:22px;
+  background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%)}
+html body #page-content .tasks-toolbar > *{margin:0!important}
+html body #page-content .tasks-toolbar .tasks-search{flex:1 1 240px}
+html body #page-content .tasks-toolbar .tasks-search input{width:100%}
+html body #page-content :is(.workspace-header,.tasks-toolbar,.section-head__actions) .tasks-text-action{
+  min-height:40px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;border:1px solid var(--rim-dim);background:var(--solid);
+  color:var(--ink);font:700 13.5px/1 var(--g-font);text-decoration:none;box-shadow:0 1px 2px rgba(13,20,36,.08)}
+html body #page-content .tasks-toolbar .tasks-text-action:first-of-type{margin-left:auto!important}
+html body #page-content .workspace-header .tasks-text-action{min-height:44px;padding:0 18px}
+
+/* Customer detail: panels keep the standard inset. */
+html body #page-content :is(.cd-shell,.customer-detail,[data-customer-detail]) :is(.workspace-card,.crm-card){padding:var(--g-pad)!important}
+
+/* Sales panels that carried their own inner padding on top of the panel's (matching, excise). */
+html body #page-content .crm-card > .crm-analytics-header{padding:0!important;margin:0 0 12px}
+html body #page-content .crm-card > :is(.crm-analytics-header + *, p, ul, div){padding-left:0!important;padding-right:0!important}
+html body #page-content .crm-analytics-title{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+html body #page-content .ex-empty{padding:var(--g-pad)!important;color:var(--muted)}
+html body #page-content .ex-empty--flat{padding:4px 0!important}
+html body #page-content :is(.settings-nav,.pp-views){width:fit-content!important;margin:14px 0 var(--g-gap)!important;flex-direction:row!important}
+/* Settings: the account sections use the full column like every other page. */
+html body #page-content .settings-layout{display:block!important;max-width:none!important}
+html body #page-content .settings-groups,html body #page-content .settings-overview .workspace-card{max-width:none!important;width:auto!important}
+/* Notifications: one action per row, but a list of rows is not a list of primary actions. Each row's
+   action is the quiet pill; the page keeps blue for nothing but status. */
+html body #page-content .nt-row__action.workspace-button--primary{background:var(--solid)!important;color:var(--ink)!important;border:1px solid var(--rim-dim)!important;box-shadow:0 1px 2px rgba(13,20,36,.08)!important}
+html body #page-content .nt-row__action.workspace-button--primary:hover{border-color:var(--accent)!important;color:var(--accent)!important}

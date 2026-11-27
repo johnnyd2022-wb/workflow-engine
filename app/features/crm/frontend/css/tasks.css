@@ -145,7 +145,7 @@ html[data-spa-theme="dark"] #page-content .tasks-tray--overdue h3 { color: #f970
 
 /* Task types are filters; Board, List and Week keep the same records. */
 .tasks-header-actions { display: flex; align-items: center; gap: 12px; }
-#page-content #tasks-type { width: auto !important; min-height: 40px; padding: 8px 12px !important; font-size: 14px !important; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); }
+#page-content #tasks-type { width: auto !important; min-height: 40px; padding: 8px 36px 8px 14px !important; font-size: 14px !important; border: 1px solid var(--ui-border); border-radius: 12px; background-color: var(--ui-surface); color: var(--ui-text); }
 #page-content .tasks-type-cue { display: block; font-size: 11px; font-weight: 500; line-height: 1.5; color: var(--ui-accent-strong); white-space: normal; overflow-wrap: anywhere; }
 #page-content .tasks-type-cue:empty { display: none; }
 #page-content .tasks-row__main .tasks-type-cue { margin-bottom: 3px; }
