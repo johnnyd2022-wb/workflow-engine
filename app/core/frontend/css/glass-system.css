@@ -1,0 +1,224 @@
+/* GLASS PROTOTYPE: the layout system. Loaded after every other stylesheet in the shell, so the page
+   anatomy below is the same on every page whatever the page's own CSS says.
+
+   Every signed-in page reads top to bottom:
+     1. Workspace title (Production, Compliance, Sales, Settings) ........ 30px, always the same place
+     2. Workspace tabs, with the page's main buttons at the right ......... one row, 44px
+     3. Breadcrumbs (sub pages only) ....................................... 13px
+     4. Page title + one-line description, buttons at the right ........... 24px
+     5. Panels, 18px apart; each panel 24px inside (18px on a phone)
+   Sub-switches inside a page (People/Roles, Board/List/Week …) are a smaller version of the tabs.
+   Toolbars are one wrapping row of 40px controls. */
+
+:root{--g-gap:18px;--g-pad:24px;--g-ctl:40px}
+@media (max-width:720px){:root{--g-pad:18px}}
+
+/* 1. Workspace title: one size on every page, whether it is the page's h1 or a label above it. */
+html body #page-content .section-head{margin:22px 0 0}
+html body #page-content .section-head .section-head__title,
+html body #page-content .section-head p.section-head__title{
+  display:block;margin:0 0 14px;font-size:30px;line-height:1.1;font-weight:800;letter-spacing:-.025em;
+  color:var(--ink);text-transform:none}
+
+/* 2. Tabs row */
+html body #page-content .section-head__row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0;padding:0;border:0}
+html body #page-content .section-head__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding:0}
+
+/* 3. Breadcrumbs */
+html body #page-content .breadcrumbs{margin:22px 0 0;font-size:13px;line-height:1.3}
+html body #page-content .breadcrumbs ol,html body #page-content .breadcrumbs ul{margin:0;padding:0}
+
+/* 4. Page header: title and description on the left, buttons on the right, centred on each other. */
+html body #page-content .workspace-header{
+  display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;
+  margin:22px 0 var(--g-gap);padding:0;background:none;border:0;box-shadow:none;min-height:0}
+html body #page-content .breadcrumbs + .workspace-header,
+html body #page-content .breadcrumbs + * > .workspace-header:first-child{margin-top:10px}
+html body #page-content .workspace-header > div:first-child{min-width:0;flex:1 1 320px}
+html body #page-content .workspace-header h1,
+html body #page-content main h1.page-title:not(.section-head__title){
+  margin:0;font-size:24px;line-height:1.2;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+html body #page-content .workspace-header h1 + p,
+html body #page-content .workspace-header > div:first-child > p{margin:6px 0 0;font-size:14px;line-height:1.45;color:var(--muted);font-weight:500;max-width:72ch}
+html body #page-content .workspace-header > :is(.workspace-header__actions,.workspace-actions,div:last-child:not(:first-child)){
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding:0;background:none;border:0;box-shadow:none;
+  backdrop-filter:none;-webkit-backdrop-filter:none;flex:0 0 auto}
+
+/* 5. Panels and spacing */
+html body #page-content :is(.workspace-stack,.workspace-grid){gap:var(--g-gap)}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card){padding:var(--g-pad)}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card) > :first-child{margin-top:0}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card) > :last-child{margin-bottom:0}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card) > h2:first-child,
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card) > .workspace-card__header:first-child h2,
+html body #page-content .g-card-h h2{font-size:17px;line-height:1.3;font-weight:800;letter-spacing:-.01em;color:var(--ink);margin:0}
+html body #page-content :is(.workspace-card,.g-panel) > h2:first-child + :is(p,.workspace-caption){margin-top:4px}
+html body #page-content :is(.workspace-card,.g-panel) .workspace-caption{font-size:13.5px;color:var(--muted)}
+html body #page-content .workspace-card__header,html body #page-content .g-card-h{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px}
+
+/* Sub-switches inside a page: the tabs' look, a size smaller, never full of air. */
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs){
+  display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:999px;width:auto;max-width:100%;
+  background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs) > :is(a,button){
+  min-height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;border:0;border-radius:999px;
+  background:transparent;color:var(--muted);font:700 13px/1 var(--g-font);white-space:nowrap;box-shadow:none;text-decoration:none;margin:0}
+html body #page-content :is(.flow-mode-segmented,.ui-tabs,[role="tablist"]):not(.section-tabs *):not(.section-tabs) > :is(a,button):is([aria-selected="true"],[aria-pressed="true"],[aria-current="page"],[aria-current="true"],.is-active,.active,[class*="--active"]){
+  background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1)}
+
+/* Selects: one shape with a quiet chevron, the height of the buttons beside them. */
+html body #page-content.page-content select:not([multiple]):not([size]){
+  -webkit-appearance:none;appearance:none;height:var(--g-ctl);min-height:var(--g-ctl);padding:0 36px 0 14px!important;
+  border-radius:12px;border:1px solid var(--field-line);background-color:var(--field);color:var(--ink);font-weight:600;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238791a3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:12px 8px!important;line-height:1.2}
+html body #page-content.page-content select:not([multiple]):not([size]){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238791a3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important}
+html body #page-content.page-content :is(input[type="text"],input[type="search"],input[type="email"],input[type="tel"],input[type="number"],input[type="date"],input[type="url"],input[type="password"],input:not([type])){
+  min-height:var(--g-ctl);border-radius:12px}
+html body #page-content :is(.workspace-card,.g-panel) :is(.workspace-button,.btn,.g-btn,.crm-btn):not(.crm-btn--sm){min-height:var(--g-ctl)}
+
+/* Tables: header text quiet, rows breathe, nothing touches the panel edge. */
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) table{width:100%;border-collapse:collapse}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) th{font-size:12px;font-weight:700;color:var(--muted);text-transform:none;letter-spacing:0;padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) :is(th,td):first-child{padding-left:var(--g-cell-edge,0)}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) :is(th,td):last-child{padding-right:var(--g-cell-edge,0)}
+/* Full-bleed lists (the panel has no padding of its own): rows reach the edge, text keeps the inset. */
+html body #page-content :is(.workspace-card,.g-panel).g-bleed,
+html body #page-content #customers-page .customers-directory{padding:0;--g-cell-edge:var(--g-pad);overflow:hidden}
+html body #page-content #customers-page .customers-directory > :not(.customers-body){padding-left:var(--g-pad);padding-right:var(--g-pad)}
+html body #page-content #customers-page .customers-directory > .customers-toolbar{padding-top:var(--g-pad)}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card) tr:last-child td{border-bottom:0}
+
+/* Text never spills out of a container. */
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card) :is(h2,h3,p,li,dd,td,a,span){overflow-wrap:anywhere}
+html body #page-content :is(.workspace-card,.g-panel,.crm-card,.card){min-width:0}
+
+/* Phone */
+@media (max-width:720px){
+  html body #page-content .section-head{margin-top:14px}
+  html body #page-content .section-head .section-head__title,html body #page-content .section-head p.section-head__title{font-size:26px;margin-bottom:12px}
+  html body #page-content .workspace-header{flex-direction:column;align-items:stretch;margin-top:18px}
+  html body #page-content .workspace-header > div:first-child{flex:none}
+  html body #page-content .workspace-header > :is(.workspace-header__actions,.workspace-actions,div:last-child:not(:first-child)) > *{flex:1 1 0;justify-content:center}
+  html body #page-content .workspace-header h1{font-size:22px}
+  html body #page-content .section-head__actions{width:100%}
+  html body #page-content .section-head__actions > *{flex:1 1 0;justify-content:center}
+}
+
+/* A page-level status line (Xero connection and the like) sits in one quiet glass strip, not loose text. */
+html body #page-content :is(.customers-connection,.g-note){
+  display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;margin:0 0 var(--g-gap);padding:12px 18px;border-radius:16px;
+  background:var(--glass);border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim);font-size:13.5px;color:var(--text)}
+html body #page-content :is(.customers-connection,.g-note) > *{margin:0}
+
+/* People and roles: each section is one panel holding its heading and its list (the heading used to
+   float on the background above a list-shaped panel). */
+html body #page-content .pp-card{
+  background:var(--panel)!important;border:1px solid var(--rim-dim)!important;border-radius:var(--g-r-panel,24px)!important;
+  box-shadow:inset 0 1px 0 var(--rim),var(--shadow)!important;padding:var(--g-pad)!important;
+  backdrop-filter:blur(20px) saturate(150%)!important;-webkit-backdrop-filter:blur(20px) saturate(150%)!important}
+html body #page-content .pp-card__head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 8px}
+html body #page-content .pp-card__head h2{font-size:17px;font-weight:800;margin:0}
+html body #page-content .pp-card__head p{margin:0;font-size:13.5px;color:var(--muted)}
+html body #page-content .pp-card .pp-list,html body #page-content .pp-page .pp-card .pp-list{
+  background:none!important;border:0!important;box-shadow:none!important;padding:0!important;margin:0;border-radius:0;backdrop-filter:none!important}
+
+/* Record a production step: each section is one panel (heading, search, list), not a heading floating
+   above a list-shaped panel. */
+html body #page-content .rs-section{background:var(--panel);border:1px solid var(--rim-dim);border-radius:24px;box-shadow:inset 0 1px 0 var(--rim),var(--shadow);
+  padding:var(--g-pad) 0 6px;margin:0 0 var(--g-gap);overflow:hidden;backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%)}
+html body #page-content .rs-section__head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 var(--g-pad);margin:0 0 10px}
+html body #page-content .rs-section__head h2{margin:0;display:flex;align-items:center;gap:8px}
+html body #page-content .rs-section .rs-batches,html body #page-content .rs-section > ul{background:none!important;border:0!important;box-shadow:none!important;border-radius:0!important;margin:0}
+html body #page-content .rs-section :is(.rs-empty,.rs-more){padding:0 var(--g-pad)}
+html body #page-content .rs-search input{min-width:240px}
+
+/* Record step: the action bar is one full-width glass strip on the bottom edge, and the form leaves
+   room for it so it never covers a field. */
+html body #page-content .batch-start-record-bar{
+  position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;transform:none!important;
+  display:flex;justify-content:center;align-items:center;gap:10px;padding:12px max(16px,env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-bottom));
+  background:var(--glass-strong);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);
+  border-top:1px solid var(--rim-dim);box-shadow:0 -10px 30px -18px rgba(13,20,36,.35);z-index:40;width:auto!important;max-width:none!important;margin:0!important}
+html body #page-content .batch-start-record-bar button{min-width:220px;min-height:44px}
+html body #page-content:has(.batch-start-record-bar){padding-bottom:96px}
+@media (max-width:720px){html body #page-content .batch-start-record-bar{bottom:calc(76px + env(safe-area-inset-bottom))!important;left:12px!important;right:12px!important;border-radius:22px;border:1px solid var(--rim-dim);padding:8px!important}
+  html body #page-content .batch-start-record-bar button{width:100%}}
+
+/* File pickers: the browser's grey button becomes the glass pill. */
+html body #page-content input[type="file"]{font-size:13.5px;color:var(--muted);max-width:100%}
+html body #page-content input[type="file"]::file-selector-button{
+  margin-right:12px;min-height:36px;padding:0 16px;border-radius:999px;border:1px solid var(--rim-dim);background:var(--solid);
+  color:var(--ink);font:700 13px/1 var(--g-font);cursor:pointer;box-shadow:0 1px 2px rgba(13,20,36,.08)}
+
+/* Workflows: the three figures sit in one row across the page (like every other "At a glance"), and
+   "In production now" takes the full width under them, so neither panel is left half empty. */
+html body #page-content :is(.workflows-layout,.planner-layout,.contracts-layout){display:flex!important;flex-direction:column;align-items:stretch!important;gap:var(--g-gap)}
+html body #page-content :is(.workflows-layout,.planner-layout,.contracts-layout) > *{grid-column:auto!important;width:auto!important;max-width:none!important;align-self:stretch!important}
+html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures){display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 0}
+html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures) .workspace-tile{display:flex!important;flex-direction:column;align-items:flex-start;gap:2px;padding:16px 18px;text-align:left!important}
+html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures) .workspace-tile dt{order:1;font-size:13px;font-weight:700;color:var(--text)}
+html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures) .workspace-tile dd{order:2;align-self:flex-start;text-align:left!important;width:auto!important;margin:2px 0 0;font-size:28px;font-weight:800;line-height:1.1;color:var(--ink)}
+html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures) .workspace-tile span{order:3;font-size:12.5px;color:var(--muted)}
+@media (max-width:720px){html body #page-content :is(.workflows-figures,.planner-figures,.contracts-figures){grid-template-columns:1fr 1fr}}
+
+/* Create a workflow: the two ways in fill the column, each a clear, clickable card with an arrow. */
+html body #page-content .chooser-cards{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--g-gap);max-width:none!important;width:100%}
+html body #page-content .chooser-card{position:relative;display:block;padding:var(--g-pad) 56px var(--g-pad) var(--g-pad)!important;min-height:0;text-decoration:none;transition:transform .15s,box-shadow .15s}
+html body #page-content .chooser-card::after{content:"";position:absolute;right:24px;top:50%;width:9px;height:9px;border-right:2px solid var(--muted);border-top:2px solid var(--muted);transform:translateY(-50%) rotate(45deg)}
+html body #page-content .chooser-card:hover{transform:translateY(-1px)}
+@media (max-width:720px){html body #page-content .chooser-cards{grid-template-columns:1fr}}
+
+/* The shared fixed action bar (workflow editor, wizards, forms): one glass strip on the bottom edge,
+   content width inside, and the page keeps room for it so nothing is ever hidden behind it. */
+html body :is(.spa-fixed-action-bar,.add-inv-manual-submit-bar){
+  position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:auto!important;max-width:none!important;
+  margin:0!important;padding:12px 16px calc(12px + env(safe-area-inset-bottom))!important;border-radius:0!important;transform:none!important;
+  background:var(--glass-strong)!important;backdrop-filter:blur(24px) saturate(160%)!important;-webkit-backdrop-filter:blur(24px) saturate(160%)!important;
+  border:0!important;border-top:1px solid var(--rim-dim)!important;box-shadow:0 -10px 30px -18px rgba(13,20,36,.35)!important;z-index:40}
+html body :is(.spa-fixed-action-bar .spa-fixed-action-bar__inner,.add-inv-manual-submit-bar .add-inv-manual-submit-bar__inner){max-width:1152px!important;width:100%;margin:0 auto!important;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0!important;background:none!important;border:0!important;box-shadow:none!important}
+html body :is(.spa-fixed-action-bar,.add-inv-manual-submit-bar) :is(button,a){min-height:44px}
+html body .add-inv-manual-submit-bar .add-inv-manual-submit-bar__inner{justify-content:center}
+html body .add-inv-manual-submit-bar__btn{min-width:240px}
+html body #page-content:has(:is(.spa-fixed-action-bar,.add-inv-manual-submit-bar)){padding-bottom:104px!important}
+@media (max-width:720px){
+  html body :is(.spa-fixed-action-bar,.add-inv-manual-submit-bar){bottom:calc(76px + env(safe-area-inset-bottom))!important;left:12px!important;right:12px!important;border-radius:22px!important;border:1px solid var(--rim-dim)!important;padding:8px!important;
+    background:var(--glass-strong)!important;backdrop-filter:blur(24px) saturate(160%)!important;-webkit-backdrop-filter:blur(24px) saturate(160%)!important;box-shadow:0 10px 30px -12px rgba(13,20,36,.35)!important}
+  html body .spa-fixed-action-bar .spa-fixed-action-bar__inner > *{flex:1 1 0}
+  html body .spa-fixed-action-bar .spa-fixed-action-bar__inner :is(button,a){width:100%;justify-content:center}
+  html body #page-content:has(.spa-fixed-action-bar){padding-bottom:160px!important}
+}
+
+/* Workflow editor: each view (structure, batches, inventory) is one panel holding its heading and list. */
+html body #page-content .flows2-panel[data-active="true"]{background:var(--panel);border:1px solid var(--rim-dim);border-radius:24px;box-shadow:inset 0 1px 0 var(--rim),var(--shadow);padding:var(--g-pad);margin-top:14px}
+html body #page-content .flows2-panel .card-title{font-size:17px;font-weight:800}
+
+/* Case detail: the title is a page title like every other. */
+html body #page-content :is(.oc-detail-header,.cd-header) h1{font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--ink);margin:6px 0 0}
+
+/* Production tasks: the calendar strip fades at both edges (no half day or stray line at the edge);
+   each day is a quiet pill, today and the picked day stand out. The board's filters and actions are one
+   wrapping toolbar row. */
+html body #page-content .core-tasks__cal-strip{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:4px 2px;margin:8px 0 0;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent);border:0!important}
+html body #page-content .core-tasks__cal-strip::-webkit-scrollbar{display:none}
+html body #page-content .core-tasks__cal-day{flex:0 0 52px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border-radius:16px;border:0!important;background:transparent;box-shadow:none}
+html body #page-content .core-tasks__cal-day:hover{background:var(--glass-strong)}
+html body #page-content .core-tasks__cal-day.today{background:var(--accent-soft)}
+html body #page-content .core-tasks__cal-day.active{background:var(--ink);color:var(--base,#fff)}
+html body #page-content .core-tasks__cal-day.active :is(.dow,.dom){color:inherit}
+html body #page-content .core-tasks__cal-day .dow{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+html body #page-content .core-tasks__cal-day .dom{font-size:17px;font-weight:800;color:var(--ink)}
+html body #page-content .core-tasks__calendar-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 0}
+html body #page-content .core-tasks__calendar-heading > *{margin:0}
+html body #page-content .core-tasks__filters{display:flex!important;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 16px}
+html body #page-content .core-tasks__filters > *{margin:0!important;flex:0 1 auto;width:auto!important;min-width:0}
+html body #page-content .core-tasks__filters .workspace-input,html body #page-content .core-tasks__filters input[type="search"]{flex:1 1 220px}
+html body #page-content .core-tasks__filters select{flex:0 1 190px}
+html body #page-content .core-tasks__filters .workspace-form__actions{display:flex;gap:8px;margin-left:auto!important;flex:0 0 auto}
+html body #page-content .core-tasks__toggle{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-size:13.5px;color:var(--text)}
+@media (max-width:720px){html body #page-content .core-tasks__filters > *{flex:1 1 100%!important}
+  html body #page-content .core-tasks__filters .workspace-form__actions{margin-left:0!important}
+  html body #page-content .core-tasks__filters .workspace-form__actions > *{flex:1 1 0}}

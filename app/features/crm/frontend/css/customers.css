@@ -12,7 +12,7 @@
 #page-content #customers-page .customers-directory { padding: 0; overflow: visible; }
 #customers-page .customers-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px 24px 12px; }
 #customers-page .customers-search { flex: 1 1 240px; min-width: 120px; }
-#page-content #customers-search, #page-content #customers-status, #page-content #customers-sort { width: 100% !important; min-height: 44px !important; height: auto !important; padding: 10px 12px !important; border: 1px solid var(--ui-border) !important; border-radius: 8px !important; background: var(--ui-surface) !important; color: var(--ui-text) !important; font: inherit !important; font-size: 14px !important; }
+#page-content #customers-search, #page-content #customers-status, #page-content #customers-sort { width: 100% !important; min-height: 44px !important; height: auto !important; padding: 10px 12px !important; border: 1px solid var(--ui-border) !important; border-radius: 12px !important; background-color: var(--ui-surface) !important; color: var(--ui-text) !important; font: inherit !important; font-size: 14px !important; }
 #customers-page .customers-status { flex: 0 1 150px; }
 #customers-page .customers-toolbar [aria-pressed="true"] { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
 #customers-page .customers-sort { display: flex; align-items: center; gap: 12px; padding: 4px 24px 12px; font-size: 13px; }
@@ -83,3 +83,4 @@
   #customers-page .customers-connection { margin-bottom: 12px; }
   #customers-page .customers-connection-hint { display: none; }
 }
+#page-content #customers-status, #page-content #customers-sort { padding-right: 36px !important; }
