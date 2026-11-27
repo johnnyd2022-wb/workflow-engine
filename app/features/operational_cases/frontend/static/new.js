@@ -97,7 +97,9 @@
 
     if (!ownerId) { setError('Choose an owner.'); return; }
     var dueAt = utcIsoFromInputs(dueDate, dueTime);
-    if (!dueAt) { setError('Enter a due date and time.'); return; }
+    var dueTimestamp = Date.parse(dueAt);
+    if (Number.isNaN(dueTimestamp)) { setError('Enter a due date and time.'); return; }
+    if (dueTimestamp <= Date.now()) { setError('Choose a due date and time in the future.'); return; }
     if (!nextAction) { setError('Describe the next action.'); return; }
 
     var payload = {

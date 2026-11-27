@@ -76,8 +76,8 @@ class CaseError(Exception):
 
 
 def _validate_text(value: Any, field: str, min_len: int = 1, max_len: int = 2000) -> str:
-    if not isinstance(value, str):
-        raise CaseError(400, f"{field}_invalid", f"{field} must be a string")
+    if not isinstance(value, str) or "\x00" in value:
+        raise CaseError(400, f"{field}_invalid", f"{field} must be text without null characters")
     trimmed = value.strip()
     if not (min_len <= len(trimmed) <= max_len):
         raise CaseError(400, f"{field}_invalid", f"{field} must be {min_len}-{max_len} characters")
@@ -93,7 +93,10 @@ def _parse_iso_datetime(value: Any, field: str) -> datetime:
         raise CaseError(400, f"{field}_invalid", f"{field} must be a valid ISO-8601 timestamp") from None
     if parsed.tzinfo is None:
         raise CaseError(400, f"{field}_invalid", f"{field} must be timezone-aware (UTC)")
-    return parsed.astimezone(UTC)
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError:
+        raise CaseError(400, f"{field}_invalid", f"{field} must be a representable UTC timestamp") from None
 
 
 def _validate_due_at_future(due_at: datetime) -> None:
@@ -125,8 +128,8 @@ def _validate_evidence_refs(session: Session, org_id: UUID, refs: Any) -> list[d
         if set(ref) != {"entity_type", "entity_id"}:
             raise CaseError(400, "evidence_invalid", "unsupported evidence fields")
         entity_type = ref.get("entity_type")
-        if entity_type not in _ALLOWED_EVIDENCE_TYPES:
-            raise CaseError(400, "evidence_invalid", f"unsupported evidence entity_type: {entity_type!r}")
+        if not isinstance(entity_type, str) or entity_type not in _ALLOWED_EVIDENCE_TYPES:
+            raise CaseError(400, "evidence_invalid", "unsupported evidence entity_type")
         try:
             entity_id = UUID(str(ref.get("entity_id")))
         except (ValueError, TypeError):
@@ -729,7 +732,7 @@ def _authorize_and_validate_transition(
         if not (is_owner or is_admin):
             raise CaseError(403, "forbidden", "only the owner or ADMIN may resolve")
         cause = fields.get("cause")
-        if cause not in CaseCauseCategory.ALL:
+        if not isinstance(cause, str) or cause not in CaseCauseCategory.ALL:
             raise CaseError(400, "cause_invalid", "cause must be one of the defined categories")
         cause_detail = None
         if cause == CaseCauseCategory.OTHER:

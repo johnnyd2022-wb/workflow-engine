@@ -1130,3 +1130,34 @@ def test_ac3_inactive_owner_requires_admin_reassignment(
     )
     assert response.status_code == 200
     assert response.json["case"]["owner_id"] == str(verifier_user.id)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("next_action", "Review lot\0and reconcile"),
+        ("due_at", "9999-12-31T23:59:59-01:00"),
+    ],
+)
+def test_create_case_rejects_unrepresentable_fields(owner_client, owner_user, untracked_item, field, value):
+    payload = _create_payload(untracked_item.id, owner_user.id, **{field: value})
+    response = owner_client.post("/api/core/cases/from-finding", json=payload, headers=_idem())
+    assert response.status_code == 400
+    assert response.json["error_code"] == f"{field}_invalid"
+
+
+def test_case_query_rejects_duplicate_limit(owner_client):
+    response = owner_client.get("/api/core/cases?limit=25&limit=40")
+    assert response.status_code == 400
+    assert response.json["error_code"] == "limit_invalid"
+
+
+def test_case_events_reject_unrepresentable_version(owner_client, owner_user, untracked_item):
+    case = owner_client.post(
+        "/api/core/cases/from-finding",
+        json=_create_payload(untracked_item.id, owner_user.id),
+        headers=_idem(),
+    ).json["case"]
+    response = owner_client.get(f"/api/core/cases/{case['id']}/events?before_version=2147483648")
+    assert response.status_code == 400
+    assert response.json["error_code"] == "invalid_pagination"
