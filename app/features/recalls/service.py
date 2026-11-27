@@ -47,7 +47,7 @@ class RecallError(ValueError):
 
 def _text(value, field: str, required: bool = True, max_len: int = MAX_TEXT) -> str | None:
     text = (value or "").strip() if isinstance(value, str) or value is None else None
-    if text is None:
+    if text is None or "\x00" in text:
         raise RecallError(f"{field} must be text")
     if not text:
         if required:
@@ -63,8 +63,10 @@ def _qty(value, field: str) -> Decimal:
         qty = Decimal(str(value))
     except (InvalidOperation, ValueError):
         raise RecallError(f"{field} must be a number") from None
-    if not qty.is_finite() or qty < 0:
-        raise RecallError(f"{field} must be zero or more")
+    if not qty.is_finite() or not 0 <= qty < Decimal("100000000000000"):
+        raise RecallError(f"{field} must be a nonnegative number within storage limits")
+    if qty != qty.quantize(Decimal("0.0001")):
+        raise RecallError(f"{field} must have at most four decimal places")
     return qty
 
 

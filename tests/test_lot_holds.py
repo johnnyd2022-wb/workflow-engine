@@ -379,3 +379,11 @@ def test_a_lot_never_held_still_deletes(db, org):
     org_obj, admin = org
     item = _lot(db, org_obj.id, "Coriander")
     assert admin.delete(f"/api/core/inventory/{item.id}").status_code == 200
+
+
+def test_lot_hold_reason_requires_text(db, org):
+    org_obj, admin = org
+    item = _lot(db, org_obj.id, "Juniper")
+    response = admin.post(f"/api/core/inventory/{item.id}/holds", json={"reason": ["Inspection"]})
+    assert response.status_code == 400
+    assert "reason" in response.json["errors"]

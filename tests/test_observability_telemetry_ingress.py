@@ -97,3 +97,18 @@ def test_telemetry_ingest_respects_independent_destination_toggles(monkeypatch):
     assert faro.status_code == 404
     assert posthog.status_code == 404
     assert captured_requests == []
+
+
+def test_telemetry_rejects_oversized_query_before_collecting(monkeypatch):
+    captured_requests = []
+    app = _build_app(monkeypatch, captured_requests)
+    with app.test_client() as client:
+        response = client.post(
+            "/telemetry/posthog/e/",
+            query_string={"sdk": "x" * 8193},
+            data=b"{}",
+            headers={"X-Forwarded-Proto": "https"},
+        )
+
+    assert response.status_code == 400
+    assert captured_requests == []

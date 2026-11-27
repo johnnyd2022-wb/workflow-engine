@@ -23,6 +23,7 @@ from app.features.costing.engine import CostEngine
 from app.features.costing.rules import RuleConflictError
 from app.features.costing.stock_value import StockValueConflictError
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_text, read_service_json
 
 logger = get_logger(__name__)
 
@@ -78,11 +79,10 @@ def _not_found(error):
     return jsonify({"error": str(error)}), 404
 
 
-def _body() -> dict:
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        raise service.CostingError("Send a JSON object")
-    return data
+@costing_bp.errorhandler(InvalidInputError)
+def invalid_input(error):
+    db_session.rollback()
+    return error.response()
 
 
 @costing_bp.route(f"{API}/me", methods=["GET"])
@@ -121,7 +121,7 @@ def get_lot_cost(item_id):
 @requires_auth
 @idempotent_write("costing_lot_cost_put")  # a retried save after a lost reply replays, never repeats
 def put_lot_cost(item_id):
-    data = _body()
+    data = read_service_json()
     unknown = set(data) - {"kind", "amount", "quantity", "cost_flow_id", "note", "replace"}
     if unknown:
         raise service.CostingError(f"Unknown field(s): {', '.join(sorted(unknown))}")
@@ -181,13 +181,16 @@ def list_materials():
 def get_material_history(material):
     from app.features.costing.price_history import material_history
 
-    return jsonify(material_history(db_session, _org(), material, request.args.get("from"), request.args.get("to")))
+    if len(material) > 255 or "\x00" in material:
+        raise InvalidInputError({"material": "Enter a material name up to 255 characters."})
+    first, second = query_text("from", max_length=10), query_text("to", max_length=10)
+    return jsonify(material_history(db_session, _org(), material, first or None, second or None))
 
 
 @costing_bp.route(f"{API}/settings", methods=["PUT"])
 @requires_auth
 def put_settings():
-    result = service.set_settings(db_session, _org(), **_body())
+    result = service.set_settings(db_session, _org(), **read_service_json())
     db_session.commit()
     return jsonify(result)
 
@@ -211,7 +214,7 @@ def list_overhead_rates():
 @requires_auth
 @idempotent_write("costing_overhead_rate_create")  # a retried save after a lost reply replays, never repeats
 def create_overhead_rate():
-    rate = overheads.create_rate(db_session, _org(), _body(), user_id=_user_id())
+    rate = overheads.create_rate(db_session, _org(), read_service_json(), user_id=_user_id())
     db_session.commit()
     return jsonify(overheads.as_dict(rate)), 201
 
@@ -220,7 +223,7 @@ def create_overhead_rate():
 @requires_auth
 @idempotent_write("costing_overhead_rate_update")
 def update_overhead_rate(rate_id):
-    rate = overheads.update_rate(db_session, _org(), rate_id, _body())
+    rate = overheads.update_rate(db_session, _org(), rate_id, read_service_json())
     db_session.commit()
     return jsonify(overheads.as_dict(rate))
 
@@ -250,7 +253,7 @@ def get_accounts():
 def put_account(xero_account_id):
     from app.features.costing.purchase_sources import PurchaseSourceError, list_accounts, set_account_treatment
 
-    data = _body()
+    data = read_service_json()
     if set(data) != {"treatment"}:
         raise service.CostingError('Send only {"treatment": ...}')
     try:
@@ -292,13 +295,22 @@ def _parse_date(raw):
 def list_purchases():
     from app.features.costing import actions
 
-    historical = request.args.get("historical") in ("1", "true")
-    date_from, date_to = _parse_date(request.args.get("from")), _parse_date(request.args.get("to"))
+    history = query_text("historical", max_length=5)
+    if history not in ("", "0", "1", "false", "true"):
+        raise InvalidInputError({"historical": "Use true or false."})
+    historical = history in ("1", "true")
+    date_from = _parse_date(query_text("from", max_length=10))
+    date_to = _parse_date(query_text("to", max_length=10))
     if historical and (date_from is None or date_to is None or date_from > date_to):
         raise service.CostingError("Historical lists need from and to (YYYY-MM-DD), from on or before to")
     return jsonify(
         actions.list_purchases(
-            db_session, _org(), request.args.get("tab", "to_record"), date_from, date_to, historical=historical
+            db_session,
+            _org(),
+            query_text("tab", default="to_record", max_length=24),
+            date_from,
+            date_to,
+            historical=historical,
         )
     )
 
@@ -318,7 +330,7 @@ def purchase_candidates(line_id):
 def record_purchase(line_id):
     from app.features.costing import actions
 
-    data = _body()
+    data = read_service_json()
     actions.record(db_session, _org(), line_id, data.get("rows"), data.get("rest"), user_id=_user_id())
     db_session.commit()
     return _purchase_card(line_id)
@@ -331,7 +343,7 @@ def record_purchase(line_id):
 def link_purchase(line_id):
     from app.features.costing import actions
 
-    data = _body()
+    data = read_service_json()
     actions.link(db_session, _org(), line_id, data.get("lots"), data.get("rest"), user_id=_user_id())
     db_session.commit()
     return _purchase_card(line_id)
@@ -343,7 +355,7 @@ def link_purchase(line_id):
 def refund_purchase(line_id):
     from app.features.costing import actions
 
-    actions.refund(db_session, _org(), line_id, _body().get("lots"), user_id=_user_id())
+    actions.refund(db_session, _org(), line_id, read_service_json().get("lots"), user_id=_user_id())
     db_session.commit()
     return _purchase_card(line_id)
 
@@ -353,12 +365,12 @@ def _simple(action_name):
         from app.features.costing import actions
 
         if action_name == "review":
-            choice = _body().get("action")
+            choice = read_service_json().get("action")
             if choice == "unlink" and not has_permission(g.current_user, "inventory.adjust"):
                 return jsonify({"error": "Unlinking a purchase from stock needs inventory.adjust"}), 403
             actions.review(db_session, _org(), line_id, choice)
         elif action_name == "not-stock":
-            body = request.get_json(silent=True) or {}
+            body = read_service_json() if request.is_json or request.get_data() else {}
             if not isinstance(body, dict) or set(body) - {"always"} or not isinstance(body.get("always", False), bool):
                 raise service.CostingError('Send nothing, or {"always": true}')
             line = actions.not_stock(db_session, _org(), line_id)
@@ -392,7 +404,7 @@ for _action in ("not-stock", "skip", "reopen", "review", "freight"):
 def edit_purchase_allocations(line_id):
     from app.features.costing import actions
 
-    actions.edit_allocations(db_session, _org(), line_id, _body().get("allocations"))
+    actions.edit_allocations(db_session, _org(), line_id, read_service_json().get("allocations"))
     db_session.commit()
     return _purchase_card(line_id)
 
@@ -427,7 +439,7 @@ def list_rules():
 def create_rule():
     from app.features.costing import rules
 
-    data = _body()
+    data = read_service_json()
     if data.get("auto_record") is True and not has_permission(g.current_user, "inventory.adjust"):
         return jsonify(
             {
@@ -446,7 +458,7 @@ def create_rule():
 def update_rule(rule_id):
     from app.features.costing import rules
 
-    data = _body()
+    data = read_service_json()
     current = rules.get_rule(db_session, _org(), rule_id)
     resulting_auto_record = data.get("auto_record", current.auto_record)
     resulting_active = data.get("is_active", current.is_active)
@@ -501,7 +513,7 @@ def bulk_purchases():
     from app.features.costing.purchase_sources import classify_line
     from app.features.crm.models.xero_account import XeroAccount
 
-    data = _body()
+    data = read_service_json()
     ids, action = data.get("line_ids"), data.get("action")
     if action not in BULK_ACTIONS:
         raise service.CostingError(f"action must be one of {', '.join(BULK_ACTIONS)}")
@@ -560,7 +572,7 @@ def historical_run():
     from app.features.costing.purchase_sources import nz_today
     from app.features.crm.services.xero_sync_service import PurchasesNeedReconnectError, XeroSyncService
 
-    data = _body()
+    data = read_service_json()
     if set(data) - {"from", "to"} or not data.get("from") or not data.get("to"):
         raise service.CostingError("Send from and to (YYYY-MM-DD)")
     date_from, date_to = _parse_date(data["from"]), _parse_date(data["to"])
@@ -640,8 +652,8 @@ def margins_report():
 
     this_month = margins.month_start(nz_today())
     six_back = date(this_month.year - (this_month.month <= 5), (this_month.month - 6) % 12 + 1, 1)
-    start = month(request.args.get("from"), six_back)
-    end = month(request.args.get("to"), this_month)
+    start = month(query_text("from", max_length=7) or None, six_back)
+    end = month(query_text("to", max_length=7) or None, this_month)
     if start > end:
         raise service.CostingError("from is after to")
     if (end.year - start.year) * 12 + end.month - start.month + 1 > margins.MAX_MONTHS:
@@ -785,7 +797,7 @@ def get_bridge():
 
     org = _org()
     _auto_month_ends(org)
-    first, second = request.args.get("from"), request.args.get("to")
+    first, second = query_text("from", max_length=38), query_text("to", max_length=38)
     if first or second:
         if not (first and second):
             raise service.CostingError("Send both from and to, or neither")

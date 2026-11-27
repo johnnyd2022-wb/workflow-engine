@@ -34,6 +34,7 @@ from app.utils.config_loader import config
 # world-readable.
 # actions.js: the landing page and the public print pages need it before anyone signs in (GL-S03).
 PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js", "actions.js"})
+MAX_TELEMETRY_QUERY_BYTES = 8192
 
 
 def create_app():
@@ -363,8 +364,11 @@ def create_app():
             return jsonify({"error": "Telemetry disabled"}), 404
 
         upstream_url = f"{upstream_base.rstrip('/')}/{endpoint_path.lstrip('/')}"
-        if request.query_string:
-            upstream_url = f"{upstream_url}?{request.query_string.decode('utf-8')}"
+        query = request.query_string
+        if len(query) > MAX_TELEMETRY_QUERY_BYTES or any(byte < 32 or byte >= 127 for byte in query):
+            return jsonify({"error": "Invalid telemetry query"}), 400
+        if query:
+            upstream_url = f"{upstream_url}?{query.decode('ascii')}"
 
         allowed_headers = {
             "accept",
@@ -419,7 +423,7 @@ def create_app():
     # Intentionally public, rate-limited ingest endpoint for browser RUM (Faro); the
     # browser has no session-authenticated way to call this before/during page load.
     @app.post("/telemetry")  # nosemgrep: route-missing-requires-auth
-    @limiter.limit("120 per minute")
+    @limiter.limit("120 per minute", key_func=get_remote_address)
     def ingest_faro_telemetry():
         """Accept Faro's fixed collect endpoint without exposing a general HTTP proxy."""
         return _telemetry_response(config.rum_faro_upstream, "collect", config.grafana_data_enabled)
@@ -442,7 +446,7 @@ def create_app():
     # Intentionally public, rate-limited ingest/config endpoint for browser RUM (PostHog
     # SDK); same reasoning as the Faro telemetry route above.
     @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])  # nosemgrep: route-missing-requires-auth
-    @limiter.limit("120 per minute")
+    @limiter.limit("120 per minute", key_func=get_remote_address)
     def ingest_posthog_telemetry(endpoint):
         """Forward only the PostHog SDK endpoints required by the browser bundle."""
         if not config.rum_enabled or not config.posthog_data_enabled:

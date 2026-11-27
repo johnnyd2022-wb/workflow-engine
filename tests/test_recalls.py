@@ -372,3 +372,13 @@ def test_an_unreachable_customer_who_gets_back_in_touch_can_acknowledge(admin_cl
     assert contact["unreachable_note"] is None and contact["unrecoverable_qty"] == "0" and contact["done"] is False
     blockers = admin_client.get(f"/api/core/recalls/{recall['id']}").get_json()["recall"]["progress"]["blockers"]
     assert "4 each of Navy Gin 700ml at Harbour Bar not yet recovered or disposed of" in blockers
+
+
+def test_recall_mode_must_be_boolean(admin_client, world, monkeypatch):
+    def unexpected(*args, **kwargs):
+        pytest.fail("A malformed drill flag reached recall creation")
+
+    monkeypatch.setattr("app.features.recalls.service.open_recall", unexpected)
+    response = _open(admin_client, world, is_drill="true")
+    assert response.status_code == 400
+    assert "is_drill" in response.json["errors"]

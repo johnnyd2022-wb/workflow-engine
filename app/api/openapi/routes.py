@@ -29,8 +29,9 @@ def _built(app) -> BuiltDocument:
 @requires_auth
 def get_openapi():
     """The OpenAPI 3.1 description of this API, narrowed to the operations the caller may reach."""
-    audience = request.args.get("audience")
-    if audience is not None and audience not in AUDIENCES:
+    audiences = request.args.getlist("audience")
+    audience = audiences[0] if audiences else None
+    if len(audiences) > 1 or (audience is not None and audience not in AUDIENCES):
         return jsonify({"error": "unknown_audience", "message": "audience, when given, must be 'mcp'"}), 400
     document = narrow(_built(current_app), g.current_user, via_token=g.auth_via == "mcp", audience=audience)
     response = jsonify(document)

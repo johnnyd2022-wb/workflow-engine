@@ -27,6 +27,7 @@ from sqlalchemy import text
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_int, query_text
 
 logger = get_logger(__name__)
 
@@ -78,22 +79,12 @@ def register_routes(bp):
         org_id = UUID(g.org_id)
         db = db_session()
 
-        since_raw = request.args.get("since")
-        since: int | None = None
-        if since_raw is not None and since_raw != "":
-            try:
-                since = int(since_raw)
-            except ValueError:
-                return jsonify({"error": "since must be an integer"}), 400
-            if since < 0:
-                return jsonify({"error": "since must be >= 0"}), 400
-
         try:
-            limit = min(int(request.args.get("limit", _DEFAULT_LIMIT)), _MAX_LIMIT)
-        except (TypeError, ValueError):
-            return jsonify({"error": "limit must be an integer"}), 400
-        if limit < 1:
-            return jsonify({"error": "limit must be >= 1"}), 400
+            raw = query_text("since", max_length=19)
+            since = query_int("since", default=0, minimum=0, maximum=2**63 - 1) if raw else None
+            limit = min(query_int("limit", default=_DEFAULT_LIMIT, minimum=1, maximum=2**63 - 1), _MAX_LIMIT)
+        except InvalidInputError as error:
+            return error.response()
 
         head = db.execute(
             text(
