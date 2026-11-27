@@ -1,5 +1,3 @@
-from uuid import uuid4
-
 import pytest
 
 from tests.test_org_routes import org_world  # noqa: F401
@@ -9,7 +7,7 @@ from tests.test_org_routes import org_world  # noqa: F401
     ("path", "payload", "field"),
     [
         ("/api/crm/customers", [True], "_body"),
-        (f"/api/crm/customers/{uuid4()}/notes", {"content": False}, "content"),
+        ("/api/crm/customers/600e31d7-a34c-41b0-90e0-59d30b6c68c2/notes", {"content": False}, "content"),
         ("/api/crm/tasks", {"title": {"name": "Follow up"}}, "title"),
         ("/api/crm/tasks", {"title": "Follow up", "priority": True}, "priority"),
         (
