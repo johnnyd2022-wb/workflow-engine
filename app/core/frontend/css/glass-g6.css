@@ -23,3 +23,21 @@ html[data-spa-theme="dark"] body #page-content .crm-root .workspace-button--prim
 html body #page-content .crm-root .crm-table th{background:transparent}
 /* Sales overview: the section head's actions sit right above the first panel; give it room. */
 html body #page-content .sales-overview{padding-top:18px}
+
+/* POLISH (Sales overview): cards are as tall as their content (the trend was stretched to the board's
+   height and left half empty); headers keep title and controls on one centred row; the board's filter
+   and "View all tasks" sit on one line; layout controls stay quiet until the card is hovered. */
+html body #page-content .sales-overview .crm-widget-grid > .crm-widget-card{align-self:start}
+html body #page-content .crm-widget-card__header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+html body #page-content .crm-widget-card__header .crm-section-title{margin:0}
+html body #page-content .sales-widget-controls .crm-btn{opacity:.45;transition:opacity .15s}
+html body #page-content .crm-widget-card:hover .sales-widget-controls .crm-btn,
+html body #page-content .sales-widget-controls .crm-btn:focus-visible{opacity:1}
+html body #page-content div:has(> #sales-operator-filter){align-items:center;margin-bottom:12px!important}
+html body #page-content div:has(> #sales-operator-filter) > a{font-size:13px!important;font-weight:700;text-decoration:none;margin-left:auto}
+html body #page-content #sales-operator-filter{min-height:40px;height:40px;width:auto;min-width:180px}
+/* Task cards: owner and due date are small meta text, like everywhere else. */
+html body #page-content [data-widget-type="task_board"] .sales-task-due,
+html body #page-content [data-widget-type="task_board"] article span{font-size:12.5px}
+html body #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"]){align-self:start}
+html body #page-content .crm-task-card-due,html body #page-content .crm-task-card-due span{font-size:12.5px;font-weight:600;color:var(--text)}

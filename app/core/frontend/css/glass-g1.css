@@ -238,3 +238,15 @@ html[data-spa-theme="dark"] #page-content .gpo .core2-journey-secondary__link,ht
 #page-content .gpo .core2-journey-addinv-menu a{border-radius:13px;min-height:44px;display:flex;align-items:center;padding:0 12px;color:var(--ink);font-weight:600;text-decoration:none}
 #page-content .gpo .core2-journey-addinv-menu a:hover{background:var(--accent-soft)}
 #page-content .batches-chip.is-active,html[data-spa-theme="dark"] #page-content .batches-chip[aria-pressed="true"]{background:var(--ink);color:var(--base);border-color:transparent}
+
+/* POLISH (overview): the ring lines up with the top of its list; the state block reads top to bottom;
+   In progress leads with one figure, not "In progress / 7 batches / in progress". */
+#page-content .gpo-hbody{align-items:start}
+#page-content .gpo-halo{margin-top:6px}
+#page-content .gpo-state .production-health__content{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+#page-content .gpo-state .production-health__review{align-self:flex-start;margin-top:6px}
+#page-content .gpo-state .workspace-caption{margin:0}
+#page-content .gpo-big{font-size:48px;margin:6px 0 10px}
+#page-content .gpo-big small{display:none}
+#page-content .gpo-key{margin-top:18px;padding-top:0}
+@media (max-width:720px){#page-content .gpo-hbody{grid-template-columns:1fr;justify-items:center}#page-content .gpo-state,#page-content .gpo-checks{width:100%}}
