@@ -8,6 +8,7 @@ from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
 from app.core.security.permissions import requires_auth
 from app.features.contract_manufacturing.routes.orders import bp, handled
+from app.features.contract_manufacturing.routes.request_payloads import read_contract_body
 from app.features.contract_manufacturing.services.material_receipts import (
     customer_materials,
     material_dto,
@@ -35,7 +36,7 @@ def receive_customer_material(customer_id):
         customer_id,
         g.current_user.id,
         request.headers.get("Idempotency-Key"),
-        request.get_json(silent=True),
+        read_contract_body(),
     )
     db_session.commit()
     return jsonify(

@@ -205,3 +205,11 @@ def test_another_org_cannot_dispatch_or_see_the_order(contract, db, flask_app): 
         from tests.dag_traversal_helpers import clear_org_synthetic_data
 
         clear_org_synthetic_data(db, other_org.id)
+
+
+def test_dispatch_quantity_rejects_excess_precision():
+    from app.features.contract_manufacturing.services.dispatches import _quantity
+    from app.features.contract_manufacturing.services.orders import OrderError
+
+    with pytest.raises(OrderError, match="four decimal places"):
+        _quantity("1.00001")

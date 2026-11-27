@@ -163,3 +163,23 @@ def test_publish_invite_and_customer_readonly_portal_at_phone_width(browser, app
     finally:
         for context in contexts:
             context.close()
+
+
+def test_portal_invite_checks_password_bytes_before_submit(browser, app_url):
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True)
+    try:
+        page = context.new_page()
+        sent = []
+
+        def unexpected_request(route):
+            sent.append(route.request.url)
+            route.fulfill(status=400, json={"error": "Reached the server"})
+
+        page.route("**/portal/api/accept", unexpected_request)
+        page.goto("/portal/invite#test-invitation")
+        page.get_by_label("New password").fill("é" * 37)
+        page.get_by_role("button", name="Create portal account").click()
+        expect(page.locator("[data-error]")).to_have_text("Use a password of no more than 72 UTF-8 bytes.")
+        assert sent == []
+    finally:
+        context.close()

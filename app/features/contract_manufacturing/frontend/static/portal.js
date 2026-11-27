@@ -6,8 +6,6 @@
     inviteToken = location.hash.slice(1);
     history.replaceState(null, '', location.pathname);
   }
-  const key = document.querySelector('[name="customer_id"]');
-  if (key) key.value = new URLSearchParams(location.search).get('customer') || key.value;
   const error = (message) => {
     const target = document.querySelector('[data-error]');
     target.textContent = message;
@@ -26,6 +24,9 @@
       button.disabled = true;
       try {
         const body = Object.fromEntries(new FormData(form));
+        if (typeof body.password === 'string' && new TextEncoder().encode(body.password).length > 72) {
+          throw new Error('Use a password of no more than 72 UTF-8 bytes.');
+        }
         if (form.hasAttribute('data-invite')) body.token = inviteToken;
         if (form.hasAttribute('data-approval-api')) body.decision = event.submitter.value;
         await post(form.dataset.portalApi || form.dataset.approvalApi, body);

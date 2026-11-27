@@ -1016,3 +1016,21 @@ def test_timeline_bounds_shared_history_and_ignores_internal_audit_fields(portal
     ]
     combined = order_timeline(db, principal, order_id, data)
     assert len(combined["events"]) == 100 and combined["truncated"]
+
+
+def test_portal_document_requires_one_file(portal_world):
+    from werkzeug.datastructures import MultiDict
+
+    order_id = portal_world["orders"][0]["id"]
+    response = portal_world["clients"][0].post(
+        f"/api/core/contract-orders/{order_id}/portal-documents",
+        data=MultiDict(
+            [
+                ("title", "Shared report"),
+                ("document", (io.BytesIO(b"%PDF-1.4\nFirst"), "first.pdf", "application/pdf")),
+                ("document", (io.BytesIO(b"%PDF-1.4\nSecond"), "second.pdf", "application/pdf")),
+            ]
+        ),
+    )
+    assert response.status_code == 400
+    assert "one document" in response.json["error"]

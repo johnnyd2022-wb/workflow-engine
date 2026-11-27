@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from io import BytesIO
+from uuid import UUID
 
 from flask import Blueprint, g, jsonify, make_response, render_template, request, send_file, session
 from flask_limiter.util import get_remote_address
@@ -12,6 +13,7 @@ from app.core.security.tenant_scope import unscoped
 from app.features.contract_manufacturing.models.portal import PortalSession
 from app.features.contract_manufacturing.portal_security import COOKIE_NAME, requires_portal
 from app.features.contract_manufacturing.routes.orders import handled
+from app.features.contract_manufacturing.routes.request_payloads import read_contract_body
 from app.features.contract_manufacturing.services.orders import OrderError
 from app.features.contract_manufacturing.services.portal_approvals import respond_approval
 from app.features.contract_manufacturing.services.portal_auth import (
@@ -24,6 +26,7 @@ from app.features.contract_manufacturing.services.portal_auth import (
 from app.features.contract_manufacturing.services.portal_messages import message_dto, send_customer_message
 from app.features.contract_manufacturing.services.portal_reorders import reorder_dto, request_reorder
 from app.features.contract_manufacturing.services.portal_sharing import shared_document, shared_order, shared_orders
+from app.utils.request_validation import query_text
 
 bp = Blueprint(
     "contract_portal",
@@ -70,9 +73,12 @@ def signed_in_response(principal, token):
 
 @bp.get("/login")  # nosemgrep: route-missing-requires-auth -- public sign-in page
 def login_page():
-    return render_template(
-        "portal/login.html", customer_key=request.args.get("customer") or session.get("portal_customer_hint")
-    )
+    try:
+        raw = query_text("customer", max_length=38) or session.get("portal_customer_hint")
+        customer_key = str(UUID(raw)) if raw else None
+    except ValueError:
+        customer_key = None
+    return render_template("portal/login.html", customer_key=customer_key)
 
 
 @bp.get("/invite")  # nosemgrep: route-missing-requires-auth -- public invitation page
@@ -160,7 +166,7 @@ def get_order(order_id):
 @requires_portal
 @handled
 def send_message(order_id):
-    row = send_customer_message(db_session(), g.portal_principal, order_id, request.get_json(silent=True))
+    row = send_customer_message(db_session(), g.portal_principal, order_id, read_contract_body())
     db_session().commit()
     return jsonify({"message": message_dto(row)}), 201
 
@@ -170,7 +176,7 @@ def send_message(order_id):
 @requires_portal
 @handled
 def respond_to_approval(order_id, approval_id):
-    row = respond_approval(db_session(), g.portal_principal, order_id, approval_id, request.get_json(silent=True))
+    row = respond_approval(db_session(), g.portal_principal, order_id, approval_id, read_contract_body())
     db_session().commit()
     return jsonify({"approval_id": str(row.id), "decision": row.decision})
 
@@ -196,6 +202,6 @@ def download_document(order_id, document_id):
 @requires_portal
 @handled
 def reorder(order_id):
-    row, created = request_reorder(db_session(), g.portal_principal, order_id, request.get_json(silent=True))
+    row, created = request_reorder(db_session(), g.portal_principal, order_id, read_contract_body())
     db_session().commit()
     return jsonify({"reorder_request": reorder_dto(row)}), 201 if created else 200
