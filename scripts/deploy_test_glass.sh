@@ -26,6 +26,9 @@ else
     env | grep -E "$KEYS" > "$ENV_FILE" || true
 fi
 echo "ENVIRONMENT=test" >> "$ENV_FILE"
+# Google returns to the host that asked: this one, not test.biz-e.app (test.ini's redirect_uri). The
+# OAuth client in Google Cloud must list this callback as an authorised redirect URI.
+echo "GOOGLE_REDIRECT_URI=https://test-glass.biz-e.app/auth/google/callback" >> "$ENV_FILE"
 if ! grep -q '^FLASK_SECRET_KEY=.\{32,\}' "$ENV_FILE"; then
     echo "❌ No FLASK_SECRET_KEY from workflow-engine-test or the environment; nothing was changed."
     exit 1
