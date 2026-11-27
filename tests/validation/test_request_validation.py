@@ -117,3 +117,14 @@ def test_json_content_type_required(sample_client):
     response = sample_client.post("/", data="{}", content_type="text/plain")
     assert response.status_code == 400
     assert set(response.json["errors"]) == {"_body"}
+
+
+@pytest.mark.xfail(
+    strict=True, reason="VAL-FINAL-04: Exact decimal inputs require strings with the current JSON parser"
+)
+def test_large_unquoted_decimal_preserves_fraction():
+    class QuantityInput(JsonInput):
+        quantity: Decimal
+
+    parsed = QuantityInput.model_validate_json('{"quantity":12345678901234.5678}')
+    assert parsed.quantity == Decimal("12345678901234.5678")

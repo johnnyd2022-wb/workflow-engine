@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, make_response, redirect, render_template, session
+from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request, session
 from pydantic import StringConstraints
 
 from app.core.db import db_session

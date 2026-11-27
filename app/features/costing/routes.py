@@ -652,8 +652,8 @@ def margins_report():
 
     this_month = margins.month_start(nz_today())
     six_back = date(this_month.year - (this_month.month <= 5), (this_month.month - 6) % 12 + 1, 1)
-    start = month(query_text("from", max_length=7) or None, six_back)
-    end = month(query_text("to", max_length=7) or None, this_month)
+    start = month(query_text("from", max_length=7) if "from" in request.args else None, six_back)
+    end = month(query_text("to", max_length=7) if "to" in request.args else None, this_month)
     if start > end:
         raise service.CostingError("from is after to")
     if (end.year - start.year) * 12 + end.month - start.month + 1 > margins.MAX_MONTHS:
