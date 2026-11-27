@@ -77,6 +77,7 @@ _MESSAGES = {
     "less_than": "This value is above the allowed range.",
     "less_than_equal": "This value is above the allowed range.",
     "enum": "Choose an allowed value.",
+    "literal_error": "Choose an allowed value.",
     "extra_forbidden": "Unknown field.",
     "json_invalid": "Send a valid JSON object.",
     "model_type": "Send a JSON object.",
@@ -86,8 +87,12 @@ _MESSAGES = {
 class InvalidInputError(ValueError):
     """Field errors safe to display in JSON responses or HTML forms."""
 
-    def __init__(self, errors: dict[str, str]):
-        message = next(iter(errors.values())) if len(errors) == 1 else "Check the request fields."
+    def __init__(self, errors: dict[str, str], *, identify_field: bool = False):
+        message = "Check the request fields."
+        if len(errors) == 1:
+            field, message = next(iter(errors.items()))
+            if identify_field and field != "_body":
+                message = f"{field} needs attention. {message}"
         super().__init__(message)
         self.errors = errors
 
@@ -131,7 +136,7 @@ def _format_errors(schema: type[JsonInput], exc: ValidationError) -> InvalidInpu
         kind = error["type"]
         field = _field_path(schema, error["loc"])
         errors.setdefault(field, _MESSAGES.get(kind, "Enter a valid value."))
-    return InvalidInputError(errors)
+    return InvalidInputError(errors, identify_field=True)
 
 
 def _field_path(schema: type[JsonInput], location: tuple) -> str:
