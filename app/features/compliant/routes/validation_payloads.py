@@ -28,7 +28,10 @@ def _optional_decimal(value):
 
 
 OptionalDate = Annotated[date | None, BeforeValidator(_optional_date)]
-OptionalDecimal = Annotated[Decimal | None, BeforeValidator(_optional_decimal)]
+PackVolume = Annotated[Decimal, Field(gt=0, le=100000, decimal_places=2)]
+ABV = Annotated[Decimal, Field(ge=0, le=100, decimal_places=4)]
+Measurement = Annotated[Decimal, Field(max_digits=18, decimal_places=4)]
+DeclaredLAL = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 
 
 class ReportInput(JsonInput):
@@ -58,8 +61,8 @@ class ExciseRateInput(JsonInput):
 class ExciseProductInput(JsonInput):
     name: CleanName = Field(max_length=255)
     product_type: CleanText = Field(default="spirits", max_length=40)
-    pack_volume_ml: OptionalDecimal = Field(default=None, gt=0, le=100000, decimal_places=2)
-    abv_fallback: OptionalDecimal = Field(default=None, ge=0, le=100, decimal_places=4)
+    pack_volume_ml: Annotated[PackVolume | None, BeforeValidator(_optional_decimal)] = None
+    abv_fallback: Annotated[ABV | None, BeforeValidator(_optional_decimal)] = None
     tariff_item: CleanText | None = Field(default=None, max_length=100)
     excise_category: CleanText | None = Field(default=None, max_length=40)
 
@@ -166,9 +169,9 @@ class ComplianceRecordInput(ReportInput):
     status: Literal["complete", "failed", "open", "superseded"] = "complete"
     title: CleanName = Field(max_length=255)
     due_date: OptionalDate = None
-    measured_value: OptionalDecimal = Field(default=None, max_digits=18, decimal_places=4)
-    limit_value: OptionalDecimal = Field(default=None, max_digits=18, decimal_places=4)
-    declared_litres_of_alcohol: OptionalDecimal = Field(default=None, ge=0, max_digits=18, decimal_places=4)
+    measured_value: Annotated[Measurement | None, BeforeValidator(_optional_decimal)] = None
+    limit_value: Annotated[Measurement | None, BeforeValidator(_optional_decimal)] = None
+    declared_litres_of_alcohol: Annotated[DeclaredLAL | None, BeforeValidator(_optional_decimal)] = None
     evidence_reference: CleanText | None = Field(default=None, max_length=1024)
     source_refs: list[Annotated[CleanName, Field(max_length=36)]] = Field(default_factory=list, max_length=30)
     details: dict[CleanName, StoredJson] = Field(default_factory=dict)

@@ -123,3 +123,17 @@ def test_the_page_fits_without_sideways_scroll(world, browser, viewport):  # noq
         expect(page.locator("[data-style-pick]")).to_have_count(0)
     finally:
         page.close()
+
+
+def test_licence_type_requires_the_corresponding_dates(world, browser):  # noqa: F811
+    page = _open(browser, world["client"])
+    try:
+        page.get_by_role("button", name="Add a licence").click()
+        form = page.locator("[data-licence-form]")
+        expect(form.get_by_label("Expires")).to_have_attribute("required", "")
+        form.get_by_label("Type").select_option("special")
+        expect(form.get_by_label("Expires")).not_to_have_attribute("required", "")
+        expect(form.get_by_label("Event starts")).to_have_attribute("required", "")
+        assert form.get_by_label("Event starts").evaluate("(field) => field.validity.valueMissing")
+    finally:
+        page.close()

@@ -2,13 +2,22 @@
 
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
 
 from app.core.db import db_session
 from app.core.db.models.audit_log import AuditLog
 from app.core.security.permissions import requires_auth, requires_org_scope
 from app.features.compliant.modules.nz_alcohol.wine import service as wine
 from app.features.compliant.routes.page_routes import _nz_alcohol_template_context
+from app.features.compliant.routes.wine_payloads import (
+    WineConsignmentInput,
+    WineEligibilityInput,
+    WineLabelApprovalInput,
+    WinePlanInput,
+    WineProblemInput,
+    WineRecordInput,
+)
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 wine_bp = Blueprint("compliant_wine", __name__, template_folder="../frontend/templates")
 
@@ -36,14 +45,13 @@ def get_overview():
 @requires_org_scope
 def update_plan():
     try:
-        plan = wine.update_plan(db_session, _org(), request.get_json(silent=True))
+        plan = wine.update_plan(db_session, _org(), _body(WinePlanInput))
         db_session.add(
             AuditLog(org_id=_org(), user_id=g.current_user.id, action="wine_plan_updated", entity="compliance_profile")
         )
         db_session.commit()
     except ValueError as exc:
-        db_session.rollback()
-        return jsonify({"error": str(exc)}), 400
+        return _refused(exc)
     return jsonify({"plan": plan})
 
 
@@ -56,9 +64,8 @@ def _settings() -> dict:
     return dict(profile.settings or {})
 
 
-def _body() -> dict:
-    data = request.get_json(silent=True)
-    return data if isinstance(data, dict) else {}
+def _body(schema) -> dict:
+    return read_json(schema).model_dump(mode="json", exclude_unset=True)
 
 
 def _done(result, status=201):
@@ -68,6 +75,8 @@ def _done(result, status=201):
 
 def _refused(exc):
     db_session.rollback()
+    if isinstance(exc, InvalidInputError):
+        return exc.response()
     return jsonify({"error": str(exc)}), 400
 
 
@@ -78,7 +87,7 @@ def add_record():
     from app.features.compliant.modules.nz_alcohol.wine import register
 
     try:
-        row = register.add_control_record(db_session, _org(), g.current_user.id, _settings(), _body())
+        row = register.add_control_record(db_session, _org(), g.current_user.id, _settings(), _body(WineRecordInput))
     except ValueError as exc:
         return _refused(exc)
     return _done({"record": register.record_dict(row)})
@@ -91,7 +100,7 @@ def report_problem():
     from app.features.compliant.modules.nz_alcohol.wine import register
 
     try:
-        result = register.report_problem(db_session, _org(), g.current_user.id, _body())
+        result = register.report_problem(db_session, _org(), g.current_user.id, _body(WineProblemInput))
     except ValueError as exc:
         return _refused(exc)
     return _done(result)
@@ -108,7 +117,10 @@ def approve_label(lot_id: str):
     if pf is None:
         return jsonify({"error": "Bottled wine lot not found"}), 404
     try:
-        row = register.approve_label(db_session, _org(), g.current_user.id, pf["lot"], pf, _body())
+        data = _body(WineLabelApprovalInput)
+        if data.get("lot_id") not in (None, lot_id):
+            raise InvalidInputError({"lot_id": "Choose the same lot as the label approval."})
+        row = register.approve_label(db_session, _org(), g.current_user.id, pf["lot"], pf, data)
     except ValueError as exc:
         return _refused(exc)
     return _done({"record": register.record_dict(row)})
@@ -130,7 +142,13 @@ def lot_trace(lot_id: str):
     result = wine_trace.lot_trace(db_session, _org(), lot_uuid, roles.roles_for_org(db_session, _org(), _settings()))
     if result is None:
         return jsonify({"error": "Wine lot not found"}), 404
-    if request.args.get("format") == "csv":
+    try:
+        output = query_text("format", default="json", max_length=4)
+        if output not in {"", "json", "csv"}:
+            raise InvalidInputError({"format": "Choose json or csv."})
+    except InvalidInputError as exc:
+        return exc.response()
+    if output == "csv":
         safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in result["lot"]["name"])[:60] or "wine-lot"
         return Response(
             wine_trace.as_csv(result),
@@ -148,11 +166,11 @@ def add_eligibility():
 
     from app.features.compliant.modules.nz_alcohol.wine import register
 
-    data = _body()
-    lot = wine.lot_info(db_session, _org(), data.get("lot_id"))
-    if lot is None:
-        return jsonify({"error": "Choose a wine lot"}), 400
     try:
+        data = _body(WineEligibilityInput)
+        lot = wine.lot_info(db_session, _org(), data["lot_id"])
+        if lot is None:
+            return jsonify({"error": "Choose a wine lot"}), 400
         row = register.add_eligibility(db_session, _org(), g.current_user.id, _settings(), lot, data, date.today())
     except ValueError as exc:
         return _refused(exc)
@@ -169,9 +187,13 @@ def add_consignment():
 
     try:
         row = register.add_consignment(
-            db_session, _org(), g.current_user.id, _settings(), _body(), date.today(),
+            db_session, _org(), g.current_user.id, _settings(), _body(WineConsignmentInput), date.today(),
             lambda lot_id: wine.lot_info(db_session, _org(), lot_id),
         )  # fmt: skip
+    except InvalidInputError as exc:
+        if "lot_id" in exc.errors:
+            exc = InvalidInputError({**exc.errors, "lot_id": "Choose the wine lot."})
+        return _refused(exc)
     except ValueError as exc:
         return _refused(exc)
     return _done({"record": register.record_dict(row)})

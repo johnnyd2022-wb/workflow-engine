@@ -13,6 +13,14 @@ from app.features.compliant.licensing_pack_pdf import build_licensing_pack_pdf
 from app.features.compliant.models.licensing import LiquorLicence, ManagerCertificate
 from app.features.compliant.modules.nz_alcohol import licensing
 from app.features.compliant.routes.page_routes import _nz_alcohol_template_context
+from app.features.compliant.routes.register_payloads import (
+    LicensingLogInput,
+    LiquorLicenceInput,
+    ManagerCertificateInput,
+    RenewalGrantedInput,
+    RenewalLodgedInput,
+)
+from app.utils.request_validation import InvalidInputError, read_json
 
 licensing_bp = Blueprint("compliant_licensing", __name__, template_folder="../frontend/templates")
 
@@ -33,15 +41,17 @@ def _load(model, item_id: str):
     return db_session.query(model).filter(model.id == iid, model.org_id == _org_id()).one_or_none()
 
 
-def _body() -> dict:
-    data = request.get_json(silent=True)
-    return data if isinstance(data, dict) else {}
+def _body(schema):
+    return read_json(schema).model_dump(mode="json", exclude_unset=True)
 
 
 def _save(action: str, entity: str, entity_id, fn):
     try:
         fn()
         db_session.commit()
+    except InvalidInputError as exc:
+        db_session.rollback()
+        return exc.response()
     except ValueError as e:
         db_session.rollback()
         return jsonify({"error": str(e)}), 400
@@ -96,8 +106,9 @@ def create_licence():
     licence = LiquorLicence(org_id=_org_id(), created_by_user_id=g.current_user.id, endorsements=[])
 
     def run():
-        licensing.assign_licence_site(db_session, licence, _body())
-        licensing.apply_licence(licence, _body())
+        data = _body(LiquorLicenceInput)
+        licensing.assign_licence_site(db_session, licence, data)
+        licensing.apply_licence(licence, data)
         db_session.add(licence)
         db_session.flush()
 
@@ -113,18 +124,17 @@ def update_licence(licence_id: str):
         return jsonify({"error": "Licence not found"}), 404
 
     def run():
-        licensing.assign_licence_site(db_session, licence, _body())
-        licensing.apply_licence(licence, _body())
+        data = _body(LiquorLicenceInput)
+        licensing.assign_licence_site(db_session, licence, data)
+        licensing.apply_licence(licence, data)
 
     return _save("update_liquor_licence", "liquor_licence", licence.id, run)
 
 
-def _date_arg(field: str) -> date:
-    value = _body().get(field) or date.today().isoformat()
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        raise ValueError(f"{field} must be a date (YYYY-MM-DD)") from None
+def _lodged_on() -> date:
+    if not request.is_json and not request.get_data():
+        return date.today()
+    return read_json(RenewalLodgedInput).lodged_on or date.today()
 
 
 @licensing_bp.route("/api/compliant/licensing/licences/<licence_id>/renewal-lodged", methods=["POST"])
@@ -137,7 +147,7 @@ def lodge_licence_renewal(licence_id: str):
         "lodge_licence_renewal",
         "liquor_licence",
         licence.id,
-        lambda: licensing.lodge_renewal(licence, _date_arg("lodged_on"), date.today()),
+        lambda: licensing.lodge_renewal(licence, _lodged_on(), date.today()),
     )
 
 
@@ -149,9 +159,7 @@ def licence_renewed(licence_id: str):
         return jsonify({"error": "Licence not found"}), 404
 
     def run():
-        if not _body().get("expires_on"):
-            raise ValueError("Give the renewed licence's expiry date")
-        licensing.renewal_granted(licence, _date_arg("expires_on"))
+        licensing.renewal_granted(licence, read_json(RenewalGrantedInput).expires_on)
 
     return _save("licence_renewed", "liquor_licence", licence.id, run)
 
@@ -183,7 +191,7 @@ def create_manager():
     cert = ManagerCertificate(org_id=_org_id())
 
     def run():
-        licensing.apply_manager(db_session, _org_id(), cert, _body())
+        licensing.apply_manager(db_session, _org_id(), cert, _body(ManagerCertificateInput))
         db_session.add(cert)
         db_session.flush()
 
@@ -201,7 +209,7 @@ def update_manager(cert_id: str):
         "update_manager_certificate",
         "manager_certificate",
         cert.id,
-        lambda: licensing.apply_manager(db_session, _org_id(), cert, _body()),
+        lambda: licensing.apply_manager(db_session, _org_id(), cert, _body(ManagerCertificateInput)),
     )
 
 
@@ -215,7 +223,7 @@ def lodge_manager_renewal(cert_id: str):
         "lodge_manager_renewal",
         "manager_certificate",
         cert.id,
-        lambda: licensing.lodge_manager_renewal(cert, _date_arg("lodged_on"), date.today()),
+        lambda: licensing.lodge_manager_renewal(cert, _lodged_on(), date.today()),
     )
 
 
@@ -227,9 +235,7 @@ def manager_renewed(cert_id: str):
         return jsonify({"error": "Certificate not found"}), 404
 
     def run():
-        if not _body().get("expires_on"):
-            raise ValueError("Give the renewed certificate's expiry date")
-        licensing.manager_renewed(cert, _date_arg("expires_on"))
+        licensing.manager_renewed(cert, read_json(RenewalGrantedInput).expires_on)
 
     return _save("manager_renewed", "manager_certificate", cert.id, run)
 
@@ -250,7 +256,9 @@ def end_manager(cert_id: str):
 @requires_auth
 def add_log_entry():
     def run():
-        db_session.add(licensing.new_log_entry(_org_id(), _body(), g.current_user.id, datetime.now(UTC)))
+        db_session.add(
+            licensing.new_log_entry(_org_id(), _body(LicensingLogInput), g.current_user.id, datetime.now(UTC))
+        )
 
     resp = _save("add_licensing_log_entry", "licensing_log_entry", None, run)
     return (resp[0], 201) if resp[1] == 200 else resp

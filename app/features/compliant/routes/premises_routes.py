@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -10,6 +10,8 @@ from app.core.db.models.audit_log import AuditLog
 from app.core.security.permissions import requires_auth, requires_org_scope
 from app.features.compliant.modules.nz_alcohol import premises
 from app.features.compliant.routes.page_routes import _nz_alcohol_template_context
+from app.features.compliant.routes.register_payloads import CustomsCoverageInput, CustomsLicenceInput
+from app.utils.request_validation import InvalidInputError, read_json
 
 premises_bp = Blueprint("compliant_premises", __name__, template_folder="../frontend/templates")
 
@@ -32,9 +34,9 @@ def get_premises():
     return jsonify(premises.overview(db_session, _org()))
 
 
-def _create(kind, service):
+def _create(kind, service, schema):
     try:
-        row = service(db_session, _org(), request.get_json(silent=True))
+        row = service(db_session, _org(), read_json(schema).model_dump(mode="json"))
         db_session.add(
             AuditLog(
                 org_id=_org(),
@@ -45,6 +47,8 @@ def _create(kind, service):
             )
         )
         db_session.commit()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as exc:
         db_session.rollback()
         return jsonify({"error": str(exc)}), 400
@@ -58,11 +62,11 @@ def _create(kind, service):
 @requires_auth
 @requires_org_scope
 def add_licence():
-    return _create("licence", premises.add_licence)
+    return _create("licence", premises.add_licence, CustomsLicenceInput)
 
 
 @premises_bp.post("/api/compliant/nz-alcohol/cca-coverage")
 @requires_auth
 @requires_org_scope
 def add_coverage():
-    return _create("coverage", premises.add_coverage)
+    return _create("coverage", premises.add_coverage, CustomsCoverageInput)
