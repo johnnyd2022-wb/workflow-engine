@@ -192,7 +192,7 @@
       card.appendChild(node("span", "pt-card-shape", p.steps.join(" → ")));
       card.appendChild(node("span", "pt-card-meta", "ABV is required on “" + p.final_output + "”. Checks that matter:"));
       card.appendChild(list(p.key_checks.map(function (c) { return node("li", null, c.why); })));
-      var btn = node("button", "btn btn-primary", "Use this pack", { type: "button" });
+      var btn = node("button", "btn pt-use", "Use this pack", { type: "button" });
       btn.addEventListener("click", function () { usePack(p.id, btn); });
       card.appendChild(btn);
       packGridEl.appendChild(card);

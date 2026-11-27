@@ -31,7 +31,7 @@ GROUPS = {
     "g2": [
         "/core/processes",
         "/core/flows",
-        "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd",
+        "@workflow",
         "/core/flows/create/start",
         "/core/flows/create/template-catalog",
     ],
@@ -105,6 +105,7 @@ def _resolve(page, path):
         return path
     src, sel = {
         "@batch-start": ("/core", "a.gpo-rec"),
+        "@workflow": ("/core", "a.gpo-rec"),
         "@execution-step": ("/core/record", "a.rs-batch"),
         "@contract-order": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
         "@contract-sharing": ("/core/contracts", "a[href^='/core/contracts/']:not([href*='materials'])"),
@@ -114,6 +115,10 @@ def _resolve(page, path):
     link = page.locator(sel).first
     link.wait_for(timeout=15000)
     href = link.get_attribute("href")
+    if path == "@workflow":  # the batch's own workflow, read off its Record link (?id=<process>)
+        from urllib.parse import parse_qs, urlparse
+
+        return "/core/flows?id=" + parse_qs(urlparse(href).query)["id"][0]
     return href.split("?")[0] + "/portal-sharing" if path == "@contract-sharing" else href
 
 
@@ -281,7 +286,7 @@ def menus(page, out):
         ("inv-drawer", "/core/inventory/view", "#inv-view-tbody tr"),
         ("inv-more", "/core/inventory/view", "[data-inv-more-toggle]"),
         ("notif-kebab", "/core/notifications", "#page-content button[aria-haspopup], #page-content .nt-more"),
-        ("flows-manage", "/core/flows?id=e6fa9c72-d1fc-4152-a1a5-ebd571bae9bd", "#flows2-manage-btn, .flows2-manage-btn, [aria-controls*=manage]"),
+        ("flows-manage", "@workflow", "#flows2-manage-btn, .flows2-manage-btn, [aria-controls*=manage]"),
         ("supplier-add", "/core/suppliers", "#page-content .workspace-button--primary"),
         ("crm-new-task", "/crm/tasks", "#page-content .workspace-button--primary, #page-content .crm-btn--primary"),
     ]

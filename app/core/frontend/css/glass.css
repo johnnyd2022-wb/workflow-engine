@@ -315,3 +315,23 @@ html body #page-content.page-content{font-family:var(--g-font);font-size:14.5px;
 html body #page-content h1,html body #page-content h2,html body #page-content h3,html body #page-content h4,
 html body #page-content .page-title{font-family:var(--g-font)}
 html body #page-content :is(button,input,select,textarea,optgroup){font-family:inherit}
+
+/* POLISH (glass-a): form section headings (.spa-form-section-title, used by add-inventory, CSV, barcode,
+   dispose and core2 panels) rendered at weight 400 from spa-forms.css; one heading weight everywhere. */
+html body #page-content .spa-form-section-title{font-size:16px !important;font-weight:800 !important;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+/* POLISH (glass-a): a panel's last child keeps no bottom margin, so the bottom inset matches the top
+   (a trailing <p> margin made it ~40px); page titles at -.03em closed up word spaces ("Stocktransfers"). */
+html body #page-content :is(.workspace-card,.g-panel,.card) > :last-child{margin-bottom:0}
+html body #page-content .workspace-header h1,html body #page-content .page-title,html body #page-content h1.page-title{letter-spacing:-.02em;word-spacing:.04em}
+/* POLISH (glass-a): glance figures (<dl> of .workspace-tile with dt/dd on Planner, Workflows, Stocktake,
+   Contracts) rendered their numbers at weight 500; figures are 800 everywhere else. */
+html body #page-content .workspace-tile > dd{font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+html body #page-content .workspace-tile > dt{font-weight:700;color:var(--muted)}
+/* POLISH (glass-a): base-spa.css forces every field to Roboto 16px with !important and a selector
+   (nine :not()s) that outranked the glass field rule, so forms mixed two typefaces and a toolbar's select
+   read bigger than its search box and buttons. Manrope everywhere; body size on desktop (phones keep
+   16px so iOS does not zoom into the field). */
+html body #page-content.page-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]),select,textarea){font-family:var(--g-font) !important}
+@media (min-width:721px){
+  html body #page-content.page-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]),select,textarea){font-size:14.5px !important}
+}

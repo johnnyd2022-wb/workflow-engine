@@ -250,3 +250,104 @@ html[data-spa-theme="dark"] #page-content .gpo .core2-journey-secondary__link,ht
 #page-content .gpo-big small{display:none}
 #page-content .gpo-key{margin-top:18px;padding-top:0}
 @media (max-width:720px){#page-content .gpo-hbody{grid-template-columns:1fr;justify-items:center}#page-content .gpo-state,#page-content .gpo-checks{width:100%}}
+
+/* POLISH 2 (overview): panel headings at the shared size and weight; 18px between every panel (the
+   .gpo .g-panel margin reset was eating the section gaps); one height and centre line for the
+   greeting bar's buttons; health checks wrap instead of ellipsing; the side-by-side panels keep
+   their own heights instead of stretching In progress into an empty block. */
+#page-content .gpo .g-card-h h2{font-size:16px;font-weight:800;line-height:1.3;letter-spacing:-.01em;color:var(--ink);margin:0}
+#page-content .gpo .g-card-h{align-items:center;min-height:32px}
+#page-content .gpo .gpo-sec,#page-content .gpo .gpo-feedpanel,#page-content .gpo > .g-panel + .g-panel,#page-content .gpo .gpo-duo + .g-panel{margin-top:18px}
+#page-content .gpo .core2-journey-primary,
+#page-content .gpo .core2-journey-secondary__link,
+#page-content .gpo .core2-journey-addinv-trigger{height:44px;min-height:44px;padding-top:0;padding-bottom:0;flex-direction:row;flex:none}
+#page-content .gpo-check small{white-space:normal;overflow:visible;text-overflow:clip}
+#page-content .gpo-duo{align-items:start}
+html[data-spa-theme="dark"] body #page-content.page-content .gpo .core2-journey-secondary__link,
+html[data-spa-theme="dark"] body #page-content.page-content .gpo .core2-journey-addinv-trigger{background:var(--glass-strong);color:var(--ink);border-color:var(--rim-dim)}
+html[data-spa-theme="dark"] body #page-content.page-content .gpo .core2-journey-primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* POLISH 2 (batches): the toolbar's search, select and chips share one 44px height and body type;
+   the view toggle loses batches.css's underline in dark mode. */
+#page-content #core2-active-batches-panel .batches-filters{align-items:center}
+#page-content #core2-active-batches-panel :is(#core2-active-search,#core2-active-process-select){height:44px;min-height:44px;font-size:14.5px;padding-top:0;padding-bottom:0;line-height:1.2}
+#page-content #core2-active-batches-panel .batches-chip{height:44px;min-height:44px;padding:0 16px;display:inline-flex;align-items:center}
+#page-content #core2-active-batches-panel .batches-view-btn{border:0 !important;box-shadow:none;padding:0 14px}
+#page-content #core2-active-batches-panel .batches-view-btn.is-active{background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1)}
+
+/* POLISH 2 (record a step): the page sits on the shell edge like its breadcrumbs (record-step.css
+   pads it 24px again); section headings use the shared size; dark mode uses the glass accent, not
+   workspace-overviews.css's teal. */
+html body #page-content .rs-shell[data-record-step-root]{padding-left:0;padding-right:0;max-width:none}
+#page-content .rs-shell .rs-section h2{font-size:16px;font-weight:800;color:var(--ink)}
+html body #page-content .rs-shell #rs-search,html body #page-content .rs-shell #rs-wsearch{height:44px;min-height:44px;font-size:14.5px}
+#page-content .rs-shell .rs-batch__workflow,#page-content .rs-shell .rs-batch__stepname{font-weight:700}
+html[data-spa-theme="dark"] body #page-content .rs-shell{--ui-accent:var(--accent);--ui-accent-strong:var(--accent);--ui-accent-soft:var(--accent-soft);--ui-surface:var(--panel);--ui-surface-subtle:var(--glass-strong);--ui-border:var(--line);--ui-text:var(--ink);--ui-text-muted:var(--muted)}
+
+/* POLISH 2 (tasks): lane titles at the shared heading size; one 44px toolbar; the date strip fades at
+   its edges instead of slicing a day in half; the teal accents of tasks.css become the glass accent. */
+#page-content .core-tasks__lane-header{min-height:44px;padding:0 14px;align-items:center}
+#page-content .core-tasks__lane-header h3{font-size:15px;font-weight:800;line-height:1.3;margin:0;color:inherit}
+#page-content .core-tasks__lane-count{min-width:24px;height:22px;padding:0 7px;display:inline-grid;place-items:center;font-size:12px;font-weight:800;line-height:1;border-radius:999px}
+#page-content .core-tasks__lane-header--in-progress{background:var(--accent-soft);color:var(--accent)}
+#page-content .core-tasks__lane-header--todo{background:var(--glass-strong);color:var(--ink)}
+#page-content .core-tasks__lane-header--done{background:var(--ok-soft);color:var(--ok)}
+#page-content .core-tasks__lane-header--cancelled{background:var(--glass-strong);color:var(--muted)}
+#page-content .core-tasks__filters{align-items:center}
+#page-content .core-tasks__filters :is(input[type="search"],select){height:44px;min-height:44px;font-size:14.5px;padding-top:0;padding-bottom:0}
+#page-content .core-tasks__toggle{display:inline-flex;align-items:center;gap:8px;min-height:44px;font-weight:600}
+#page-content .core-tasks__cal-strip{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 28px,#000 calc(100% - 28px),transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 28px,#000 calc(100% - 28px),transparent 100%);padding-left:20px;padding-right:20px}
+#page-content .core-tasks__cal-day{border-radius:14px}
+#page-content .core-tasks__cal-day:hover{background:var(--glass-strong);border-color:var(--line)}
+#page-content .core-tasks__cal-day.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+#page-content .core-tasks__cal-day.active .dow{color:var(--accent-ink)}
+#page-content .core-tasks__cal-dots{background:var(--accent-soft);color:var(--accent);display:inline-grid;place-items:center;line-height:1}
+#page-content .core-tasks__selected-date{color:var(--accent)}
+#page-content .core-tasks__calendar-heading p{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--muted)}
+html[data-spa-theme="dark"] body #page-content.page-content .core-tasks .workspace-button--primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* POLISH 2 (record step / batch start): the body carries no page class after an htmx swap, so the
+   body.batch-start-spa rules above never matched. Key them on the page's own hero instead: one panel
+   on the shell edge with a 24px inset, the title at page-title size, the step form in Manrope, and the
+   floating Record step bar centred on the page (batch-start.css still offset it by the old sidebar). */
+#page-content.page-content:has(.batch-start-hero) > .max-content{margin-top:18px;padding:24px;border-radius:var(--g-r-panel);background:var(--panel);
+  border:1px solid var(--rim-dim);box-shadow:inset 0 1px 0 var(--rim),var(--shadow);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
+  padding-bottom:calc(96px + var(--g-tabbar))}
+#page-content .batch-start-hero{padding:0;margin:0 0 8px;background:transparent;border:0;box-shadow:none;text-align:left}
+#page-content .batch-start-hero .batch-start-hero__title{font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.15;margin:0 0 6px}
+#page-content .batch-start-hero .batch-start-hero__desc{color:var(--muted);font-weight:600;margin:0}
+#page-content :is(#execute-step-modal,#execute-step-modal *){font-family:var(--g-font)}
+#page-content #execute-step-modal :is(h2,h3,h4){font-weight:800;color:var(--ink)}
+#page-content #execute-step-modal .exec-modal__panel{background:transparent;border:0;box-shadow:none;padding:0}
+#page-content input[type="file"]{border-radius:var(--g-r-ctl);padding:8px;border:1px solid var(--field-line);background:var(--field);color:var(--ink);max-width:100%}
+#page-content .batch-start-record-bar,html[data-spa-theme="dark"] #page-content .batch-start-record-bar{left:0;right:0;background:transparent;border-top:0;box-shadow:none;pointer-events:none;
+  bottom:calc(10px + var(--g-tabbar) + env(safe-area-inset-bottom,0px))}
+#page-content .batch-start-record-bar__inner{pointer-events:auto;display:flex;justify-content:center;padding:8px 16px}
+#page-content .batch-start-record-bar__btn{min-width:240px;box-shadow:0 14px 30px -10px var(--accent)}
+@media (max-width:720px){
+  #page-content.page-content:has(.batch-start-hero) > .max-content{padding:18px 16px calc(96px + var(--g-tabbar));border-radius:22px}
+  #page-content .batch-start-record-bar__btn{width:100%}
+}
+/* core2.css gives the secondary group 0.3rem top padding, which sat its buttons 5px below the primary. */
+#page-content .gpo .core2-journey-secondary,#page-content .gpo .core2-journey-primary-bundle{padding:0;margin:0}
+/* Under way and Recent activity: the same inset on all four sides. */
+#page-content .gpo .gpo-sec{padding:22px 24px}
+@media (max-width:720px){#page-content .gpo .gpo-sec{padding:18px 16px}}
+/* batches.css sizes the workflow select with a higher-specificity rule; pin the toolbar to one 44px row. */
+html body #page-content #core2-active-batches-panel select#core2-active-process-select,html body #page-content #core2-active-batches-panel input#core2-active-search{height:44px !important;min-height:44px !important;font-size:14.5px !important;padding-top:0 !important;padding-bottom:0 !important}
+/* In progress used a 24/28 inset, Production health 22/24: the two headings sat 2px apart. */
+#page-content .gpo .gpo-today{padding:22px 24px}
+@media (max-width:720px){#page-content .gpo .gpo-today{padding:18px 16px}}
+html body #page-content .rs-shell .rs-batch{padding-left:24px;padding-right:22px}
+@media (max-width:720px){html body #page-content .rs-shell .rs-batch{padding-left:16px;padding-right:16px}}
+/* Phone greeting: the two secondary buttons fill their halves, edge to edge with Record above them. */
+@media (max-width:720px){
+  html body #page-content .gpo .core2-journey-secondary__invwrap{width:100%;min-width:0;margin:0;padding:0}
+  html body #page-content .gpo .core2-journey-secondary__invwrap > .core2-journey-addinv-trigger,
+  html body #page-content .gpo .core2-journey-secondary > .core2-journey-secondary__link{width:100%;min-width:0;margin:0;padding:0 10px}
+}
+/* The step form is the legacy modal in page mode; its page-mode reset keys on a body class an htmx swap
+   drops, so the overlay's blur painted a second, edgeless box inside the panel. The evidence drop zone
+   takes glass tokens instead of its teal-dark fill. */
+html body #page-content .max-content > #execute-step-modal{position:static;inset:auto;display:block;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;overflow:visible;z-index:auto}
+html body #page-content #execute-step-modal .execute-evidence-upload{background:var(--glass-strong);border-color:var(--field-line);border-radius:18px}

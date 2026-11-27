@@ -57,3 +57,47 @@ html body.flows2-page #page-content .flows2-process-head__desc{margin-left:0;mar
 @media (max-width:720px){
   html body #page-content .flows2-mode .flow-mode-segmented,html body #page-content .flows2-inventory-submode .flow-mode-segmented{width:auto;max-width:100%;flex-wrap:wrap;overflow:visible;border-radius:22px}
 }
+
+/* POLISH 2 (workflows list): state badges are centred pills; the glance and running panels keep their
+   own heights rather than stretching In production now into an empty block; the search reads at body size. */
+html body #page-content .processes-list-page .workflows-state{min-height:28px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:700;line-height:1;justify-content:center;border:0}
+html body #page-content .processes-list-page .workflows-state[data-state="running"]{background:var(--accent-soft);color:var(--accent)}
+html body #page-content .processes-list-page .workflows-layout{align-items:start}
+html body #page-content .processes-list-page .processes-list-search input,html body #page-content .processes-list-page input[type="search"]{height:44px;min-height:44px;font-size:14.5px}
+html body #page-content .processes-list-page .processes-list-item__actions{align-items:center}
+
+/* POLISH 2 (workflow editor): the title and section headings in Manrope at the shared sizes; the mode
+   switch fills the row on a phone instead of dropping its last option onto a second line; the batch
+   count is a muted pill, not teal text. */
+html body.flows2-page #page-content .flows2-process-head h1,html body #page-content .flows2-process-head h1{font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.15}
+html body #page-content :is(.flows2-mode,.flows2-inventory-submode) .flow-mode-segment{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+html body #page-content .flows2-mode .flow-mode-segment :is(.badge,.count,[class*="count"],[class*="badge"]){min-width:22px;height:22px;padding:0 7px;border-radius:999px;display:inline-grid;place-items:center;
+  background:var(--glass-strong);color:var(--muted);font-size:12px;font-weight:800;line-height:1;border:0}
+@media (max-width:720px){
+  html body #page-content .flows2-mode .flow-mode-segmented{display:flex;width:100%;flex-wrap:nowrap;border-radius:var(--g-r-pill)}
+  html body #page-content .flows2-mode .flow-mode-segment{flex:1 1 0;min-width:0;padding:0 6px;font-size:13px}
+}
+html body #page-content .flows2-panel .card-title{font-family:var(--g-font);font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+html body #page-content .flows2-panel .card-title + .page-subtitle{font-size:13px;font-weight:500;color:var(--muted)}
+html body #page-content .flows2-stat__label{font-size:12.5px;letter-spacing:0;text-transform:none;font-weight:700;color:var(--muted)}
+
+/* POLISH 2 (template catalog): pack cards are panels with the standard inset and their buttons pinned
+   to one bottom line; one primary action per view, so each card's "Use this pack" is a glass button;
+   section headings at the shared weight; the "Start from scratch" link centres on the title row. */
+html body #page-content .pt-catalog-shell .pt-card{padding:22px 24px;border-radius:22px;display:flex;flex-direction:column;gap:8px}
+html body #page-content .pt-catalog-shell .pt-card > .btn{margin-top:auto;align-self:flex-start}
+html body #page-content .pt-catalog-shell .pt-card ul{margin:0 0 12px;padding-left:18px}
+html body #page-content .pt-catalog-shell .pt-card-name{font-size:15px;font-weight:800;color:var(--ink)}
+html body #page-content .pt-catalog-shell .pt-card-family{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
+html body #page-content .pt-catalog-shell .pt-card-meta{font-size:12.5px;color:var(--muted)}
+html body #page-content .pt-catalog-shell .pt-card-shape{font-size:13.5px;color:var(--text)}
+html body #page-content .pt-catalog-shell h2{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+html body #page-content .pt-catalog-header{align-items:flex-start}
+html body #page-content .pt-back-link{font-weight:700;color:var(--accent);text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;min-height:30px}
+@media (max-width:720px){html body #page-content .pt-catalog-shell .pt-card{padding:18px 16px}}
+html body #page-content .flows2-process-head__desc{font-size:14.5px;color:var(--muted);font-weight:500}
+@media (max-width:720px){
+  /* "Process Structure" filled its third edge to edge at 13px. */
+  html body #page-content .flows2-mode .flow-mode-segment{font-size:12.5px;padding:0 8px;gap:6px}
+  html body #page-content .flows2-mode .flow-mode-segment[data-flows2-target="structure"]{flex-grow:1.35}
+}
