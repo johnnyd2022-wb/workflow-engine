@@ -410,3 +410,11 @@ def test_a_signed_in_user_without_the_2fa_enrolment_they_owe_does_not_reach_cons
         assert "enroll2fa=1" in resp.headers["Location"]
     finally:
         flask_app.config["REQUIRE_ADMIN_2FA"] = False
+
+
+def test_authorize_rejects_repeated_client_id(world):
+    _verifier, challenge = pkce_pair()
+    url = authorize_url(authorize_params(world.client_row.client_id, challenge))
+    response = world.anon().get(url + "&client_id=another-client")
+    assert response.status_code == 400
+    assert "Location" not in response.headers

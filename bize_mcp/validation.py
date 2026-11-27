@@ -7,7 +7,9 @@ messages name the field and never echo the value (it could be a token someone pa
 
 from __future__ import annotations
 
+from math import isfinite
 from typing import Any
+from unicodedata import category
 
 import jsonschema
 
@@ -55,10 +57,42 @@ def _message(error: jsonschema.ValidationError) -> str:
     return f"{field} is not valid"
 
 
+_MAX_VALUES = 1000
+_MAX_TEXT = 4096
+
+
+def _check_values(arguments: Any) -> None:
+    """Apply transport limits before schema validation and before building upstream requests."""
+    pending = [(arguments, 0)]
+    checked = 0
+    while pending:
+        value, depth = pending.pop()
+        checked += 1
+        if checked > _MAX_VALUES or depth > 20:
+            raise ToolFailureError("Tool arguments are too deeply nested or too large.", kind="invalid_input")
+        if isinstance(value, dict):
+            if len(value) > _MAX_VALUES:
+                raise ToolFailureError("Tool arguments contain too many fields.", kind="invalid_input")
+            pending.extend((item, depth + 1) for pair in value.items() for item in pair)
+        elif isinstance(value, list):
+            if len(value) > _MAX_VALUES:
+                raise ToolFailureError("Tool arguments contain too many items.", kind="invalid_input")
+            pending.extend((item, depth + 1) for item in value)
+        elif isinstance(value, str) and (
+            len(value) > _MAX_TEXT or "\x00" in value or any(category(char) == "Cs" for char in value)
+        ):
+            raise ToolFailureError("Tool arguments contain invalid or oversized text.", kind="invalid_input")
+        elif isinstance(value, float) and not isfinite(value):
+            raise ToolFailureError("Tool arguments must contain finite numbers.", kind="invalid_input")
+        elif isinstance(value, int) and value.bit_length() > 1024:
+            raise ToolFailureError("Tool arguments contain a number outside the supported range.", kind="invalid_input")
+
+
 def check_arguments(tool_name: str, tool_schema: dict[str, Any], arguments: Any) -> dict[str, Any]:
     """The arguments if they fit the schema, else a ``ToolFailureError`` saying which field is wrong."""
     if arguments is None:
         arguments = {}
+    _check_values(arguments)
     validator = jsonschema.Draft202012Validator(tool_schema, format_checker=jsonschema.FormatChecker())
     try:
         errors = sorted(validator.iter_errors(arguments), key=lambda e: [str(p) for p in e.absolute_path])

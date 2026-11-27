@@ -99,7 +99,7 @@ def validate_role_keys(db, org_id: UUID, keys) -> list[str]:
         else:
             match = _CUSTOM_RE.fullmatch(key)
             if match is None or not repo.custom_role_exists(org_id, UUID(match.group(1))):
-                raise SettingsError(f"Unknown role: {key[:60]}")
+                raise SettingsError("Choose a role belonging to this organisation")
         if key not in clean:
             clean.append(key)
     return clean
