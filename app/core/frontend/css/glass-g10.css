@@ -46,3 +46,11 @@ html body [role="dialog"][aria-modal="true"]:not(dialog):not(#g-act-tray) textar
 
 /* Selected chips sit on the accent: use its own ink so dark mode (light-blue accent) stays readable. */
 html body #page-content [class*="chip"].is-active,html body #page-content [class*="chip"][aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* POLISH (glass-b): the help reference is in the page's typeface (base-spa.css set it in a monospace),
+   and the recall drill checkbox sits on its label's centre line. */
+html body .bize-help__facts code{font-family:var(--g-font);font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+html body #page-content .rc-drill,html body .rc-drill{align-items:center;gap:10px}
+html body .rc-drill input[type="checkbox"]{width:18px;height:18px;margin:0;flex:none;accent-color:var(--accent)}
+/* POLISH (glass-b): on a phone the toast spans the column between its 12px insets (it kept its desktop width). */
+@media (max-width:720px){html body .spa-notification-toast{width:auto !important}html body .spa-notification-toast .card{width:100% !important;box-sizing:border-box}}

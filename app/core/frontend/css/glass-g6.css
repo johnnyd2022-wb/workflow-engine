@@ -41,3 +41,50 @@ html body #page-content [data-widget-type="task_board"] .sales-task-due,
 html body #page-content [data-widget-type="task_board"] article span{font-size:12.5px}
 html body #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"]){align-self:start}
 html body #page-content .crm-task-card-due,html body #page-content .crm-task-card-due span{font-size:12.5px;font-weight:600;color:var(--text)}
+
+/* ---- POLISH pass (glass-b) ---- */
+/* Sales overview: sales-overview.css stretches the locked trend to the task board's height (more specific
+   than the rule above), which left the trend half empty; let it be as tall as its chart. */
+@container sales-board (min-width: 1100px){
+  html body #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"][data-widget-locked="true"]){align-self:start}
+}
+/* The trend's and the board's titles share a row height, so the two headings line up. */
+html body #page-content .sales-overview .crm-widget-card__header{min-height:40px}
+
+/* Sales tasks: the Board/List/Week switch is a pill group like the section tabs. */
+html body #page-content .tasks-view-switch{border-radius:var(--g-r-pill);border:1px solid var(--rim-dim);background:var(--glass);padding:4px 4px 4px 10px;box-shadow:inset 0 1px 0 var(--rim)}
+html body #page-content .tasks-view-switch button{border-radius:var(--g-r-pill);min-height:34px;padding:0 16px;font-weight:700}
+html body #page-content .tasks-view-switch button[aria-pressed="true"]{background:var(--solid);color:var(--ink);box-shadow:0 1px 2px rgba(13,20,36,.1)}
+
+/* Batch matching: its cards had 14–16px insets; panels use 24px like every other page. */
+html body #page-content .crm-root .crm-card .crm-analytics-header{padding-left:24px;padding-right:24px}
+
+/* Excise estimate: the chosen month uses the glass accent, not the old teal. */
+html body #page-content .ex-month{border-radius:16px}
+html body #page-content .ex-month--on{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+html body #page-content .ex-month:hover{border-color:var(--accent)}
+
+/* Sales settings: sections are panels with the shared inset and heading weight. */
+html body #page-content .ss-section{padding:24px;border-radius:24px;border:1px solid var(--rim-dim);background:var(--panel)}
+html body #page-content .ss-intro h2{font-size:17px;font-weight:700}
+
+@media (max-width:720px){
+  /* Customers: the page kept its own 16px side padding inside the shell's, so everything sat 32px in. */
+  html body #page-content #customers-page.customers-page{padding-left:0 !important;padding-right:0 !important}
+  html body #page-content #customers-page > .workspace-header{flex-direction:column;align-items:stretch;gap:12px}
+  /* Analytics total sits under the heading, left-aligned with it. */
+  html body #page-content .sales-analytics__total{text-align:left}
+  /* Sales tasks: lane chips wrap instead of running off the right edge. */
+  html body #page-content .tasks-lane-picker{flex-wrap:wrap;overflow:visible}
+  html body #page-content .tasks-text-action{padding-left:0}
+  html body #page-content .ss-section{padding:18px 16px;border-radius:22px}
+}
+/* Excise "Sales estimate" badge: warn tokens, so it stays readable in dark mode (was mustard on brown). */
+html body #page-content .ex-badge{background:var(--warn-soft);color:var(--warn);font-size:11.5px;letter-spacing:.02em;text-transform:none;padding:3px 10px;line-height:1.3}
+/* New task sheet: the shared 24px inset, a heading at panel size and a round close button like the other dialogs. */
+html body .crm-task-sheet__header{padding:18px 24px}
+html body .crm-task-sheet__body{padding:18px 24px 22px}
+html body .crm-task-sheet__footer{padding:14px 24px}
+html body .crm-task-sheet__title{font-size:17px;font-weight:800;color:var(--ink)}
+html body .crm-task-sheet__header button.crm-btn{min-width:40px !important;width:40px !important;height:40px !important;padding:0 !important;border-radius:50% !important;border:0 !important;background:var(--glass-strong) !important;color:var(--ink) !important;display:grid !important;place-items:center;font-size:20px !important}
+@media (max-width:720px){html body .crm-task-sheet__header,html body .crm-task-sheet__body,html body .crm-task-sheet__footer{padding-left:18px;padding-right:18px}}

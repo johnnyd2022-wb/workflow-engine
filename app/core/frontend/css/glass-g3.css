@@ -48,6 +48,20 @@ html[data-spa-theme="dark"] body #page-content :is(.inv-view-page,.inv-add-page,
 
 /* ===== GLASS-G11: menus, popovers and drawers (no group file of their own, so they live here).
    A menu sits over content, so it is a solid surface, not the near-opaque panel. ===== */
+/* POLISH (G11, live inventory): the figures use status tokens, not the old teal and pink, and each tile has
+   the same 14px inset as the other stat cards. */
+html body #page-content .core2-live-inv__snap-value--teal{color:var(--accent)}
+html body #page-content .core2-live-inv__snap-value--amber{color:var(--warn)}
+html body #page-content .core2-live-inv__snap-value--pink{color:var(--bad)}
+html body #page-content .core2-live-inv__snap-cell{padding:14px 16px}
+/* POLISH (G11, customer detail): its cards are panels with the shared 24px inset and radius. */
+html body #page-content .customer-page .crm-card{padding:24px;border-radius:var(--g-r-panel)}
+@media (max-width:720px){html body #page-content .customer-page .crm-card{padding:18px 16px;border-radius:22px}}
+/* POLISH (G11, case detail): the badges sit 14px under the breadcrumb, not touching it. */
+html body #page-content .oc-detail-header__badges{margin-top:14px}
+/* On a phone the case's action bar spans the column with two even buttons per row (it shrank to a narrow stack). */
+@media (max-width:720px){html body #page-content .oc-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;box-sizing:border-box}
+  html body #page-content .oc-actions button{width:100%}}
 html body #page-content [role="menu"],html body #page-content [role="listbox"],
 html body #page-content .flows2-manage-menu,html body #page-content .inv-view-page .inv-drawer,
 html body #page-content .searchable-dropdown-list,html body #page-content .autocomplete-list,html body #page-content .dropdown-menu{
@@ -73,7 +87,7 @@ html body .bee-topbar-wrap > .bee-menu{position:fixed;top:84px;right:max(16px,ca
 html body #page-content [role="menu"] [role="menuitem"]:is(.danger,[data-danger],.flows2-manage-item--danger,#flows2-manage-delete){color:var(--bad)}
 /* Account menu contents: left-aligned, readable email, its actions as glass pills. */
 html body .bee-menu .bee-menu__inner,html body .bee-menu .bee-menu__content{text-align:left;align-items:stretch}
-html body .bee-menu .bee-menu__title{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:6px}
+html body .bee-menu .bee-menu__title{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:6px;text-align:left;align-self:stretch}
 html body .bee-menu .bee-menu__name{font-size:16px;font-weight:800}
 html body .bee-menu .bee-menu__email{font-family:var(--g-font);font-size:13.5px;word-break:break-all}
 html body .bee-menu :is(.bee-menu__settings,.bee-menu__help){display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:44px;margin:8px 0 0;padding:0 16px;

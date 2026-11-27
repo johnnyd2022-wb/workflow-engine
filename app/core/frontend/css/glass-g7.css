@@ -46,3 +46,19 @@ html[data-spa-theme="dark"] body #page-content :is(.nt-page,.st-page,.ig-page,.p
 html body #page-content .pp-card{background:transparent;border:0;box-shadow:none;padding:0}
 /* Settings sub-navigation: the current item uses the glass accent, not teal. */
 html[data-spa-theme="dark"] body #page-content .settings-nav a[aria-current]{background:var(--accent-soft);color:var(--accent)}
+
+/* ---- POLISH pass (glass-b) ---- */
+/* People: the heading wrapper kept the panel's backdrop blur, which drew a frosted strip behind "People". */
+html body #page-content .pp-card{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* Sites and Integrations: cards have the shared 24px inset and bold panel headings. */
+html body #page-content .st-card{padding:24px}
+html body #page-content :is(.st-card h2,.ig-item h2,.ig-item h3){font-size:17px;font-weight:700}
+@media (max-width:720px){html body #page-content .st-card{padding:18px 16px}}
+/* Trace and recall: every card's type row is one height, so names line up across a row whether or not
+   the card has a warning badge. */
+html body #page-content .sm-page .sm-browse-card__header{min-height:22px;display:flex;align-items:center}
+html body #page-content .sm-page .sm-browse-card{padding:16px 18px;border-radius:18px}
+/* Go live: step titles use the shared panel heading weight; the number sits on the title's centre line. */
+html body #page-content .gl-step-title{align-items:center;font-size:18px;font-weight:700}
+/* Notifications on a phone: the area chips wrap instead of running off the right edge. */
+@media (max-width:720px){html body #page-content .nt-chips--areas{flex-wrap:wrap;overflow:visible}}

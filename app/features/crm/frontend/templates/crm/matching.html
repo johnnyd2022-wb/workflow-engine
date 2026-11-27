@@ -6,13 +6,13 @@
   <link rel="stylesheet" href="/crm/static/css/crm.css">
   <style>
     .mt-list { display: flex; flex-direction: column; gap: 10px; }
-    .mt-line { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border-default, #e5e7eb); }
+    .mt-line { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 12px; align-items: center; padding: 12px 24px; border-top: 1px solid var(--border-default, #e5e7eb); }
     .mt-line:first-child { border-top: 0; }
     .mt-title { font-weight: 600; color: var(--text-primary, #111827); }
     .mt-meta { font-size: .8rem; color: var(--text-secondary, #6b7280); }
     .mt-flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; background: #fdf3dc; color: #7a5410; margin-left: 6px; }
     .mt-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-    .mt-picker { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .mt-picker { padding: 24px; display: flex; flex-direction: column; gap: 10px; }
     .mt-pick { display: grid; grid-template-columns: 1fr 1fr 7rem; gap: 10px; align-items: center; font-size: .86rem; }
     .mt-pick input { padding: 6px 8px; border: 1px solid var(--border-default, #d1d5db); border-radius: 8px; font: inherit; width: 100%; }
     .mt-total { font-size: .86rem; font-variant-numeric: tabular-nums; }
@@ -33,9 +33,9 @@
 
   <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span>
     <button aria-label="Close" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button></div>
-  <div x-show="notice" class="crm-card" x-cloak style="padding:10px 14px; margin-bottom:12px; background:#e3f4ec; color:#17603f; border-color:#9ad3b6;"><span x-text="notice"></span></div>
+  <div x-show="notice" class="crm-card" x-cloak style="padding:14px 24px; margin-bottom:18px; background:var(--ok-soft); color:var(--ok);"><span x-text="notice"></span></div>
 
-  <div class="crm-card" style="padding:14px 16px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
+  <div class="crm-card" style="padding:18px 24px; margin-bottom:18px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
     <div>
       <div class="mt-title">Matching: <span x-text="modeLabel()"></span></div>
       <div class="mt-meta" x-show="mode === 'fifo'">Every sale is matched to the oldest batch in stock. Nothing to review; pre-sales are marked on the sale.</div>
@@ -72,9 +72,9 @@
     </div>
   </template>
 
-  <div class="crm-card" style="margin-bottom:12px;" x-show="mode === 'manual'" x-cloak>
+  <div class="crm-card" style="margin-bottom:18px;" x-show="mode === 'manual'" x-cloak>
     <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="('Waiting for a batch (' + (toAssign.length) + ')')"></span></div>
-    <div x-show="!toAssign.length" class="mt-meta" style="padding:14px 16px;">Nothing waiting.</div>
+    <div x-show="!toAssign.length" class="mt-meta" style="padding:14px 24px;">Nothing waiting.</div>
     <template x-for="line in toAssign" :key="line.invoice_id + line.line_key">
       <div class="mt-line">
         <div><div class="mt-title" x-text="line.description || line.product_name"></div>
@@ -87,7 +87,7 @@
 
   <div class="crm-card" x-show="mode !== 'manual' || pending.length" x-cloak>
     <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="('To review (' + (pending.length) + ')')"></span></div>
-    <div x-show="!loading && !pending.length" class="mt-meta" style="padding:14px 16px;">Nothing to review.</div>
+    <div x-show="!loading && !pending.length" class="mt-meta" style="padding:14px 24px;">Nothing to review.</div>
     <template x-for="line in pending" :key="line.invoice_id + line.line_key">
       <div class="mt-line">
         <div><div class="mt-title"><span x-text="line.product_name"></span><span class="mt-flag" x-show="line.presold">Pre-sold</span></div>
@@ -102,10 +102,10 @@
     </template>
   </div>
 
-  <div class="crm-card" style="margin-top:12px;">
+  <div class="crm-card" style="margin-top:18px;">
     <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="('Unmatched sales (' + (unmatched.length) + ')')"></span></div>
-    <p class="mt-meta" style="padding:0 16px;" x-show="unmatched.length">Each invoice line shows why it has no batch match and what to do next.</p>
-    <div x-show="!loading && !unmatched.length" class="mt-meta" style="padding:14px 16px;">No unmatched sales.</div>
+    <p class="mt-meta" style="padding:0 24px;" x-show="unmatched.length">Each invoice line shows why it has no batch match and what to do next.</p>
+    <div x-show="!loading && !unmatched.length" class="mt-meta" style="padding:14px 24px;">No unmatched sales.</div>
     <template x-for="line in unmatched" :key="line.invoice_id + line.line_key">
       <div class="mt-line">
         <div><div class="mt-title" x-text="line.description || line.item_code || 'Unlabelled sale'"></div>
