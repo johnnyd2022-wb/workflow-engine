@@ -940,7 +940,8 @@ def register_routes(bp):
                 extra_data["notes"] = notes
                 # Invariant: untracked items must always have remaining_balance_to_reconcile for reduce_only logic.
                 extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
-                extra_data["remaining_balance_to_reconcile"] = format(quantity, "f")
+                balance = format(quantity.normalize(), "f")
+                extra_data["remaining_balance_to_reconcile"] = balance if "." in balance else f"{balance}.0"
 
             # Live cost (8.1e-1): an optional "total paid" prices the new lot in the same
             # transaction, for people who manage costs in an org with costing switched on.
