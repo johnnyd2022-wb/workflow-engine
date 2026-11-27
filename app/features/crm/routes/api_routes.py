@@ -45,7 +45,7 @@ from app.features.crm.services.crm_service import CRMService
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError, _extract_exception_error_message
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger
-from app.utils.request_validation import InvalidInputError, query_int, query_text, read_json
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 api_bp = Blueprint("crm_api", __name__)
 logger = get_logger(__name__)
@@ -65,9 +65,20 @@ def _uuid_or_none(raw: str | None) -> UUID | None:
         return None
 
 
+def _integer_query(name: str, default: int, *, error_message: str | None = None) -> int:
+    raw = query_text(name, default=str(default), max_length=24)
+    try:
+        return int(raw)
+    except ValueError:
+        raise InvalidInputError({name: error_message or f"{name} must be an integer"}) from None
+
+
 def _page_args(default_page_size: int) -> tuple[int, int]:
-    page = query_int("page", default=1, minimum=1, maximum=20_000_000)
-    page_size = query_int("page_size", default=default_page_size, minimum=1, maximum=100)
+    error_message = "page and page_size must be integers"
+    page = max(1, _integer_query("page", 1, error_message=error_message))
+    page_size = min(100, max(1, _integer_query("page_size", default_page_size, error_message=error_message)))
+    if page > 20_000_000:
+        raise InvalidInputError({"page": "page must be at most 20000000."})
     return page, page_size
 
 
@@ -912,7 +923,7 @@ def excise_month():
 @requires_auth
 def monthly_sales():
     org_id = UUID(g.org_id)
-    months = query_int("months", default=12, minimum=1, maximum=24)
+    months = min(24, max(1, _integer_query("months", 12)))
     data = _crm_service().monthly_sales(org_id, months=months)
     return jsonify({"monthly_sales": data}), 200
 
@@ -921,7 +932,7 @@ def monthly_sales():
 @requires_auth
 def customer_breakdown():
     org_id = UUID(g.org_id)
-    top_n = query_int("top_n", default=20, minimum=1, maximum=50)
+    top_n = min(50, max(1, _integer_query("top_n", 20)))
     data = _crm_service().customer_breakdown(org_id, top_n=top_n)
     return jsonify({"customer_breakdown": data, "customers": data}), 200
 
@@ -938,7 +949,7 @@ def rankings():
     if direction not in {"top", "bottom"}:
         return jsonify({"error": "direction must be top or bottom"}), 400
 
-    limit = query_int("limit", default=10, minimum=1, maximum=50)
+    limit = min(50, max(1, _integer_query("limit", 10)))
     months = request.args.get("months")
     period_n = request.args.get("period_n")
     period_unit = query_text("period_unit", default="months", max_length=8).lower()
@@ -953,7 +964,7 @@ def rankings():
     end_date = None
 
     if period_n:
-        n = query_int("period_n", default=12, minimum=1, maximum=3650)
+        n = min(3650, max(1, _integer_query("period_n", 12)))
         today = date.today()
         # Inclusive "last n <unit>" window ending today.
         end_date = today + timedelta(days=1)
@@ -987,12 +998,11 @@ def rankings():
             try:
                 end_date = date.fromisoformat(end_date_raw) + timedelta(days=1)
             except (ValueError, OverflowError):
-                return InvalidInputError({"end_date": "Enter a supported end date in YYYY-MM-DD format."}).response()
+                raise InvalidInputError(
+                    {"end_date": "end_date must be a supported date in YYYY-MM-DD format"}
+                ) from None
     elif months:
-        try:
-            m = min(36, max(1, int(months)))
-        except ValueError:
-            return jsonify({"error": "months must be an integer"}), 400
+        m = min(36, max(1, _integer_query("months", 12)))
         today = date.today()
         current_month_start = today.replace(day=1)
         y = current_month_start.year
@@ -1259,14 +1269,14 @@ def create_mappings_bulk():
 @requires_auth
 def update_mapping(mapping_id: str):
     org_id = UUID(g.org_id)
+    mapping_uuid = _uuid_or_none(mapping_id)
+    if mapping_uuid is None:
+        return jsonify({"error": "Invalid mapping ID"}), 400
     data = read_json(UpdateMappingInput).model_dump(mode="json", exclude_unset=True)
     if "biz_e_product_name" in data and data["biz_e_product_name"] is None:
         raise InvalidInputError({"biz_e_product_name": "This field cannot be null."})
     if "xero_description_pattern" in data and data["xero_description_pattern"] is None:
         raise InvalidInputError({"xero_description_pattern": "This field cannot be null."})
-    mapping_uuid = _uuid_or_none(mapping_id)
-    if mapping_uuid is None:
-        return jsonify({"error": "Invalid mapping ID"}), 400
     try:
         mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
     except ValueError as e:
