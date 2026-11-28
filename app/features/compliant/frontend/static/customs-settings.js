@@ -64,8 +64,8 @@
         ]);
         if (p.workflow) head.append(el('span', { className: 'customs-product__from', text: 'From ' + p.workflow }));
         var type = categorySelect(id, p.name, p.excise_category);
-        var vol = el('input', { name: 'pack_volume_ml', id: id + '-vol', type: 'number', min: '1', step: '1', placeholder: '700', 'aria-label': 'Pack size in mL for ' + p.name });
-        var abv = el('input', { name: 'abv_fallback', id: id + '-abv', type: 'number', min: '0', max: '100', step: '0.1', placeholder: '—', 'aria-label': 'Fallback ABV for ' + p.name });
+        var vol = el('input', { name: 'pack_volume_ml', id: id + '-vol', type: 'number', min: '0.01', max: '100000', step: '0.01', placeholder: '700', 'aria-label': 'Pack size in mL for ' + p.name });
+        var abv = el('input', { name: 'abv_fallback', id: id + '-abv', type: 'number', min: '0', max: '100', step: '0.0001', placeholder: '—', 'aria-label': 'Fallback ABV for ' + p.name });
         var tar = el('input', { name: 'tariff_item', id: id + '-tariff', placeholder: 'Optional', maxlength: '100', 'aria-label': 'Tariff item override for ' + p.name });
         vol.value = p.pack_volume_ml || ''; tar.value = p.tariff_item || ''; abv.value = p.abv_fallback || '';
         var save = el('button', { type: 'submit', className: 'workspace-button', text: 'Save' });

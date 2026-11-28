@@ -354,3 +354,9 @@ def test_settings_are_per_org(world, db, flask_app):  # noqa: F811
         assert client.get(f"{API}/settings").get_json() == {"use_last_known_price": True, "split_basis": "quantity"}
     finally:
         purge(db, other)
+
+
+def test_purchase_list_rejects_repeated_date_filter(world):
+    response = world["admin"].get(f"{API}/purchases?from=2026-11-01&from=2026-11-02")
+    assert response.status_code == 400
+    assert "from" in response.json["errors"]

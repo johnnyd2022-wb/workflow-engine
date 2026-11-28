@@ -581,3 +581,12 @@ def test_ac10_a_token_under_a_secret_looking_key_is_redacted():
     event = redact_sensitive_fields(None, "info", {"event": "x", "access_token": "bza_abc", "refresh_token": "bzr_abc"})
     assert event["access_token"] == "[REDACTED]"
     assert event["refresh_token"] == "[REDACTED]"
+
+
+def test_token_request_rejects_repeated_grant_type(world):
+    from werkzeug.datastructures import MultiDict
+
+    response = token(world, MultiDict([("grant_type", "refresh_token"), ("grant_type", "authorization_code")]))
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_request"
+    assert "one grant_type" in response.json["error_description"]

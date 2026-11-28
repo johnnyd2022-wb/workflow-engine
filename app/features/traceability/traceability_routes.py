@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC
+from typing import Annotated, Literal
 from uuid import UUID
 
 from flask import g, jsonify, render_template, request
+from pydantic import Field
 from sqlalchemy.orm import joinedload
 
 from app.core.db import db_session
@@ -18,8 +20,23 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.features.activity_log.routes.activity_routes import human_summary
 from app.observability import get_logger
+from app.utils.request_validation import (
+    InvalidInputError,
+    JsonInput,
+    OptionalIsoDateTime,
+    query_int,
+    query_text,
+    read_json,
+)
 
 logger = get_logger(__name__)
+
+
+class TraceInput(JsonInput):
+    root_id: UUID
+    root_type: Literal["inventory_item", "execution", "process"] = "inventory_item"
+    depth: Annotated[int, Field(ge=0, le=10)] = 5
+    as_of: OptionalIsoDateTime = None
 
 
 def _to_iso_timestamp(ts) -> str | None:
@@ -424,13 +441,15 @@ def register_routes(bp):
         db = db_session()
 
         try:
-            page = max(1, int(request.args.get("page", 1)))
-            limit = min(int(request.args.get("limit", 50)), 200)
-        except (TypeError, ValueError):
-            return jsonify({"error": "page and limit must be integers"}), 400
+            page = query_int("page", default=1, minimum=1, maximum=10_000_000)
+            limit = query_int("limit", default=50, minimum=1, maximum=200)
+            q = query_text("q", max_length=255)
+            entity_type_filter = query_text("type", max_length=32)
+            if entity_type_filter not in {"", "inventory_item", "execution", "process"}:
+                raise InvalidInputError({"type": "Choose an allowed entity type."})
+        except InvalidInputError as exc:
+            return exc.response()
         offset = (page - 1) * limit
-        q = request.args.get("q", "").strip()
-        entity_type_filter = request.args.get("type", "").strip()
 
         objects = []
         total = 0
@@ -518,32 +537,22 @@ def register_routes(bp):
 
         Routes to DAGTracer (current) or TemporalDAGTracer (historical).
         """
-        data = request.get_json() or {}
-        root_type = data.get("root_type", "inventory_item")
-        root_id_str = data.get("root_id")
-        as_of_str = data.get("as_of")
         try:
-            depth = min(int(data.get("depth", 5)), 10)
-        except (TypeError, ValueError):
-            return jsonify({"error": "depth must be an integer"}), 400
-
-        if not root_id_str:
-            return jsonify({"error": "root_id is required"}), 400
-
-        try:
-            root_id = UUID(root_id_str)
-        except ValueError:
-            return jsonify({"error": "Invalid root_id"}), 400
+            data = read_json(TraceInput)
+        except InvalidInputError as exc:
+            return exc.response()
+        root_id = data.root_id
+        root_type = data.root_type
+        depth = data.depth
 
         org_id = UUID(g.org_id)
         db = db_session()
 
         # Temporal trace — use as_of if provided
-        if as_of_str:
-            try:
-                as_of = datetime.fromisoformat(as_of_str.replace("Z", "+00:00"))
-            except ValueError:
-                return jsonify({"error": "Invalid as_of datetime format"}), 400
+        if data.as_of:
+            as_of = data.as_of
+            if as_of.tzinfo is None:
+                as_of = as_of.replace(tzinfo=UTC)
 
             from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer
 

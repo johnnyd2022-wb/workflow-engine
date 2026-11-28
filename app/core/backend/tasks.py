@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from flask import g, jsonify, request
+from flask import g, jsonify
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.core.db.models.user import User
 from app.core.security.permissions import requires_auth
 from app.core.utils.time import utc_now
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_text, read_service_json
 
 logger = get_logger(__name__)
 
@@ -203,16 +204,22 @@ def _validate_task_fields(session: Session, org_id: UUID, data: dict[str, Any], 
     unknown = set(data) - allowed
     if unknown:
         raise TaskError("unsupported fields: " + ", ".join(sorted(unknown)))
-    if creating and not str(data.get("title") or "").strip():
+    if creating and data.get("title") in (None, ""):
         raise TaskError("title is required")
     fields: dict[str, Any] = {}
     if "title" in data:
-        title = str(data["title"] or "").strip()
+        if not isinstance(data["title"], str) or "\x00" in data["title"]:
+            raise TaskError("title must be text")
+        title = data["title"].strip()
         if not title or len(title) > 500:
             raise TaskError("title must be 1-500 characters")
         fields["title"] = title
     if "description" in data:
-        description = str(data["description"] or "").strip()
+        if data["description"] is not None and (
+            not isinstance(data["description"], str) or "\x00" in data["description"]
+        ):
+            raise TaskError("description must be text")
+        description = (data["description"] or "").strip()
         if len(description) > 20_000:
             raise TaskError("description must be 20,000 characters or fewer")
         fields["description"] = description or None
@@ -447,7 +454,10 @@ def create_lane(
         raise TaskError("invalid task board")
     if set(data) - {"title"}:
         raise TaskError("unsupported lane fields")
-    title = str(data.get("title") or "").strip()
+    raw = data.get("title")
+    if not isinstance(raw, str) or "\x00" in raw:
+        raise TaskError("lane title must be text")
+    title = raw.strip()
     if not title or len(title) > 80:
         raise TaskError("lane title must be 1-80 characters")
     max_position = (
@@ -485,12 +495,14 @@ def update_lane(
     if lane is None:
         return None
     if "title" in data:
-        title = str(data["title"] or "").strip()
+        if not isinstance(data["title"], str) or "\x00" in data["title"]:
+            raise TaskError("title must be text")
+        title = data["title"].strip()
         if not title or len(title) > 80:
             raise TaskError("lane title must be 1-80 characters")
         lane.title = title
     if "position" in data:
-        if type(data["position"]) is not int or data["position"] < 0:
+        if type(data["position"]) is not int or not 0 <= data["position"] <= 2**31 - 1:
             raise TaskError("position must be a non-negative integer")
         lane.position = data["position"]
     try:
@@ -571,6 +583,12 @@ def register_routes(bp) -> None:
     def org_id() -> UUID:
         return UUID(g.org_id)
 
+    def failure(error):
+        db_session().rollback()
+        if isinstance(error, InvalidInputError):
+            return error.response()
+        return jsonify({"error": str(error)}), 400
+
     @bp.route("/api/core/tasks", methods=["GET"])
     @requires_auth
     def list_core_tasks():
@@ -580,26 +598,23 @@ def register_routes(bp) -> None:
                     "tasks": list_tasks(
                         db_session(),
                         org_id(),
-                        request.args.get("source", "all"),
-                        request.args.get("status"),
-                        request.args.get("archive", "active"),
+                        query_text("source", default="all", max_length=8),
+                        query_text("status", max_length=12) or None,
+                        query_text("archive", default="active", max_length=8),
                     )
                 }
             )
-        except TaskError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except (TaskError, InvalidInputError) as exc:
+            return failure(exc)
 
     @bp.route("/api/core/tasks", methods=["POST"])
     @requires_auth
     def create_core_task():
         try:
-            task = create_task(
-                db_session(), org_id(), UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {}
-            )
+            task = create_task(db_session(), org_id(), UUID(g.user_id) if g.user_id else None, read_service_json())
             return jsonify({"task": task}), 201
-        except TaskError as exc:
-            db_session().rollback()
-            return jsonify({"error": str(exc)}), 400
+        except (TaskError, InvalidInputError) as exc:
+            return failure(exc)
 
     @bp.route("/api/core/tasks/<task_id>", methods=["PUT"])
     @requires_auth
@@ -610,14 +625,13 @@ def register_routes(bp) -> None:
                 org_id(),
                 UUID(g.user_id) if g.user_id else None,
                 UUID(task_id),
-                request.get_json(silent=True) or {},
+                read_service_json(),
             )
             if task is None:
                 return jsonify({"error": "Task not found"}), 404
             return jsonify({"task": task})
         except (TaskError, ValueError) as exc:
-            db_session().rollback()
-            return jsonify({"error": str(exc)}), 400
+            return failure(exc)
 
     @bp.route("/api/core/tasks/<task_id>", methods=["DELETE"])
     @requires_auth
@@ -639,10 +653,9 @@ def register_routes(bp) -> None:
     @requires_auth
     def save_task_configuration():
         try:
-            return jsonify(update_config(db_session(), org_id(), request.get_json(silent=True) or {}))
-        except TaskError as exc:
-            db_session().rollback()
-            return jsonify({"error": str(exc)}), 400
+            return jsonify(update_config(db_session(), org_id(), read_service_json()))
+        except (TaskError, InvalidInputError) as exc:
+            return failure(exc)
 
     @bp.route("/api/core/tasks/lanes", methods=["GET"])
     @requires_auth
@@ -658,35 +671,35 @@ def register_routes(bp) -> None:
                 org_id(),
                 "core",
                 UUID(g.user_id) if g.user_id else None,
-                request.get_json(silent=True) or {},
+                read_service_json(),
             )
             return jsonify({"lane": lane}), 201
-        except TaskError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except (TaskError, InvalidInputError) as exc:
+            return failure(exc)
 
     @bp.route("/api/core/tasks/lanes/<lane_id>", methods=["PUT"])
     @requires_auth
     def update_core_task_lane(lane_id: str):
         try:
-            lane = update_lane(db_session(), org_id(), "core", UUID(lane_id), request.get_json(silent=True) or {})
+            lane = update_lane(db_session(), org_id(), "core", UUID(lane_id), read_service_json())
             if lane is None:
                 return jsonify({"error": "Lane not found"}), 404
             return jsonify({"lane": lane})
         except (TaskError, ValueError) as exc:
-            return jsonify({"error": str(exc)}), 400
+            return failure(exc)
 
     @bp.route("/api/core/tasks/lanes/order", methods=["PUT"])
     @requires_auth
     def reorder_core_task_lanes():
-        data = request.get_json(silent=True) or {}
         try:
+            data = read_service_json()
             raw_ids = data.get("lane_ids")
             if set(data) != {"lane_ids"} or not isinstance(raw_ids, list):
                 raise TaskError("lane_ids is required")
             lanes = reorder_lanes(db_session(), org_id(), "core", [UUID(raw_id) for raw_id in raw_ids])
             return jsonify({"lanes": lanes})
         except (TaskError, ValueError, TypeError) as exc:
-            return jsonify({"error": str(exc)}), 400
+            return failure(exc)
 
     @bp.route("/api/core/tasks/lanes/<lane_id>", methods=["DELETE"])
     @requires_auth
@@ -701,8 +714,8 @@ def register_routes(bp) -> None:
     @bp.route("/api/core/tasks/<task_id>/lane", methods=["PUT"])
     @requires_auth
     def assign_core_task_lane(task_id: str):
-        data = request.get_json(silent=True) or {}
         try:
+            data = read_service_json()
             if set(data) != {"lane_id"}:
                 raise TaskError("lane_id is required")
             lane_id = UUID(data["lane_id"]) if data["lane_id"] else None
@@ -711,4 +724,4 @@ def register_routes(bp) -> None:
                 return jsonify({"error": "Task not found"}), 404
             return jsonify({"task": task})
         except (TaskError, ValueError, TypeError) as exc:
-            return jsonify({"error": str(exc)}), 400
+            return failure(exc)

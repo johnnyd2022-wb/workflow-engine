@@ -148,3 +148,8 @@ def test_completed_tasks_load_from_archive_only_after_configured_period(task_wor
     assert [row["id"] for row in active] == [recent_task["id"]]
     assert [row["id"] for row in archived] == [old_task["id"]]
     assert archived[0]["archived"] is True
+
+
+def test_core_task_title_requires_text(task_world, db):
+    with pytest.raises(TaskError, match="title must be text"):
+        create_task(db, task_world["org_a"].id, task_world["user_a"].id, {"title": {"label": "Inspection"}})

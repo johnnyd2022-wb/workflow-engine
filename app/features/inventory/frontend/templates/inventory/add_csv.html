@@ -395,7 +395,10 @@
         var expEl = document.getElementById('csv-review-expiry');
         var paidEl = document.getElementById('csv-review-paid');
         var packEl = document.getElementById('csv-review-pack');
-        return Object.assign({}, row, {
+        // The commit schema accepts CSV fields only. Duplicate review state stays on the card.
+        return {
+          row_index: row.row_index,
+          site: row.site,
           pack: packEl ? (packEl.value || '').trim() || null : row.pack,
           total_paid: paidEl ? (paidEl.value || '').replace(/[$,\s]/g, '') || null : row.total_paid,
           name: nameEl ? (nameEl.value || '').trim() : row.name,
@@ -405,7 +408,7 @@
           batch_number: batchEl ? (batchEl.value || '').trim() || null : row.batch_number,
           purchase_date: purEl && purEl.value ? purEl.value : null,
           expiry_date: expEl && expEl.value ? expEl.value : null,
-        });
+        };
       }
 
       function finishReviewQueue() {
@@ -558,10 +561,10 @@
           );
           return;
         }
-        var merged = readCurrentRowFromForm();
-        if (!merged) return;
+        var acceptedRow = readCurrentRowFromForm();
+        if (!acceptedRow) return;
         runAfterCardExit(function() {
-          S.acceptedRows.push(merged);
+          S.acceptedRows.push(acceptedRow);
           S.pendingRows.shift();
           renderCurrentReviewCard();
         });

@@ -279,3 +279,17 @@ def test_invalid_workflow_unit_is_not_offered_or_persisted(db, demand_world, inv
     with pytest.raises(ValueError, match="this business"):
         service.create_demand(db, org_a, payload(outputs[org_a]))
     assert db.query(PlanningDemand).count() == 0
+
+
+def test_planning_rejects_unstorable_reference(demand_clients):
+    client, _, output_id = demand_clients[0]
+    response = client.post("/api/core/planner/demands", json=payload(output_id, reference="Order\0number"))
+    assert response.status_code == 400
+    assert "reference" in response.json["errors"]
+
+
+def test_planning_date_filter_cannot_be_repeated(demand_clients):
+    client, _, _ = demand_clients[0]
+    response = client.get("/api/core/planner/batches?start=2026-11-01&start=2026-12-01&end=2026-11-07")
+    assert response.status_code == 400
+    assert "start" in response.json["errors"]

@@ -54,7 +54,10 @@ def _when(value, label: str) -> datetime:
 
 
 def _nz_day(moment: datetime) -> date:
-    return moment.astimezone(NZ).date()
+    try:
+        return moment.astimezone(NZ).date()
+    except OverflowError:
+        raise ValueError("Choose a movement date that can be represented in New Zealand time.") from None
 
 
 def _day(value, label: str) -> date:
@@ -428,7 +431,8 @@ def record_departure(session, org_id: UUID, data: dict, user_id) -> CcaDeparture
     if dest is None:
         raise ValueError("Choose the CCA the goods went to")
     moved_at = _when(data.get("moved_at"), "when the goods left")
-    if inv.date and _nz_day(moved_at) < inv.date - timedelta(days=60):
+    moved_on = _nz_day(moved_at)
+    if inv.date and (inv.date - moved_on).days > 60:
         raise ValueError("The goods can't have left more than 60 days before the sale")
     row = (
         session.query(CcaDeparture)

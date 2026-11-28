@@ -76,7 +76,7 @@ def amount(value, *, zero=False):
 def text(value, limit, *, optional=False):
     if value is None and optional:
         return ""
-    if not isinstance(value, str) or len(value) > limit or (not optional and not value.strip()):
+    if not isinstance(value, str) or "\x00" in value or len(value) > limit or (not optional and not value.strip()):
         raise TastingError(f"Record text of at most {limit} characters")
     return value.strip()
 
@@ -87,7 +87,7 @@ def timestamp(value):
         if result.tzinfo is None or result.utcoffset() != result.astimezone(NZ).utcoffset():
             raise ValueError()
         return result
-    except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError, OverflowError):
         raise TastingError("Use an ISO timestamp with the Pacific/Auckland offset at that instant") from None
 
 
@@ -151,11 +151,12 @@ def save_event(db, org_id, actor_id, data, event_id=None):
         ]
     }
     fields["venue_type"] = value("venue_type")
-    if fields["venue_type"] not in {"own", "external"}:
+    if fields["venue_type"] not in ("own", "external"):
         raise TastingError("Choose own or external venue")
     # A tasting pours samples; an event can also sell bottles. Both can bring bottles back.
-    fields["kind"] = value("kind", "tasting") or "tasting"
-    if fields["kind"] not in {"tasting", "event"}:
+    kind = value("kind", "tasting")
+    fields["kind"] = "tasting" if kind in (None, "") else kind
+    if fields["kind"] not in ("tasting", "event"):
         raise TastingError("Choose a tasting or an event")
     fields["starts_at"] = (
         timestamp(data["starts_at"]) if "starts_at" in data else (event.starts_at if event else timestamp(None))

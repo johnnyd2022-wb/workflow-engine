@@ -59,16 +59,16 @@
       {% endif %}
       <form data-invite-form novalidate>
         <div class="row">
-          <label>First name<input name="first_name" id="invite-first-name" value="{{ first_name }}" autocomplete="given-name"></label>
-          <label>Last name<input name="last_name" id="invite-last-name" value="{{ last_name }}" autocomplete="family-name"></label>
+          <label>First name<input name="first_name" id="invite-first-name" maxlength="255" value="{{ first_name }}" autocomplete="given-name"></label>
+          <label>Last name<input name="last_name" id="invite-last-name" maxlength="255" value="{{ last_name }}" autocomplete="family-name"></label>
         </div>
         <label>Password
-          <input type="password" name="password" id="invite-password" required minlength="8" autocomplete="new-password">
+          <input type="password" name="password" id="invite-password" maxlength="72" required minlength="8" autocomplete="new-password">
           <span class="hint">At least 8 characters.</span>
         </label>
         <ul class="warnings" data-invite-warnings hidden></ul>
         <label>Confirm password
-          <input type="password" name="password_confirm" id="invite-password-confirm" required autocomplete="new-password">
+          <input type="password" name="password_confirm" id="invite-password-confirm" minlength="8" maxlength="72" required autocomplete="new-password">
         </label>
         <div class="error" data-invite-error role="alert" hidden></div>
         <button type="submit">Create my account</button>

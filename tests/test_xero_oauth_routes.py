@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 import requests
 from sqlalchemy.orm import Session
+from werkzeug.datastructures import MultiDict
 
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
 from app.features.crm.services.xero_oauth_service import XeroOAuthService
@@ -60,6 +61,13 @@ def test_multi_organisation_callback_activates_only_the_confirmed_selection(
         selection_id = session["_xero_pending_selection"]
     invalid = client.post(PICKER, data={"tenant_id": "unknown", "selection_id": selection_id})
     assert b"Invalid selection" in invalid.data
+    assert client.get("/api/crm/xero/status").get_json().get("tenant_id") == previous_tenant
+    sync.assert_not_called()
+
+    repeated = client.post(
+        PICKER, data=MultiDict([("selection_id", selection_id), ("tenant_id", "selected"), ("tenant_id", "other")])
+    )
+    assert b"Invalid selection" in repeated.data
     assert client.get("/api/crm/xero/status").get_json().get("tenant_id") == previous_tenant
     sync.assert_not_called()
 

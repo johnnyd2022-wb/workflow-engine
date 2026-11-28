@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request
@@ -9,6 +10,7 @@ from flask import Blueprint, g, jsonify, request
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.process_templates.services import process_templates_service as service
+from app.utils.request_validation import InvalidInputError
 
 api_bp = Blueprint("process_templates_api", __name__)
 
@@ -21,7 +23,10 @@ def _org_id() -> UUID:
 @requires_auth
 def list_process_templates():
     org_id = _org_id()
-    family_filter = request.args.get("family") or None
+    families = request.args.getlist("family")
+    if len(families) > 1 or (families and not re.fullmatch(r"[A-Za-z0-9_-]{0,80}", families[0])):
+        return InvalidInputError({"family": "Enter a family identifier of up to 80 characters."}).response()
+    family_filter = (families[0] or None) if families else None
     result = service.list_catalog(db_session(), org_id, family_filter)
     service.emit_catalog_viewed(db_session(), org_id)
     return jsonify(result), 200

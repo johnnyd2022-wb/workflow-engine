@@ -14,12 +14,20 @@ from urllib.parse import quote, urlsplit
 
 from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request
 from flask_limiter.util import get_remote_address
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.urls import iri_to_uri
 
 from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.mcp_oauth import SUPPORTED_SCOPES
+from app.features.mcp_oauth.routes.request_payloads import (
+    AUTHORIZE_SINGLE_FIELDS,
+    CONSENT_SINGLE_FIELDS,
+    REVOKE_SINGLE_FIELDS,
+    TOKEN_SINGLE_FIELDS,
+    check_single_fields,
+)
 from app.features.mcp_oauth.services import authorization, client_registry, pending_authorization, token_service
 from app.features.mcp_oauth.services.client_registry import ClientError
 from app.features.mcp_oauth.services.token_service import TokenError
@@ -31,9 +39,30 @@ logger = get_logger(__name__)
 oauth_bp = Blueprint("oauth", __name__, template_folder="../frontend/templates")
 
 MAX_REGISTER_BYTES = 8 * 1024
+MAX_OAUTH_FORM_BYTES = 16 * 1024
 # These endpoints are called by browser-based MCP clients as well as servers. They carry no cookie
 # and trust no origin, so any origin may read the answer; the authorize page never gets this.
 _CORS_ENDPOINTS = frozenset({"oauth.metadata", "oauth.register", "oauth.token", "oauth.revoke"})
+
+
+@oauth_bp.before_request
+def _bound_request():
+    if request.method == "POST":
+        maximum = MAX_REGISTER_BYTES if request.endpoint == "oauth.register" else MAX_OAUTH_FORM_BYTES
+        request.max_content_length = maximum
+        request.max_form_memory_size = maximum
+        request.max_form_parts = 32
+
+
+@oauth_bp.errorhandler(RequestEntityTooLarge)
+def _too_large(_error):
+    message = "Request too large"
+    if request.endpoint == "oauth.authorize_decision":
+        return _error_page(message, 413)
+    if request.endpoint == "oauth.revoke":
+        return "", 200
+    error = "invalid_client_metadata" if request.endpoint == "oauth.register" else "invalid_request"
+    return jsonify(error=error, error_description=message), 413
 
 
 @oauth_bp.after_request
@@ -141,7 +170,8 @@ def _login_redirect():
     from the stored parameters (``pending_authorization``), so nothing here can be turned into a
     redirect to another site.
     """
-    pending_authorization.remember(request.args)
+    if not pending_authorization.remember(request.args):
+        return _error_page("The authorization request is too large to continue after sign-in.", 400)
     return redirect("/?login=1")
 
 
@@ -150,6 +180,12 @@ def _login_redirect():
 @oauth_bp.get("/oauth/authorize")  # nosemgrep: route-missing-requires-auth
 @limiter.limit("60 per minute", key_func=get_remote_address)
 def authorize():
+    if len(request.query_string) > MAX_OAUTH_FORM_BYTES:
+        return _error_page("Request too large", 413)
+    try:
+        check_single_fields(request.args, AUTHORIZE_SINGLE_FIELDS)
+    except ValueError as exc:
+        return _error_page(str(exc), 400)
     db = db_session()
     if g.current_user is None and authorization.needs_metadata_fetch(db, request.args.get("client_id")):
         # A stranger must not be able to make this server fetch a URL of their choosing: an unknown
@@ -185,6 +221,10 @@ def authorize():
 @limiter.limit("60 per minute", key_func=get_remote_address)
 def authorize_decision():
     db = db_session()
+    try:
+        check_single_fields(request.form, CONSENT_SINGLE_FIELDS)
+    except ValueError as exc:
+        return _error_page(str(exc), 400)
     try:
         req = authorization.parse_authorize(db, request.form)
     except authorization.PageError as err:
@@ -231,6 +271,10 @@ def token():
     if request.method == "OPTIONS":
         return "", 204
     db = db_session()
+    try:
+        check_single_fields(request.form, TOKEN_SINGLE_FIELDS)
+    except ValueError as exc:
+        return _token_response(400, TokenError("invalid_request", str(exc)).body())
     grant_type = request.form.get("grant_type")
     try:
         if grant_type == "authorization_code":
@@ -250,6 +294,10 @@ def token():
 def revoke():
     if request.method == "OPTIONS":
         return "", 204
+    try:
+        check_single_fields(request.form, REVOKE_SINGLE_FIELDS)
+    except ValueError:
+        return "", 200
     db = db_session()
     try:
         token_service.revoke_presented(db, request.form)

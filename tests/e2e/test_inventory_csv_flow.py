@@ -312,6 +312,37 @@ def test_csv_upload_through_the_browser_reviews_then_adds_the_item(logged_in_pag
     assert matching[0]["supplier"] == "E2E CSV Supplier"
 
 
+def test_csv_upload_retries_corrected_duplicate_batch(logged_in_page):
+    page = logged_in_page
+    name = f"E2E CSV Duplicate Retry {uuid.uuid4().hex[:8]}"
+    csv = f"Item Name,Quantity,Unit,Supplier Name,Batch Number\n{name},1,kg,Example,B1\n"
+
+    _offer_csv(page, csv)
+    review_batch = page.locator("#csv-review-batch")
+    accept = page.locator("#csv-review-accept")
+    expect(review_batch).to_have_value("B1")
+    accept.click()
+    page.wait_for_url(re.compile(r"/core$"))
+
+    _offer_csv(page, csv)
+    expect(review_batch).to_have_value("B1")
+    accept.click()
+    expect(page.locator("#csv-review-dup-summary")).to_be_visible()
+    expect(accept).to_be_disabled()
+    review_batch.fill("B2")
+    expect(accept).to_be_enabled()
+
+    with page.expect_response("**/api/core/inventory/csv-commit") as retry:
+        accept.click()
+    assert retry.value.status == 200, retry.value.text()
+    page.wait_for_url(re.compile(r"/core$"))
+
+    listing = page.request.get("/api/core/inventory")
+    assert listing.status == 200, listing.text()
+    matching = [item for item in listing.json()["inventory_items"] if item["name"] == name]
+    assert sorted((item["supplier_batch_number"], item["quantity"]) for item in matching) == [("B1", "1"), ("B2", "1")]
+
+
 def test_csv_upload_through_the_browser_skipping_the_review_card_writes_nothing(logged_in_page):
     """Declining the review card must leave inventory untouched and return to the drop zone."""
     page = logged_in_page

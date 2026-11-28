@@ -66,11 +66,11 @@
               <h3 id="barcode-inv-section-basic" class="spa-form-section-title">Basic information</h3>
               <div>
                 <label class="spa-field-label" for="barcode-inv-name">Item name</label>
-                <input type="text" name="name" id="barcode-inv-name" required class="spa-inp" placeholder="e.g., Juniper berries">
+                <input type="text" name="name" id="barcode-inv-name" maxlength="255" required class="spa-inp" placeholder="e.g., Juniper berries">
               </div>
               <div>
                 <label class="spa-field-label" for="barcode-inv-quantity">Quantity</label>
-                <input type="number" name="quantity" id="barcode-inv-quantity" required step="0.01" class="spa-inp" placeholder="0">
+                <input type="number" name="quantity" id="barcode-inv-quantity" required min="0.0001" max="99999999999999.9999" step="0.0001" class="spa-inp" placeholder="0">
               </div>
               <div>
                 <label class="spa-field-label" for="barcode-inv-unit">Unit</label>
@@ -90,7 +90,7 @@
               <h3 id="barcode-inv-section-source" class="spa-form-section-title">Source</h3>
               <div>
                 <label class="spa-field-label" for="barcode-inv-supplier">Supplier <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
-                <input type="text" name="supplier" id="barcode-inv-supplier" class="spa-inp" placeholder="Who supplied this stock?">
+                <input type="text" name="supplier" id="barcode-inv-supplier" maxlength="255" class="spa-inp" placeholder="Who supplied this stock?">
               </div>
               <div id="barcode-inv-barcode-display-wrap" style="display: none;">
                 <span class="spa-field-label">Barcode</span>

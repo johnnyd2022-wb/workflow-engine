@@ -21,7 +21,7 @@
   <p>Google confirmed your account. Enter your authenticator code or a backup code to finish signing in.</p>
   <form id="google-totp-form">
     <label for="code">Authenticator or backup code</label>
-    <input id="code" name="code" autocomplete="one-time-code" maxlength="8" required autofocus>
+    <input id="code" name="code" autocomplete="one-time-code" maxlength="8" pattern="(?:[0-9]{6}|[A-Za-z0-9]{8})" required autofocus>
     <button type="submit">Continue</button>
     <p id="challenge-error" class="error" role="alert" hidden></p>
   </form>

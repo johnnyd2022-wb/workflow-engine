@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify
+from pydantic import Field
 
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem
@@ -16,6 +17,7 @@ from app.core.db.models.lot_hold import LotHold
 from app.core.security.permissions import requires_auth, requires_org_scope
 from app.core.services import lot_holds
 from app.core.utils.log_action import log_action
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 lot_holds_bp = Blueprint("lot_holds", __name__)
 
@@ -27,9 +29,19 @@ def _uuid(value):
         return None
 
 
-def _body() -> dict:
-    body = request.get_json(silent=True)
-    return body if isinstance(body, dict) else {}
+class HoldInput(JsonInput):
+    reason: str = Field(max_length=lot_holds.MAX_REASON, pattern=r"^[^\x00]*$")
+    also_hold: list[UUID] | None = Field(default=None, max_length=500)
+
+
+class ReleaseInput(JsonInput):
+    note: str = Field(max_length=lot_holds.MAX_REASON, pattern=r"^[^\x00]*$")
+
+
+@lot_holds_bp.errorhandler(InvalidInputError)
+def invalid_input(error):
+    db_session().rollback()
+    return error.response()
 
 
 @lot_holds_bp.get("/api/core/inventory/<item_id>/holds")
@@ -63,16 +75,11 @@ def place_lot_hold(item_id):
     item_uuid = _uuid(item_id)
     if item_uuid is None:
         return jsonify({"error": "Lot not found"}), 404
-    body = _body()
-    also = body.get("also_hold") or []
-    if not isinstance(also, list) or any(_uuid(i) is None for i in also) or len(also) > 500:
-        return jsonify({"error": "also_hold must be a list of lot ids"}), 400
+    data = read_json(HoldInput)
     session = db_session()
     org_id = g.current_org_id
     try:
-        holds = lot_holds.place_hold(
-            session, org_id, item_uuid, body.get("reason"), g.current_user.id, [_uuid(i) for i in also]
-        )
+        holds = lot_holds.place_hold(session, org_id, item_uuid, data.reason, g.current_user.id, data.also_hold or [])
         session.commit()
     except LookupError:
         session.rollback()
@@ -101,7 +108,7 @@ def release_lot_hold(hold_id):
     session = db_session()
     org_id = g.current_org_id
     try:
-        hold = lot_holds.release_hold(session, org_id, hold_uuid, _body().get("note"), g.current_user.id)
+        hold = lot_holds.release_hold(session, org_id, hold_uuid, read_json(ReleaseInput).note, g.current_user.id)
         session.commit()
     except LookupError:
         session.rollback()

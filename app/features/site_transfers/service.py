@@ -71,7 +71,7 @@ def _date(value):
 
 
 def _string(value, name, limit, required=True):
-    if not isinstance(value, str) or len(value.strip()) > limit or (required and not value.strip()):
+    if not isinstance(value, str) or "\x00" in value or len(value.strip()) > limit or (required and not value.strip()):
         raise TransferError(f"{name} must be {'nonempty ' if required else ''}text, up to {limit} characters")
     return value.strip()
 
@@ -340,6 +340,8 @@ def receive(session, org_id, actor_id, transfer_id, key, data, policy):
         "occurred_on",
     }:
         raise TransferError("Unknown receipt field")
+    if "confirm_loss" in data and not isinstance(data["confirm_loss"], bool):
+        raise TransferError("Confirm loss must be true or false")
     _actor_and_release(session, org_id, actor_id)
     key = _key_lock(session, org_id, key, "receipt")
     request_hash = _hash({"transfer_id": str(_id(transfer_id)), **data})

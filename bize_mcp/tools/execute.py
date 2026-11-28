@@ -72,7 +72,7 @@ INPUT = schema(
             "items": schema(
                 {
                     "id": {"type": "string", "pattern": _ID},
-                    "operation_id": {"type": "string", "maxLength": 120},
+                    "operation_id": {"type": "string", "minLength": 1, "maxLength": 120},
                     "params": {"type": "object"},
                     "select": {"type": "string", "maxLength": 300},
                 },
@@ -119,6 +119,8 @@ def _resolve_references(params: dict[str, Any], done: dict[str, Any], failed: se
             if source not in done:
                 raise ToolFailureError(f"{name}: {source} is not an earlier call.", kind="invalid_input")
             path = value.get("path")
+            if "path" in value and (not isinstance(path, str) or not path.strip()):
+                raise ToolFailureError("A result reference path must be nonempty text.", kind="invalid_input")
             try:
                 found = evaluate(compile_expression(path, allow_hash=False), done[source]) if path else done[source]
             except SelectError as error:

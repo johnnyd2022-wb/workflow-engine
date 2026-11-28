@@ -1,9 +1,11 @@
 """API routes for evidence upload and download."""
 
 from io import BytesIO
+from typing import Annotated
 from uuid import UUID
 
 from flask import g, jsonify, request, send_file
+from pydantic import StringConstraints
 
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
@@ -17,11 +19,16 @@ from app.features.execution.evidence.evidence_validation import (
     get_allowed_mime_types,
     get_max_file_size_bytes,
     validate_file_streaming,
-    validate_upload_request,
 )
 from app.observability import get_logger
+from app.utils.request_validation import CleanName, CleanText, InvalidInputError, JsonInput, read_form
 
 logger = get_logger(__name__)
+
+
+class EvidenceMetadataInput(JsonInput):
+    execution_id: Annotated[CleanName, StringConstraints(max_length=36)]
+    step_id: Annotated[CleanText, StringConstraints(max_length=36)] = ""
 
 
 def register_routes(bp):
@@ -49,29 +56,26 @@ def register_routes(bp):
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid organisation context"}), 400
 
-        execution_id = request.form.get("execution_id", "").strip()
-        step_id = request.form.get("step_id", "").strip() or None
-        logger.info("Evidence upload request: org_id=%s execution_id=%s step_id=%s", org_uuid, execution_id, step_id)
-        ok, err = validate_upload_request(org_uuid, execution_id, step_id)
-        if not ok:
-            logger.warning("Evidence upload validate_upload_request failed: %s", err)
-            return jsonify({"error": err}), 400
+        try:
+            data = read_form(EvidenceMetadataInput)
+        except InvalidInputError as exc:
+            if "execution_id" in exc.errors:
+                return jsonify(error="Enter a valid execution_id.", errors=exc.errors), 400
+            return exc.response()
+        execution_id = data.execution_id
+        try:
+            execution_uuid = UUID(execution_id)
+        except ValueError:
+            return InvalidInputError({"execution_id": "Invalid execution_id"}).response()
+        try:
+            step_uuid = UUID(data.step_id) if data.step_id else None
+        except ValueError:
+            return InvalidInputError({"step_id": "Invalid step_id"}).response()
 
         ok, err, temp_path, content_type, original_filename, file_size = validate_file_streaming()
         if not ok:
             logger.warning("Evidence upload validate_file_streaming failed: %s", err)
-            return jsonify({"error": err}), 400
-
-        try:
-            execution_uuid = UUID(execution_id)
-            step_uuid = UUID(step_id) if step_id else None
-        except (ValueError, TypeError):
-            if temp_path and temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except OSError:
-                    pass
-            return jsonify({"error": "Invalid execution_id or step_id"}), 400
+            return InvalidInputError({"file": err}).response()
 
         # NOTE: `getattr(g, "user_email", None) or X if Y else Z` parses as
         # `(getattr(...) or X) if Y else Z` (the ternary binds looser than `or`), so a
@@ -150,9 +154,10 @@ def register_routes(bp):
             org_uuid = UUID(org_id) if isinstance(org_id, str) else org_id
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid organisation context"}), 400
-        execution_id = request.args.get("execution_id", "").strip()
-        if not execution_id:
-            return jsonify({"error": "execution_id is required"}), 400
+        execution_ids = request.args.getlist("execution_id")
+        if len(execution_ids) != 1 or not execution_ids[0].strip():
+            return InvalidInputError({"execution_id": "Send one execution_id."}).response()
+        execution_id = execution_ids[0].strip()
         try:
             execution_uuid = UUID(execution_id)
         except (ValueError, TypeError):

@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -11,6 +11,8 @@ from app.core.db.models.audit_log import AuditLog
 from app.core.security.permissions import requires_auth, requires_org_scope
 from app.features.compliant.modules.nz_alcohol import food_registrations
 from app.features.compliant.routes.page_routes import _nz_alcohol_template_context
+from app.features.compliant.routes.register_payloads import FoodRegistrationInput, FoodScopeInput
+from app.utils.request_validation import InvalidInputError, read_json
 
 food_registration_bp = Blueprint("compliant_food_registrations", __name__, template_folder="../frontend/templates")
 
@@ -33,15 +35,17 @@ def get_registrations():
     return jsonify(food_registrations.overview(db_session, _org()))
 
 
-def _create(service, entity):
+def _create(service, entity, schema):
     try:
-        row = service(db_session, _org(), request.get_json(silent=True))
+        row = service(db_session, _org(), read_json(schema).model_dump(mode="json"))
         db_session.add(
             AuditLog(
                 org_id=_org(), user_id=g.current_user.id, action=f"{entity}_created", entity=entity, entity_id=row.id
             )
         )
         db_session.commit()
+    except InvalidInputError as exc:
+        return exc.response()
     except ValueError as exc:
         db_session.rollback()
         return jsonify({"error": str(exc)}), 400
@@ -56,7 +60,9 @@ def _create(service, entity):
 @requires_org_scope
 def add_registration():
     return _create(
-        lambda db, org, data: food_registrations.add_registration(db, org, data, date.today()), "food_registration"
+        lambda db, org, data: food_registrations.add_registration(db, org, data, date.today()),
+        "food_registration",
+        FoodRegistrationInput,
     )
 
 
@@ -64,4 +70,4 @@ def add_registration():
 @requires_auth
 @requires_org_scope
 def add_scope():
-    return _create(food_registrations.add_scope, "food_registration_scope")
+    return _create(food_registrations.add_scope, "food_registration_scope", FoodScopeInput)

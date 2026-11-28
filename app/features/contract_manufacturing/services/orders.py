@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from unicodedata import category
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -44,6 +45,8 @@ def text_value(value, field, limit, required=True):
         return None
     if not isinstance(value, str):
         raise OrderError(f"{field} must be text")
+    if any(char == "\x00" or category(char) == "Cs" for char in value):
+        raise OrderError(f"{field} must be valid text")
     value = value.strip()
     if not value and not required:
         return None
@@ -56,7 +59,7 @@ def object_body(data, allowed):
     if not isinstance(data, dict):
         raise OrderError("JSON object required")
     if set(data) - set(allowed):
-        raise OrderError("Unknown fields: " + ", ".join(sorted(set(data) - set(allowed))))
+        raise OrderError("Unknown fields")
 
 
 class ContractOrderService:
@@ -191,7 +194,7 @@ class ContractOrderService:
             self.customer(customer_id)
             query = query.filter(ContractOrder.customer_id == identifier(customer_id, "customer_id"))
         if status:
-            if status not in ORDER_STATUSES:
+            if not isinstance(status, str) or status not in ORDER_STATUSES:
                 raise OrderError("Unknown order status")
             query = query.filter(ContractOrder.status == status)
         return (
@@ -219,7 +222,7 @@ class ContractOrderService:
                 raise OrderError("due_date must be YYYY-MM-DD") from None
         if "duty_responsibility" in data or creating:
             duty = data.get("duty_responsibility")
-            if duty not in DUTY_RESPONSIBILITIES:
+            if not isinstance(duty, str) or duty not in DUTY_RESPONSIBILITIES:
                 raise OrderError("Choose the order's duty responsibility")
             row.duty_responsibility = duty
         if "customer_cca_reference" in data:
@@ -230,7 +233,7 @@ class ContractOrderService:
             raise OrderError("Customer licensee or underbond orders require the customer's CCA reference")
         if "status" in data or creating:
             status = data.get("status", "draft")
-            if status not in ORDER_STATUSES:
+            if not isinstance(status, str) or status not in ORDER_STATUSES:
                 raise OrderError("Unknown order status")
             if creating and status not in {"draft", "confirmed"}:
                 raise OrderError("New orders must be draft or confirmed")
@@ -334,7 +337,7 @@ class ContractOrderService:
             raise OrderError("Counted products require a whole quantity")
         if "materials_source" in data or creating:
             source = data.get("materials_source")
-            if source not in MATERIALS_SOURCES:
+            if not isinstance(source, str) or source not in MATERIALS_SOURCES:
                 raise OrderError("Choose producer, customer or mixed materials")
             row.materials_source = source
         if "spec_reference" in data:

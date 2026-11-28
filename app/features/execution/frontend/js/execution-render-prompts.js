@@ -137,7 +137,7 @@
                 <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
               </label>
               <label>Take a photo
-                <input type="file" class="execute-evidence-file-input" accept="image/*" capture="environment" style="display: block; margin-bottom: 8px;">
+                <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png" capture="environment" style="display: block; margin-bottom: 8px;">
               </label>
               <div class="execute-evidence-error" style="display:none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
               <div class="execute-evidence-list" style="margin-top: 12px;"></div>

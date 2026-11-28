@@ -186,6 +186,40 @@ def check_change(
         raise PeopleError("This is the organisation's only admin. Make someone else an admin first.")
 
 
+def validate_email(email: str) -> tuple[bool, str | None]:
+    """
+    Validate email address format.
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not email:
+        return False, "Email address is required"
+
+    email = email.strip()
+
+    if not email:
+        return False, "Email address cannot be empty"
+
+    if "@" not in email or any(character.isspace() for character in email):
+        return False, "Invalid email address format"
+
+    # Basic validation: must have @ and at least one character before and after
+    parts = email.split("@")
+    if len(parts) != 2:
+        return False, "Invalid email address format"
+
+    if not parts[0] or not parts[1]:
+        return False, "Invalid email address format"
+
+    # Check for basic domain format (at least one dot)
+    labels = parts[1].split(".")
+    if len(labels) < 2 or any(not label for label in labels):
+        return False, "Invalid email address format"
+
+    return True, None
+
+
 def validate_new_password(password: str, confirm: str | None = None) -> None:
     """The one password rule (GL-A01): signup, invite acceptance and change all call this."""
     if not password or len(password) < MIN_PASSWORD_LENGTH:

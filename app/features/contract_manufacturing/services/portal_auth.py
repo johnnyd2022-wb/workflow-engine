@@ -1,6 +1,7 @@
 """A separate authentication realm; never resolve a staff User from portal credentials."""
 
 import hashlib
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -24,7 +25,7 @@ _DUMMY_HASH = AuthService.hash_password(secrets.token_urlsafe(32))
 
 
 def token_hash(value):
-    if not isinstance(value, str) or not 32 <= len(value) <= 128:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", value):
         raise OrderError("Invalid or expired access", 401)
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -36,8 +37,18 @@ def email_value(value):
     return value
 
 
+def _password_bytes(value):
+    if not isinstance(value, str) or len(value) > 72:
+        return None
+    try:
+        return len(value.encode("utf-8"))
+    except UnicodeEncodeError:
+        return None
+
+
 def password_value(value):
-    if not isinstance(value, str) or len(value) < 12 or len(value.encode()) > 72:
+    size = _password_bytes(value)
+    if size is None or len(value) < 12 or size > 72:
         raise OrderError("Use a password of at least 12 characters and at most 72 UTF-8 bytes")
     return value
 
@@ -144,7 +155,8 @@ def authenticate(db, data):
     except (ValueError, OrderError):
         customer_id, email = None, ""
     password = data.get("password")
-    if not isinstance(password, str) or len(password.encode()) > 72:
+    size = _password_bytes(password)
+    if size is None or size > 72:
         password = "invalid"
     now = datetime.now(UTC)
     with unscoped():

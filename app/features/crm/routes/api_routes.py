@@ -23,10 +23,29 @@ from app.core.security.access_policy import has_permission
 from app.core.security.permissions import requires_auth, requires_permission
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
+from app.features.crm.routes.crm_payloads import (
+    AssignLaneInput,
+    AssignMatchingLineInput,
+    BulkMappingsInput,
+    ContactImportInput,
+    ContactSyncInput,
+    ContactSyncSettingsInput,
+    CreateMappingInput,
+    CreateTaskInput,
+    LineRefInput,
+    NoReturnNoteInput,
+    NoteInput,
+    ReorderLanesInput,
+    ServicePayload,
+    TraceabilitySettingsInput,
+    UpdateMappingInput,
+    UpdateTaskInput,
+)
 from app.features.crm.services.crm_service import CRMService
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError, _extract_exception_error_message
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 api_bp = Blueprint("crm_api", __name__)
 logger = get_logger(__name__)
@@ -38,20 +57,34 @@ def _crm_service() -> CRMService:
 
 def _uuid_or_none(raw: str | None) -> UUID | None:
     """The UUID in a request-supplied string, or None when it is not one (the caller answers 400)."""
+    if not isinstance(raw, str):
+        return None
     try:
         return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
-
-def _page_args(default_page_size: int) -> tuple[int, int] | None:
-    """(page, page_size) from the query string, clamped to 1+ and 1-100; None if either is not an integer."""
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-        page_size = min(100, max(1, int(request.args.get("page_size", default_page_size))))
     except ValueError:
         return None
+
+
+def _integer_query(name: str, default: int, *, error_message: str | None = None) -> int:
+    raw = query_text(name, default=str(default), max_length=24)
+    try:
+        return int(raw)
+    except ValueError:
+        raise InvalidInputError({name: error_message or f"{name} must be an integer"}) from None
+
+
+def _page_args(default_page_size: int) -> tuple[int, int]:
+    error_message = "page and page_size must be integers"
+    page = max(1, _integer_query("page", 1, error_message=error_message))
+    page_size = min(100, max(1, _integer_query("page_size", default_page_size, error_message=error_message)))
+    if page > 20_000_000:
+        raise InvalidInputError({"page": "page must be at most 20000000."})
     return page, page_size
+
+
+@api_bp.errorhandler(InvalidInputError)
+def invalid_crm_request(error):
+    return error.response()
 
 
 # ------------------------------------------------------------------
@@ -79,16 +112,14 @@ def customer_import():
 
     if request.content_length and request.content_length > 1_200_000:
         return jsonify({"error": "Import text must be at most 1 MB"}), 413
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or not isinstance(data.get("text"), str):
-        return jsonify({"error": "Send import text and format"}), 400
+    data = read_json(ContactImportInput)
     try:
         result = import_contacts(
             db_session(),
             UUID(g.org_id),
-            data["text"],
-            data.get("format", "csv"),
-            commit=data.get("commit") is True,
+            data.text,
+            data.format,
+            commit=data.commit,
             actor_id=_actor(),
         )
     except ValueError as exc:
@@ -100,14 +131,11 @@ def customer_import():
 @requires_auth
 def list_customers():
     org_id = UUID(g.org_id)
-    search = request.args.get("q", "").strip() or None
+    search = query_text("q") or None
     status = request.args.get("status") or None
     sort_by = request.args.get("sort_by", "name")
     sort_dir = request.args.get("sort_dir", "asc")
-    paging = _page_args(50)
-    if paging is None:
-        return jsonify({"error": "page and page_size must be integers"}), 400
-    page, page_size = paging
+    page, page_size = _page_args(50)
 
     result = _crm_service().list_customers(
         org_id=org_id,
@@ -184,10 +212,9 @@ def _contact_response(contact, xero_state: dict, status: int = 200, **extra):
 @requires_auth
 def create_customer():
     """Create a contact in Biz-E. It goes to Xero now if its sync (or the Sales default) is on."""
+    data = read_json(ServicePayload).model_dump()
     try:
-        contact, state = _contact_sync().create_contact(
-            UUID(g.org_id), request.get_json(silent=True) or {}, actor_id=_actor()
-        )
+        contact, state = _contact_sync().create_contact(UUID(g.org_id), data, actor_id=_actor())
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return _contact_response(contact, state, 201)
@@ -202,10 +229,9 @@ def update_customer(contact_id: str):
     contact_uuid = _uuid_or_none(contact_id)
     if contact_uuid is None:
         return jsonify({"error": "Invalid customer ID"}), 400
+    data = read_json(ServicePayload).model_dump()
     try:
-        contact, state, changed = _contact_sync().update_contact(
-            UUID(g.org_id), contact_uuid, request.get_json(silent=True) or {}, actor_id=_actor()
-        )
+        contact, state, changed = _contact_sync().update_contact(UUID(g.org_id), contact_uuid, data, actor_id=_actor())
     except ContactNotFoundError:
         return jsonify({"error": "Customer not found"}), 404
     except ValueError as e:
@@ -220,12 +246,12 @@ def set_customer_xero_sync(contact_id: str):
     from app.features.crm.services.contact_service import ContactNotFoundError
 
     contact_uuid = _uuid_or_none(contact_id)
-    data = request.get_json(silent=True)
-    if contact_uuid is None or not isinstance(data, dict) or "sync_to_xero" not in data:
-        return jsonify({"error": "Send sync_to_xero: true, false or null"}), 400
+    if contact_uuid is None:
+        raise InvalidInputError({"contact_id": "Enter a valid contact ID."})
+    data = read_json(ContactSyncInput)
     try:
         contact, state = _contact_sync().set_contact_sync(
-            UUID(g.org_id), contact_uuid, data["sync_to_xero"], actor_id=_actor()
+            UUID(g.org_id), contact_uuid, data.sync_to_xero, actor_id=_actor()
         )
     except ContactNotFoundError:
         return jsonify({"error": "Customer not found"}), 404
@@ -261,10 +287,8 @@ def get_contact_sync_settings():
 @requires_auth
 def update_contact_sync_settings():
     """The Sales default for contacts created in Biz-E. Turning it on sends those not yet in Xero."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or not isinstance(data.get("sync_contacts_to_xero"), bool):
-        return jsonify({"error": "Send sync_contacts_to_xero: true or false"}), 400
-    result = _contact_sync().set_sync_default(UUID(g.org_id), data["sync_contacts_to_xero"], actor_id=_actor())
+    data = read_json(ContactSyncSettingsInput)
+    result = _contact_sync().set_sync_default(UUID(g.org_id), data.sync_contacts_to_xero, actor_id=_actor())
     return jsonify(result), 200
 
 
@@ -280,10 +304,7 @@ def get_customer_invoices(contact_id: str):
     contact_uuid = _uuid_or_none(contact_id)
     if contact_uuid is None:
         return jsonify({"error": "Invalid customer ID"}), 400
-    paging = _page_args(25)
-    if paging is None:
-        return jsonify({"error": "page and page_size must be integers"}), 400
-    page, page_size = paging
+    page, page_size = _page_args(25)
     result = _crm_service().get_customer_invoices(contact_uuid, org_id, page=page, page_size=page_size)
     return jsonify(result), 200
 
@@ -295,10 +316,7 @@ def get_org_invoices():
     kind = (request.args.get("kind") or "all").strip().lower()
     if kind not in {"all", "this_month", "outstanding"}:
         return jsonify({"error": "kind must be all, this_month or outstanding"}), 400
-    paging = _page_args(50)
-    if paging is None:
-        return jsonify({"error": "page and page_size must be integers"}), 400
-    page, page_size = paging
+    page, page_size = _page_args(50)
     result = _crm_service().get_org_invoices(org_id, kind=kind, page=page, page_size=page_size)
     return jsonify(result), 200
 
@@ -309,10 +327,7 @@ def list_pending_returns():
     """Mapped credit-note lines that still need a physical-return decision."""
     from app.features.crm.services.credit_note_returns import pending
 
-    paging = _page_args(25)
-    if paging is None:
-        return jsonify({"error": "page and page_size must be integers"}), 400
-    page, page_size = paging
+    page, page_size = _page_args(25)
     return jsonify(pending(db_session(), UUID(g.org_id), page=page, page_size=page_size)), 200
 
 
@@ -324,12 +339,9 @@ def record_credit_note_line_no_return(credit_note_id: str, line_id: str):
 
     note_uuid = _uuid_or_none(credit_note_id)
     line_uuid = _uuid_or_none(line_id)
-    data = request.get_json(silent=True)
-    note = data.get("note") if isinstance(data, dict) else None
     if note_uuid is None or line_uuid is None:
         return jsonify({"error": "Credit note line not found"}), 404
-    if not isinstance(note, str):
-        return jsonify({"error": "Add a note of 1 to 500 characters"}), 400
+    note = read_json(NoReturnNoteInput).note
     try:
         record_no_return(db_session(), UUID(g.org_id), note_uuid, line_uuid, UUID(g.user_id), note)
         db_session().commit()
@@ -406,9 +418,7 @@ def record_customer_return():
 
     from app.features.crm.services.sales_returns import ReturnConflictError, ReturnError, record_return, serialise
 
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "Send the return as JSON"}), 400
+    data = read_json(ServicePayload).model_dump()
     ids = {}
     for key, missing in (
         ("credit_note_line_id", "Credit note line not found"),
@@ -543,7 +553,7 @@ def get_org_line_item_descriptions():
 @requires_auth
 def create_customer_invoice(contact_id: str):
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
+    data = read_json(ServicePayload).model_dump()
     try:
         invoice = _crm_service().create_customer_invoice(UUID(contact_id), org_id, data)
     except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
@@ -630,10 +640,7 @@ def get_customer_analytics(contact_id: str):
 @requires_auth
 def create_note(contact_id: str):
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"error": "content is required"}), 400
+    content = read_json(NoteInput).content
 
     svc = _crm_service()
     try:
@@ -647,10 +654,7 @@ def create_note(contact_id: str):
 @requires_auth
 def update_note(note_id: str):
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"error": "content is required"}), 400
+    content = read_json(NoteInput).content
 
     note_uuid = _uuid_or_none(note_id)
     if note_uuid is None:
@@ -706,9 +710,7 @@ def list_tasks():
 @requires_auth
 def create_task():
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    if not isinstance(data, dict):
-        return jsonify(error="Use a task object"), 400
+    data = read_json(CreateTaskInput).model_dump(mode="json", exclude_unset=True)
     if data.get("task_type") == "tasting":
         from app.features.compliant.service import nz_alcohol_active
         from app.features.tastings.routes.tasting_routes import _write
@@ -729,7 +731,7 @@ def create_task():
         row = _crm_service().task_repo.get_by_id(UUID(event["task_id"]), org_id)
         return jsonify(task=_serialise_task(row, db=db_session()), tasting=event), 201
     if not data.get("title"):
-        return jsonify({"error": "title is required"}), 400
+        raise InvalidInputError({"title": "Enter a task title."})
 
     try:
         task = _crm_service().create_task(org_id, data, UUID(g.user_id) if g.user_id else None)
@@ -763,7 +765,9 @@ def get_task(task_id: str):
 @requires_auth
 def update_task(task_id: str):
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
+    data = read_json(UpdateTaskInput).model_dump(mode="json", exclude_unset=True)
+    if "title" in data and data["title"] is None:
+        raise InvalidInputError({"title": "This field cannot be null."})
     try:
         task = _crm_service().update_task(UUID(task_id), org_id, data)
     except ValueError as e:
@@ -803,13 +807,14 @@ def list_task_lanes():
 @api_bp.route("/api/crm/tasks/lanes", methods=["POST"])
 @requires_auth
 def create_task_lane():
+    data = read_json(ServicePayload).model_dump()
     try:
         lane = create_lane(
             db_session(),
             UUID(g.org_id),
             "crm",
             UUID(g.user_id) if g.user_id else None,
-            request.get_json(silent=True) or {},
+            data,
         )
         return jsonify({"lane": lane}), 201
     except TaskError as exc:
@@ -819,8 +824,9 @@ def create_task_lane():
 @api_bp.route("/api/crm/tasks/lanes/<lane_id>", methods=["PUT"])
 @requires_auth
 def update_task_lane(lane_id: str):
+    data = read_json(ServicePayload).model_dump()
     try:
-        lane = update_lane(db_session(), UUID(g.org_id), "crm", UUID(lane_id), request.get_json(silent=True) or {})
+        lane = update_lane(db_session(), UUID(g.org_id), "crm", UUID(lane_id), data)
         if lane is None:
             return jsonify({"error": "Lane not found"}), 404
         return jsonify({"lane": lane}), 200
@@ -831,12 +837,9 @@ def update_task_lane(lane_id: str):
 @api_bp.route("/api/crm/tasks/lanes/order", methods=["PUT"])
 @requires_auth
 def reorder_task_lanes():
-    data = request.get_json(silent=True) or {}
+    data = read_json(ReorderLanesInput)
     try:
-        raw_ids = data.get("lane_ids")
-        if set(data) != {"lane_ids"} or not isinstance(raw_ids, list):
-            raise TaskError("lane_ids is required")
-        lanes = reorder_lanes(db_session(), UUID(g.org_id), "crm", [UUID(raw_id) for raw_id in raw_ids])
+        lanes = reorder_lanes(db_session(), UUID(g.org_id), "crm", data.lane_ids)
         return jsonify({"lanes": lanes}), 200
     except (TaskError, ValueError, TypeError) as exc:
         return jsonify({"error": str(exc)}), 400
@@ -856,11 +859,9 @@ def delete_task_lane(lane_id: str):
 @api_bp.route("/api/crm/tasks/<task_id>/lane", methods=["PUT"])
 @requires_auth
 def assign_task_lane(task_id: str):
-    data = request.get_json(silent=True) or {}
+    data = read_json(AssignLaneInput)
     try:
-        if set(data) != {"lane_id"}:
-            raise TaskError("lane_id is required")
-        lane_id = UUID(data["lane_id"]) if data["lane_id"] else None
+        lane_id = data.lane_id if isinstance(data.lane_id, UUID) else None
         task = assign_task_to_lane(db_session(), UUID(g.org_id), "crm", UUID(task_id), lane_id)
         if task is None:
             return jsonify({"error": "Task not found"}), 404
@@ -922,10 +923,7 @@ def excise_month():
 @requires_auth
 def monthly_sales():
     org_id = UUID(g.org_id)
-    try:
-        months = min(24, max(1, int(request.args.get("months", 12))))
-    except ValueError:
-        return jsonify({"error": "months must be an integer"}), 400
+    months = min(24, max(1, _integer_query("months", 12)))
     data = _crm_service().monthly_sales(org_id, months=months)
     return jsonify({"monthly_sales": data}), 200
 
@@ -934,10 +932,7 @@ def monthly_sales():
 @requires_auth
 def customer_breakdown():
     org_id = UUID(g.org_id)
-    try:
-        top_n = min(50, max(1, int(request.args.get("top_n", 20))))
-    except ValueError:
-        return jsonify({"error": "top_n must be an integer"}), 400
+    top_n = min(50, max(1, _integer_query("top_n", 20)))
     data = _crm_service().customer_breakdown(org_id, top_n=top_n)
     return jsonify({"customer_breakdown": data, "customers": data}), 200
 
@@ -954,13 +949,12 @@ def rankings():
     if direction not in {"top", "bottom"}:
         return jsonify({"error": "direction must be top or bottom"}), 400
 
-    try:
-        limit = min(50, max(1, int(request.args.get("limit", 10))))
-    except ValueError:
-        return jsonify({"error": "limit must be an integer"}), 400
+    limit = min(50, max(1, _integer_query("limit", 10)))
     months = request.args.get("months")
     period_n = request.args.get("period_n")
-    period_unit = (request.args.get("period_unit") or "months").strip().lower()
+    period_unit = query_text("period_unit", default="months", max_length=8).lower()
+    if period_unit not in {"days", "weeks", "months", "years"}:
+        raise InvalidInputError({"period_unit": "Choose days, weeks, months or years."})
     start_month = (request.args.get("start_month") or "").strip()
     end_month = (request.args.get("end_month") or "").strip()
     start_date_raw = (request.args.get("start_date") or "").strip()
@@ -970,10 +964,7 @@ def rankings():
     end_date = None
 
     if period_n:
-        try:
-            n = min(3650, max(1, int(period_n)))
-        except ValueError:
-            return jsonify({"error": "period_n must be an integer"}), 400
+        n = min(3650, max(1, _integer_query("period_n", 12)))
         today = date.today()
         # Inclusive "last n <unit>" window ending today.
         end_date = today + timedelta(days=1)
@@ -982,6 +973,8 @@ def rankings():
         elif period_unit == "weeks":
             start_date = today - timedelta(days=(n * 7) - 1)
         elif period_unit == "years":
+            if n * 365 > today.toordinal():
+                raise InvalidInputError({"period_n": "The period starts before the earliest date."})
             start_date = today - timedelta(days=(n * 365) - 1)
         else:
             # default: months
@@ -1004,13 +997,12 @@ def rankings():
         if end_date_raw:
             try:
                 end_date = date.fromisoformat(end_date_raw) + timedelta(days=1)
-            except ValueError:
-                return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
+            except (ValueError, OverflowError):
+                raise InvalidInputError(
+                    {"end_date": "end_date must be a supported date in YYYY-MM-DD format"}
+                ) from None
     elif months:
-        try:
-            m = min(36, max(1, int(months)))
-        except ValueError:
-            return jsonify({"error": "months must be an integer"}), 400
+        m = min(36, max(1, _integer_query("months", 12)))
         today = date.today()
         current_month_start = today.replace(day=1)
         y = current_month_start.year
@@ -1101,7 +1093,7 @@ def update_traceability_config():
     from app.features.crm.services.crm_service import MatchingModeChangeError
 
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
+    data = read_json(TraceabilitySettingsInput).model_dump(mode="json", exclude_unset=True)
     # SALES-PERM: the matching mode decides whether waiting sales take stock. Switching it
     # (say manual -> fifo) makes the next sync consume the whole waiting backlog, the same
     # effect as /matching/run, so changing it needs inventory.adjust beside sales.manage. The
@@ -1166,8 +1158,9 @@ def _line_ref(data):
 @api_bp.route("/api/crm/matching/confirm", methods=["POST"])
 @requires_auth
 def confirm_matching_line():
+    data = read_json(LineRefInput)
     try:
-        invoice_id, line_key = _line_ref(request.get_json(silent=True) or {})
+        invoice_id, line_key = data.invoice_id, data.line_key
         count = _traceability().confirm_line(UUID(g.org_id), invoice_id, line_key)
         db_session.commit()
     except ValueError as e:
@@ -1182,7 +1175,7 @@ def confirm_matching_line():
 @requires_auth
 @requires_permission("inventory.adjust")
 def assign_matching_line():
-    data = request.get_json(silent=True) or {}
+    data = read_json(AssignMatchingLineInput).model_dump(mode="json", exclude_unset=True)
     try:
         invoice_id, line_key = _line_ref(data)
         created = _traceability().assign_line(
@@ -1235,14 +1228,7 @@ def list_final_products():
 @requires_auth
 def create_mapping():
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    if not data.get("biz_e_product_name") or not data.get("xero_description_pattern"):
-        return jsonify({"error": "biz_e_product_name and xero_description_pattern are required"}), 400
-    if data.get("biz_e_source_output_id"):
-        try:
-            UUID(data["biz_e_source_output_id"])
-        except Exception:
-            return jsonify({"error": "biz_e_source_output_id must be a valid UUID"}), 400
+    data = read_json(CreateMappingInput).model_dump(mode="json", exclude_unset=True)
 
     try:
         mapping = _crm_service().create_mapping(org_id, data, UUID(g.user_id) if g.user_id else None)
@@ -1265,7 +1251,7 @@ def create_mapping():
 @requires_auth
 def create_mappings_bulk():
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
+    data = read_json(BulkMappingsInput).model_dump(mode="json", exclude_unset=True)
     try:
         mappings = _crm_service().create_mappings(org_id, data.get("mappings"), UUID(g.user_id) if g.user_id else None)
         return jsonify({"product_mappings": mappings}), 201
@@ -1283,10 +1269,14 @@ def create_mappings_bulk():
 @requires_auth
 def update_mapping(mapping_id: str):
     org_id = UUID(g.org_id)
-    data = request.get_json() or {}
     mapping_uuid = _uuid_or_none(mapping_id)
     if mapping_uuid is None:
         return jsonify({"error": "Invalid mapping ID"}), 400
+    data = read_json(UpdateMappingInput).model_dump(mode="json", exclude_unset=True)
+    if "biz_e_product_name" in data and data["biz_e_product_name"] is None:
+        raise InvalidInputError({"biz_e_product_name": "This field cannot be null."})
+    if "xero_description_pattern" in data and data["xero_description_pattern"] is None:
+        raise InvalidInputError({"xero_description_pattern": "This field cannot be null."})
     try:
         mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
     except ValueError as e:

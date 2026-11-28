@@ -117,6 +117,8 @@
     function dialog(name) { return $('[data-lic-dialog="' + name + '"]'); }
     function openDialog(name) {
       var d = dialog(name);
+      if (name === 'licence') syncKind();
+      if (name === 'manager') syncManager();
       if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
       var first = d.querySelector('input:not([type="hidden"]), select, textarea');
       if (first) first.focus();
@@ -454,9 +456,18 @@
       var special = $('[data-licence-kind]').value === 'special';
       root.querySelectorAll('[data-special]').forEach(function (n) { n.hidden = !special; });
       root.querySelectorAll('[data-standing]').forEach(function (n) { n.hidden = special; });
+      var fields = $('[data-licence-form]').elements;
+      fields.expires_on.required = !special;
+      fields.event_name.required = special;
+      fields.event_starts_on.required = special;
+    }
+    function syncManager() {
+      var externalHolder = !$('[data-manager-user]').value;
+      $('[data-manager-name]').hidden = !externalHolder;
+      $('[data-manager-form]').elements.holder_name.required = externalHolder;
     }
     $('[data-licence-kind]').addEventListener('change', syncKind);
-    $('[data-manager-user]').addEventListener('change', function (e) { $('[data-manager-name]').hidden = !!e.target.value; });
+    $('[data-manager-user]').addEventListener('change', syncManager);
 
     $('[data-licence-form]').addEventListener('submit', async function (e) {
       e.preventDefault();

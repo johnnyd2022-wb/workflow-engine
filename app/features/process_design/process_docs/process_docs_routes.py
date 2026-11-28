@@ -1,9 +1,11 @@
 """API routes for process step documentation (SOP): upload, inline, list, delete, download."""
 
 from io import BytesIO
+from typing import Annotated, Literal
 from uuid import UUID
 
 from flask import g, jsonify, request, send_file
+from pydantic import StringConstraints
 
 from app.core.db.models.user import UserRole
 from app.core.security.permissions import requires_auth, requires_role
@@ -23,8 +25,23 @@ from app.features.process_design.process_docs.process_docs_validation import (
     validate_upload_request,
 )
 from app.observability import get_logger
+from app.utils.request_validation import CleanName, CleanText, InvalidInputError, JsonInput, read_form, read_json
 
 logger = get_logger(__name__)
+
+
+class UploadMetadataInput(JsonInput):
+    process_id: Annotated[CleanName, StringConstraints(max_length=36)]
+    step_id: Annotated[CleanName, StringConstraints(max_length=36)]
+    title: Annotated[CleanText, StringConstraints(max_length=512)] = ""
+
+
+class InlineDocumentInput(JsonInput):
+    process_id: UUID
+    step_id: UUID
+    title: Annotated[CleanName, StringConstraints(max_length=512)]
+    content_markdown: Annotated[str, StringConstraints(max_length=1_000_000, pattern=r"^[^\x00]*$")]
+    document_id: UUID | Literal[""] | None = None
 
 
 def _org_uuid():
@@ -66,15 +83,17 @@ def register_routes(bp):
         org_id = _org_uuid()
         if not org_id:
             return jsonify({"error": "Organisation context required"}), 400
-        process_id = request.form.get("process_id", "").strip()
-        step_id = request.form.get("step_id", "").strip()
-        title = request.form.get("title", "").strip()
+        try:
+            data = read_form(UploadMetadataInput)
+        except InvalidInputError as exc:
+            return exc.response()
+        process_id, step_id, title = data.process_id, data.step_id, data.title
         ok, err = validate_upload_request(org_id, process_id, step_id)
         if not ok:
-            return jsonify({"error": err}), 400
+            return InvalidInputError({"step_id": err}).response()
         ok, err, temp_path, content_type, original_filename, file_size = validate_file_streaming()
         if not ok:
-            return jsonify({"error": err}), 400
+            return InvalidInputError({"file": err}).response()
         try:
             p_uuid = UUID(process_id)
             s_uuid = UUID(step_id)
@@ -121,33 +140,25 @@ def register_routes(bp):
         org_id = _org_uuid()
         if not org_id:
             return jsonify({"error": "Organisation context required"}), 400
-        data = request.get_json() or {}
-        process_id_s = data.get("process_id", "").strip()
-        step_id_s = data.get("step_id", "").strip()
-        title = (data.get("title") or "").strip()
-        content_markdown = data.get("content_markdown")
-        document_id_s = (data.get("document_id") or "").strip() or None
-        if content_markdown is not None and not isinstance(content_markdown, str):
-            content_markdown = str(content_markdown)
         try:
-            p_uuid = UUID(process_id_s) if process_id_s else None
-            s_uuid = UUID(step_id_s) if step_id_s else None
-            doc_uuid = UUID(document_id_s) if document_id_s else None
-        except (ValueError, TypeError):
-            return jsonify({"error": "Invalid process_id, step_id, or document_id"}), 400
-        if not p_uuid or not s_uuid:
-            return jsonify({"error": "process_id and step_id are required"}), 400
-        ok, err = validate_inline_request(org_id, p_uuid, s_uuid, title, content_markdown or "")
+            data = read_json(InlineDocumentInput)
+        except InvalidInputError as exc:
+            if "title" in exc.errors:
+                return jsonify(error="Enter a title of up to 512 characters.", errors=exc.errors), 400
+            return exc.response()
+        if not data.content_markdown.strip():
+            return InvalidInputError({"content_markdown": "content_markdown is required for inline SOP"}).response()
+        ok, err = validate_inline_request(org_id, data.process_id, data.step_id, data.title, data.content_markdown)
         if not ok:
-            return jsonify({"error": err}), 400
+            return InvalidInputError({"step_id": err}).response()
         result, err_msg, status = create_or_update_inline(
             org_id=org_id,
-            process_id=p_uuid,
-            step_id=s_uuid,
-            title=title,
-            content_markdown=content_markdown or "",
+            process_id=data.process_id,
+            step_id=data.step_id,
+            title=data.title,
+            content_markdown=data.content_markdown,
             created_by=_user_id_uuid(),
-            document_id=doc_uuid,
+            document_id=data.document_id or None,
         )
         if err_msg:
             return jsonify({"error": err_msg}), status
@@ -155,7 +166,7 @@ def register_routes(bp):
             "create" if status == 201 else "update",
             "process_step_document",
             result.get("id") and UUID(result["id"]),
-            {"process_id": process_id_s, "step_id": step_id_s, "title": result.get("title")},
+            {"process_id": str(data.process_id), "step_id": str(data.step_id), "title": result.get("title")},
             org_id,
             _user_id_uuid(),
         )

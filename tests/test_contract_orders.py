@@ -537,3 +537,16 @@ def test_the_order_page_names_batches_for_people_not_by_id(world, db):
     for batch in (linked, unlinked):
         assert f">{batch.id}" not in page and str(batch.id)[:8] + "<" not in page
         assert f"{str(batch.id)[:8]}</option>" not in page
+
+
+def test_customer_name_rejects_unstorable_text(world):
+    client = world["clients"][0]
+    response = client.post(CUSTOMERS, json={"name": "Brand\0owner"})
+    assert response.status_code == 400
+    assert "name" in response.json["errors"]
+
+
+def test_contract_order_list_rejects_duplicate_status(world):
+    response = world["clients"][0].get(API + "?status=draft&status=confirmed")
+    assert response.status_code == 400
+    assert "status" in response.json["errors"]

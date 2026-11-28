@@ -3,7 +3,7 @@
 from urllib.parse import urlsplit
 
 from authlib.integrations.flask_client import OAuth
-from flask import current_app
+from flask import current_app, request
 
 from app.features.google_sign_in.service import ISSUERS, GoogleSignInError, validate_verified_claims
 
@@ -50,6 +50,14 @@ def google_client():
     if not current_app.config.get("GOOGLE_SIGN_IN_ENABLED"):
         raise GoogleSignInError("Google sign-in is not configured")
     return current_app.extensions["google_oidc_client"]
+
+
+def callback_state() -> str | None:
+    """Read the state created with token_urlsafe(32) on either sign-in surface."""
+    states = request.args.getlist("state")
+    if len(states) != 1 or len(states[0]) != 43 or not states[0].isascii():
+        return None
+    return states[0]
 
 
 def exchange_verified_identity(nonce):

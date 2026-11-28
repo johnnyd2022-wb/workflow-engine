@@ -1,8 +1,10 @@
 """Site configuration API and page; existing operational routes retain their URLs."""
 
+from typing import Annotated
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request
+from pydantic import StringConstraints
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -11,6 +13,7 @@ from app.core.db.site_guard import SiteScopeError
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.features.sites import service
+from app.utils.request_validation import CleanName, InvalidInputError, JsonInput, read_json
 
 sites_bp = Blueprint(
     "sites",
@@ -30,11 +33,25 @@ def _operations() -> bool:
     return sites_on(db_session, _org(), g.current_org.multiple_sites_enabled)
 
 
-def _body():
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        raise SiteScopeError("Send a JSON object")
-    return data
+class SiteSettingsInput(JsonInput):
+    enabled: bool
+
+
+class UpdateSiteInput(JsonInput):
+    name: Annotated[CleanName, StringConstraints(max_length=120)] | None = None
+    address: Annotated[str, StringConstraints(max_length=500, pattern=r"^[^\x00]*$")] | None = None
+    kind: Annotated[CleanName, StringConstraints(max_length=32)] = "manufacturing"
+    is_active: bool = True
+    is_default: bool = False
+
+
+class CreateSiteInput(UpdateSiteInput):
+    name: Annotated[CleanName, StringConstraints(max_length=120)]
+
+
+@sites_bp.errorhandler(InvalidInputError)
+def invalid_site_input(error):
+    return jsonify(error=str(error), errors=error.errors, code="invalid_site_scope"), 400
 
 
 @sites_bp.errorhandler(SiteScopeError)
@@ -106,10 +123,8 @@ def site_position(site_id):
 @sites_bp.route("/api/core/sites/settings", methods=["PUT"])
 @requires_auth
 def configure_sites():
-    data = _body()
-    if set(data) != {"enabled"}:
-        raise SiteScopeError("Send only the enabled setting")
-    org = service.configure(db_session, _org(), data["enabled"])
+    data = read_json(SiteSettingsInput)
+    org = service.configure(db_session, _org(), data.enabled)
     db_session.commit()
     log_action("update", "organisation", org.id, {"multiple_sites_enabled": org.multiple_sites_enabled})
     return jsonify(service.overview(db_session, _org()))
@@ -118,7 +133,7 @@ def configure_sites():
 @sites_bp.route("/api/core/sites", methods=["POST"])
 @requires_auth
 def create_site():
-    site = service.save_site(db_session, _org(), _body())
+    site = service.save_site(db_session, _org(), read_json(CreateSiteInput).model_dump(exclude_unset=True))
     db_session.commit()
     shown = service.serialise(site, _operations())
     log_action("create", "site", site.id, shown)
@@ -131,7 +146,7 @@ def update_site(site_id):
     site = service.get_site(db_session, _org(), service.parse_id(site_id))
     if site is None:
         return jsonify({"error": "Site not found"}), 404
-    service.save_site(db_session, _org(), _body(), site)
+    service.save_site(db_session, _org(), read_json(UpdateSiteInput).model_dump(exclude_unset=True), site)
     db_session.commit()
     shown = service.serialise(site, _operations())
     log_action("update", "site", site.id, shown)

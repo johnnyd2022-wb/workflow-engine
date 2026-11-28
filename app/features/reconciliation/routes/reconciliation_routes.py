@@ -9,17 +9,50 @@ from __future__ import annotations
 from uuid import UUID
 
 from flask import g, jsonify, request
+from pydantic import AliasChoices, Field
 
 from app.core.db import db_session
+from app.core.db.models.inventory_item import InventoryType
 from app.core.security.permissions import requires_auth
+from app.features.inventory.inventory_payloads import (
+    InventoryDate,
+    LotName,
+    LotText,
+    LotUnit,
+    OptionalId,
+    PositiveQuantity,
+)
 from app.features.reconciliation.service import (
     get_matching_untracked,
     reconcile_via_addition,
     reconcile_via_execution,
 )
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
+
+
+class ReconcileAdditionInput(JsonInput):
+    name: LotName
+    quantity: PositiveQuantity
+    unit: LotUnit
+    inventory_type: InventoryType = InventoryType.RAW_MATERIAL
+    untracked_item_id: OptionalId = None
+    purchase_date: InventoryDate = None
+    supplier: LotText | None = None
+    supplier_batch_number: LotText | None = None
+    expiry_date: InventoryDate = None
+
+
+class ReconcileExecutionInput(JsonInput):
+    untracked_item_id: UUID
+    process_id: UUID
+    step_id: UUID
+    output_name: LotName = Field(validation_alias=AliasChoices("output_name", "name"))
+    output_quantity: PositiveQuantity = Field(validation_alias=AliasChoices("output_quantity", "quantity"))
+    output_unit: LotUnit = Field(validation_alias=AliasChoices("output_unit", "unit"))
+    output_date: InventoryDate = None
 
 
 def register_routes(bp):
@@ -64,24 +97,16 @@ def register_routes(bp):
         user_email = getattr(g, "user_email", None)
         if user_id is not None:
             user_id = str(user_id)
-        data = request.get_json() or {}
-        name = (data.get("name") or "").strip()
-        quantity = data.get("quantity")
-        unit = (data.get("unit") or "").strip()
-        inventory_type = (data.get("inventory_type") or "raw_material").strip()
-        untracked_item_id_str = data.get("untracked_item_id")
-        untracked_item_id = None
-        if untracked_item_id_str:
-            try:
-                untracked_item_id = UUID(untracked_item_id_str)
-            except ValueError:
-                return jsonify({"error": "Invalid untracked_item_id"}), 400
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-        if quantity is None:
-            return jsonify({"error": "quantity is required"}), 400
-        if not unit:
-            return jsonify({"error": "unit is required"}), 400
+        try:
+            data = read_json(ReconcileAdditionInput)
+        except InvalidInputError as exc:
+            field = next(iter(exc.errors))
+            if field in exc.missing_fields:
+                return jsonify(error=f"{field} is required", errors=exc.errors), 400
+            if field == "untracked_item_id":
+                return jsonify(error="Invalid untracked_item_id", errors=exc.errors), 400
+            return exc.response()
+        fields = data.model_dump(mode="json")
 
         session = db_session()
         try:
@@ -90,15 +115,15 @@ def register_routes(bp):
                 session=session,
                 user_id=user_id,
                 user_email=user_email,
-                name=name,
-                quantity=quantity,
-                unit=unit,
-                inventory_type=inventory_type,
-                untracked_item_id=untracked_item_id,
-                purchase_date=data.get("purchase_date"),
-                supplier=data.get("supplier"),
-                supplier_batch_number=data.get("supplier_batch_number"),
-                expiry_date=data.get("expiry_date"),
+                name=data.name,
+                quantity=data.quantity,
+                unit=data.unit,
+                inventory_type=data.inventory_type.value,
+                untracked_item_id=data.untracked_item_id or None,
+                purchase_date=fields["purchase_date"],
+                supplier=data.supplier,
+                supplier_batch_number=data.supplier_batch_number,
+                expiry_date=fields["expiry_date"],
             )
         finally:
             session.close()
@@ -116,34 +141,19 @@ def register_routes(bp):
         user_email = getattr(g, "user_email", None)
         if user_id is not None:
             user_id = str(user_id)
-        data = request.get_json() or {}
-        untracked_item_id_str = data.get("untracked_item_id")
-        process_id_str = data.get("process_id")
-        step_id_str = data.get("step_id")
-        output_name = (data.get("output_name") or data.get("name") or "").strip()
-        output_quantity = data.get("output_quantity") or data.get("quantity")
-        output_unit = (data.get("output_unit") or data.get("unit") or "").strip()
-
-        if not untracked_item_id_str:
-            return jsonify({"error": "untracked_item_id is required"}), 400
-        if not process_id_str:
-            return jsonify({"error": "process_id is required"}), 400
-        if not step_id_str:
-            return jsonify({"error": "step_id is required"}), 400
-        if not output_name:
-            return jsonify({"error": "output_name (or name) is required"}), 400
-        if output_quantity is None:
-            return jsonify({"error": "output_quantity (or quantity) is required"}), 400
-        if not output_unit:
-            return jsonify({"error": "output_unit (or unit) is required"}), 400
-
         try:
-            untracked_item_id = UUID(untracked_item_id_str)
-            process_id = UUID(process_id_str)
-            step_id = UUID(step_id_str)
-        except ValueError:
-            logger.warning("reconcile_via_execution invalid uuid in request")
-            return jsonify({"error": "Invalid untracked_item_id, process_id, or step_id"}), 400
+            data = read_json(ReconcileExecutionInput)
+        except InvalidInputError as exc:
+            field = next(iter(exc.errors))
+            if field in exc.missing_fields:
+                label = field
+                if field.startswith("output_"):
+                    label = f"{field} (or {field.removeprefix('output_')})"
+                return jsonify(error=f"{label} is required", errors=exc.errors), 400
+            if field in {"untracked_item_id", "process_id", "step_id"}:
+                return jsonify(error="Invalid untracked_item_id, process_id, or step_id", errors=exc.errors), 400
+            return exc.response()
+        fields = data.model_dump(mode="json")
 
         session = db_session()
         try:
@@ -152,13 +162,13 @@ def register_routes(bp):
                 session=session,
                 user_id=user_id,
                 user_email=user_email,
-                untracked_item_id=untracked_item_id,
-                process_id=process_id,
-                step_id=step_id,
-                output_name=output_name,
-                output_quantity=output_quantity,
-                output_unit=output_unit,
-                output_date=data.get("output_date"),
+                untracked_item_id=data.untracked_item_id,
+                process_id=data.process_id,
+                step_id=data.step_id,
+                output_name=data.output_name,
+                output_quantity=data.output_quantity,
+                output_unit=data.output_unit,
+                output_date=fields["output_date"],
             )
         finally:
             session.close()

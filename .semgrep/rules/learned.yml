@@ -185,3 +185,38 @@ rules:
       - pattern: $Q.query(EntityEventSummary).filter(EntityEventSummary.entity_id == $EID).$METHOD(...)
       - pattern-not: $Q.query(EntityEventSummary).filter(EntityEventSummary.entity_id == $EID, EntityEventSummary.org_id == $ORG).$METHOD(...)
       - pattern-not: $Q.query(EntityEventSummary).filter(EntityEventSummary.org_id == $ORG, EntityEventSummary.entity_id == $EID).$METHOD(...)
+
+  - id: bize-input-validation-json-object
+    languages: [python]
+    severity: WARNING
+    message: >-
+      A parsed JSON body can be a scalar or array. Check its object shape before
+      reading fields, or use a route-specific request validation schema.
+    metadata:
+      born-from: security-audit (input validation review)
+      finding: "VAL-AUTH: auth_routes.py reads fields after checking only JSON truthiness."
+      date: "2026-11-27"
+      fixture: bize-input-validation-json-object
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $BODY = request.get_json(...)
+              if not $BODY:
+                  return ...
+              ...
+              $VALUE = $BODY.get(...)
+          - pattern: |
+              $BODY = request.json
+              if not $BODY:
+                  return ...
+              ...
+              $VALUE = $BODY.get(...)
+      - pattern-not: |
+          $BODY = ...
+          if not $BODY:
+              return ...
+          ...
+          if not isinstance($BODY, dict):
+              return ...
+          ...
+          $VALUE = $BODY.get(...)

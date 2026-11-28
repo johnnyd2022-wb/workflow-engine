@@ -3,6 +3,6 @@
 <form data-portal-api="/portal/api/accept" data-invite hx-boost="false">
 <label>New password<input type="password" name="password" minlength="12" required autocomplete="new-password">
 </label>
-<p>At least 12 characters. This invitation can be used once.</p>
+<p>At least 12 characters and up to 72 UTF-8 bytes. This invitation can be used once.</p>
 <button type="submit">Create portal account</button>
 </form>{% endblock %}

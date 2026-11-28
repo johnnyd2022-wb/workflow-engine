@@ -3,10 +3,12 @@ operational-case routes; these carry the recall's own record."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify
+from pydantic import Field
 
 from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
@@ -15,6 +17,7 @@ from app.core.utils.log_action import log_action
 from app.core.utils.time import utc_now
 from app.features.recalls import service
 from app.features.recalls.models import Recall
+from app.utils.request_validation import InvalidInputError, JsonInput, read_json, read_service_json
 
 bp = Blueprint("recalls", __name__)
 
@@ -26,21 +29,36 @@ def _uuid(value):
         return None
 
 
-def _body() -> dict:
-    body = request.get_json(silent=True)
-    return body if isinstance(body, dict) else {}
+class OpenRecallInput(JsonInput):
+    lot_id: UUID
+    owner_id: UUID | None = None
+    reason: str = Field(max_length=service.MAX_TEXT, pattern=r"^[^\x00]*$")
+    risk: Literal["health", "quality", "regulatory"]
+    due_at: str | None = Field(default=None, max_length=64)
+    is_drill: bool = False
+
+
+@bp.errorhandler(InvalidInputError)
+def invalid_input(error):
+    db_session().rollback()
+    return error.response()
 
 
 def _when(value, field: str) -> datetime:
     if value in (None, ""):
         return utc_now()
+    if not isinstance(value, str) or len(value) > 64:
+        raise service.RecallError(f"{field} must be a date and time")
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         raise service.RecallError(f"{field} must be a date and time") from None
     if parsed.tzinfo is None:
         raise service.RecallError(f"{field} needs a time zone")
-    return parsed
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError:
+        raise service.RecallError(f"{field} must be a representable UTC timestamp") from None
 
 
 def _fail(exc: service.RecallError):
@@ -64,24 +82,24 @@ def _recall(recall_id):
 @requires_auth
 @requires_org_scope
 def open_recall():
-    body = _body()
+    try:
+        data = read_json(OpenRecallInput)
+    except InvalidInputError as exc:
+        if set(exc.errors) == {"lot_id"}:
+            return jsonify({"error": "Lot not found"}), 404
+        raise
     session = db_session()
     try:
-        lot_id, owner_id = _uuid(body.get("lot_id")), _uuid(body.get("owner_id") or g.current_user.id)
-        if lot_id is None:
-            raise service.RecallError("Lot not found", 404)
-        if owner_id is None:
-            raise service.RecallError("Choose an owner from your team")
         recall = service.open_recall(
             session,
             g.current_org_id,
             g.current_user,
-            lot_id=lot_id,
-            reason=body.get("reason"),
-            risk=str(body.get("risk") or ""),
-            owner_id=owner_id,
-            due_at=_when(body.get("due_at"), "Due date"),
-            is_drill=body.get("is_drill") is True,
+            lot_id=data.lot_id,
+            reason=data.reason,
+            risk=data.risk,
+            owner_id=data.owner_id or g.current_user.id,
+            due_at=_when(data.due_at, "Due date"),
+            is_drill=data.is_drill,
         )
         session.commit()
     except service.RecallError as exc:
@@ -166,7 +184,7 @@ def _contact_action(recall_id, contact_id, action):
         cid = _uuid(contact_id)
         if cid is None:
             raise service.RecallError("Customer not found on this recall", 404)
-        contact = action(session, recall.id, cid, _body())
+        contact = action(session, recall.id, cid, read_service_json())
         session.commit()
     except service.RecallError as exc:
         return _fail(exc)

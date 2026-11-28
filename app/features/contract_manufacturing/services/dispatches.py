@@ -25,24 +25,17 @@ from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stor
 from app.core.utils.unit_conversion import is_count_unit
 from app.features.contract_manufacturing.models.dispatch import ContractDispatch, ContractDispatchLine
 from app.features.contract_manufacturing.models.orders import ContractCustomer, ContractOrder, ContractOrderExecution
-from app.features.contract_manufacturing.services.orders import OrderError
+from app.features.contract_manufacturing.services.orders import OrderError, object_body, text_value
 
 NZ = ZoneInfo("Pacific/Auckland")  # moves are entered and dated in NZ time
 RECEIPT_OVERDUE_DAYS = 14  # the same as a sale to another CCA (cca_transfers)
 
 
 def _nz_day(moment: datetime) -> date:
-    return moment.astimezone(NZ).date()
-
-
-def _text(value, label: str, limit: int, required: bool = True) -> str | None:
-    if value is None or (isinstance(value, str) and not value.strip()):
-        if required:
-            raise OrderError(f"Enter the {label}")
-        return None
-    if not isinstance(value, str) or len(value.strip()) > limit:
-        raise OrderError(f"The {label} must be text of at most {limit} characters")
-    return value.strip()
+    try:
+        return moment.astimezone(NZ).date()
+    except OverflowError:
+        raise OrderError("Choose a departure date that can be represented in New Zealand time") from None
 
 
 def _when(value) -> datetime:
@@ -62,6 +55,8 @@ def _quantity(value) -> Decimal:
         raise OrderError("Each quantity must be a number") from None
     if not amount.is_finite() or amount <= 0 or amount.adjusted() > 12:
         raise OrderError("Each quantity must be more than zero")
+    if amount != amount.quantize(Decimal("0.0001")):
+        raise OrderError("Each quantity supports at most four decimal places")
     return amount
 
 
@@ -157,23 +152,21 @@ def dispatches(db, org_id: UUID, order_id: UUID) -> list[dict]:
 
 def dispatch(db, org_id: UUID, order_id: UUID, data, user_id) -> ContractDispatch:
     """Take the chosen quantities off the order's lots and record where they went."""
-    if not isinstance(data, dict):
-        raise OrderError("Send the dispatch as an object")
+    object_body(data, {"moved_at", "carrier", "consignment_note", "lines"})
     order = _order(db, org_id, order_id, lock=True)
     if order.status not in {"confirmed", "completed"}:
         raise OrderError("Only a confirmed or completed order can be dispatched", 409)
     moved_at = _when(data.get("moved_at"))
     if _nz_day(moved_at) > date.today() + timedelta(days=1):
         raise OrderError("The goods can't leave in the future")
-    carrier = _text(data.get("carrier"), "carrier", 200)
-    note = _text(data.get("consignment_note"), "consignment note", 200, required=False)
+    carrier = text_value(data.get("carrier"), "carrier", 200)
+    note = text_value(data.get("consignment_note"), "consignment note", 200, required=False)
     picks = data.get("lines")
     if not isinstance(picks, list) or not picks or len(picks) > 50:
         raise OrderError("Choose at least one batch to dispatch")
     wanted: dict[UUID, Decimal] = {}
     for pick in picks:
-        if not isinstance(pick, dict):
-            raise OrderError("Choose at least one batch to dispatch")
+        object_body(pick, {"inventory_item_id", "quantity"})
         try:
             item_id = UUID(str(pick.get("inventory_item_id")))
         except ValueError:
@@ -262,8 +255,7 @@ def dispatch(db, org_id: UUID, order_id: UUID, data, user_id) -> ContractDispatc
 
 def record_receipt(db, org_id: UUID, order_id: UUID, dispatch_id: UUID, data) -> ContractDispatch:
     """The customer's written acknowledgement that the goods arrived at their CCA."""
-    if not isinstance(data, dict):
-        raise OrderError("Send the receipt as an object")
+    object_body(data, {"received_on", "receipt_reference"})
     row = (
         db.query(ContractDispatch)
         .filter(
@@ -287,6 +279,8 @@ def record_receipt(db, org_id: UUID, order_id: UUID, dispatch_id: UUID, data) ->
     if received > date.today() + timedelta(days=1):
         raise OrderError("The receipt date can't be in the future")
     row.received_on = received
-    row.receipt_reference = _text(data.get("receipt_reference"), "receipt (who acknowledged it, or the document)", 500)
+    row.receipt_reference = text_value(
+        data.get("receipt_reference"), "receipt (who acknowledged it, or the document)", 500
+    )
     db.flush()
     return row

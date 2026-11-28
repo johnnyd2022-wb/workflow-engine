@@ -313,9 +313,13 @@
           select.replaceChildren();
           var first = el('option', 'Choose a product output'); first.value = ''; select.appendChild(first);
           cache.outputs.forEach(function (item) {
-            var option = el('option', item.name + ' (' + item.unit + ')'); option.value = item.id; select.appendChild(option);
+            var option = el('option', item.name + ' (' + item.unit + ')');
+            option.value = item.id;
+            option.dataset.counted = String(item.counted);
+            select.appendChild(option);
           });
           select.value = previous;
+          syncQuantityStep(select);
         }
         root.dataset.loaded = 'true';
         render();
@@ -353,20 +357,27 @@
         form.reset(); showForm(false); await load();
       } catch (err) { if (err.name !== 'AbortError') report(err.message); } finally { button.disabled = false; }
     }
-    async function onSite(event) {
+    function syncQuantityStep(select) {
+      var counted = select.selectedOptions[0]?.dataset.counted === 'true';
+      var quantity = form.elements.quantity;
+      quantity.step = counted ? '1' : '0.0001';
+      quantity.min = quantity.step;
+    }
+    async function onChange(event) {
+      if (event.target.matches('[data-output-select]')) syncQuantityStep(event.target);
       if (!event.target.matches('[data-cover-site-select]')) return;
       siteId = event.target.value || null;
       say('');
       await loadCover();
     }
-    root.addEventListener('change', onSite);
+    root.addEventListener('change', onChange);
     root.addEventListener('click', onClick);
     if (form) form.addEventListener('submit', onSubmit);
     load();
     return function () {
       controller.abort();
       root.removeEventListener('click', onClick);
-      root.removeEventListener('change', onSite);
+      root.removeEventListener('change', onChange);
       if (form) form.removeEventListener('submit', onSubmit);
     };
   }

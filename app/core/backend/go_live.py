@@ -18,10 +18,12 @@ dated before the go-live date are left out of batch matching (see
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
+from pydantic import Field, StringConstraints
 
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -32,8 +34,9 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
-from app.core.utils.unit_conversion import is_count_unit
+from app.core.utils.unit_conversion import is_count_unit, whole_count_error
 from app.observability import get_logger
+from app.utils.request_validation import CleanName, CleanText, InvalidInputError, JsonInput, read_json
 
 logger = get_logger(__name__)
 
@@ -42,6 +45,25 @@ _OPENING_TYPES = {
     "work_in_progress": InventoryType.WORK_IN_PROGRESS.value,
 }
 _MAX_ITEMS = 200
+
+
+class GoLiveDateInput(JsonInput):
+    go_live_date: date
+
+
+class OpeningStockRow(JsonInput):
+    name: Annotated[CleanName, StringConstraints(max_length=255)]
+    inventory_type: Literal["final_product", "work_in_progress"] = "final_product"
+    unit: Annotated[CleanText, StringConstraints(max_length=50)] | None = None
+    quantity: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=4)]
+    abv_percent: Annotated[Decimal, Field(ge=0, le=100, decimal_places=4)] | Literal[""] | None = None
+    bottled_on: date | Literal[""] | None = None
+    batch_id: Annotated[CleanText, StringConstraints(max_length=255)] | None = None
+
+
+class OpeningStockInput(JsonInput):
+    items: Annotated[list[OpeningStockRow], Field(min_length=1, max_length=_MAX_ITEMS)]
+    site_id: UUID | None = None
 
 
 def _org_id() -> UUID:
@@ -117,54 +139,20 @@ def go_live_status(session, org_id: UUID) -> dict:
     }
 
 
-def _parse_date(value, field: str) -> date | None:
-    if value in (None, ""):
-        return None
-    try:
-        return date.fromisoformat(str(value).strip())
-    except ValueError:
-        raise ValueError(f"{field} must be a date like 2026-10-01") from None
-
-
-def _parse_opening_row(row: dict, index: int, known_finals: dict) -> dict:
-    where = f"Row {index + 1}"
-    if not isinstance(row, dict):
-        raise ValueError(f"{where}: each row must be an object")
-    name = (row.get("name") or "").strip()
-    if not name:
-        raise ValueError(f"{where}: name is required")
-    kind = row.get("inventory_type") or "final_product"
-    if kind not in _OPENING_TYPES:
-        raise ValueError(f"{where}: inventory_type must be final_product or work_in_progress")
-    unit = (row.get("unit") or (known_finals.get(name.casefold(), {}).get("unit")) or "").strip()
+def _opening_row_values(row: OpeningStockRow, index: int, known_finals: dict) -> dict:
+    unit = row.unit or known_finals.get(row.name.casefold(), {}).get("unit")
     if not unit:
-        raise ValueError(f"{where}: unit is required")
-    try:
-        quantity = Decimal(str(row.get("quantity")))
-    except (InvalidOperation, ValueError, TypeError):
-        raise ValueError(f"{where}: quantity must be a number") from None
-    if not quantity.is_finite() or quantity <= 0:
-        raise ValueError(f"{where}: quantity must be more than 0")
-    abv = row.get("abv_percent")
-    if abv not in (None, ""):
-        try:
-            abv = Decimal(str(abv))
-        except (InvalidOperation, ValueError, TypeError):
-            raise ValueError(f"{where}: ABV must be a number") from None
-        if not (Decimal("0") <= abv <= Decimal("100")):
-            raise ValueError(f"{where}: ABV must be between 0 and 100")
-    else:
-        abv = None
-    bottled_on = _parse_date(row.get("bottled_on"), f"{where}: bottled date")
-    batch_id = (row.get("batch_id") or "").strip()[:255] or None
+        raise InvalidInputError({f"items.{index}.unit": f"Row {index + 1}: unit is required."})
+    if whole_count_error(row.quantity, unit):
+        raise InvalidInputError({f"items.{index}.quantity": f"Row {index + 1}: Enter a quantity in whole numbers."})
     return {
-        "name": name,
+        "name": row.name,
         "unit": unit,
-        "quantity": quantity,
-        "inventory_type": _OPENING_TYPES[kind],
-        "batch_id": batch_id,
-        "abv_percent": f"{abv.normalize():f}" if abv is not None else None,
-        "bottled_on": bottled_on.isoformat() if bottled_on else None,
+        "quantity": row.quantity,
+        "inventory_type": _OPENING_TYPES[row.inventory_type],
+        "batch_id": row.batch_id or None,
+        "abv_percent": f"{row.abv_percent.normalize():f}" if isinstance(row.abv_percent, Decimal) else None,
+        "bottled_on": row.bottled_on.isoformat() if row.bottled_on else None,
     }
 
 
@@ -182,13 +170,10 @@ def register_routes(bp):
     @bp.route("/api/core/go-live", methods=["PUT"])
     @requires_auth
     def set_go_live_date():
-        data = request.get_json(silent=True) or {}
         try:
-            go_live = _parse_date(data.get("go_live_date"), "go_live_date")
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-        if go_live is None:
-            return jsonify({"error": "go_live_date is required"}), 400
+            go_live = read_json(GoLiveDateInput).go_live_date
+        except InvalidInputError as exc:
+            return exc.response()
         org = db_session.get(Organisation, _org_id())
         before = org.go_live_date.isoformat() if org.go_live_date else None
         org.go_live_date = go_live
@@ -211,18 +196,15 @@ def register_routes(bp):
         org = db_session.get(Organisation, org_id)
         if org is None or org.go_live_date is None:
             return jsonify({"error": "Set your go-live date first."}), 409
-        data = request.get_json(silent=True) or {}
-        rows = data.get("items")
-        if not isinstance(rows, list) or not rows:
-            return jsonify({"error": "items must be a non-empty list"}), 400
-        if len(rows) > _MAX_ITEMS:
-            return jsonify({"error": f"At most {_MAX_ITEMS} rows at a time"}), 400
-
-        known = {o["name"].casefold(): o for o in workflow_outputs(db_session, org_id)["final_outputs"]}
+        try:
+            rows = read_json(OpeningStockInput).items
+            known = {o["name"].casefold(): o for o in workflow_outputs(db_session, org_id)["final_outputs"]}
+            parsed = [_opening_row_values(row, i, known) for i, row in enumerate(rows)]
+        except InvalidInputError as exc:
+            return exc.response()
         repo = InventoryRepository(db_session)
         created = []
         try:
-            parsed = [_parse_opening_row(row, i, known) for i, row in enumerate(rows)]
             for row in parsed:
                 extra = {"opening_stock": True, "opening_as_of": org.go_live_date.isoformat()}
                 if row["abv_percent"] is not None:

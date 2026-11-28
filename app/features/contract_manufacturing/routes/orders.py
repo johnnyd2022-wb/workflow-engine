@@ -3,11 +3,12 @@
 from functools import wraps
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
 from app.core.security.permissions import has_permission, requires_auth
+from app.features.contract_manufacturing.routes.request_payloads import CustomerInput, read_contract_body
 from app.features.contract_manufacturing.services import dispatches
 from app.features.contract_manufacturing.services.orders import (
     DUTY_RESPONSIBILITIES,
@@ -20,6 +21,7 @@ from app.features.contract_manufacturing.services.orders import (
     serialize_line,
     serialize_order,
 )
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 bp = Blueprint(
     "contracts",
@@ -77,6 +79,9 @@ def handled(function):
     def wrapped(*args, **kwargs):
         try:
             return function(*args, **kwargs)
+        except InvalidInputError as error:
+            db_session.rollback()
+            return error.response()
         except OrderError as error:
             db_session.rollback()
             return jsonify({"error": str(error)}), error.status
@@ -100,7 +105,7 @@ def list_customers():
 @requires_auth
 @handled
 def create_customer():
-    row = service().save_customer(request.get_json(silent=True))
+    row = service().save_customer(read_json(CustomerInput).model_dump(exclude_unset=True))
     db_session.commit()
     return jsonify({"customer": serialize_customer(row)}), 201
 
@@ -109,7 +114,7 @@ def create_customer():
 @requires_auth
 @handled
 def update_customer(customer_id):
-    row = service().save_customer(request.get_json(silent=True), customer_id)
+    row = service().save_customer(read_json(CustomerInput).model_dump(exclude_unset=True), customer_id)
     db_session.commit()
     return jsonify({"customer": serialize_customer(row)})
 
@@ -118,20 +123,16 @@ def update_customer(customer_id):
 @requires_auth
 @handled
 def list_orders():
-    return jsonify(
-        {
-            "orders": _orders_out(
-                service().orders(customer_id=request.args.get("customer_id"), status=request.args.get("status"))
-            )
-        }
-    )
+    customer_id = query_text("customer_id", max_length=38) or None
+    status = query_text("status", max_length=12) or None
+    return jsonify({"orders": _orders_out(service().orders(customer_id=customer_id, status=status))})
 
 
 @bp.post("/api/core/contract-orders")
 @requires_auth
 @handled
 def create_order():
-    data = request.get_json(silent=True)
+    data = read_contract_body()
     guard_recipe_write(data)
     row = service().create_order(data)
     db_session.commit()
@@ -150,7 +151,7 @@ def get_order(order_id):
 @requires_auth
 @handled
 def update_order(order_id):
-    row = service().update_order(order_id, request.get_json(silent=True))
+    row = service().update_order(order_id, read_contract_body())
     db_session.commit()
     sync_planner()
     return jsonify({"order": _order_out(row)})
@@ -160,7 +161,7 @@ def update_order(order_id):
 @requires_auth
 @handled
 def create_line(order_id):
-    data = request.get_json(silent=True)
+    data = read_contract_body()
     guard_recipe_write(data)
     row = service().add_line(order_id, data)
     db_session.commit()
@@ -172,7 +173,7 @@ def create_line(order_id):
 @requires_auth
 @handled
 def update_line(order_id, line_id):
-    data = request.get_json(silent=True)
+    data = read_contract_body()
     guard_recipe_write(data)
     row = service().update_line(order_id, line_id, data)
     db_session.commit()
@@ -184,7 +185,7 @@ def update_line(order_id, line_id):
 @requires_auth
 @handled
 def link_batch(order_id, line_id):
-    data = request.get_json(silent=True)
+    data = read_contract_body()
     object_body(data, {"execution_id"})
     row = service().link_batch(order_id, line_id, data.get("execution_id"))
     db_session.commit()
@@ -222,7 +223,7 @@ def list_dispatches(order_id):
 @requires_auth
 @handled
 def dispatch_order(order_id):
-    row = dispatches.dispatch(db_session(), UUID(g.org_id), order_id, request.get_json(silent=True), g.current_user.id)
+    row = dispatches.dispatch(db_session(), UUID(g.org_id), order_id, read_contract_body(), g.current_user.id)
     db_session.commit()
     return jsonify(dispatches.dispatch_dict(row)), 201
 
@@ -231,7 +232,7 @@ def dispatch_order(order_id):
 @requires_auth
 @handled
 def record_dispatch_receipt(order_id, dispatch_id):
-    row = dispatches.record_receipt(db_session(), UUID(g.org_id), order_id, dispatch_id, request.get_json(silent=True))
+    row = dispatches.record_receipt(db_session(), UUID(g.org_id), order_id, dispatch_id, read_contract_body())
     db_session.commit()
     return jsonify(dispatches.dispatch_dict(row)), 200
 

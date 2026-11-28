@@ -2,8 +2,10 @@
 
 import os
 import tempfile
+from codecs import getincrementaldecoder
 from pathlib import Path
 from uuid import UUID
+from zipfile import BadZipFile, ZipFile
 
 from flask import request
 
@@ -44,6 +46,46 @@ def _detect_mime_from_path(file_path: Path, original_filename: str = "") -> str 
                     return "text/plain"
             return "application/octet-stream"
     return None
+
+
+_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_DOCUMENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": _DOCX,
+    ".md": "text/markdown",
+    ".txt": "text/plain",
+}
+
+
+def _validated_document_mime(file_path: Path, original_filename: str) -> str | None:
+    """Check the content expected by the declared filename extension."""
+    extension = Path(original_filename).suffix.lower()
+    mime = _DOCUMENT_TYPES.get(extension)
+    if mime is None:
+        return None
+    try:
+        with file_path.open("rb") as stream:
+            head = stream.read(8)
+            if extension in {".pdf", ".doc"}:
+                signature_matches = (
+                    head.startswith(b"%PDF-") if extension == ".pdf" else head[4:] == b"\xa1\xb1\x1a\xe1"
+                )
+                return mime if signature_matches and _detect_mime_from_path(file_path) == mime else None
+            if extension == ".docx":
+                if _detect_mime_from_path(file_path, original_filename) != _DOCX:
+                    return None
+                with ZipFile(file_path) as package:
+                    return mime if {"[Content_Types].xml", "word/document.xml"} <= set(package.namelist()) else None
+            stream.seek(0)
+            decoder = getincrementaldecoder("utf-8-sig")()
+            for chunk in iter(lambda: stream.read(65536), b""):
+                if any(ord(character) < 32 and character not in "\t\r\n\f" for character in decoder.decode(chunk)):
+                    return None
+            decoder.decode(b"", final=True)
+            return mime
+    except (OSError, UnicodeError, BadZipFile):
+        return None
 
 
 def get_allowed_mime_types() -> list[str]:
@@ -115,13 +157,16 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
     Validate uploaded file by streaming to temp file. Checks size and MIME.
     Returns (ok, error_message, temp_path, content_type, original_filename, file_size).
     """
-    if "file" not in request.files:
-        logger.warning("Process docs validate_file_streaming: no 'file' in request.files")
-        return False, "No file in request", None, "", "", 0
-    f = request.files["file"]
+    uploads = request.files.getlist("file")
+    if len(uploads) != 1 or set(request.files) != {"file"}:
+        return False, "Choose exactly one file.", None, "", "", 0
+    f = uploads[0]
     if not f or not f.filename or f.filename.strip() == "":
         return False, "No file selected", None, "", "", 0
 
+    filename = f.filename.strip()
+    if len(filename) > 255 or any(ord(char) < 32 for char in filename):
+        return False, "Enter a valid filename of up to 255 characters.", None, "", "", 0
     max_bytes = get_max_file_size_bytes()
     # Temp under storage root so os.replace(temp, final) is same-filesystem and atomic (avoids cross-device link errors)
     temp_dir = get_temp_dir()
@@ -144,10 +189,7 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
                 pass
             return False, "File is empty", None, "", "", 0
 
-        content_type = _detect_mime_from_path(Path(temp_path), (f.filename or "").strip())
-        if not content_type:
-            content_type = _normalize_content_type(f.content_type or request.content_type or "")
-        content_type = _normalize_content_type(content_type or "")
+        content_type = _validated_document_mime(Path(temp_path), filename)
         allowed = get_allowed_mime_types()
         allowed_normalized = [_normalize_content_type(m) for m in allowed]
         if content_type not in allowed_normalized:
@@ -158,7 +200,7 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
                 pass
             return (
                 False,
-                f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}",
+                f"File type not allowed or content does not match the extension. Allowed: {', '.join(allowed)}",
                 None,
                 "",
                 "",
@@ -171,7 +213,7 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
             size,
             content_type,
         )
-        return True, "", Path(temp_path), content_type, (f.filename or "").strip(), size
+        return True, "", Path(temp_path), content_type, filename, size
     except Exception as e:
         logger.exception("Process docs validate_file_streaming failed: %s", e)
         try:

@@ -170,3 +170,10 @@ def test_consent_page_has_no_sideways_scroll_on_a_phone(browser, app_url, assist
         assert widths[0] <= widths[1], widths
     finally:
         context.close()
+
+
+def test_ambiguous_authorization_keeps_the_browser_on_the_error_page(page: Page):
+    response = page.goto("/oauth/authorize?client_id=first-client&client_id=second-client")
+    assert response.status == 400
+    expect(page.get_by_role("alert")).to_have_text("Send only one client_id parameter.")
+    assert "/oauth/authorize" in page.url

@@ -346,7 +346,14 @@
         role: fd.get('role')
       };
       if (needsExpiry(body.role)) body.access_expires_at = fd.get('access_expires_at') || '';
-      if (!body.email) { formError.textContent = 'Enter their email address.'; formError.hidden = false; return; }
+      var emailControl = form.elements.email;
+      var domain = body.email.split('@')[1] || '';
+      if (!emailControl.validity.valid || domain.split('.').length < 2 || domain.split('.').some(function (part) { return !part; })) {
+        formError.textContent = 'Enter a valid email address.';
+        formError.hidden = false;
+        emailControl.focus();
+        return;
+      }
       try {
         var data = await api('POST', '/org/users', body);
         state.people.push(data.user);

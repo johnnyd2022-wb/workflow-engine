@@ -8,8 +8,11 @@ from flask import Blueprint, g, jsonify, render_template, request
 from app.core.db import db_session
 from app.core.db.models.audit_log import AuditLog
 from app.core.security.permissions import requires_auth, requires_org_scope
+from app.core.utils.unit_conversion import is_count_unit
 from app.features.planning import batch_service as batches
 from app.features.planning import demand_service as service
+from app.features.planning.request_payloads import PlanningDemandInput
+from app.utils.request_validation import InvalidInputError, query_text, read_json, read_service_json
 
 planning_bp = Blueprint(
     "planning",
@@ -52,7 +55,10 @@ def get_demands():
     return jsonify(
         {
             "demands": service.list_demands(db_session, _org_id()),
-            "outputs": service.output_catalog(db_session, _org_id()),
+            "outputs": [
+                {**output, "counted": is_count_unit(output["unit"])}
+                for output in service.output_catalog(db_session, _org_id())
+            ],
         }
     )
 
@@ -62,12 +68,12 @@ def get_demands():
 @requires_org_scope
 def add_demand():
     try:
-        row = service.create_demand(db_session, _org_id(), request.get_json(silent=True))
+        data = read_json(PlanningDemandInput).model_dump(mode="json")
+        row = service.create_demand(db_session, _org_id(), data)
         _audit("planning_demand_created", row)
         db_session.commit()
     except ValueError as exc:
-        db_session.rollback()
-        return jsonify({"error": str(exc)}), 400
+        return _planning_error(exc)
     return jsonify(service.demand_dict(row)), 201
 
 
@@ -82,8 +88,7 @@ def cancel_demand(demand_id):
         _audit("planning_demand_cancelled", row)
         db_session.commit()
     except ValueError as exc:
-        db_session.rollback()
-        return jsonify({"error": str(exc)}), 400
+        return _planning_error(exc)
     return jsonify(service.demand_dict(row))
 
 
@@ -106,6 +111,8 @@ def _replan(trigger):
 
 def _planning_error(exc):
     db_session.rollback()
+    if isinstance(exc, InvalidInputError):
+        return exc.response()
     status = 409 if isinstance(exc, batches.PlanningConflictError) else 400
     return jsonify({"error": str(exc)}), status
 
@@ -161,7 +168,7 @@ def planning_workflows():
 @requires_org_scope
 def save_planning_workflow(process_id):
     try:
-        row = batches.save_setting(db_session, _org_id(), process_id, request.get_json(silent=True))
+        row = batches.save_setting(db_session, _org_id(), process_id, read_service_json())
         db_session.add(
             AuditLog(
                 org_id=_org_id(),
@@ -183,9 +190,7 @@ def save_planning_workflow(process_id):
 @requires_org_scope
 def plan_production_demand(demand_id):
     try:
-        rows, changed = batches.plan_demand(
-            db_session, _org_id(), demand_id, request.get_json(silent=True), today=date.today()
-        )
+        rows, changed = batches.plan_demand(db_session, _org_id(), demand_id, read_service_json(), today=date.today())
         if rows is None:
             return jsonify({"error": "Demand not found"}), 404
         if changed:
@@ -234,8 +239,8 @@ def get_stock_cover():
     from app.features.planning import forecast_service
 
     try:
-        weeks = forecast_service.window_weeks(request.args.get("weeks"))
-        site = _site_arg(request.args.get("site_id"))
+        weeks = forecast_service.window_weeks(query_text("weeks", max_length=2) or None)
+        site = _site_arg(query_text("site_id", max_length=38))
         result = forecast_service.cover(db_session, _org_id(), site, today=date.today(), weeks=weeks)
     except ValueError as exc:
         return _planning_error(exc)
@@ -265,9 +270,9 @@ def _planning_sites():
 def save_stock_target():
     from app.features.planning import forecast_service
 
-    data = request.get_json(silent=True)
     try:
-        site = _site_arg(data.get("site_id") if isinstance(data, dict) else None)
+        data = read_service_json()
+        site = _site_arg(data.get("site_id"))
         row = forecast_service.save_target(db_session, _org_id(), site, data)
         db_session.add(
             AuditLog(
@@ -299,7 +304,7 @@ def plan_stock_cover():
         demand, rows, changed = forecast_service.plan_forecast(
             db_session,
             _org_id(),
-            request.get_json(silent=True),
+            read_service_json(),
             request.headers.get("Idempotency-Key"),
             today=date.today(),
         )
@@ -313,16 +318,31 @@ def plan_stock_cover():
     return _plan_response(rows, changed, demand=service.demand_dict(demand))
 
 
+def _parse_query_date(name, value):
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise InvalidInputError({name: "Enter a date in YYYY-MM-DD format."}) from None
+
+
+def _query_date(name, default=None):
+    value = query_text(name, default=default.isoformat() if default else "", max_length=10)
+    return _parse_query_date(name, value)
+
+
 @planning_bp.get("/api/core/planner/batches")
 @requires_auth
 @requires_org_scope
 def get_planning_batches():
     try:
-        start = date.fromisoformat(request.args.get("start", date.today().isoformat()))
-        end = date.fromisoformat(request.args.get("end", (start + timedelta(days=6)).isoformat()))
+        start = _query_date("start", default=date.today())
+        raw_end = query_text("end", max_length=10)
+        end = _parse_query_date("end", raw_end) if raw_end else start + timedelta(days=6)
         result = batches.list_batches(db_session, _org_id(), start, end)
-    except (ValueError, OverflowError) as exc:
-        return jsonify({"error": str(exc)}), 400
+    except OverflowError:
+        return InvalidInputError({"start": "Choose a start date with room for the planning period."}).response()
+    except ValueError as exc:
+        return _planning_error(exc)
     return jsonify(result)
 
 
@@ -331,14 +351,13 @@ def get_planning_batches():
 @requires_org_scope
 def change_planning_batch(batch_id):
     try:
-        row, changed = batches.update_batch(
-            db_session, _org_id(), batch_id, request.get_json(silent=True), today=date.today()
-        )
+        data = read_service_json()
+        row, changed = batches.update_batch(db_session, _org_id(), batch_id, data, today=date.today())
         if row is None:
             return jsonify({"error": "Batch not found"}), 404
         if changed:
-            _batch_audit("planning_batch_" + request.get_json()["action"], row)
-            _replan("batch_" + request.get_json()["action"])
+            _batch_audit("planning_batch_" + data["action"], row)
+            _replan("batch_" + data["action"])
         db_session.commit()
     except ValueError as exc:
         return _planning_error(exc)
@@ -353,7 +372,7 @@ def start_planning_batch(batch_id):
 
     try:
         result, changed = start_service.start_batch(
-            db_session, _org_id(), batch_id, request.get_json(silent=True), request.headers.get("Idempotency-Key")
+            db_session, _org_id(), batch_id, read_service_json(), request.headers.get("Idempotency-Key")
         )
         if result is None:
             return jsonify({"error": "Batch not found"}), 404
@@ -390,7 +409,7 @@ def assess_materials():
     from app.features.planning.material_adapter import assess, latest
 
     try:
-        row = assess(db_session, _org_id(), request.get_json(silent=True), today=date.today())
+        row = assess(db_session, _org_id(), read_service_json(), today=date.today())
         db_session.add(
             AuditLog(
                 org_id=_org_id(),
@@ -414,11 +433,11 @@ def get_capacity():
     from app.features.planning.capacity_service import review
 
     try:
-        start = date.fromisoformat(request.args.get("start"))
-        end = date.fromisoformat(request.args.get("end"))
+        start = _query_date("start")
+        end = _query_date("end")
         return jsonify(review(db_session, _org_id(), start, end))
-    except (ValueError, TypeError) as exc:
-        return jsonify({"error": str(exc) or "Choose a capacity period"}), 400
+    except ValueError as exc:
+        return _planning_error(exc)
 
 
 @planning_bp.post("/api/core/planner/capacity/sites/<uuid:site_id>")
@@ -428,7 +447,7 @@ def save_capacity(site_id):
     from app.features.planning.capacity_service import save_setting, setting_dict
 
     try:
-        row = save_setting(db_session, _org_id(), site_id, request.get_json(silent=True))
+        row = save_setting(db_session, _org_id(), site_id, read_service_json())
         db_session.add(
             AuditLog(
                 org_id=_org_id(),
@@ -526,7 +545,12 @@ def get_promise():
     from app.features.planning.promise import promise
 
     try:
-        result = promise(db_session, _org_id(), request.args.to_dict(), today=date.today())
+        data = {
+            "source_output_id": query_text("source_output_id", max_length=38),
+            "quantity": query_text("quantity", max_length=40),
+            "site_id": query_text("site_id", max_length=38) or None,
+        }
+        result = promise(db_session, _org_id(), data, today=date.today())
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _planning_error(exc)
     return jsonify(result)

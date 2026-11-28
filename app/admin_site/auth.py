@@ -20,7 +20,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from app.admin_site.settings import IDLE_MINUTES, SESSION_HOURS, AdminSettings
-from app.features.google_sign_in.oidc import exchange_verified_identity, google_client
+from app.features.google_sign_in.oidc import callback_state, exchange_verified_identity, google_client
 from app.features.google_sign_in.service import authoritative_email
 from app.observability import get_logger
 
@@ -125,11 +125,11 @@ def start():
 @limiter.limit("20 per minute")
 def callback():
     flow = session.pop("google_flow", None)
-    state = request.args.get("state", "")
+    state = callback_state()
     try:
         if (
             not isinstance(flow, dict)
-            or not state
+            or state is None
             or not hmac.compare_digest(state, flow.get("state", ""))
             or time.time() - flow.get("created_at", 0) > FLOW_SECONDS
         ):

@@ -63,7 +63,8 @@
             <label class="form-label" for="settings-first-name">First name</label>
             <input 
               type="text" 
-              id="settings-first-name" 
+              id="settings-first-name"
+                maxlength="255"
               class="form-input" 
               placeholder="Enter first name"
               autocomplete="given-name"
@@ -74,7 +75,8 @@
             <label class="form-label" for="settings-last-name">Last name</label>
             <input 
               type="text" 
-              id="settings-last-name" 
+              id="settings-last-name"
+                maxlength="255"
               class="form-input" 
               placeholder="Enter last name"
               autocomplete="family-name"
@@ -85,7 +87,8 @@
             <label class="form-label" for="settings-email">Email</label>
             <input 
               type="email" 
-              id="settings-email" 
+              id="settings-email"
+                maxlength="255"
               class="form-input" 
               placeholder="Enter email"
               required
@@ -125,7 +128,8 @@
               <label class="form-label" for="current-password">Current password</label>
               <input 
                 type="password" 
-                id="current-password" 
+                id="current-password"
+                maxlength="72"
                 class="form-input" 
                 placeholder="Enter current password"
                 required
@@ -136,14 +140,15 @@
               <label class="form-label" for="new-password">New password</label>
               <input 
                 type="password" 
-                id="new-password" 
+                id="new-password"
+                maxlength="72"
                 class="form-input" 
                 placeholder="Enter new password"
                 minlength="8"
                 aria-describedby="new-password-rule"
                 required
               >
-              <div id="new-password-rule" class="form-hint" style="margin-top: 0.375rem; font-size: 0.8125rem; color: var(--ui-text-muted);">8 to 72 characters. A long phrase works well.</div>
+              <div id="new-password-rule" class="form-hint" style="margin-top: 0.375rem; font-size: 0.8125rem; color: var(--ui-text-muted);">8 characters minimum, 72 bytes maximum.</div>
               <div id="new-password-warnings" style="display: none; margin-top: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: #fbbf24; font-size: 0.875rem;"></div>
             </div>
             
@@ -151,7 +156,8 @@
               <label class="form-label" for="new-password-confirm">Confirm new password</label>
               <input 
                 type="password" 
-                id="new-password-confirm" 
+                id="new-password-confirm"
+                minlength="8" maxlength="72"
                 class="form-input" 
                 placeholder="Confirm new password"
                 required

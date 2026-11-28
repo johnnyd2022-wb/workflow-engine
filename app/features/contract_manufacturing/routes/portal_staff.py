@@ -11,6 +11,7 @@ from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.contract_manufacturing.models.portal import PortalDocument, PortalInvite, PortalPublication
 from app.features.contract_manufacturing.routes.orders import bp, handled, service
+from app.features.contract_manufacturing.routes.request_payloads import PortalDocumentForm, read_contract_body
 from app.features.contract_manufacturing.services.orders import OrderError
 from app.features.contract_manufacturing.services.portal_approvals import request_approval, staff_approvals
 from app.features.contract_manufacturing.services.portal_auth import audit, issue_invite, portal_people, revoke_access
@@ -27,6 +28,7 @@ from app.features.contract_manufacturing.services.portal_sharing import (
     revoke_publication,
     share_document,
 )
+from app.utils.request_validation import read_form
 
 
 @bp.get("/core/contracts/<uuid:order_id>/portal-sharing")
@@ -93,9 +95,7 @@ def portal_list_people(customer_id):
 @limiter.limit("20 per hour", key_func=get_remote_address)
 @handled
 def portal_issue_invite(customer_id):
-    invite, token = issue_invite(
-        db_session(), UUID(g.org_id), g.current_user.id, customer_id, request.get_json(silent=True)
-    )
+    invite, token = issue_invite(db_session(), UUID(g.org_id), g.current_user.id, customer_id, read_contract_body())
     db_session().commit()
     return jsonify(
         {
@@ -139,7 +139,7 @@ def portal_revoke_person(customer_id, principal_id):
 @requires_auth
 @handled
 def portal_publish_order(order_id):
-    row = publish_order(db_session(), UUID(g.org_id), g.current_user.id, order_id, request.get_json(silent=True))
+    row = publish_order(db_session(), UUID(g.org_id), g.current_user.id, order_id, read_contract_body())
     db_session().commit()
     return jsonify({"publication_id": str(row.id), "revision": row.revision}), 201
 
@@ -148,7 +148,7 @@ def portal_publish_order(order_id):
 @requires_auth
 @handled
 def portal_send_message(order_id):
-    row = send_staff_message(db_session(), UUID(g.org_id), g.current_user.id, order_id, request.get_json(silent=True))
+    row = send_staff_message(db_session(), UUID(g.org_id), g.current_user.id, order_id, read_contract_body())
     db_session().commit()
     return jsonify({"message": message_dto(row)}), 201
 
@@ -157,7 +157,7 @@ def portal_send_message(order_id):
 @requires_auth
 @handled
 def portal_request_approval(order_id):
-    row = request_approval(db_session(), UUID(g.org_id), g.current_user.id, order_id, request.get_json(silent=True))
+    row = request_approval(db_session(), UUID(g.org_id), g.current_user.id, order_id, read_contract_body())
     db_session().commit()
     return jsonify({"approval_id": str(row.id)}), 201
 
@@ -175,15 +175,17 @@ def portal_unpublish_order(order_id):
 @requires_auth
 @handled
 def portal_upload_document(order_id):
-    if set(request.form) - {"title", "csrf_token"} or set(request.files) != {"document"}:
+    files = request.files.getlist("document")
+    if set(request.files) != {"document"} or len(files) != 1:
         raise OrderError("Provide a title and one document")
+    form = read_form(PortalDocumentForm)
     row = share_document(
         db_session(),
         UUID(g.org_id),
         g.current_user.id,
         order_id,
-        request.form.get("title"),
-        request.files.get("document"),
+        form.title,
+        files[0],
     )
     db_session().commit()
     return jsonify({"document": document_dto(row)}), 201

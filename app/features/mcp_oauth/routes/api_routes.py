@@ -15,9 +15,11 @@ from flask import Blueprint, g, jsonify, request
 from app.core.db import db_session
 from app.core.security.access_policy import READ_PERMISSIONS, has_permission, permissions_for, role_label_for
 from app.core.security.permissions import requires_auth
+from app.features.mcp_oauth.routes.request_payloads import MCPSettingsInput
 from app.features.mcp_oauth.services import settings_service
 from app.features.mcp_oauth.services.settings_service import SettingsError, SharedStoreRequiredError
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, read_json
 
 logger = get_logger(__name__)
 
@@ -80,10 +82,13 @@ def get_settings():
 def update_settings():
     if (request.content_length or 0) > MAX_BODY_BYTES:
         return jsonify({"error": "Request body too large"}), 413
-    body = request.get_json(silent=True) if request.is_json else None
+    request.max_content_length = MAX_BODY_BYTES
     db = db_session()
     try:
+        body = read_json(MCPSettingsInput).model_dump()
         return jsonify(settings_service.update_settings(db, g.current_org_id, g.current_user.id, body))
+    except InvalidInputError as err:
+        return err.response()
     except SharedStoreRequiredError as err:
         db.rollback()
         return jsonify({"error": str(err)}), 409

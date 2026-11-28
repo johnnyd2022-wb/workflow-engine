@@ -41,7 +41,7 @@ def validate_abv_rules(rules: Any) -> str | None:
         pattern = rule.get("pattern")
         if not isinstance(pattern, str) or not pattern.strip() or len(pattern) > 255:
             return f"{ABV_RULES_SETTING} pattern must be 1-255 characters"
-        if rule.get("match_type") not in ABV_MATCH_TYPES:
+        if not isinstance(rule.get("match_type"), str) or rule["match_type"] not in ABV_MATCH_TYPES:
             return f"{ABV_RULES_SETTING} match_type must be exact or contains"
         key = (pattern.strip().casefold(), rule["match_type"])
         if key in seen:
@@ -53,7 +53,7 @@ def validate_abv_rules(rules: Any) -> str | None:
 def validate_workflow_settings(settings: dict) -> str | None:
     """Validate settings owned by this module at the generic profile write boundary."""
     mode = settings.get("np3_execution_evidence_mode")
-    if mode is not None and mode not in _CAPTURE_MODES:
+    if mode is not None and (not isinstance(mode, str) or mode not in _CAPTURE_MODES):
         return "np3_execution_evidence_mode must be off, recommended, or required"
     if ABV_RULES_SETTING in settings:
         return validate_abv_rules(settings[ABV_RULES_SETTING])

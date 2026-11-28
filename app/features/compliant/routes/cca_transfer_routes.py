@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
@@ -11,6 +11,8 @@ from app.core.security.permissions import requires_auth, requires_org_scope
 from app.core.utils.log_action import log_action
 from app.features.compliant.modules.nz_alcohol import cca_transfers
 from app.features.compliant.routes.page_routes import _nz_alcohol_template_context
+from app.features.compliant.routes.register_payloads import CCADepartureInput, CCADestinationInput, CCAReceiptInput
+from app.utils.request_validation import InvalidInputError, query_text, read_json
 
 cca_transfer_bp = Blueprint("compliant_cca_transfers", __name__, template_folder="../frontend/templates")
 
@@ -30,6 +32,9 @@ def _save(action, entity, write):
     try:
         row = write()
         db_session.commit()
+    except InvalidInputError as exc:
+        db_session.rollback()
+        return None, exc.response()
     except LookupError as exc:
         db_session.rollback()
         return None, (jsonify({"error": str(exc)}), 404)
@@ -56,12 +61,13 @@ def transfers_page():
 @requires_auth
 @requires_org_scope
 def get_transfers():
-    since = None
-    if request.args.get("since"):
-        try:
-            since = date.fromisoformat(request.args["since"])
-        except ValueError:
-            return jsonify({"error": "since must be a date like 2026-01-01"}), 400
+    try:
+        raw_since = query_text("since", max_length=10)
+        since = date.fromisoformat(raw_since) if raw_since else None
+    except InvalidInputError as exc:
+        return exc.response()
+    except ValueError:
+        return InvalidInputError({"since": "Enter a date like 2026-01-01."}).response()
     result = cca_transfers.register(db_session, _org(), since=since)
     result["destinations"] = cca_transfers.destinations(db_session, _org())
     return jsonify(result)
@@ -71,18 +77,23 @@ def get_transfers():
 @requires_auth
 @requires_org_scope
 def search_sales():
-    return jsonify({"sales": cca_transfers.sales_to_mark(db_session, _org(), request.args.get("q", ""))})
+    try:
+        query = query_text("q", max_length=100)
+    except InvalidInputError as exc:
+        return exc.response()
+    return jsonify({"sales": cca_transfers.sales_to_mark(db_session, _org(), query)})
 
 
 @cca_transfer_bp.post("/api/compliant/nz-alcohol/cca-transfers")
 @requires_auth
 @requires_org_scope
 def record_transfer():
-    data = request.get_json(silent=True)
     row, error = _save(
         "cca_departure_recorded",
         "cca_departure",
-        lambda: cca_transfers.record_departure(db_session, _org(), data, g.current_user.id),
+        lambda: cca_transfers.record_departure(
+            db_session, _org(), read_json(CCADepartureInput).model_dump(mode="json"), g.current_user.id
+        ),
     )
     return error or (jsonify(cca_transfers.departure_dict(row)), 201)
 
@@ -94,11 +105,12 @@ def record_transfer_receipt(departure_id):
     ident = _uuid(departure_id)
     if ident is None:
         return jsonify({"error": "No such movement"}), 404
-    data = request.get_json(silent=True)
     row, error = _save(
         "cca_departure_received",
         "cca_departure",
-        lambda: cca_transfers.record_receipt(db_session, _org(), ident, data),
+        lambda: cca_transfers.record_receipt(
+            db_session, _org(), ident, read_json(CCAReceiptInput).model_dump(mode="json")
+        ),
     )
     return error or (jsonify(cca_transfers.departure_dict(row)), 200)
 
@@ -136,9 +148,12 @@ def get_destinations():
 @requires_auth
 @requires_org_scope
 def add_destination():
-    data = request.get_json(silent=True)
     row, error = _save(
-        "cca_destination_created", "cca_destination", lambda: cca_transfers.save_destination(db_session, _org(), data)
+        "cca_destination_created",
+        "cca_destination",
+        lambda: cca_transfers.save_destination(
+            db_session, _org(), read_json(CCADestinationInput).model_dump(mode="json")
+        ),
     )
     return error or (jsonify(cca_transfers.destination_dict(row)), 201)
 
@@ -150,10 +165,11 @@ def update_destination(destination_id):
     ident = _uuid(destination_id)
     if ident is None:
         return jsonify({"error": "No such destination"}), 404
-    data = request.get_json(silent=True)
     row, error = _save(
         "cca_destination_updated",
         "cca_destination",
-        lambda: cca_transfers.save_destination(db_session, _org(), data, ident),
+        lambda: cca_transfers.save_destination(
+            db_session, _org(), read_json(CCADestinationInput).model_dump(mode="json"), ident
+        ),
     )
     return error or (jsonify(cca_transfers.destination_dict(row)), 200)

@@ -241,7 +241,7 @@
         </div>
         <div class="crm-form-group">
           <label class="crm-form-label" for="task-title">Title <span class="tasks-required">*</span></label>
-          <input id="task-title" class="crm-form-input" x-model="drawerForm.title" placeholder="e.g. Confirm the Christmas order" @keydown.enter.prevent="saveTask()">
+          <input id="task-title" required maxlength="500" class="crm-form-input" x-model="drawerForm.title" placeholder="e.g. Confirm the Christmas order" @keydown.enter.prevent="saveTask()">
         </div>
         <div class="tasks-sheet-grid">
           <div class="crm-form-group">
@@ -291,7 +291,7 @@
         </div>
         <div class="crm-form-group">
           <label class="crm-form-label" for="task-notes">Notes</label>
-          <textarea id="task-notes" class="crm-form-textarea" x-model="drawerForm.description" placeholder="Optional"></textarea>
+          <textarea id="task-notes" maxlength="20000" class="crm-form-textarea" x-model="drawerForm.description" placeholder="Optional"></textarea>
         </div>
       </div>
 

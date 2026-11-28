@@ -22,6 +22,7 @@ from app.core.security.permissions import has_permission, requires_auth
 from app.features.activity_log.routes.activity_routes import human_summary
 from app.observability import get_logger
 from app.utils.config_loader import config
+from app.utils.request_validation import InvalidInputError, query_text
 
 logger = get_logger(__name__)
 _APP_TZ = ZoneInfo("Pacific/Auckland")
@@ -893,13 +894,18 @@ def _dashboard_build_action_board(
 @requires_auth
 def get_dashboard_summary():
     org_id = UUID(g.org_id)
-    window_days_raw = (request.args.get("window_days") or "30").strip()
     try:
-        window_days = int(window_days_raw)
+        raw_window = query_text("window_days", default="30", max_length=24)
+    except InvalidInputError as exc:
+        return exc.response()
+    if request.args.get("window_days") == "":
+        raw_window = "30"
+    try:
+        window_days = int(raw_window)
     except ValueError:
-        return jsonify({"error": "window_days must be an integer"}), 400
-    if window_days < 7 or window_days > 180:
-        return jsonify({"error": "window_days must be between 7 and 180"}), 400
+        return jsonify(error="window_days must be an integer"), 400
+    if not 7 <= window_days <= 180:
+        return jsonify(error="window_days must be between 7 and 180"), 400
 
     today = date.today()
     now_dt = datetime.now(_APP_TZ)

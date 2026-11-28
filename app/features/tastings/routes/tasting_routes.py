@@ -15,6 +15,14 @@ from app.features.compliant.service import nz_alcohol_active
 from app.features.crm.models.xero_contact import XeroContact
 from app.features.tastings.repositories.tasting_repo import TastingRepository
 from app.features.tastings.services import tasting_service as service
+from app.utils.request_validation import (
+    InvalidInputError,
+    JsonInput,
+    query_int,
+    query_text,
+    read_json,
+    read_service_json,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -25,6 +33,12 @@ bp = Blueprint("tastings", __name__, template_folder="../frontend/templates")
 def require_subscription():
     if not nz_alcohol_active(db_session(), getattr(g, "current_org_id", None)):
         abort(404)
+
+
+@bp.errorhandler(InvalidInputError)
+def invalid_input(error):
+    db_session().rollback()
+    return error.response()
 
 
 @bp.errorhandler(service.TastingError)
@@ -43,7 +57,7 @@ def invalid_request(error):
 @bp.get("/crm/tastings")
 @requires_auth
 def home():
-    event_id = request.args.get("tasting_id")
+    event_id = query_text("tasting_id", max_length=38)
     if event_id:
         event = service.get_event(db_session(), g.current_org_id, event_id)
         return redirect("/crm/tasks?task_id=" + str(event.task_id))
@@ -55,10 +69,17 @@ def home():
 def list_tastings():
     try:
         start = date.fromisoformat(
-            request.args.get("start", service.utc_now().astimezone(service.NZ).date().replace(day=1).isoformat())
+            query_text(
+                "start",
+                default=service.utc_now().astimezone(service.NZ).date().replace(day=1).isoformat(),
+                max_length=10,
+            )
         )
-        end = date.fromisoformat(request.args["end"]) if "end" in request.args else start + timedelta(days=62)
-    except (ValueError, TypeError):
+        raw_end = query_text("end", max_length=10)
+        end = date.fromisoformat(raw_end) if raw_end else start + timedelta(days=62)
+    except InvalidInputError:
+        raise
+    except (ValueError, OverflowError):
         raise service.TastingError("Use ISO start/end dates") from None
     if not 0 < (end - start).days <= 93:
         raise service.TastingError("Choose a period of at most 93 days")
@@ -81,13 +102,7 @@ def list_tastings():
 
 
 def _offset(name="offset"):
-    try:
-        value = int(request.args.get(name, "0"))
-    except ValueError:
-        raise service.TastingError("Offset must be a nonnegative integer") from None
-    if not 0 <= value <= 100000:
-        raise service.TastingError("Offset must be between zero and 100000")
-    return value
+    return query_int(name, default=0, minimum=0, maximum=100000)
 
 
 @bp.get("/api/crm/tastings/choices")
@@ -95,16 +110,12 @@ def _offset(name="offset"):
 def choices():
     db = db_session()
     org_id = g.current_org_id
-    term = request.args.get("q", "").strip()
-    if len(term) > 100:
-        raise service.TastingError("Search is too long")
+    term = query_text("q", max_length=100)
     # Escape LIKE metacharacters: this is a literal bounded search, not a wildcard API.
     match = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     offset = _offset()
     people_offset = _offset("people_offset")
-    people_term = request.args.get("people_q", "").strip()
-    if len(people_term) > 100:
-        raise service.TastingError("People search is too long")
+    people_term = query_text("people_q", max_length=100)
     people_match = "%" + people_term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     from sqlalchemy import or_
 
@@ -234,13 +245,13 @@ def _write(operation, *args):
 @bp.post("/api/crm/tastings")
 @requires_auth
 def create_tasting():
-    return _write(service.save_event, request.get_json(silent=True)), 201
+    return _write(service.save_event, read_service_json()), 201
 
 
 @bp.put("/api/crm/tastings/<event_id>")
 @requires_auth
 def update_tasting(event_id):
-    return _write(service.save_event, request.get_json(silent=True), event_id)
+    return _write(service.save_event, read_service_json(), event_id)
 
 
 @bp.post("/api/crm/tastings/<event_id>/dispatch")
@@ -251,13 +262,13 @@ def dispatch_tasting(event_id):
             "tastings_access_denied", org_id=str(g.current_org_id), user_id=str(g.user_id), operation=request.endpoint
         )
         abort(403)
-    return _write(service.dispatch, event_id, request.get_json(silent=True), request.headers.get("Idempotency-Key"))
+    return _write(service.dispatch, event_id, read_service_json(), request.headers.get("Idempotency-Key"))
 
 
 @bp.post("/api/crm/tastings/<event_id>/finalise")
 @requires_auth
 def finalise_tasting(event_id):
-    return _write(service.finalise, event_id, request.get_json(silent=True))
+    return _write(service.finalise, event_id, read_service_json())
 
 
 @bp.get("/api/crm/tastings/<event_id>/invoice-lines")
@@ -270,7 +281,6 @@ def tasting_invoice_lines(event_id):
 @bp.post("/api/crm/tastings/<event_id>/cancel")
 @requires_auth
 def cancel_tasting(event_id):
-    data = request.get_json(silent=True)
-    if data not in (None, {}):
-        raise service.TastingError("Cancellation takes an empty request")
+    if request.is_json or request.get_data():
+        read_json(JsonInput)
     return _write(service.cancel, event_id)

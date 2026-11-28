@@ -10,6 +10,7 @@ from uuid import UUID
 from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, session
 from flask_limiter.util import get_remote_address
 
+from app.api.routes.auth_payloads import InviteToken, Password
 from app.api.routes.auth_routes import limiter, rotate_session
 from app.core.db import db_session
 from app.core.db.models.user import User
@@ -19,19 +20,37 @@ from app.core.security.people import PeopleError, validate_new_password
 from app.core.security.permissions import requires_auth
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required
 from app.core.utils.log_action import log_action
-from app.features.google_sign_in.oidc import exchange_verified_identity, google_client
+from app.features.google_sign_in.oidc import callback_state, exchange_verified_identity, google_client
 from app.features.google_sign_in.service import PROVIDER, GoogleSignInError, assert_account_available, resolve_identity
 from app.features.mcp_oauth.services import pending_authorization
 from app.observability import get_logger
+from app.utils.request_validation import InvalidInputError, JsonInput, read_form, read_json
 
 logger = get_logger(__name__)
 google_auth_bp = Blueprint("google_auth", __name__, url_prefix="/auth/google", template_folder="frontend")
 FLOW_SECONDS = 600
 
 
-def _data():
-    data = request.get_json(silent=True) if request.is_json else request.form
-    return data if isinstance(data, dict) or hasattr(data, "get") else {}
+class InviteInput(JsonInput):
+    token: InviteToken
+
+
+class ConfirmPasswordInput(JsonInput):
+    password: Password
+
+
+class NewPasswordInput(ConfirmPasswordInput):
+    password_confirm: Password
+
+
+def _read_payload[Payload: JsonInput](schema: type[Payload]) -> Payload:
+    return read_json(schema) if request.is_json else read_form(schema)
+
+
+def _field_error(error: InvalidInputError):
+    if request.is_json:
+        return error.response()
+    return _error(str(error))
 
 
 def _password_version(user):
@@ -88,9 +107,10 @@ def start():
 def invite():
     from app.api.routes.auth_routes import _pending_invite_user
 
-    token = _data().get("token")
-    if not isinstance(token, str) or len(token) > 512:
-        return _error()
+    try:
+        token = _read_payload(InviteInput).token
+    except InvalidInputError as exc:
+        return _field_error(exc)
     db = db_session()
     user = _pending_invite_user(db, token)
     if user is None or session.get("user_id"):
@@ -107,8 +127,11 @@ def invite():
 @limiter.limit("5 per minute")
 def link():
     user = g.current_user
-    password = _data().get("password")
-    if not isinstance(password, str) or not AuthService.verify_password(password, user.password_hash):
+    try:
+        password = _read_payload(ConfirmPasswordInput).password
+    except InvalidInputError as exc:
+        return _field_error(exc)
+    if not AuthService.verify_password(password, user.password_hash):
         return _error("Confirm your current password to link Google.", 401)
     try:
         assert_account_available(db_session(), user)
@@ -123,10 +146,10 @@ def link():
 @limiter.limit("20 per minute")
 def callback():
     flow = session.pop("google_flow", None)
-    state = request.args.get("state", "")
+    state = callback_state()
     if (
         not isinstance(flow, dict)
-        or not state
+        or state is None
         or not hmac.compare_digest(state, flow.get("state", ""))
         or time.time() - flow.get("created_at", 0) > FLOW_SECONDS
         or flow.get("current_user_id") != session.get("user_id")
@@ -242,8 +265,11 @@ def methods():
 @limiter.limit("5 per minute")
 def unlink():
     user = g.current_user
-    password = _data().get("password")
-    if not isinstance(password, str) or not AuthService.verify_password(password, user.password_hash):
+    try:
+        password = _read_payload(ConfirmPasswordInput).password
+    except InvalidInputError as exc:
+        return _field_error(exc)
+    if not AuthService.verify_password(password, user.password_hash):
         return _error("Confirm your password before unlinking Google. A password must remain available.", 401)
     db = db_session()
     try:
@@ -274,14 +300,14 @@ def set_password():
         or time.time() - session.get("google_authenticated_at", 0) > FLOW_SECONDS
     ):
         return _error("Sign in with Google again before adding a password.", 401)
-    data = _data()
+    try:
+        data = _read_payload(NewPasswordInput)
+    except InvalidInputError as exc:
+        return _field_error(exc)
     try:
         assert_account_available(db, user)
-        password, confirm = data.get("password"), data.get("password_confirm")
-        if not isinstance(password, str) or not isinstance(confirm, str) or len(password.encode("utf-8")) > 72:
-            raise PeopleError("Use a valid password and matching confirmation")
-        validate_new_password(password, confirm)
-        user.password_hash = AuthService.hash_password(password)
+        validate_new_password(data.password, data.password_confirm)
+        user.password_hash = AuthService.hash_password(data.password)
         db.commit()
         log_action("google_account_password_added", "user", user.id, None, user.org_id, user.id)
         rotate_session()
