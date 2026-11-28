@@ -29,6 +29,15 @@
   object-fit: cover;
   background: inherit;
 }
+.product-image:has(img)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid #000;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.product-image--editor:has(img)::after { border-width: 2px; }
 .product-image--preview { --product-image-size: min(160px, 100%); }
 .product-image--preview img, .product-image--workflow img {
   object-fit: contain;
