@@ -180,11 +180,6 @@ def register_routes(bp):
             items = items[:page_limit]
         next_cursor = encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
-        image_ids = ProductImageRepository(db_session).inventory_image_ids(
-            g.current_org_id, [item.id for item in items if item.inventory_type == InventoryType.FINAL_PRODUCT.value]
-        )
-        image_urls = {item_id: url_for("core.get_inventory_product_image", item_id=item_id) for item_id in image_ids}
-
         # Compact view: just the core item fields, no per-item enrichment (system findings,
         # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
         # grid groups the whole list by name / batch / supplier and needs none of that; the
@@ -198,8 +193,6 @@ def register_routes(bp):
                             "name": i.name,
                             "display_label": i.display_label,
                             "inventory_type": i.inventory_type,
-                            "product_image_url": image_urls.get(i.id),
-                            "product_image_id": str(image_ids[i.id]) if i.id in image_ids else None,
                             "quantity": str(i.quantity),
                             "unit": i.unit,
                             "supplier": i.supplier,
@@ -214,6 +207,11 @@ def register_routes(bp):
                     "next_cursor": next_cursor,
                 }
             ), 200
+
+        image_ids = ProductImageRepository(db_session).inventory_image_ids(
+            g.current_org_id, [item.id for item in items if item.inventory_type == InventoryType.FINAL_PRODUCT.value]
+        )
+        image_urls = {item_id: url_for("core.get_inventory_product_image", item_id=item_id) for item_id in image_ids}
 
         # System findings per item (all checks) for UI: red border + reasons in dropdown
         findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)

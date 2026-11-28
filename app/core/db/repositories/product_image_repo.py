@@ -60,9 +60,7 @@ class ProductImageRepository:
     def inventory_image_ids(self, org_id: UUID, item_ids: Collection[UUID]) -> dict[UUID, UUID]:
         if not item_ids:
             return {}
-        rows = self._finished_lots(org_id, InventoryItem.id, ProductImage.process_id).where(
-            InventoryItem.id.in_(item_ids)
-        )
+        rows = self._finished_lots(org_id, InventoryItem.id, ProductImage.id).where(InventoryItem.id.in_(item_ids))
         return dict(self.db.execute(rows).tuples().all())
 
     def inventory_image(self, org_id: UUID, item_id: UUID) -> bytes | None:

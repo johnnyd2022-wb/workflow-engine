@@ -121,24 +121,28 @@ def test_ac2_terminal_outputs_inherit_current_image(account, db):
     db.commit()
     raw = InventoryItemFactory(org_id=org_id, source_execution_id=UUID(batch["id"]), name="Raw ingredient")
 
-    for query in ("", "?view=compact"):
-        lots = {lot["name"]: lot for lot in client.get("/api/core/inventory" + query).get_json()["inventory_items"]}
-        final = lots["Bottled batch 47"]
-        assert final["inventory_type"] == "final_product"
-        final_url = f"/api/core/inventory/{final['id']}/product-image"
-        assert final["product_image_url"] == final_url
-        assert client.get(final_url).data == first_image
-        for inherited in (lots[legacy.name], lots[step_only.name]):
-            assert inherited["product_image_id"] == final["product_image_id"] == pid
-            assert client.get(inherited["product_image_url"]).data == first_image
-        for name in ("Undiluted spirit", raw.name, relabelled.name, mismatched.name):
-            lot = lots[name]
-            assert lot["product_image_url"] is None
-            assert client.get(f"/api/core/inventory/{lot['id']}/product-image").status_code == 404
+    lots = {lot["name"]: lot for lot in client.get("/api/core/inventory").get_json()["inventory_items"]}
+    final = lots["Bottled batch 47"]
+    assert final["inventory_type"] == "final_product"
+    final_url = f"/api/core/inventory/{final['id']}/product-image"
+    assert final["product_image_url"] == final_url
+    assert UUID(final["product_image_id"])
+    assert client.get(final_url).data == first_image
+    for inherited in (lots[legacy.name], lots[step_only.name]):
+        assert inherited["product_image_id"] == final["product_image_id"]
+        assert client.get(inherited["product_image_url"]).data == first_image
+    for name in ("Undiluted spirit", raw.name, relabelled.name, mismatched.name):
+        lot = lots[name]
+        assert lot["product_image_url"] is None
+        assert client.get(f"/api/core/inventory/{lot['id']}/product-image").status_code == 404
 
     assert _upload(client, workflow_url, _image(color="blue")).status_code == 200
     replacement = client.get(final_url).data
     assert replacement == client.get(workflow_url).data and replacement != first_image
+    refreshed = next(
+        lot for lot in client.get("/api/core/inventory").get_json()["inventory_items"] if lot["id"] == final["id"]
+    )
+    assert refreshed["product_image_id"] == final["product_image_id"]
     assert client.delete(workflow_url).status_code == 204
     assert client.get(final_url).status_code == 404
 

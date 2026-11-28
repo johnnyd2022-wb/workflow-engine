@@ -32,8 +32,8 @@ schemas:
       location_id: {type: [string, "null"], description: "The stock area inside the site."}
       location_name: {type: [string, "null"]}
       process_name: {type: [string, "null"], description: "The workflow that produced the lot, when it was produced."}
-      product_image_id: {type: [string, "null"], description: "Shared identity for lots that inherit the same product photo."}
-      product_image_url: {type: [string, "null"], description: "Authenticated URL for the producing workflow photo on a finished lot."}
+      product_image_id: {type: [string, "null"], description: "Shared identity for lots that inherit the same product photo. Absent in the compact view."}
+      product_image_url: {type: [string, "null"], description: "Authenticated URL for the producing workflow photo on a finished lot. Absent in the compact view."}
       source_execution_id: {type: [string, "null"], description: "The batch that produced the lot."}
       source_execution_step_id: {type: [string, "null"]}
       source_output_id: {type: [string, "null"]}
@@ -146,7 +146,7 @@ operations:
         schema: {type: string, format: uuid}
       - name: view
         in: query
-        description: "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date, site_id, product_image_id and product_image_url per lot, and `has_more` and `next_cursor` always present."
+        description: "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present."
         schema: {type: string, enum: [compact]}
       - name: limit
         in: query

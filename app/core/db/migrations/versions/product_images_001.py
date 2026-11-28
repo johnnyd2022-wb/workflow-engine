@@ -13,9 +13,11 @@ depends_on = None
 def upgrade():
     op.create_table(
         "product_images",
-        sa.Column("process_id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("process_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organisations.id"), nullable=False),
         sa.Column("content", sa.LargeBinary(), nullable=False),
+        sa.UniqueConstraint("process_id", name="uq_product_images_process_id"),
         sa.ForeignKeyConstraint(
             ["org_id", "process_id"],
             ["processes.org_id", "processes.id"],

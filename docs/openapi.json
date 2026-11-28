@@ -228,14 +228,14 @@
             ]
           },
           "product_image_id": {
-            "description": "Shared identity for lots that inherit the same product photo.",
+            "description": "Shared identity for lots that inherit the same product photo. Absent in the compact view.",
             "type": [
               "string",
               "null"
             ]
           },
           "product_image_url": {
-            "description": "Authenticated URL for the producing workflow photo on a finished lot.",
+            "description": "Authenticated URL for the producing workflow photo on a finished lot. Absent in the compact view.",
             "type": [
               "string",
               "null"
@@ -9812,7 +9812,7 @@
             }
           },
           {
-            "description": "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date, site_id, product_image_id and product_image_url per lot, and `has_more` and `next_cursor` always present.",
+            "description": "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present.",
             "in": "query",
             "name": "view",
             "schema": {
