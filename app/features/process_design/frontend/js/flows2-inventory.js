@@ -753,7 +753,10 @@
       appendInventoryHdrRow('Available quantity', `${formattedQuantity} ${item.unit || ''}`.trim());
       if (item.created_at) appendInventoryHdrRow('Created', flows2InvFormatDate(item.created_at));
 
-      left.appendChild(title);
+      const heading = document.createElement('div');
+      heading.className = 'product-image-heading';
+      heading.append(window.ProductImage.thumbnail(item.product_image_url), title);
+      left.appendChild(heading);
       left.appendChild(detailsRowWrap);
 
       const right = document.createElement('div');

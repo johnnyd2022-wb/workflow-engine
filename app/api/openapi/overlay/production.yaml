@@ -13,6 +13,7 @@ schemas:
       name: {type: string}
       description: {type: [string, "null"]}
       category: {type: [string, "null"]}
+      product_image_url: {type: [string, "null"], description: "Authenticated URL for the current final product photo."}
       is_draft: {type: boolean, description: "A draft workflow cannot be run yet."}
       step_count: {type: integer}
       active_executions: {type: integer, description: "Batches of this workflow still in progress."}
@@ -101,6 +102,7 @@ operations:
           name: {type: string}
           description: {type: [string, "null"]}
           category: {type: [string, "null"]}
+          product_image_url: {type: [string, "null"], description: "Authenticated URL for the current final product photo."}
           is_draft: {type: boolean}
           settings: {type: object, additionalProperties: true}
           created_at: {type: [string, "null"]}
@@ -125,6 +127,41 @@ operations:
       outside_text: []
       concepts: [production.workflows, production.steps, production.inputs_and_outputs]
       related_operations: [core_list_processes, core_list_executions]
+  core_get_workflow_product_image:
+    summary: Read the current workflow product photo
+    errors: [404]
+    response:
+      description: The normalized final product photo.
+      media_type: image/webp
+      schema: {type: string, format: binary}
+    x-bize: {domain: production, mcp: false}
+  core_put_workflow_product_image:
+    summary: Add or replace a workflow product photo
+    description: Upload one still JPEG, PNG or WebP photo up to 10 MiB and 25 megapixels.
+    errors: [400, 404, 413]
+    request_body:
+      media_type: multipart/form-data
+      schema:
+        type: object
+        additionalProperties: false
+        required: [file]
+        properties:
+          file: {type: string, format: binary}
+    response:
+      description: Authenticated URL for the normalized final product photo.
+      schema:
+        type: object
+        required: [product_image_url]
+        properties:
+          product_image_url: {type: string}
+    x-bize: {domain: production, mcp: false}
+  core_delete_workflow_product_image:
+    summary: Remove a workflow product photo
+    errors: [404]
+    response:
+      status: 204
+      description: The workflow has no product photo.
+    x-bize: {domain: production, mcp: false}
   core_list_executions:
     summary: List batches (executions)
     description: >-

@@ -7,6 +7,9 @@
       "Conflict": {
         "description": "Not possible in the current state; the error says why and what to do."
       },
+      "ContentTooLarge": {
+        "description": "The request body exceeded the upload limit."
+      },
       "Forbidden": {
         "description": "Signed in, but the person's role does not hold the required permission."
       },
@@ -219,6 +222,20 @@
             ]
           },
           "producing_step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product_image_id": {
+            "description": "Shared identity for lots that inherit the same product photo.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product_image_url": {
+            "description": "Authenticated URL for the producing workflow photo on a finished lot.",
             "type": [
               "string",
               "null"
@@ -765,6 +782,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "product_image_url": {
+            "description": "Authenticated URL for the current final product photo.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "step_count": {
             "type": "integer"
@@ -9788,7 +9812,7 @@
             }
           },
           {
-            "description": "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date and site_id per lot, and `has_more` and `next_cursor` always present.",
+            "description": "Set to compact for a lighter list: only id, name, display_label, inventory_type, quantity, unit, supplier, supplier_batch_number, expiry_date, site_id, product_image_id and product_image_url per lot, and `has_more` and `next_cursor` always present.",
             "in": "query",
             "name": "view",
             "schema": {
@@ -11474,6 +11498,59 @@
           "mcp": false,
           "permission": "inventory.adjust",
           "schema_status": "skeleton"
+        }
+      }
+    },
+    "/api/core/inventory/{item_id}/product-image": {
+      "get": {
+        "operationId": "core_get_inventory_product_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The current normalized product photo from the producing workflow."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the product photo inherited by a finished stock lot",
+        "tags": [
+          "inventory"
+        ],
+        "x-bize": {
+          "domain": "inventory",
+          "mcp": false,
+          "permission": "inventory.view",
+          "schema_status": "documented"
         }
       }
     },
@@ -13304,6 +13381,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "product_image_url": {
+                      "description": "Authenticated URL for the current final product photo.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "settings": {
                       "additionalProperties": true,
                       "type": "object"
@@ -13412,6 +13496,187 @@
           "mcp": false,
           "permission": "production.design",
           "schema_status": "skeleton"
+        }
+      }
+    },
+    "/api/core/processes/{process_id}/product-image": {
+      "delete": {
+        "operationId": "core_delete_workflow_product_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "process_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The workflow has no product photo."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Remove a workflow product photo",
+        "tags": [
+          "production"
+        ],
+        "x-bize": {
+          "domain": "production",
+          "mcp": false,
+          "permission": "production.design",
+          "schema_status": "documented"
+        }
+      },
+      "get": {
+        "operationId": "core_get_workflow_product_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "process_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The normalized final product photo."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the current workflow product photo",
+        "tags": [
+          "production"
+        ],
+        "x-bize": {
+          "domain": "production",
+          "mcp": false,
+          "permission": "production.view",
+          "schema_status": "documented"
+        }
+      },
+      "put": {
+        "description": "Upload one still JPEG, PNG or WebP photo up to 10 MiB and 25 megapixels.",
+        "operationId": "core_put_workflow_product_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "process_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "product_image_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "product_image_url"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authenticated URL for the normalized final product photo."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Add or replace a workflow product photo",
+        "tags": [
+          "production"
+        ],
+        "x-bize": {
+          "domain": "production",
+          "mcp": false,
+          "permission": "production.design",
+          "schema_status": "documented"
         }
       }
     },

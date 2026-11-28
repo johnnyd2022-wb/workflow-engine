@@ -8,10 +8,12 @@ from flask import g, jsonify, render_template, request
 from sqlalchemy.orm import joinedload
 
 from app.core.backend.event_writer import EventWriter
+from app.core.backend.product_image_routes import workflow_image_url
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+from app.core.db.repositories.product_image_repo import ProductImageRepository
 from app.core.domain.execution_prompt_rules import validate_execution_prompts
 from app.core.security.permissions import requires_auth
 from app.features.execution.complete_step_payload import validate_json_blob
@@ -110,8 +112,11 @@ def register_routes(bp):
         step = _step(org_id, execution_uuid, step_uuid)
         if step is None or step.status != ExecutionStepStatus.COMPLETED:
             return jsonify({"error": "Completed step not found"}), 404
+        process_id = step.execution.process_id
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(org_id, [process_id])
         return render_template(
             "processes/execution-step-record.html",
+            product_image_url=workflow_image_url(process_id, image_ids),
             execution_id=str(execution_uuid),
             execution_step_id=str(step_uuid),
             step_name=step.step.name if step.step else f"Step {step.step_number}",

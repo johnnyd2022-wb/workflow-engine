@@ -12,6 +12,7 @@ from flask import abort, current_app, g, jsonify, redirect, render_template, req
 from pydantic import ValidationError
 
 from app.core.backend.pagination import encode_list_cursor, parse_page_params
+from app.core.backend.product_image_routes import workflow_image_url
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
@@ -20,6 +21,7 @@ from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.db.repositories.product_image_repo import ProductImageRepository
 from app.core.domain.execution_entry_timing import entry_timing
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
@@ -367,6 +369,10 @@ def register_routes(bp):
         if has_more:
             executions = executions[:page_limit]
 
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(
+            g.current_org_id, {execution.process_id for execution in executions}
+        )
+
         # Batch-fetch all evidence for all executions in a single query
         executions_by_id = {str(e.id): e for e in executions}
         evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
@@ -439,6 +445,7 @@ def register_routes(bp):
                     "status": execution.status.value,
                     "started_at": execution.started_at.isoformat() if execution.started_at else None,
                     "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+                    "product_image_url": workflow_image_url(execution.process_id, image_ids),
                     "current_step": current_step,
                     "progress": progress,
                     "total_steps": total_steps,
@@ -499,12 +506,14 @@ def register_routes(bp):
             )
 
         evidence_list = list_evidence_for_execution(execution_uuid, org_id, execution=execution)
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(g.current_org_id, [execution.process_id])
 
         return (
             jsonify(
                 {
                     "id": str(execution.id),
                     "process_id": str(execution.process_id),
+                    "product_image_url": workflow_image_url(execution.process_id, image_ids),
                     "status": execution.status.value,
                     "started_at": execution.started_at.isoformat() if execution.started_at else None,
                     "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
@@ -583,8 +592,10 @@ def register_routes(bp):
                 }
             )
 
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(g.current_org_id, [process.id])
         process_payload = {
             "id": str(process.id),
+            "product_image_url": workflow_image_url(process.id, image_ids),
             "name": process.name,
             "description": None if minimal else process.description,
             "category": None if minimal else (process.category.value if process.category else None),

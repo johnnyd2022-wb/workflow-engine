@@ -18,6 +18,10 @@
 {% block title %}Record step{% endblock %}
 
 
+{% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='product-image.css') }}">
+{% endblock %}
+
 {% block content %}
   {% include "processes/batch-start-fragment.html" %}
   {% include "processes/batch-start-scripts.html" %}

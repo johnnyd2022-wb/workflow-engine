@@ -25,6 +25,7 @@ dependencies = [
     "pytest>=9.0.3",
     "structlog>=24.1",
     "qrcode[pil]>=7.4.2",
+    "pillow>=13.0.0",
     "requests==2.33.0",
     "sqlalchemy>=2.0.43,<2.1",
     "xero-python==4.0.0",

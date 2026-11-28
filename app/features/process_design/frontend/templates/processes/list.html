@@ -3,6 +3,7 @@
 {% block title %}Product workflows{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='product-image.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='processes-list.css') }}">
 
   <meta name="description" content="Define, start, and review product workflows and their production runs.">
@@ -62,6 +63,7 @@
       {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
     </div>
   </div>
+  <script src="{{ url_for('core.serve_core_js', filename='product-image.js') }}"></script>
   <script nonce="{{ csp_nonce() }}">
     (function () {
       if (window.__processesListInit) return;
@@ -200,10 +202,13 @@
             return (
               '<article class="processes-list-item" data-state="' + esc(state.key) + '">' +
                 '<a href="' + esc(href) + '" class="processes-list-item__open" aria-label="Open workflow: ' + esc(name) + '">' +
-                  '<div class="processes-list-item__main">' +
-                    '<p class="processes-list-item__name">' + esc(name) + '</p>' +
-                    '<p class="processes-list-item__meta">' + esc(plural(c.steps, 'step', 'steps') + ' · ' + plural(c.made, 'batch', 'batches') + ' made') + '</p>' +
-                    (edited ? '<p class="processes-list-item__audit">' + esc(edited) + '</p>' : '') +
+                  '<div class="product-image-heading">' +
+                    window.ProductImage.thumbnail(p.product_image_url).outerHTML +
+                    '<div class="processes-list-item__main">' +
+                      '<p class="processes-list-item__name">' + esc(name) + '</p>' +
+                      '<p class="processes-list-item__meta">' + esc(plural(c.steps, 'step', 'steps') + ' · ' + plural(c.made, 'batch', 'batches') + ' made') + '</p>' +
+                      (edited ? '<p class="processes-list-item__audit">' + esc(edited) + '</p>' : '') +
+                    '</div>' +
                   '</div>' +
                   '<span class="workflows-state" data-state="' + esc(state.key) + '">' + esc(state.label) + '</span>' +
                 '</a>' +

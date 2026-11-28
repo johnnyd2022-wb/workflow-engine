@@ -10,6 +10,8 @@ from uuid import UUID
 from flask import abort, g, jsonify, redirect, render_template, request, session
 from sqlalchemy.exc import IntegrityError
 
+from app.core.backend import product_image_routes
+from app.core.backend.product_image_routes import workflow_image_url
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution, ExecutionStatus
@@ -18,6 +20,7 @@ from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.process_repo import STALE_WRITE, STEP_TIMING_FIELDS, ProcessRepository
+from app.core.db.repositories.product_image_repo import ProductImageRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_duration
 from app.core.security.permissions import requires_auth, requires_role
 from app.features.process_design.process_payloads import (
@@ -345,6 +348,8 @@ def _process_field_error(error: InvalidInputError):
 
 
 def register_routes(bp):
+    product_image_routes.register_routes(bp)
+
     """Register process-design routes on the given blueprint, preserving endpoints."""
 
     @bp.route("/core/flows", methods=["GET"])
@@ -354,7 +359,15 @@ def register_routes(bp):
         process_id = flow_process_id_from_request()
         if process_id is not None:
             assert_flow_process_access(process_id)
-        return render_template("processes/flows2.html", active_page="core", process_id=process_id)
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(
+            g.current_org_id, [process_id] if process_id else []
+        )
+        return render_template(
+            "processes/flows2.html",
+            active_page="core",
+            process_id=process_id,
+            product_image_url=workflow_image_url(process_id, image_ids),
+        )
 
     @bp.route("/core/flows/create/start", methods=["GET"])
     @requires_auth
@@ -557,6 +570,7 @@ def register_routes(bp):
         # Batch-load process event summaries
 
         proc_ids_all = [p.id for p in processes]
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(g.current_org_id, proc_ids_all)
         proc_summary_by_id: dict = {}
         if proc_ids_all:
             proc_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(proc_ids_all)).all()
@@ -594,6 +608,7 @@ def register_routes(bp):
                 "active_executions": active_count,
                 "completed_executions": completed_count,
                 "created_at": process.created_at.isoformat() if process.created_at else None,
+                "product_image_url": workflow_image_url(process.id, image_ids),
                 "event_summary": proc_summary_by_id.get(str(process.id)),
             }
 
@@ -765,7 +780,11 @@ def register_routes(bp):
         if not process:
             return jsonify({"error": "Process not found"}), 404
 
-        return jsonify(_serialize_process(process, with_steps=True)), 200
+        image_ids = ProductImageRepository(db_session).workflow_ids_with_image(g.current_org_id, [process.id])
+        return jsonify(
+            **_serialize_process(process, with_steps=True),
+            product_image_url=workflow_image_url(process.id, image_ids),
+        ), 200
 
     @bp.route("/api/core/processes/<process_id>/steps", methods=["POST"])
     @requires_auth

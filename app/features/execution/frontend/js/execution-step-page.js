@@ -77,6 +77,9 @@
       }
 
       setSubtitle('Loading execution…');
+      var productImage = qs('batch-start-product-image');
+      productImage?.replaceChildren();
+      if (productImage) productImage.hidden = true;
       var executionData = null;
       var processData = null;
       var readyStep = null;
@@ -116,6 +119,11 @@
       } else {
         processData = await window.CoreAPI.getProcess(processId);
         if (isStale()) return;
+      }
+
+      if (productImage && processData?.product_image_url) {
+        productImage.append(window.ProductImage.thumbnail(processData.product_image_url, 'workflow', 'Final product'));
+        productImage.hidden = false;
       }
 
       if (!processData || !Array.isArray(processData.steps)) {

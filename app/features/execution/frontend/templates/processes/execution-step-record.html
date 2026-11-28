@@ -5,10 +5,18 @@
 
 {% block title %}Step record | Workflow Engine{% endblock %}
 
+{% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='product-image.css') }}">
+{% endblock %}
+
 {% block content %}
+{% from 'shared/product_image.html' import product_image %}
 <div class="max-content" id="execution-record" data-execution-id="{{ execution_id }}" data-step-id="{{ execution_step_id }}">
   <a class="btn btn-secondary btn-sm" href="/core/flows" hx-boost="true">Back to product workflows</a>
-  <h1 style="margin:18px 0 6px;">{{ step_name }} record</h1>
+  <div class="product-image-heading">
+    {% if product_image_url %}{{ product_image(product_image_url, 'workflow', 'Final product') }}{% endif %}
+    <h1 style="margin:18px 0 6px;">{{ step_name }} record</h1>
+  </div>
   <p style="color:var(--text-secondary);">Happened: {{ occurred_at or 'Unknown' }} · Entered: {{ entered_at or 'Legacy record' }}</p>
   <p style="color:var(--text-secondary);">Stock inputs and outputs are fixed after completion. Correct stock through Live Inventory.</p>
 

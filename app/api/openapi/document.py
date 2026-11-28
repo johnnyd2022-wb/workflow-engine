@@ -50,8 +50,16 @@ _RESPONSES = {
     "Forbidden": {"description": "Signed in, but the person's role does not hold the required permission."},
     "NotFound": {"description": "No such record in this organisation."},
     "Conflict": {"description": "Not possible in the current state; the error says why and what to do."},
+    "ContentTooLarge": {"description": "The request body exceeded the upload limit."},
 }
-_ERROR_RESPONSES = {400: "BadRequest", 401: "Unauthorized", 403: "Forbidden", 404: "NotFound", 409: "Conflict"}
+_ERROR_RESPONSES = {
+    400: "BadRequest",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "NotFound",
+    409: "Conflict",
+    413: "ContentTooLarge",
+}
 
 _ERROR_SCHEMA = {
     "type": "object",
@@ -125,13 +133,13 @@ def _responses(op: Operation, entry: dict) -> dict:
     responses: dict[str, dict] = {}
     described = entry.get("response")
     if described:
-        media = {"schema": copy.deepcopy(described["schema"])}
-        if "example" in described:
-            media["example"] = copy.deepcopy(described["example"])
-        responses["200"] = {
-            "description": described.get("description", "The request succeeded."),
-            "content": {"application/json": media},
-        }
+        response = {"description": described.get("description", "The request succeeded.")}
+        if "schema" in described:
+            media = {"schema": copy.deepcopy(described["schema"])}
+            if "example" in described:
+                media["example"] = copy.deepcopy(described["example"])
+            response["content"] = {described.get("media_type", "application/json"): media}
+        responses[str(described.get("status", 200))] = response
     else:
         responses["200"] = {"description": "The request succeeded. The response body is not described yet."}
     codes = set(entry.get("errors", []))
@@ -160,7 +168,10 @@ def _operation(op: Operation, entry: dict) -> dict:
         media = {"schema": copy.deepcopy(body["schema"])}
         if "example" in body:
             media["example"] = copy.deepcopy(body["example"])
-        request_body = {"required": bool(body.get("required", True)), "content": {"application/json": media}}
+        request_body = {
+            "required": bool(body.get("required", True)),
+            "content": {body.get("media_type", "application/json"): media},
+        }
         if "description" in body:
             request_body["description"] = body["description"]
         result["requestBody"] = request_body

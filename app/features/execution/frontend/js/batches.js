@@ -101,6 +101,7 @@
       id: String(execution.id || ''),
       processId: String(execution.process_id || ''),
       workflow: processName || 'Untitled workflow',
+      imageUrl: execution.product_image_url,
       title: label || (started ? 'Batch from ' + formatDateTime(started) : 'Untitled batch'),
       steps: steps,
       total: steps.length || Number(execution.total_steps || 0),
@@ -218,7 +219,10 @@
     // A batch card: what it is, how long it has waited, and who last touched it.
     function card(batch) {
       return el('button', { type: 'button', className: 'core2-active-card batches-item' + (batch.waiting ? ' is-waiting' : ''), 'data-core2-execution-id': batch.id, 'aria-label': 'Open ' + batch.title }, [
-        el('span', { className: 'core2-active-card-id batches-item__title', text: batch.title }),
+        el('span', { className: 'product-image-heading' }, [
+          window.ProductImage.thumbnail(batch.imageUrl),
+          el('span', { className: 'core2-active-card-id batches-item__title', text: batch.title }),
+        ]),
         ageTag(batch),
         batch.lastBy ? el('span', { className: 'batches-item__meta', text: 'Last by ' + batch.lastBy }) : null,
       ]);
@@ -340,6 +344,8 @@
       linkError = '';
       var set = function (sel, text) { var node = document.getElementById(sel); if (node) node.textContent = text; };
       set('core2-active-detail-id', batch.title);
+      var image = document.getElementById('core2-active-detail-image');
+      if (image) image.replaceChildren(window.ProductImage.thumbnail(batch.imageUrl, 'workflow', 'Final product'));
       set('core2-active-detail-process', batch.workflow + ' · ' + (batch.finished ? 'Finished' : stepText(batch)));
       set('core2-active-detail-started', (batch.finished
         ? ['Started ' + formatDateTime(batch.started), batch.finishedAt ? 'finished ' + formatDateTime(batch.finishedAt) : 'finished',

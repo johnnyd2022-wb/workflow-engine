@@ -312,6 +312,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("getting_started.getting_started_page", None, SIGNED_IN),
     ("getting_started.get_getting_started", None, SIGNED_IN),
     # --- process design
+    ("core.get_workflow_product_image", _READ, "production.view"),
+    ("core.put_workflow_product_image", None, "production.design"),
+    ("core.delete_workflow_product_image", None, "production.design"),
+    ("core.get_inventory_product_image", _READ, "inventory.view"),
     ("core.create_process", None, "production.design"),
     ("core.update_process", None, "production.design"),
     ("core.delete_process", None, "production.design"),

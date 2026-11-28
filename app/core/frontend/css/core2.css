@@ -767,6 +767,10 @@ button.core2-hub-card {
   gap: 8px;
   align-items: flex-start;
 }
+.core2-live-inv__item-head > .core2-live-inv__pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .core2-live-inv__item-title {
   margin: 0;
   font-size: 0.98rem;

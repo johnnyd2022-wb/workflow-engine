@@ -1,0 +1,25 @@
+{% from 'shared/product_image.html' import product_image %}
+<div class="product-image-editor"{% if can('production.design') %} data-product-image-editor="{{ url_for('core.put_workflow_product_image', process_id=process_id) }}"{% endif %}>
+  {{ product_image(product_image_url, 'workflow', 'Final product') }}
+  {% if can('production.design') %}
+    <div>
+      <button class="btn btn-secondary btn-sm" type="button" data-product-image-open aria-haspopup="dialog">{{ 'Change final product image' if product_image_url else 'Add final product image' }}</button>
+      <p class="product-image-status" role="status"></p>
+    </div>
+    <dialog class="product-image-sheet" aria-labelledby="product-image-heading">
+      <form data-product-image-form>
+        <h2 id="product-image-heading">Final product image</h2>
+        <p>Choose a photo of the finished product to show on this workflow, its batches and its finished stock.</p>
+        <label for="product-image-file">Photo</label>
+        <input id="product-image-file" name="file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="product-image-formats">
+        <p id="product-image-formats">JPEG, PNG or WebP up to 10 MB.</p>
+        <p class="product-image-status" role="alert"></p>
+        <div class="product-image-sheet__actions">
+          <button class="btn btn-primary" type="submit" value="save">Save image</button>
+          <button class="btn btn-secondary" type="submit" value="remove"{% if not product_image_url %} hidden{% endif %}>Remove image</button>
+          <button class="btn btn-secondary" type="submit" value="cancel">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+  {% endif %}
+</div>

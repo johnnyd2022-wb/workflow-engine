@@ -15,6 +15,7 @@ from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.process_step_document import ProcessStepDocument
 from app.core.db.models.process_version import ProcessVersion
+from app.core.db.models.product_image import ProductImage
 from app.core.db.models.site import Site
 from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.models.step import Step
@@ -53,6 +54,7 @@ __all__ = [
     "EntityEvent",
     "EntityEventSummary",
     "ProcessVersion",
+    "ProductImage",
     "TrustedDevice",
     "TwoFactorBackupCode",
     "Process",

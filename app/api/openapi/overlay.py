@@ -11,12 +11,14 @@ what the query string accepts or what the body looks like, so those live here, k
         description: ...        # replaces the docstring's body
         parameters:             # OpenAPI parameter objects; a path parameter merges onto the derived one
           - {name: item_type, in: query, description: ..., schema: {type: string}}
-        response:               # the 200 body
+        response:               # success response, 200 and application/json by default
+          status: 200           # use 204 and omit schema for an empty response
+          media_type: application/json
           description: ...
           schema: {...}         # inline, or {$ref: '#/components/schemas/Name'}
           example: {...}
         errors: [400, 404]      # extra documented failures (the 401 and 403 are added to every route)
-        request_body: {...}     # {description, required, schema, example}
+        request_body: {...}     # {description, required, media_type, schema, example}
         x-bize:
           kind: list            # record | list | calculation
           mcp: true             # an assistant may call it
@@ -153,7 +155,9 @@ def _check_operation(name: str, where: str, entry) -> None:
     if "outside_text" in xbize:
         _check_outside_text(name, where, xbize["outside_text"])
     response = entry.get("response")
-    if response is not None and not (isinstance(response, dict) and "schema" in response):
+    if response is not None and not (
+        isinstance(response, dict) and ("schema" in response or response.get("status") == 204)
+    ):
         raise OverlayError(f"{where}: {name} response needs a schema")
     for parameter in entry.get("parameters", []):
         if not isinstance(parameter, dict) or not {"name", "in"} <= set(parameter):

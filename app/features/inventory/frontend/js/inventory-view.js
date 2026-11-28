@@ -327,19 +327,23 @@
     var open = el('button', 'inv-row__open', item.name);
     open.type = 'button';
     open.setAttribute('aria-haspopup', 'dialog');
-    itemTd.appendChild(open);
+    var itemHeading = el('div', 'product-image-heading');
+    var itemLabel = el('div');
+    itemLabel.appendChild(open);
+    itemHeading.append(window.ProductImage.thumbnail(item.product_image_url), itemLabel);
+    itemTd.appendChild(itemHeading);
     if (item.quality_hold) {
       var holdTag = el('span', 'inv-row__hold', 'On hold');
       holdTag.title = 'Quality hold: ' + item.quality_hold.reason;
-      itemTd.appendChild(holdTag);
+      itemLabel.appendChild(holdTag);
     }
     if (item.system_findings && item.system_findings.length) {
       var flag = el('span', 'inv-row__flag', plural(item.system_findings.length, 'finding'));
       flag.title = item.system_findings.map(function (f) { return f.reason; }).join('\n');
-      itemTd.appendChild(flag);
+      itemLabel.appendChild(flag);
     }
     var sub = sourceLine(item);
-    itemTd.appendChild(el('span', 'inv-row__sub', sub || (item.inventory_type === 'raw_material' ? 'No supplier recorded' : 'No process recorded')));
+    itemLabel.appendChild(el('span', 'inv-row__sub', sub || (item.inventory_type === 'raw_material' ? 'No supplier recorded' : 'No process recorded')));
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(item.inventory_type)));
     if (sitesShown()) {
@@ -361,8 +365,11 @@
     var toggle = el('button', 'inv-row__open', row.name);
     toggle.type = 'button';
     toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    itemTd.appendChild(toggle);
-    itemTd.appendChild(el('span', 'inv-row__sub', plural(row.members.length, 'lot')));
+    var itemHeading = el('div', 'product-image-heading');
+    var itemLabel = el('div');
+    itemLabel.append(toggle, el('span', 'inv-row__sub', plural(row.members.length, 'lot')));
+    itemHeading.append(window.ProductImage.thumbnailForLots(row.members.map(function (member) { return member.item; })), itemLabel);
+    itemTd.appendChild(itemHeading);
     tr.appendChild(itemTd);
     tr.appendChild(cell('inv-cell-type', typeBadge(row.members[0].item.inventory_type)));
     if (sitesShown()) tr.appendChild(cell('inv-cell-where', groupWhere(row)));
@@ -753,7 +760,9 @@
   function renderDrawer(item) {
     els.drawerTitle.textContent = item.name;
     els.drawerEyebrow.replaceChildren(typeBadge(item.inventory_type));
-    els.drawerBody.replaceChildren();
+    els.drawerBody.replaceChildren(
+      window.ProductImage.thumbnail(item.product_image_url, 'preview', 'Final product')
+    );
 
     var hero = el('div', 'inv-drawer__hero');
     var figure = el('div', 'inv-drawer__figure');

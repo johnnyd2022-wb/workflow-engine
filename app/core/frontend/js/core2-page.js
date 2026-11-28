@@ -1100,7 +1100,9 @@
         if (expired) header.appendChild(pill(flag(expired, 'Expired'), 'core2-live-inv__pill--expired'));
         card.appendChild(header);
 
-        card.appendChild(el('div', 'core2-inv-card__name', g.name));
+        const heading = el('div', 'product-image-heading');
+        heading.append(window.ProductImage.thumbnailForLots(g.lots), el('div', 'core2-inv-card__name', g.name));
+        card.appendChild(heading);
         card.appendChild(el('div', 'core2-inv-card__qty', totalText));
         // Live inventory is deliberately lot-grouped, but expiry belongs on the
         // collapsed card too: otherwise a supplied expiry is only visible after an
@@ -1138,7 +1140,9 @@
         const tags = el('div', 'core2-inv-lot__tags');
         lotTags(it).forEach(function (t) { tags.appendChild(t); });
         main.appendChild(tags);
-        row.appendChild(main);
+        const heading = el('div', 'product-image-heading');
+        heading.append(window.ProductImage.thumbnail(it.product_image_url), main);
+        row.appendChild(heading);
 
         row.appendChild(el('div', 'core2-inv-lot__qty', String(it.quantity) + (it.unit ? ' ' + it.unit : '')));
         const chev = el('span', 'core2-inv-lot__chev', '›');
@@ -1149,6 +1153,7 @@
 
       function buildLotDetail(it) {
         const wrap = el('div', 'core2-inv-detail');
+        wrap.appendChild(window.ProductImage.thumbnail(it.product_image_url, 'preview', 'Final product'));
         const qty = el('div', 'core2-live-inv__qty');
         qty.appendChild(el('span', 'core2-live-inv__qty-value', String(it.quantity)));
         qty.appendChild(el('span', 'core2-live-inv__qty-unit', it.unit || ''));
@@ -1424,7 +1429,9 @@
               const cards = list.map(function (it) {
                 return '<article class="core2-live-inv__item-card">' +
                   '<div class="core2-live-inv__item-head">' +
-                    '<h3 class="core2-live-inv__item-title">' + esc(it.name || 'Unnamed item') + '</h3>' +
+                    '<div class="product-image-heading">' + window.ProductImage.thumbnail(it.product_image_url).outerHTML +
+                      '<h3 class="core2-live-inv__item-title">' + esc(it.name || 'Unnamed item') + '</h3>' +
+                    '</div>' +
                     '<span class="core2-live-inv__pill ' + typePillClass(it.inventory_type) + '">' + esc(typeLabel(it.inventory_type)) + '</span>' +
                   '</div>' +
                   '<div class="core2-live-inv__qty"><span class="core2-live-inv__qty-value">' + esc(it.quantity) + '</span><span class="core2-live-inv__qty-unit">' + esc(it.unit || '') + '</span></div>' +
@@ -1770,7 +1777,10 @@
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" data-action="toggleInventoryItemDetails" data-action-args="${actionArgs(item.id)}">
+            <div class="product-image-heading">
+            ${window.ProductImage.thumbnail(item.product_image_url).outerHTML}
             <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
+            </div>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
             <button class="btn-icon-small" data-action-stop data-action="openEditInventoryModal" data-action-args="${actionArgs(item.id)}" title="Edit inventory item">

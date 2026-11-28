@@ -191,3 +191,11 @@ and the factories, not the `tests/unit/<slug>/` shape in `new-feature`'s SKILL.m
   control characters.
 - **An absent optional dependency is a skip, not a failure.** The MCP tests `importorskip("mcp")`; CI's
   `relevant_tests` and `unit_tests` jobs install `--extra mcp`, so they run there.
+
+## 10. Finished product images follow recorded lineage
+
+Use the finished inventory type and the recorded terminal execution step when displaying a
+workflow photo on a stock lot. A legacy lot may have only its source batch. A recorded step must
+agree with the recorded batch. Lists use a single metadata query for their returned lots and
+the binary photo loads through an authenticated endpoint. See
+`app/core/db/repositories/product_image_repo.py:72` and `tests/test_product_images.py:66`.

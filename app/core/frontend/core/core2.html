@@ -3,6 +3,7 @@
 {% block title %}Production{% endblock %}
 
 {% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='product-image.css') }}">
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
@@ -446,6 +447,7 @@
             <div class="core2-active-detail-sheet batches-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-id">
               <div class="core2-active-detail-head">
                 <div>
+                  <div id="core2-active-detail-image"></div>
                   <h3 class="core2-active-detail-id" id="core2-active-detail-id">Batch</h3>
                   <p class="core2-active-detail-meta" id="core2-active-detail-process">Workflow</p>
                 </div>
@@ -470,6 +472,7 @@
    would load it. `defer` matters here too: this tag now sits before core-api.js (loaded later in
    base_spa.html), so without it the script would run -- and, on the Suppliers page, call
    window.CoreAPI -- before core-api.js has defined it. #}
+<script src="{{ url_for('core.serve_core_js', filename='product-image.js') }}"></script>
 <script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}" defer></script>
 <template id="core-execution-editor-markup">
   {% include 'shared/execution-modal.html' %}

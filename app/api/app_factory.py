@@ -16,6 +16,7 @@ from app.api.routes.org_routes import org_bp, people_pages
 from app.core.security import csp
 from app.core.security.access_policy import setup_access_policy
 from app.core.security.two_factor_policy import resolve_require_admin_2fa, setup_two_factor_policy
+from app.core.services.product_images import MAX_UPLOAD_BYTES
 from app.observability import (
     configure_logging,
     configure_metrics,
@@ -597,6 +598,12 @@ def create_app():
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response
+
+    @app.before_request
+    def limit_product_image_upload():
+        if request.endpoint == "core.put_workflow_product_image":
+            # Set the limit before Flask-WTF reads the multipart form.
+            request.max_content_length = MAX_UPLOAD_BYTES + 64 * 1024
 
     # CRITICAL: CSRF Protection - Protect against Cross-Site Request Forgery attacks
     # Flask-WTF validates mutating requests; SPA sends token via X-CSRFToken (see base_spa.html + core-api.js).

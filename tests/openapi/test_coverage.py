@@ -238,7 +238,16 @@ def test_a_documented_operation_names_its_success_response(full_doc):
     for oid, (_path, _method, op) in by_id(full_doc).items():
         status = op["x-bize"]["schema_status"]
         assert status in ("documented", "skeleton"), oid
-        assert (status == "documented") == (response_schema(op) is not None), oid
+        success = op["responses"]
+        if "204" in success:
+            assert status == "documented" and success["204"]["description"], oid
+            assert "200" not in success and "content" not in success["204"], oid
+        elif "image/webp" in success["200"].get("content", {}):
+            assert status == "documented", oid
+            assert success["200"]["content"]["image/webp"]["schema"] == {"type": "string", "format": "binary"}, oid
+            assert not op["x-bize"]["mcp"], oid
+        else:
+            assert (status == "documented") == (response_schema(op) is not None), oid
 
 
 @pytest.mark.parametrize("oid", sorted(FIRST_WAVE))
