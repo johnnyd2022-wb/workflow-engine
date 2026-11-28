@@ -1,6 +1,5 @@
 """Inventory request fields aligned with the lot and movement storage types."""
 
-from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -8,7 +7,7 @@ from uuid import UUID
 from pydantic import Field, JsonValue, StringConstraints
 
 from app.core.db.models.inventory_item import InventoryType
-from app.utils.request_validation import CleanName, CleanText, JsonInput
+from app.utils.request_validation import CleanName, CleanText, JsonInput, OptionalIsoDateTime
 
 Quantity = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 PositiveQuantity = Annotated[Quantity, Field(gt=0)]
@@ -16,7 +15,7 @@ LotText = Annotated[CleanText, StringConstraints(max_length=255)]
 LotName = Annotated[CleanName, StringConstraints(max_length=255)]
 LotUnit = Annotated[CleanName, StringConstraints(max_length=50)]
 OptionalLotUnit = Annotated[CleanText, StringConstraints(max_length=50)]
-InventoryDate = date | datetime | Literal[""] | None
+InventoryDate = OptionalIsoDateTime
 OptionalId = UUID | Literal[""] | None
 
 

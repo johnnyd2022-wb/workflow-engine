@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -20,7 +20,14 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.features.activity_log.routes.activity_routes import human_summary
 from app.observability import get_logger
-from app.utils.request_validation import InvalidInputError, JsonInput, query_int, query_text, read_json
+from app.utils.request_validation import (
+    InvalidInputError,
+    JsonInput,
+    OptionalIsoDateTime,
+    query_int,
+    query_text,
+    read_json,
+)
 
 logger = get_logger(__name__)
 
@@ -29,7 +36,7 @@ class TraceInput(JsonInput):
     root_id: UUID
     root_type: Literal["inventory_item", "execution", "process"] = "inventory_item"
     depth: Annotated[int, Field(ge=0, le=10)] = 5
-    as_of: datetime | date | Literal[""] | None = None
+    as_of: OptionalIsoDateTime = None
 
 
 def _to_iso_timestamp(ts) -> str | None:
@@ -544,9 +551,7 @@ def register_routes(bp):
         # Temporal trace — use as_of if provided
         if data.as_of:
             as_of = data.as_of
-            if not isinstance(as_of, datetime):
-                as_of = datetime.combine(as_of, time.min, tzinfo=UTC)
-            elif as_of.tzinfo is None:
+            if as_of.tzinfo is None:
                 as_of = as_of.replace(tzinfo=UTC)
 
             from app.features.traceability.temporal_dag_tracer import TemporalDAGTracer

@@ -10,12 +10,12 @@ import csv
 import io
 import re
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from flask import Response, g, jsonify, request
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.idempotency import idempotent_write
@@ -26,6 +26,7 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.packs import PACK_KEY, clean_pack, describe_pack, lot_pack
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
+from app.features.inventory.inventory_payloads import PositiveQuantity
 from app.observability import get_logger, start_span
 from app.utils.request_validation import InvalidInputError, JsonInput, read_json
 
@@ -35,6 +36,7 @@ logger = get_logger(__name__)
 CSV_MAX_BYTES = 2 * 1024 * 1024
 # Max rows per CSV (validation and commit)
 CSV_MAX_ROWS = 500
+_POSITIVE_QUANTITY = TypeAdapter(PositiveQuantity)
 
 
 class InventoryCsvRow(JsonInput):
@@ -85,29 +87,30 @@ def _unit_to_canonical(unit: str) -> str | None:
     return display_prefer.get(u, u)
 
 
-def _parse_quantity(qty_str: str) -> tuple[bool, str | None]:
-    """Validate quantity with Decimal; return (ok, sanitized_original_str or None). Preserves precision."""
-    s = (qty_str or "").strip()
-    if not s:
-        return False, None
+def _parse_quantity(qty_str: str) -> tuple[str | None, str | None]:
+    """Return (error, original quantity text) after applying the manual lot constraints."""
+    value = (qty_str or "").strip()
+    if not value:
+        return "Quantity is required", None
     try:
-        d = Decimal(s)
-        if d <= 0:
-            return False, None
-        return True, s
-    except InvalidOperation:
-        return False, None
+        _POSITIVE_QUANTITY.validate_python(value, strict=False)
+    except ValidationError as exc:
+        kind = exc.errors(include_input=False, include_context=False, include_url=False)[0]["type"]
+        if kind == "decimal_max_places":
+            return "Quantity must have at most 4 decimal places", None
+        if kind in {"decimal_max_digits", "decimal_whole_digits"}:
+            return "Quantity is too large", None
+        return "Invalid quantity (must be a positive number)", None
+    return None, value
 
 
 def _validate_row(name: str, qty_str: str, unit_raw: str) -> tuple[str, str, str | None, str | None]:
     """Shared validation for preview and commit. Returns (status, message, canonical_unit, quantity_str_for_storage)."""
     if not name:
         return "error", "Item name is required", None, None
-    ok, quantity_str = _parse_quantity(qty_str)
-    if not ok:
-        if not (qty_str or "").strip():
-            return "error", "Quantity is required", None, None
-        return "error", "Invalid quantity (must be a positive number)", None, None
+    error, quantity_str = _parse_quantity(qty_str)
+    if error:
+        return "error", error, None, None
     if not (unit_raw or "").strip():
         return "error", "Unit is required", None, None
     canonical_unit = _unit_to_canonical(unit_raw)

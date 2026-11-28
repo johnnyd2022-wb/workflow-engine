@@ -5,6 +5,7 @@ uses strict Pydantic types. Dates, UUIDs, decimal strings and enum values use th
 standard JSON representations. Schemas reject extra fields by default.
 """
 
+from datetime import datetime
 from math import isfinite
 from types import NoneType, UnionType
 from typing import Annotated, get_args, get_origin
@@ -22,6 +23,17 @@ def _check_name(value):
 
 CleanText = Annotated[str, StringConstraints(strip_whitespace=True), BeforeValidator(_check_name)]
 CleanName = Annotated[CleanText, StringConstraints(min_length=1)]
+
+
+def _parse_optional_iso_datetime(value: object) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError("Enter an ISO date or datetime.")
+    return datetime.fromisoformat(value)
+
+
+OptionalIsoDateTime = Annotated[datetime | None, BeforeValidator(_parse_optional_iso_datetime)]
 
 
 def validate_json_storage(value):

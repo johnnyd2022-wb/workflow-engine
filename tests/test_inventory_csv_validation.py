@@ -64,36 +64,39 @@ def test_unit_to_canonical_rejects_unit_outside_conversion_factors():
 
 
 def test_parse_quantity_accepts_positive_numeric_string():
-    ok, value = _parse_quantity("10.5")
-    assert ok is True
+    error, value = _parse_quantity("10.5")
+    assert error is None
     assert value == "10.5"
 
 
 def test_parse_quantity_rejects_zero():
-    ok, value = _parse_quantity("0")
-    assert ok is False
+    error, value = _parse_quantity("0")
+    assert error == "Invalid quantity (must be a positive number)"
     assert value is None
 
 
 def test_parse_quantity_rejects_negative():
-    ok, value = _parse_quantity("-5")
-    assert ok is False
+    error, value = _parse_quantity("-5")
+    assert error == "Invalid quantity (must be a positive number)"
+    assert value is None
 
 
 def test_parse_quantity_rejects_blank():
-    ok, value = _parse_quantity("   ")
-    assert ok is False
+    error, value = _parse_quantity("   ")
+    assert error == "Quantity is required"
+    assert value is None
 
 
 def test_parse_quantity_rejects_non_numeric():
-    ok, value = _parse_quantity("not-a-number")
-    assert ok is False
+    error, value = _parse_quantity("not-a-number")
+    assert error == "Invalid quantity (must be a positive number)"
+    assert value is None
 
 
 def test_parse_quantity_preserves_original_precision_string():
     """The sanitized string is stored verbatim (not re-rendered) — precision must survive."""
-    ok, value = _parse_quantity("3.140000")
-    assert ok is True
+    error, value = _parse_quantity("3.140000")
+    assert error is None
     assert value == "3.140000"
 
 

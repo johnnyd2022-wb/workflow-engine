@@ -750,6 +750,8 @@ def register_routes(bp):
         unit = payload.unit or None
         inventory_type = payload.inventory_type.value
         barcode = payload.barcode or None
+        purchase_date = payload.purchase_date.date() if payload.purchase_date else None
+        expiry_date = payload.expiry_date.date() if payload.expiry_date else None
 
         repo = InventoryRepository(db_session)
         try:
@@ -769,12 +771,6 @@ def register_routes(bp):
                         ), 409
                     # Add quantity to existing item; supplier is stock-level (stored in audit only, row.supplier unchanged)
                     supplier = (data.get("supplier") or "").strip() or None
-                    purchase_date = None
-                    if data.get("purchase_date"):
-                        purchase_date = datetime.fromisoformat(data.get("purchase_date").replace("Z", "+00:00")).date()
-                    expiry_date = None
-                    if data.get("expiry_date"):
-                        expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
                     source_method = (data.get("source_method") or "barcode_scan").strip()
                     if source_method not in ("manual", "csv_upload", "barcode_scan"):
                         source_method = "barcode_scan"
@@ -889,15 +885,6 @@ def register_routes(bp):
                 return jsonify({"error": "unit is required"}), 400
 
             supplier = (data.get("supplier") or "").strip() or None
-            # Parse purchase date if provided
-            purchase_date = None
-            if data.get("purchase_date"):
-                purchase_date = datetime.fromisoformat(data.get("purchase_date").replace("Z", "+00:00")).date()
-
-            expiry_date = None
-            if data.get("expiry_date"):
-                expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
-
             # Optional traceability (e.g. in-flow "add missing output" from execution step)
             source_execution_id = None
             if data.get("source_execution_id"):
@@ -1049,18 +1036,11 @@ def register_routes(bp):
         quantity = payload.quantity
         unit = payload.unit
         inventory_type = payload.inventory_type.value
+        purchase_date = payload.purchase_date.date() if payload.purchase_date else None
+        expiry_date = payload.expiry_date.date() if payload.expiry_date else None
 
         repo = InventoryRepository(db_session)
         try:
-            # Parse purchase date if provided
-            purchase_date = None
-            if data.get("purchase_date"):
-                purchase_date = datetime.fromisoformat(data.get("purchase_date").replace("Z", "+00:00")).date()
-
-            expiry_date = None
-            if data.get("expiry_date"):
-                expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
-
             # Get existing item
             item = repo.get_inventory_item_by_id(item_uuid, org_id)
             if not item:

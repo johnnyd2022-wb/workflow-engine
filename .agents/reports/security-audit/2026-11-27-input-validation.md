@@ -122,3 +122,17 @@ The frozen dependency audit reported no known vulnerabilities or adverse statuse
 - A narrower request schema can refuse a legacy value when someone edits and resubmits it. This branch does not rewrite saved records or coerce them on reads. Relevant examples are historic task names, timestamps and over-precision quantities.
 - Existing compatibility checks cover decimal strings. Exact unquoted decimal literals across storage boundaries remain open as VAL-FINAL-04.
 - Shared-database failures reproduced on the earlier baseline include 44 Planning tests, 14 Customs premises counts, three evidence tests and one wastage test. The final private database avoids carrying those rows forward. The results of the final suite and GitLab checks are recorded on the merge request.
+
+## MR !775 review fixes
+
+- **Lot dates stored in 1970.** Inventory create, edit and reconciliation parse compact and extended ISO dates and datetimes explicitly. Traceability uses the same parser for `as_of`. Covered by `test_inventory_round_trips_iso_lot_dates`, `test_create_inventory_validates_writes`, `test_trace_accepts_iso_as_of` and `test_trace_rejects_invalid_request_fields`.
+- **Corrected duplicate CSV batch could not be saved.** The review card sends only CSV row fields. Covered by `test_csv_upload_retries_corrected_duplicate_batch` and `test_csv_commit_rejects_browser_review_state`.
+- **CSV quantities were rounded.** Preview and commit share the manual inventory quantity constraints and return a row error for excess precision. Covered by `test_csv_preview_and_commit_reject_excess_quantity_precision`.
+
+Chromium screenshots show the result of retrying a corrected batch.
+
+| Viewport | Before | After |
+| --- | --- | --- |
+| Desktop | [Upload error](https://gitlab.com/whistlebird/workflow-engine/uploads/9bf2ce190b8d42bfb4d65df646932d9b/csv-retry-desktop-before.png) | [Successful return to Production](https://gitlab.com/whistlebird/workflow-engine/uploads/887a896e83506ff1a441e17c80b90115/csv-retry-desktop-after.png) |
+| Laptop | [Upload error](https://gitlab.com/whistlebird/workflow-engine/uploads/7c235eb1fa333f570c1c6e037e5b6b19/csv-retry-laptop-before.png) | [Successful return to Production](https://gitlab.com/whistlebird/workflow-engine/uploads/2ca4723f60d30ab74f36ac46d3a3df1a/csv-retry-laptop-after.png) |
+| Mobile | [Upload error](https://gitlab.com/whistlebird/workflow-engine/uploads/0df5265f092f2bd5cc0046a6437012ca/csv-retry-phone-before.png) | [Successful return to Production](https://gitlab.com/whistlebird/workflow-engine/uploads/6458bfafc19670bfcc7ef519d40e4c46/csv-retry-phone-after.png) |
