@@ -30,3 +30,12 @@ The browser harness seeded the private database and checked 1440 × 900, 1280 ×
 390 × 844 layouts in both themes, including populated, empty, error and long-name states
 and the expanded and collapsed desktop and laptop rail. The phone captures passed the
 horizontal-overflow guard.
+
+## Workflow preview follow-up
+
+The larger workflow preview uses proportional sizing for portrait and landscape photos.
+The top-right pencil opens the existing image sheet and retains a 44-pixel touch target.
+Chromium checks the preview size, proportions, centering and edit control position.
+The first MR pipeline identified an assumption in the tenant export about binary tables
+having an ID and an exact response contract for compact inventory. The image record now
+has its own UUID and compact inventory keeps its original fields.

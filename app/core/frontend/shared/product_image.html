@@ -1,5 +1,5 @@
 {% macro product_image(url, size='', alt='') %}
   <span class="product-image{% if size %} product-image--{{ size }}{% endif %}"{% if not url %} aria-hidden="true"{% endif %}>
-    {% if url %}<img src="{{ url }}" alt="{{ alt }}" width="48" height="48" decoding="async" loading="lazy">{% endif %}
+    {% if url %}<img src="{{ url }}" alt="{{ alt }}" width="48" height="48" decoding="async" loading="{{ 'eager' if size == 'editor' else 'lazy' }}">{% endif %}
   </span>
 {% endmacro %}

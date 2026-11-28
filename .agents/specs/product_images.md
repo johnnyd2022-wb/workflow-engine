@@ -13,7 +13,7 @@ Workflow designers can add, replace or remove a photo of the finished product. I
 - tenant_scoped: yes. The image belongs to an organisation and a workflow. Inheritance joins inventory, execution steps, executions and images within that organisation.
 
 ## Acceptance criteria
-- AC1: Workflow detail prompts designers to add a final product image. Upload, replacement and removal update Workflow detail, the Workflows list, the Live Batches board and the batch start and step record pages.
+- AC1: Workflow detail prompts designers to add a final product image. Once uploaded, it displays a large centered preview that preserves the original proportions and an edit icon at the top right. Upload, replacement and removal update Workflow detail, the Workflows list, the Live Batches board and the batch start and step record pages.
 - AC2: A finished inventory output with recorded lineage resolves its workflow's current image even when its name differs from the workflow name. Replacement and removal apply to existing output lots.
 - AC3: The Stock list, Inventory Live cards and the stock lot detail drawer reserve a fixed thumbnail or preview area. Raw material, WIP and finished goods without a linked image display a neutral placeholder. Thumbnails lazy-load and the upload picker accepts phone photos in supported formats.
 - AC4: Upload accepts decoded JPEG, PNG and WebP. It rejects unsupported signatures, MIME mismatches, animated or invalid images, files over 10 MiB, and images over 25 million pixels. A missing or generic binary MIME is accepted if the file signature and decode match a supported format. The server applies camera orientation and re-encodes a scaled image without source metadata.

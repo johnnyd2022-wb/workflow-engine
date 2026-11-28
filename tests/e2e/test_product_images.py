@@ -61,7 +61,17 @@ def test_ac1_ac2_ac3_ac4_ac5_product_image_journey(strict_csp_page, fresh_user, 
     sheet.get_by_label("Photo").set_input_files(_photo("darkgreen"))
     sheet.get_by_role("button", name="Save image").click()
     expect(sheet).not_to_be_visible()
-    _assert_loaded(page.get_by_role("img", name="Final product", exact=True))
+    workflow_photo = page.get_by_role("img", name="Final product", exact=True)
+    _assert_loaded(workflow_photo)
+    photo_box = workflow_photo.bounding_box()
+    edit = page.get_by_role("button", name="Change final product image")
+    edit_box = edit.bounding_box()
+    assert photo_box["height"] >= 180
+    assert abs(photo_box["width"] / photo_box["height"] - 96 / 144) < 0.02
+    assert abs(photo_box["x"] + photo_box["width"] / 2 - page.viewport_size["width"] / 2) < 10
+    expect(edit.get_by_text("Add final product image")).not_to_be_visible()
+    assert 0 < photo_box["x"] + photo_box["width"] - edit_box["x"] - edit_box["width"] <= 12
+    assert 0 < edit_box["y"] - photo_box["y"] <= 12
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
 
     page.goto("/core/processes")

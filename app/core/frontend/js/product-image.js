@@ -12,7 +12,7 @@
     var image = document.createElement('img');
     image.width = 48;
     image.height = 48;
-    image.loading = 'lazy';
+    image.loading = size === 'editor' ? 'eager' : 'lazy';
     image.decoding = 'async';
     image.alt = alt || '';
     image.src = url;
@@ -85,9 +85,10 @@
           ? 'Choose an image of 10 MB or less.' : 'Could not save the final product image. Try again.'));
       }
       var url = removing ? '' : (await response.json()).product_image_url + '?v=' + Date.now();
-      editor.querySelector('.product-image').replaceWith(thumbnail(url, 'workflow', 'Final product'));
+      editor.querySelector('.product-image').replaceWith(thumbnail(url, 'editor', 'Final product'));
+      editor.toggleAttribute('data-has-image', !removing);
       form.querySelector('[value=remove]').hidden = removing;
-      trigger.textContent = removing ? 'Add final product image' : 'Change final product image';
+      trigger.setAttribute('aria-label', removing ? 'Add final product image' : 'Change final product image');
       editor.querySelector('[role=status]').textContent = removing ? 'Product image removed.' : 'Product image saved.';
       sheet.close();
     } catch (errorResponse) {
